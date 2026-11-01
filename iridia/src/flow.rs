@@ -806,7 +806,18 @@ impl<'a> Walker<'a> {
                 let item = io
                     .arguments
                     .iter()
-                    .find(|item| Some(&item.binding) == binding)
+                    .find(|item| match (program.stage, &item.binding, binding) {
+                        // Vertex inputs have no interpolation or sampling. WGSL parsing may add
+                        // those defaults anyway; only their location identifies the input.
+                        (
+                            Stage::Vertex,
+                            naga::Binding::Location {
+                                location: expected, ..
+                            },
+                            Some(naga::Binding::Location { location, .. }),
+                        ) => expected == location,
+                        _ => Some(&item.binding) == binding,
+                    })
                     .ok_or_else(|| format!("entry argument {i}: no interface input has its binding"))?;
                 for k in 0..width {
                     let (input, lane) = varying_lane(&program.interface.inputs, item, k, false)?
