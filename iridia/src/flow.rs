@@ -916,9 +916,15 @@ impl<'a> Walker<'a> {
     }
 
     /// One of `arms` as `condition` decides; the one value where they agree.
-    fn merge(&mut self, condition: Vec<NodeId>, mut arms: Vec<NodeId>) -> NodeId {
-        let mut seen = BTreeSet::new();
-        arms.retain(|a| seen.insert(*a));
+    fn merge(&mut self, condition: Vec<NodeId>, arms: Vec<NodeId>) -> NodeId {
+        // the arms in order, each once (there are as many as the branch has ways out: a few)
+        let mut distinct: Vec<NodeId> = Vec::with_capacity(arms.len());
+        for a in arms {
+            if !distinct.contains(&a) {
+                distinct.push(a);
+            }
+        }
+        let arms = distinct;
         if let [only] = arms[..] {
             return only;
         }
@@ -1715,48 +1721,51 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// The state after `states` meet, `condition` deciding which: a lane they disagree on is a merge.
+    /// The state after `states` meet, `condition` deciding which: a lane they disagree on is a merge, a lane they agree
+    /// on keeps its value (the merge of one value is that value, so it is not built).
     fn join(&mut self, condition: &[NodeId], states: Vec<State>) -> Option<State> {
         let mut states = states.into_iter();
-        let first = states.next()?;
+        let mut out = states.next()?;
         let rest: Vec<State> = states.collect();
         if rest.is_empty() {
-            return Some(first);
+            return Some(out);
         }
-        let mut out = first.clone();
-        for (l, lanes) in first.locals {
-            let joined = (0..lanes.len())
-                .map(|k| {
-                    let arms: Vec<NodeId> = lanes
-                        .get(k)
-                        .copied()
-                        .into_iter()
-                        .chain(
-                            rest.iter()
-                                .filter_map(|s| s.locals.get(&l).and_then(|v| v.get(k).copied())),
-                        )
-                        .collect();
-                    self.merge(condition.to_vec(), arms)
-                })
-                .collect();
-            out.locals.insert(l, joined);
+        for (l, lanes) in &mut out.locals {
+            if rest.iter().all(|s| s.locals.get(l).is_none_or(|v| v == lanes)) {
+                continue;
+            }
+            for (k, lane) in lanes.iter_mut().enumerate() {
+                let others = rest
+                    .iter()
+                    .filter_map(|s| s.locals.get(l).and_then(|v| v.get(k).copied()));
+                if others.clone().all(|o| o == *lane) {
+                    continue;
+                }
+                let arms = std::iter::once(*lane).chain(others).collect();
+                *lane = self.merge(condition.to_vec(), arms);
+            }
         }
-        let globals: BTreeSet<_> = std::iter::once(&first.globals)
+        let globals: BTreeSet<_> = std::iter::once(&out.globals)
             .chain(rest.iter().map(|s| &s.globals))
             .flat_map(|g| g.keys().copied())
             .collect();
         for g in globals {
+            // the global's lanes before the program writes it stand for a state that has not written it; taken for
+            // every global met, as they intern its nodes
             let Ok(initial) = self.global_lanes(g) else {
                 continue;
             };
-            let all: Vec<Vec<NodeId>> = std::iter::once(&first.globals)
-                .chain(rest.iter().map(|s| &s.globals))
-                .map(|m| m.get(&g).cloned().unwrap_or_else(|| initial.clone()))
-                .collect();
+            let first = out.globals.get(&g);
             let joined = (0..initial.len())
                 .map(|k| {
-                    let arms = all.iter().filter_map(|v| v.get(k).copied()).collect();
-                    self.merge(condition.to_vec(), arms)
+                    let arms = std::iter::once(first)
+                        .chain(rest.iter().map(|s| s.globals.get(&g)))
+                        .filter_map(|m| m.unwrap_or(&initial).get(k).copied());
+                    let mut each = arms.clone();
+                    match each.next() {
+                        Some(a) if each.all(|b| b == a) => a,
+                        _ => self.merge(condition.to_vec(), arms.collect()),
+                    }
                 })
                 .collect();
             out.globals.insert(g, joined);
