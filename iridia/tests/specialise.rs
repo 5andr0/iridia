@@ -176,3 +176,123 @@ fn an_unknown_branch_preserves_the_sign_of_zero() {
         );
     }
 }
+/// An entry point of `fixtures/specialise.hlsl` as fxc and dxc compile it, lifted.
+fn lifted(dxbc: &[u8], dxil: &[u8]) -> [(&'static str, iridia::Program); 2] {
+    [
+        ("fxc", iridia_dxbc::lift(dxbc).unwrap()),
+        ("dxc", iridia_dxil::lift(dxil).unwrap()),
+    ]
+}
+fn constant_buffer(program: &iridia::Program) -> iridia::ResourceId {
+    program
+        .interface
+        .resources
+        .iter()
+        .find(|r| matches!(r.kind, ResourceKind::ConstantBuffer { .. }))
+        .unwrap()
+        .id
+}
+/// Whether `program` reaches its outputs from lane `lane` of its input `COLOR0`.
+fn reads_colour(program: &iridia::Program, lane: u8) -> bool {
+    let colour = program
+        .interface
+        .inputs
+        .iter()
+        .position(|v| v.label.name == "COLOR" && v.label.index == 0)
+        .unwrap();
+    let values = iridia::flow::Values::of_program(program).unwrap();
+    values.reached_from(values.roots()).into_iter().any(|id| {
+        matches!(values.node(id), iridia::flow::Node::Input { input, lane: l } if *input == colour && *l == lane)
+    })
+}
+/// `specialised` gives the outputs `source` gives, with the words of `cb` stated, on inputs across the colour's range.
+fn same_outputs(source: &iridia::Program, specialised: iridia::Program, cb: [u32; 4], context: &str) {
+    let original = ProgramShader::new(source.clone()).unwrap();
+    let specialised = ProgramShader::new(specialised).unwrap();
+    for i in 0..64u32 {
+        let inputs = [
+            [0; 4],
+            [
+                (i as f32 / 64.).to_bits(),
+                0.25f32.to_bits(),
+                0.5f32.to_bits(),
+                ((63 - i) as f32 / 64.).to_bits(),
+            ],
+        ];
+        let sample = |_: &ImageSample<u32>| Ok([0.; 4]);
+        let a = original
+            .execute(&inputs, &[(0, &[cb])], &mut AnsweredReads::new(sample))
+            .unwrap();
+        let b = specialised
+            .execute(&inputs, &[(0, &[cb])], &mut AnsweredReads::new(sample))
+            .unwrap();
+        assert_eq!(a.outputs, b.outputs, "{context}, input={i}");
+    }
+}
+/// `word`: the stated word decides, by a select, whether the vertex colour's w is read. fxc's program reads the word
+/// from a row of the constant buffer indexed by a value (`Access`), dxc's from a constant index: in either the word
+/// folds, the specialised program reads the colour's w only where the word is set, and it gives the original's
+/// outputs.
+#[test]
+fn a_stated_word_folds_in_either_bytecode() {
+    for (compiler, source) in lifted(
+        include_bytes!("fixtures/specialise_word.dxbc"),
+        include_bytes!("fixtures/specialise_word.dxil"),
+    ) {
+        let buffer = constant_buffer(&source);
+        assert!(reads_colour(&source, 3), "{compiler}: the source reads COLOR0.w");
+        for weighted in [0u32, 1] {
+            let context = format!("{compiler}, weighted={weighted}");
+            let words = Words::from([((buffer, 0), weighted)]);
+            let result = specialise(&source, &words).unwrap_or_else(|e| panic!("{context}: {e}"));
+            assert_eq!(result.words, words, "{context}");
+            assert!(result.folded > 0, "{context}: nothing folded");
+            assert_eq!(reads_colour(&result.program, 3), weighted == 1, "{context}");
+            same_outputs(
+                &source,
+                result.program,
+                [weighted, 0.5f32.to_bits(), 0, 0],
+                &context,
+            );
+        }
+    }
+}
+/// `integer`: a signed word compared with a number decides the select; it folds either way in both bytecodes.
+#[test]
+fn a_signed_word_compared_with_a_number_folds() {
+    for (compiler, source) in lifted(
+        include_bytes!("fixtures/specialise_integer.dxbc"),
+        include_bytes!("fixtures/specialise_integer.dxil"),
+    ) {
+        let buffer = constant_buffer(&source);
+        for mode in [-1i32, 5] {
+            let context = format!("{compiler}, mode={mode}");
+            let words = Words::from([((buffer, 8), mode.cast_unsigned())]);
+            let result = specialise(&source, &words).unwrap_or_else(|e| panic!("{context}: {e}"));
+            assert_eq!(result.words, words, "{context}");
+            same_outputs(&source, result.program, [0, 0, mode.cast_unsigned(), 0], &context);
+        }
+    }
+}
+/// `root`: the stated word decides the select through its square root, which the fold does not evaluate. The word is
+/// still a feature word, and the specialisation is refused, naming it, rather than returned with the select unmade.
+#[test]
+fn a_decision_the_fold_cannot_evaluate_is_refused() {
+    for (compiler, source) in lifted(
+        include_bytes!("fixtures/specialise_root.dxbc"),
+        include_bytes!("fixtures/specialise_root.dxil"),
+    ) {
+        let buffer = constant_buffer(&source);
+        let words = Words::from([((buffer, 4), 4f32.to_bits())]);
+        assert_eq!(
+            iridia::specialise::feature_words(&source, &words).unwrap(),
+            words,
+            "{compiler}"
+        );
+        let refused = specialise(&source, &words).expect_err(compiler);
+        assert!(
+            refused.contains(&format!("{}+4", buffer.0)) && refused.contains("not taken"),
+            "{compiler}: {refused}"
+        );
+    }
+}

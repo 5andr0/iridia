@@ -5,6 +5,8 @@ use naga::{Expression as E, Handle, Literal as L, ScalarKind as K, Statement as 
 use std::collections::{BTreeMap, BTreeSet};
 /// A known raw word in a constant buffer, at its byte offset.
 pub type Words = BTreeMap<(ResourceId, u32), u32>;
+/// A word of a constant buffer: the buffer and the word's byte offset.
+type Word = (ResourceId, u32);
 /// A specialised copy and the evidence for its eliminated resource reads.
 #[derive(Clone, Debug)]
 pub struct Specialised {
@@ -101,8 +103,26 @@ fn binary(op: naga::BinaryOperator, a: L, b: L) -> Option<L> {
             B::Multiply => L::U32(a.wrapping_mul(b)),
             B::Equal => L::Bool(a == b),
             B::NotEqual => L::Bool(a != b),
+            B::Less => L::Bool(a < b),
+            B::LessEqual => L::Bool(a <= b),
+            B::Greater => L::Bool(a > b),
+            B::GreaterEqual => L::Bool(a >= b),
             B::And => L::U32(a & b),
             B::InclusiveOr => L::U32(a | b),
+            _ => return None,
+        }),
+        (L::I32(a), L::I32(b)) => Some(match op {
+            B::Add => L::I32(a.wrapping_add(b)),
+            B::Subtract => L::I32(a.wrapping_sub(b)),
+            B::Multiply => L::I32(a.wrapping_mul(b)),
+            B::Equal => L::Bool(a == b),
+            B::NotEqual => L::Bool(a != b),
+            B::Less => L::Bool(a < b),
+            B::LessEqual => L::Bool(a <= b),
+            B::Greater => L::Bool(a > b),
+            B::GreaterEqual => L::Bool(a >= b),
+            B::And => L::I32(a & b),
+            B::InclusiveOr => L::I32(a | b),
             _ => return None,
         }),
         _ => None,
@@ -133,30 +153,47 @@ impl Fold<'_> {
             .cloned()
             .ok_or_else(|| "expression has no value slot in specialisation".into())
     }
+    /// The place a pointer names: its root variable, the first of its lanes there, and how many. An element indexed by
+    /// a value the fold knows (`Access`, as the DXBC lift addresses a constant buffer's rows) is placed as a constant
+    /// index (`AccessIndex`) is; one indexed at run time, or out of its array's bounds, has no place.
     fn ptr(&self, h: Handle<E>) -> Option<(Root, usize, usize)> {
         match self.f.expressions[h] {
             E::LocalVariable(l) => Some((Root::Local(l), 0, self.width(h).ok()?)),
             E::GlobalVariable(g) => Some((Root::Global(g), 0, self.width(h).ok()?)),
-            E::AccessIndex { base, index } => {
-                let (root, offset, _) = self.ptr(base)?;
-                let base_type = self.ty(base).ok()?;
-                let t = match self.m.types[base_type].inner {
-                    T::Pointer { base, .. } => base,
-                    _ => base_type,
+            E::AccessIndex { base, index } => self.element(h, base, index),
+            E::Access { base, index } => {
+                let index = match self.values.get(index.index())?.as_slice() {
+                    [Some(L::U32(i))] => *i,
+                    [Some(L::I32(i))] => u32::try_from(*i).ok()?,
+                    _ => return None,
                 };
-                let start = match &self.m.types[t].inner {
-                    T::Struct { members, .. } => members
-                        .iter()
-                        .take(index as usize)
-                        .try_fold(0usize, |count, s| count.checked_add(lanes(s.ty, self.m).ok()?))?,
-                    T::Array { base, .. } => (index as usize).checked_mul(lanes(*base, self.m).ok()?)?,
-                    T::Matrix { rows, .. } => (index as usize).checked_mul(*rows as usize)?,
-                    _ => index as usize,
-                };
-                Some((root, offset.checked_add(start)?, self.width(h).ok()?))
+                self.element(h, base, index)
             }
             _ => None,
         }
+    }
+    /// The place of element (or member) `index` of the pointer `base`, which `h` names.
+    fn element(&self, h: Handle<E>, base: Handle<E>, index: u32) -> Option<(Root, usize, usize)> {
+        let (root, offset, _) = self.ptr(base)?;
+        let base_type = self.ty(base).ok()?;
+        let t = match self.m.types[base_type].inner {
+            T::Pointer { base, .. } => base,
+            _ => base_type,
+        };
+        let start = match &self.m.types[t].inner {
+            T::Struct { members, .. } => members
+                .iter()
+                .take(index as usize)
+                .try_fold(0usize, |count, s| count.checked_add(lanes(s.ty, self.m).ok()?))?,
+            T::Array {
+                size: naga::ArraySize::Constant(n),
+                ..
+            } if index >= n.get() => return None,
+            T::Array { base, .. } => (index as usize).checked_mul(lanes(*base, self.m).ok()?)?,
+            T::Matrix { rows, .. } => (index as usize).checked_mul(*rows as usize)?,
+            _ => index as usize,
+        };
+        Some((root, offset.checked_add(start)?, self.width(h).ok()?))
     }
     fn root(&self, h: Handle<E>) -> Option<Root> {
         match self.f.expressions[h] {
@@ -225,6 +262,11 @@ impl Fold<'_> {
                 .map(|v| match (v, *kind, *convert) {
                     (Some(L::U32(v)), K::Float, None) => Some(L::F32(f32::from_bits(v))),
                     (Some(L::F32(v)), K::Uint, None) => Some(L::U32(v.to_bits())),
+                    (Some(L::U32(v)), K::Sint, None) => Some(L::I32(v.cast_signed())),
+                    (Some(L::I32(v)), K::Uint, None) => Some(L::U32(v.cast_unsigned())),
+                    (Some(L::F32(v)), K::Sint, None) => Some(L::I32(v.to_bits().cast_signed())),
+                    (Some(L::U32(v)), K::Uint, None | Some(4)) => Some(L::U32(v)),
+                    (Some(L::I32(v)), K::Sint, None | Some(4)) => Some(L::I32(v)),
                     (Some(L::I32(v)), K::Float, None) => Some(L::F32(f32::from_bits(v as u32))),
                     (Some(L::F32(v)), K::Float, _) => Some(L::F32(v)),
                     (Some(L::U32(v)), K::Float, Some(_)) => Some(L::F32(v as f32)),
@@ -468,67 +510,81 @@ impl Fold<'_> {
         Ok(out)
     }
 }
+/// The stated words a value is made of, where it is made of nothing else (literals and words among `known`); none
+/// where it reads a runtime input, a texture, a word not known or loop state.
+fn dependencies(
+    values: &crate::flow::Values,
+    id: crate::flow::NodeId,
+    known: &Words,
+    cache: &mut BTreeMap<crate::flow::NodeId, Option<BTreeSet<Word>>>,
+) -> Option<BTreeSet<Word>> {
+    use crate::flow::{At, Node};
+    if let Some(v) = cache.get(&id) {
+        return v.clone();
+    }
+    let result = match values.node(id) {
+        Node::Literal(_) => Some(BTreeSet::new()),
+        Node::Global {
+            resource: Some(resource),
+            at: At::Component(word),
+        } => {
+            let key = (*resource, word.checked_mul(4)?);
+            known.contains_key(&key).then(|| BTreeSet::from([key]))
+        }
+        Node::Op { operands, .. } => {
+            let mut out = BTreeSet::new();
+            for operand in operands {
+                out.extend(dependencies(values, *operand, known, cache)?);
+            }
+            Some(out)
+        }
+        _ => None,
+    };
+    cache.insert(id, result.clone());
+    result
+}
+/// Each decision the program's outputs depend on that is made without any runtime input: a select's or a branch's
+/// condition made of literals and words among `known` (between arms that differ), with the words it is made of.
+fn stated_decisions(
+    program: &Program,
+    known: &Words,
+) -> Result<BTreeMap<crate::flow::NodeId, BTreeSet<Word>>, String> {
+    use crate::flow::{Node, Op, Values};
+    let values = Values::of_program(program)?;
+    let mut decisions = BTreeMap::new();
+    let mut cache = BTreeMap::new();
+    for id in values.reached_from(values.roots()) {
+        // a select or merge whose arms are one value decides nothing (the fold leaves a taken select so)
+        let conditions = match values.node(id) {
+            Node::Op {
+                op: Op::Select,
+                operands,
+            } => match operands.as_slice() {
+                [condition, accept, reject] if accept != reject => vec![*condition],
+                _ => Vec::new(),
+            },
+            Node::Merge { condition, arms } if arms.iter().any(|arm| Some(arm) != arms.first()) => {
+                condition.clone()
+            }
+            _ => Vec::new(),
+        };
+        for condition in conditions {
+            if let Some(found) = dependencies(&values, condition, known, &mut cache) {
+                decisions.insert(condition, found);
+            }
+        }
+    }
+    Ok(decisions)
+}
 /// The subset of stated words that decides a branch or a select without any runtime input.
 /// Values mixed with vertex inputs, texture samples, unknown words or loop state are not frozen.
 /// Ordinary colours and scales remain uniforms unless the program itself uses them as a fully
 /// stated feature decision. This keeps specialisations tied to feature sets rather than data values.
 pub fn feature_words(source: &Program, known: &Words) -> Result<Words, String> {
-    use crate::flow::{At, Node, NodeId, Op, Values};
-    fn dependencies(
-        values: &Values,
-        id: NodeId,
-        known: &Words,
-        cache: &mut BTreeMap<NodeId, Option<BTreeSet<(ResourceId, u32)>>>,
-    ) -> Option<BTreeSet<(ResourceId, u32)>> {
-        if let Some(v) = cache.get(&id) {
-            return v.clone();
-        }
-        let result = match values.node(id) {
-            Node::Literal(_) => Some(BTreeSet::new()),
-            Node::Global {
-                resource: Some(resource),
-                at: At::Component(word),
-            } => {
-                let key = (*resource, word.checked_mul(4)?);
-                known.contains_key(&key).then(|| BTreeSet::from([key]))
-            }
-            Node::Op { operands, .. } => {
-                let mut out = BTreeSet::new();
-                for operand in operands {
-                    out.extend(dependencies(values, *operand, known, cache)?);
-                }
-                Some(out)
-            }
-            _ => None,
-        };
-        cache.insert(id, result.clone());
-        result
-    }
-    let values = Values::of_program(source)?;
-    let mut keys = BTreeSet::new();
-    let mut cache = BTreeMap::new();
-    for id in values.reached_from(values.roots()) {
-        match values.node(id) {
-            Node::Op {
-                op: Op::Select,
-                operands,
-            } => {
-                if let Some(condition) = operands.first()
-                    && let Some(found) = dependencies(&values, *condition, known, &mut cache)
-                {
-                    keys.extend(found);
-                }
-            }
-            Node::Merge { condition, .. } => {
-                for condition in condition {
-                    if let Some(found) = dependencies(&values, *condition, known, &mut cache) {
-                        keys.extend(found);
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
+    let keys = stated_decisions(source, known)?
+        .into_values()
+        .flatten()
+        .collect::<BTreeSet<_>>();
     Ok(known
         .iter()
         .filter(|(key, _)| keys.contains(key))
@@ -536,8 +592,10 @@ pub fn feature_words(source: &Program, known: &Words) -> Result<Words, String> {
         .collect())
 }
 
-/// Fold only `words`, retaining all unknown runtime values. Unsupported constructs return a refusal.
-/// A result is validated before it is returned. The original bytes, interface and lift are not changed.
+/// Fold only `words`, retaining all unknown runtime values. Unsupported constructs return a refusal, and so does a
+/// result that leaves a branch or select the selected words decide untaken (a read the fold could not follow, or a
+/// value it could not evaluate): a specialisation never returns a decision it was given unmade. A result is validated before it is returned. The
+/// original bytes, interface and lift are not changed.
 pub fn specialise(source: &Program, words: &Words) -> Result<Specialised, String> {
     let info = source
         .validate()
@@ -700,6 +758,22 @@ pub fn specialise(source: &Program, words: &Words) -> Result<Specialised, String
     program
         .validate()
         .map_err(|p| format!("specialised program invalid: {p:?}"))?;
+    // every decision the words fixed is taken: one left behind is made of literals now (the words folded into a
+    // value the fold could not evaluate) or still of the words (a read the fold could not follow). The source's own
+    // decisions on literals alone are no specialisation's to take.
+    let left = stated_decisions(&program, words)?.len();
+    let own = stated_decisions(source, &Words::new())?.len();
+    if let Some(untaken) = left.checked_sub(own).filter(|n| *n > 0) {
+        let named = words
+            .keys()
+            .map(|(id, offset)| format!("{}+{offset}", id.0))
+            .collect::<Vec<_>>()
+            .join(", ");
+        return Err(format!(
+            "{untaken} branch or select decision(s) the stated words {named} fix are not taken: the fold could not \
+             evaluate the value they decide by"
+        ));
+    }
     Ok(Specialised {
         program,
         words: words.clone(),

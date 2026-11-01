@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- `iridia::specialise`: a word read through an element indexed by a value the fold knows (`Access`, as `iridia-dxbc`
+  addresses a constant buffer's rows) folds as one read through a constant index (`AccessIndex`) does. Before, no
+  program `iridia-dxbc` lifted folded a stated word: its specialisations returned the program with the words selected
+  and nothing decided. Signed integers fold too (their bitcasts, arithmetic and comparisons, and unsigned comparisons),
+  so a signed word compared with a number decides its select.
+- `iridia::specialise::specialise` refuses a result that leaves a branch or select the selected words decide untaken
+  (a read the fold cannot follow, or a value it cannot evaluate), naming the words, instead of returning it.
+  `feature_words` no longer selects a word for a select whose arms are the same value.
+- Tests: `iridia/tests/specialise.rs` specialises `fixtures/specialise.hlsl`'s entry points as fxc and dxc compile them.
+
 ## 0.4.1 (2026-10-29)
 
 - `iridia::specialise`: specialises a program for one material's stated uniform words. `feature_words` finds the
