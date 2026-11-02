@@ -69,6 +69,7 @@ struct ReadmeExamples;
 #[doc = include_str!("../../README.md")]
 struct RepositoryReadmeExamples;
 
+pub mod blend;
 pub mod bound;
 pub mod build;
 pub mod d3d;

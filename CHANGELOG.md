@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- `iridia::blend`: layers a program lays over one another, read from its value graph with no game in it. `Over` is
+  a lane made of a chain of interpolations (`weight * (layer - below) + below` in any operand order, the difference
+  also as `layer + -below`, or naga's `mix`): its base and each layer's weight and value, bottom first; `Over::under`
+  finds the first chain under an output lane (beneath a saturate, a tint). `Scalar` is a value as the float operations
+  it is made of (add, subtract, multiply, min, max, saturate, constants), each one of the program's own operations in
+  its order, down to leaves the caller names (input lanes, texels, constant words). Direct3D's results the lifters
+  spell out are read back as the operation they spell: the NaN-guarded saturate (NaN gives 0) and the guarded `min`
+  and `max` (a NaN operand gives the other); an unguarded one is a leaf. `Scalar::evaluate` computes it under those
+  rules.
+- `iridia::flow::Values::kind`: the scalar kind of an operation's result and of a literal. A float and an integer
+  operation of the same operands are two nodes now (they were one), and an integer literal a float operation reads
+  through a bitcast is told from a float literal of the same number.
+- Tests: `iridia/tests/blend.rs` reads `fixtures/blend.hlsl`'s layers as fxc compiles them, checks them against the
+  source by hand, and evaluates what it read against `iridia-exec` running the program, bit for bit (NaN, infinity
+  and weights past 0 and 1 included).
 - `iridia::specialise`: a word read through an element indexed by a value the fold knows (`Access`, as `iridia-dxbc`
   addresses a constant buffer's rows) folds as one read through a constant index (`AccessIndex`) does. Before, no
   program `iridia-dxbc` lifted folded a stated word: its specialisations returned the program with the words selected
