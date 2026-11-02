@@ -11,6 +11,7 @@ Part of [iridia](https://github.com/Kalmarv/iridia), which turns compiled Direct
 - **`draw`**: a small software rasterizer for an indexed triangle list (vertex program, clipping, viewport, rasterization, pixel program, depth test, render targets), for re-running a recorded draw on its programs and setting its pixels against the game's.
 - **`evaluate`**: a pixel shader over a grid of UVs, to bake a procedural material to textures. The caller states everything the program reads (the constant layout and values, a texture per sampled slot, a value per used input) and which outputs it wants; the evaluator has no policy of its own and refuses what it is not given. `evaluate_periodic` bakes to a texture that tiles.
 - **`probe`**: runs one vertex of a vertex program with chosen constants to see what it does with them (what a matrix or a table is).
+- **`value`**: one node of a program's value graph (`iridia::flow::Values`) evaluated from the words of the leaves it reads, with the executor's own operations: what a run computes for that lane where it is given the same leaves, bit for bit. The caller answers each leaf (an input lane, a constant word, a texel) or leaves it unknown; a lane that needs an unknown leaf is unknown and names it. A loop's value, a merge whose arms differ, a run-time index, a derivative and a subgroup operation are refused by name.
 - **`texture`** and **`views`**: a 2D texture as the executor samples it (levels, colour transfer, the sampler state's addressing and bias, the filtering the caller chooses) and resource views bound by slot.
 
 ## Example
@@ -46,7 +47,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Tests
 
-`cargo test -p iridia-exec` needs no game files: it runs fixtures through both `iridia-dxbc` and `iridia-dxil` (development dependencies, a cycle cargo allows), holding the interface read from either to the values worked out from the HLSL (`tests/interface.rs`), the evaluator to outputs worked out by hand (`tests/evaluate.rs`), lockstep lanes against one pixel after another with diverging control flow (`tests/lanes.rs`), and the stage drivers to hand-worked meshes, strips, patches and scenes. The comparisons against WARP live in `iridia-dxbc` and `iridia-dxil` (`tests/exec_warp*.rs`).
+`cargo test -p iridia-exec` needs no game files: it runs fixtures through both `iridia-dxbc` and `iridia-dxil` (development dependencies, a cycle cargo allows), holding the interface read from either to the values worked out from the HLSL (`tests/interface.rs`), the evaluator to outputs worked out by hand (`tests/evaluate.rs`), lockstep lanes against one pixel after another with diverging control flow (`tests/lanes.rs`), the value evaluator against a run of the same program on the same leaves, bit for bit (`tests/value.rs`), and the stage drivers to hand-worked meshes, strips, patches and scenes. The comparisons against WARP live in `iridia-dxbc` and `iridia-dxil` (`tests/exec_warp*.rs`).
 
 ## Check the examples
 

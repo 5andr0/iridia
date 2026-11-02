@@ -20,7 +20,7 @@ use iridia::{Program, ResourceId};
 
 /// The scalar kind of a typed value.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Kind {
+pub(super) enum Kind {
     U,
     I,
     F,
@@ -132,7 +132,7 @@ fn words(m: &Module, ty: Handle<naga::Type>) -> Result<u32, String> {
     })
 }
 
-fn kind_of(s: ScalarKind) -> Result<Kind, String> {
+pub(super) fn kind_of(s: ScalarKind) -> Result<Kind, String> {
     Ok(match s {
         ScalarKind::Float => Kind::F,
         ScalarKind::Uint => Kind::U,
@@ -140,6 +140,134 @@ fn kind_of(s: ScalarKind) -> Result<Kind, String> {
         ScalarKind::Bool => Kind::B,
         k => return Err(format!("scalar kind {k:?}")),
     })
+}
+
+// ---------------------------------------------------------------- operations
+
+/// The flat operation of unary operator `op` on operands of kind `k`.
+pub(super) fn unary_op(op: Uo, k: Kind) -> UnOp {
+    match (op, k) {
+        (Uo::Negate, Kind::F) => UnOp::NegF,
+        (Uo::Negate, _) => UnOp::NegI,
+        (Uo::LogicalNot, _) => UnOp::Not,
+        (Uo::BitwiseNot, _) => UnOp::BitNot,
+    }
+}
+
+/// The flat operation of binary operator `op` on operands of kind `k`.
+pub(super) fn binary_op(op: Bo, k: Kind) -> Result<BinOp, String> {
+    use BinOp::*;
+    Ok(match (op, k) {
+        (Bo::Add, Kind::F) => AddF,
+        (Bo::Subtract, Kind::F) => SubF,
+        (Bo::Multiply, Kind::F) => MulF,
+        (Bo::Divide, Kind::F) => DivF,
+        (Bo::Modulo, Kind::F) => ModF,
+        (Bo::Add, _) => AddU,
+        (Bo::Subtract, _) => SubU,
+        (Bo::Multiply, _) => MulU,
+        (Bo::Divide, Kind::U) => DivU,
+        (Bo::Modulo, Kind::U) => ModU,
+        (Bo::And, _) => And,
+        (Bo::InclusiveOr, _) => Or,
+        (Bo::ExclusiveOr, _) => Xor,
+        (Bo::ShiftLeft, _) => Shl,
+        (Bo::ShiftRight, Kind::I) => ShrI,
+        (Bo::ShiftRight, _) => ShrU,
+        (Bo::Equal, Kind::F) => EqF,
+        (Bo::NotEqual, Kind::F) => NeF,
+        (Bo::Equal, _) => EqW,
+        (Bo::NotEqual, _) => NeW,
+        (Bo::Less, Kind::F) => LtF,
+        (Bo::LessEqual, Kind::F) => LeF,
+        (Bo::Greater, Kind::F) => GtF,
+        (Bo::GreaterEqual, Kind::F) => GeF,
+        (Bo::Less, Kind::U) => LtU,
+        (Bo::LessEqual, Kind::U) => LeU,
+        (Bo::Greater, Kind::U) => GtU,
+        (Bo::GreaterEqual, Kind::U) => GeU,
+        (Bo::Less, Kind::I) => LtI,
+        (Bo::LessEqual, Kind::I) => LeI,
+        (Bo::Greater, Kind::I) => GtI,
+        (Bo::GreaterEqual, Kind::I) => GeI,
+        (Bo::LogicalAnd, _) => LAnd,
+        (Bo::LogicalOr, _) => LOr,
+        (o, k) => return Err(format!("binary {o:?} on {k:?}")),
+    })
+}
+
+/// The flat conversion of a value of kind `from` to kind `to`; `None` for one between the integer kinds, which leaves the
+/// bits as they are.
+pub(super) fn convert_op(from: Kind, to: ScalarKind) -> Result<Option<CvtOp>, String> {
+    Ok(Some(match (from, to) {
+        (Kind::F, ScalarKind::Sint) => CvtOp::F2I,
+        (Kind::F, ScalarKind::Uint) => CvtOp::F2U,
+        (Kind::I, ScalarKind::Float) => CvtOp::I2F,
+        (Kind::U, ScalarKind::Float) => CvtOp::U2F,
+        (Kind::B, ScalarKind::Float) => CvtOp::B2F,
+        (Kind::B, ScalarKind::Uint | ScalarKind::Sint) => CvtOp::B2U,
+        (Kind::I, ScalarKind::Uint) | (Kind::U, ScalarKind::Sint) => return Ok(None),
+        (a, b) => return Err(format!("conversion {a:?} to {b:?}")),
+    }))
+}
+
+/// The flat operation of math function `fun` on arguments of kind `k`.
+pub(super) fn math_op(fun: Mf, k: Kind) -> Result<MathOp, String> {
+    Ok(match (fun, k) {
+        (Mf::Abs, Kind::F) => MathOp::AbsF,
+        (Mf::Abs, _) => MathOp::AbsI,
+        (Mf::Min, Kind::F) => MathOp::MinF,
+        (Mf::Max, Kind::F) => MathOp::MaxF,
+        (Mf::Min, Kind::U) => MathOp::MinU,
+        (Mf::Max, Kind::U) => MathOp::MaxU,
+        (Mf::Min, Kind::I) => MathOp::MinI,
+        (Mf::Max, Kind::I) => MathOp::MaxI,
+        (Mf::Clamp, Kind::F) => MathOp::ClampF,
+        (Mf::Saturate, _) => MathOp::SatF,
+        (Mf::Floor, _) => MathOp::Floor,
+        (Mf::Ceil, _) => MathOp::Ceil,
+        (Mf::Trunc, _) => MathOp::Trunc,
+        (Mf::Round, _) => MathOp::Round,
+        (Mf::Fract, _) => MathOp::Fract,
+        (Mf::Exp2, _) => MathOp::Exp2,
+        (Mf::Log2, _) => MathOp::Log2,
+        (Mf::Sin, _) => MathOp::Sin,
+        (Mf::Cos, _) => MathOp::Cos,
+        (Mf::QuantizeToF16, _) => MathOp::QuantizeF16,
+        (Mf::Tan, _) => MathOp::Tan,
+        (Mf::Asin, _) => MathOp::Asin,
+        (Mf::Acos, _) => MathOp::Acos,
+        (Mf::Atan, _) => MathOp::Atan,
+        (Mf::Sinh, _) => MathOp::Sinh,
+        (Mf::Cosh, _) => MathOp::Cosh,
+        (Mf::Tanh, _) => MathOp::Tanh,
+        (Mf::Fma, _) => MathOp::Fma,
+        (Mf::Sqrt, _) => MathOp::Sqrt,
+        (Mf::InverseSqrt, _) => MathOp::Rsqrt,
+        (Mf::Dot, _) => MathOp::Dot,
+        (Mf::CountOneBits, _) => MathOp::Popcnt,
+        (Mf::ReverseBits, _) => MathOp::RevBits,
+        (Mf::CountLeadingZeros, _) => MathOp::Clz,
+        (Mf::FirstTrailingBit, _) => MathOp::Ctz,
+        (Mf::Pack2x16float, _) => MathOp::PackHalf,
+        (Mf::Unpack2x16float, _) => MathOp::UnpackHalf,
+        (Mf::Mix, Kind::F) => MathOp::Mix,
+        (Mf::Pow, Kind::F) => MathOp::Pow,
+        (Mf::Normalize, Kind::F) => MathOp::Normalize,
+        (Mf::Sign, Kind::F) => MathOp::SignF,
+        (Mf::Sign, Kind::I) => MathOp::SignI,
+        (f, k) => return Err(format!("math function {f:?} on {k:?}")),
+    })
+}
+
+/// The flat operation of relational function `fun`.
+pub(super) fn relational_op(fun: naga::RelationalFunction) -> MathOp {
+    match fun {
+        naga::RelationalFunction::All => MathOp::All,
+        naga::RelationalFunction::Any => MathOp::Any,
+        naga::RelationalFunction::IsNan => MathOp::IsNan,
+        naga::RelationalFunction::IsInf => MathOp::IsInf,
+    }
 }
 #[derive(Clone, Copy, Debug)]
 enum Shape {
@@ -763,15 +891,8 @@ pub(super) fn compile(
             }
             E::Unary { op, expr } => {
                 let n = nlanes(*expr);
-                let k = kind(*expr);
-                let uo = match (op, k) {
-                    (Uo::Negate, Kind::F) => UnOp::NegF,
-                    (Uo::Negate, _) => UnOp::NegI,
-                    (Uo::LogicalNot, _) => UnOp::Not,
-                    (Uo::BitwiseNot, _) => UnOp::BitNot,
-                };
                 *op_of.at_mut(i)? = Some(Op::Un {
-                    op: uo,
+                    op: unary_op(*op, kind(*expr)),
                     src: *slot.at(expr.index())?,
                     n,
                 });
@@ -780,46 +901,8 @@ pub(super) fn compile(
                 let k = kind(*left);
                 let (a1, b1) = (nlanes(*left) == 1, nlanes(*right) == 1);
                 let n = nlanes(*left).max(nlanes(*right));
-                use BinOp::*;
-                let bo = match (op, k) {
-                    (Bo::Add, Kind::F) => AddF,
-                    (Bo::Subtract, Kind::F) => SubF,
-                    (Bo::Multiply, Kind::F) => MulF,
-                    (Bo::Divide, Kind::F) => DivF,
-                    (Bo::Modulo, Kind::F) => ModF,
-                    (Bo::Add, _) => AddU,
-                    (Bo::Subtract, _) => SubU,
-                    (Bo::Multiply, _) => MulU,
-                    (Bo::Divide, Kind::U) => DivU,
-                    (Bo::Modulo, Kind::U) => ModU,
-                    (Bo::And, _) => And,
-                    (Bo::InclusiveOr, _) => Or,
-                    (Bo::ExclusiveOr, _) => Xor,
-                    (Bo::ShiftLeft, _) => Shl,
-                    (Bo::ShiftRight, Kind::I) => ShrI,
-                    (Bo::ShiftRight, _) => ShrU,
-                    (Bo::Equal, Kind::F) => EqF,
-                    (Bo::NotEqual, Kind::F) => NeF,
-                    (Bo::Equal, _) => EqW,
-                    (Bo::NotEqual, _) => NeW,
-                    (Bo::Less, Kind::F) => LtF,
-                    (Bo::LessEqual, Kind::F) => LeF,
-                    (Bo::Greater, Kind::F) => GtF,
-                    (Bo::GreaterEqual, Kind::F) => GeF,
-                    (Bo::Less, Kind::U) => LtU,
-                    (Bo::LessEqual, Kind::U) => LeU,
-                    (Bo::Greater, Kind::U) => GtU,
-                    (Bo::GreaterEqual, Kind::U) => GeU,
-                    (Bo::Less, Kind::I) => LtI,
-                    (Bo::LessEqual, Kind::I) => LeI,
-                    (Bo::Greater, Kind::I) => GtI,
-                    (Bo::GreaterEqual, Kind::I) => GeI,
-                    (Bo::LogicalAnd, _) => LAnd,
-                    (Bo::LogicalOr, _) => LOr,
-                    (o, k) => return Err(format!("binary {o:?} on {k:?}")),
-                };
                 *op_of.at_mut(i)? = Some(Op::Bin {
-                    op: bo,
+                    op: binary_op(*op, k)?,
                     a: *slot.at(left.index())?,
                     b: *slot.at(right.index())?,
                     n,
@@ -849,19 +932,9 @@ pub(super) fn compile(
                 None => *slot.at_mut(i)? = *slot.at(expr.index())?,
                 Some(_) => {
                     let n = nlanes(*expr);
-                    let from = kind(*expr);
-                    let co = match (from, tk) {
-                        (Kind::F, ScalarKind::Sint) => CvtOp::F2I,
-                        (Kind::F, ScalarKind::Uint) => CvtOp::F2U,
-                        (Kind::I, ScalarKind::Float) => CvtOp::I2F,
-                        (Kind::U, ScalarKind::Float) => CvtOp::U2F,
-                        (Kind::B, ScalarKind::Float) => CvtOp::B2F,
-                        (Kind::B, ScalarKind::Uint | ScalarKind::Sint) => CvtOp::B2U,
-                        (Kind::I, ScalarKind::Uint) | (Kind::U, ScalarKind::Sint) => {
-                            *slot.at_mut(i)? = *slot.at(expr.index())?;
-                            continue;
-                        }
-                        (a, b) => return Err(format!("conversion {a:?} to {b:?}")),
+                    let Some(co) = convert_op(kind(*expr), *tk)? else {
+                        *slot.at_mut(i)? = *slot.at(expr.index())?;
+                        continue;
                     };
                     *op_of.at_mut(i)? = Some(Op::Cvt {
                         op: co,
@@ -893,61 +966,12 @@ pub(super) fn compile(
                 let a = *slot.at(arg.index())?;
                 let b = arg1.map_or(Ok(0), |x| slot.at(x.index()).copied())?;
                 let c = arg2.map_or(Ok(0), |x| slot.at(x.index()).copied())?;
-                let f = match (fun, k) {
-                    (Mf::Abs, Kind::F) => MathOp::AbsF,
-                    (Mf::Abs, _) => MathOp::AbsI,
-                    (Mf::Min, Kind::F) => MathOp::MinF,
-                    (Mf::Max, Kind::F) => MathOp::MaxF,
-                    (Mf::Min, Kind::U) => MathOp::MinU,
-                    (Mf::Max, Kind::U) => MathOp::MaxU,
-                    (Mf::Min, Kind::I) => MathOp::MinI,
-                    (Mf::Max, Kind::I) => MathOp::MaxI,
-                    (Mf::Clamp, Kind::F) => MathOp::ClampF,
-                    (Mf::Saturate, _) => MathOp::SatF,
-                    (Mf::Floor, _) => MathOp::Floor,
-                    (Mf::Ceil, _) => MathOp::Ceil,
-                    (Mf::Trunc, _) => MathOp::Trunc,
-                    (Mf::Round, _) => MathOp::Round,
-                    (Mf::Fract, _) => MathOp::Fract,
-                    (Mf::Exp2, _) => MathOp::Exp2,
-                    (Mf::Log2, _) => MathOp::Log2,
-                    (Mf::Sin, _) => MathOp::Sin,
-                    (Mf::Cos, _) => MathOp::Cos,
-                    (Mf::QuantizeToF16, _) => MathOp::QuantizeF16,
-                    (Mf::Tan, _) => MathOp::Tan,
-                    (Mf::Asin, _) => MathOp::Asin,
-                    (Mf::Acos, _) => MathOp::Acos,
-                    (Mf::Atan, _) => MathOp::Atan,
-                    (Mf::Sinh, _) => MathOp::Sinh,
-                    (Mf::Cosh, _) => MathOp::Cosh,
-                    (Mf::Tanh, _) => MathOp::Tanh,
-                    (Mf::Fma, _) => MathOp::Fma,
-                    (Mf::Sqrt, _) => MathOp::Sqrt,
-                    (Mf::InverseSqrt, _) => MathOp::Rsqrt,
-                    (Mf::Dot, _) => MathOp::Dot,
-                    (Mf::CountOneBits, _) => MathOp::Popcnt,
-                    (Mf::ReverseBits, _) => MathOp::RevBits,
-                    (Mf::CountLeadingZeros, _) => MathOp::Clz,
-                    (Mf::FirstTrailingBit, _) => MathOp::Ctz,
-                    (Mf::Pack2x16float, _) => MathOp::PackHalf,
-                    (Mf::Unpack2x16float, _) => MathOp::UnpackHalf,
-                    (Mf::Mix, Kind::F) => MathOp::Mix,
-                    (Mf::Pow, Kind::F) => MathOp::Pow,
-                    (Mf::Normalize, Kind::F) => MathOp::Normalize,
-                    (Mf::Sign, Kind::F) => MathOp::SignF,
-                    (Mf::Sign, Kind::I) => MathOp::SignI,
-                    (f, k) => return Err(format!("math function {f:?} on {k:?}")),
-                };
+                let f = math_op(*fun, k)?;
                 let c1 = arg2.is_some_and(|x| nlanes(x) == 1) && n > 1;
                 *op_of.at_mut(i)? = Some(Op::Math { f, a, b, c, n, c1 });
             }
             E::Relational { fun, argument } => {
-                let f = match fun {
-                    naga::RelationalFunction::All => MathOp::All,
-                    naga::RelationalFunction::Any => MathOp::Any,
-                    naga::RelationalFunction::IsNan => MathOp::IsNan,
-                    naga::RelationalFunction::IsInf => MathOp::IsInf,
-                };
+                let f = relational_op(*fun);
                 *op_of.at_mut(i)? = Some(Op::Math {
                     f,
                     a: *slot.at(argument.index())?,

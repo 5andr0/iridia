@@ -771,11 +771,12 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                             })
                         };
                     }
+                    // each arm a constant operation, so its loop is specialised
                     match op {
-                        UnOp::NegF => un!(w => w ^ 0x8000_0000),
-                        UnOp::NegI => un!(w => (w as i32).wrapping_neg() as u32),
-                        UnOp::Not => un!(w => (w == 0) as u32),
-                        UnOp::BitNot => un!(w => !w),
+                        UnOp::NegF => un!(w => unary(UnOp::NegF, w)),
+                        UnOp::NegI => un!(w => unary(UnOp::NegI, w)),
+                        UnOp::Not => un!(w => unary(UnOp::Not, w)),
+                        UnOp::BitNot => un!(w => unary(UnOp::BitNot, w)),
                     }
                 }
                 Op::Bin { op, a, b, n, a1, b1 } => {
@@ -836,13 +837,14 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                             })
                         };
                     }
+                    // each arm a constant operation, so its loop is specialised
                     match op {
-                        CvtOp::F2I => cvt!(w => float_to_int(f(w))),
-                        CvtOp::F2U => cvt!(w => float_to_uint(f(w))),
-                        CvtOp::I2F => cvt!(w => (w as i32 as f32).to_bits()),
-                        CvtOp::U2F => cvt!(w => (w as f32).to_bits()),
-                        CvtOp::B2F => cvt!(w => (if w != 0 { 1.0f32 } else { 0.0 }).to_bits()),
-                        CvtOp::B2U => cvt!(w => u32::from(w != 0)),
+                        CvtOp::F2I => cvt!(w => convert(CvtOp::F2I, w)),
+                        CvtOp::F2U => cvt!(w => convert(CvtOp::F2U, w)),
+                        CvtOp::I2F => cvt!(w => convert(CvtOp::I2F, w)),
+                        CvtOp::U2F => cvt!(w => convert(CvtOp::U2F, w)),
+                        CvtOp::B2F => cvt!(w => convert(CvtOp::B2F, w)),
+                        CvtOp::B2U => cvt!(w => convert(CvtOp::B2U, w)),
                     }
                 }
                 Op::Math {
@@ -2012,8 +2014,33 @@ fn atomic(fun: AtomOp, signed: bool, old: u32, v: u32, expected: u32) -> (u32, b
     (new, true)
 }
 
+/// Unary operation `op` on the word `w`.
 #[inline(always)]
-fn bin(op: BinOp, x: u32, y: u32, ftz: bool) -> Result<u32, String> {
+pub(super) fn unary(op: UnOp, w: u32) -> u32 {
+    match op {
+        UnOp::NegF => w ^ 0x8000_0000,
+        UnOp::NegI => (w as i32).wrapping_neg() as u32,
+        UnOp::Not => (w == 0) as u32,
+        UnOp::BitNot => !w,
+    }
+}
+
+/// Conversion `op` of the word `w`.
+#[inline(always)]
+pub(super) fn convert(op: CvtOp, w: u32) -> u32 {
+    match op {
+        CvtOp::F2I => float_to_int(f(w)),
+        CvtOp::F2U => float_to_uint(f(w)),
+        CvtOp::I2F => (w as i32 as f32).to_bits(),
+        CvtOp::U2F => (w as f32).to_bits(),
+        CvtOp::B2F => (if w != 0 { 1.0f32 } else { 0.0 }).to_bits(),
+        CvtOp::B2U => u32::from(w != 0),
+    }
+}
+
+/// Binary operation `op` on the words `x` and `y`, subnormal floats flushed to zero where `ftz`.
+#[inline(always)]
+pub(super) fn bin(op: BinOp, x: u32, y: u32, ftz: bool) -> Result<u32, String> {
     use BinOp::*;
     let fa = || fl(f(x), ftz);
     let fb = || fl(f(y), ftz);
@@ -2056,7 +2083,8 @@ fn bin(op: BinOp, x: u32, y: u32, ftz: bool) -> Result<u32, String> {
     })
 }
 
-fn math(mf: MathOp, a: Reg, b: Reg, c: Reg, n: u8, z: bool) -> Reg {
+/// Math operation `mf` on the first `n` lanes of `a`, `b` and `c`, subnormal floats flushed to zero where `z`.
+pub(super) fn math(mf: MathOp, a: Reg, b: Reg, c: Reg, n: u8, z: bool) -> Reg {
     let mut r = [0u32; 4];
     if mf == MathOp::Dot {
         let mut acc = 0.0f32;

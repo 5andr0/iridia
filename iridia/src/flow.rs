@@ -5,8 +5,10 @@
 //! (a lifter keeps registers and phis in locals: a load is the value the last store left there), a branch whose arms
 //! leave different values is a [`Node::Merge`] that names its condition, a loop-carried value a [`Node::Loop`] (the
 //! graph's only cycles) and a bitcast is no operation (the bits are the value). An operation and a literal also have
-//! the scalar kind they are of ([`Values::kind`]): where it differs from an operand's, a bitcast is between them. Equal
-//! nodes of one kind are one node, so a value used twice is shared.
+//! the scalar kind they are of ([`Values::kind`]), and an operation the kind it reads its operands in ([`Values::reads`]):
+//! where that differs from an operand's own, a bitcast is between them. Equal nodes of the same kinds are one node, so a
+//! value used twice is shared, and two operations alike but for the kind they read in (a comparison of the same bits as
+//! floats and as integers) are two.
 //!
 //! [`Flow`] is what may reach each output lane and the discard, and how ([`Via`]): an input lane or a texel lane
 //! through arithmetic (its value), only as a texel's coordinate, or only through a condition. It is a may-reach
@@ -187,6 +189,14 @@ pub enum Node {
     },
 }
 
+/// A node's scalar kinds: its result's ([`Values::kind`]) and, for an operation, the one it reads its operands in
+/// ([`Values::reads`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+struct Kinds {
+    result: Option<ScalarKind>,
+    reads: Option<ScalarKind>,
+}
+
 /// The entry point of a program as a value graph ([`Node`]): each output lane's node and each discard's conditions. A
 /// program of a stage naga has no entry point for is its stage functions ([`stage_functions`]): a vertex program
 /// feeding a tessellator, a domain program, and a hull program's control-point phase (its outputs) and patch-constant
@@ -195,8 +205,8 @@ pub enum Node {
 pub struct Values {
     stage: Stage,
     nodes: Vec<Node>,
-    /// Each node's scalar kind ([`Values::kind`]).
-    kinds: Vec<Option<ScalarKind>>,
+    /// Each node's scalar kinds ([`Values::kind`], [`Values::reads`]).
+    kinds: Vec<Kinds>,
     /// (index in `Interface::outputs`, lane) -> its value.
     outputs: BTreeMap<(usize, u8), NodeId>,
     /// A hull program's patch constants: (index in the hull facts' `patch_constants`, lane) -> its value.
@@ -301,10 +311,18 @@ impl Values {
     /// The scalar kind of node `id` where the program states one: an operation's result's (a comparison's is
     /// [`ScalarKind::Bool`]) and a literal's. `None` for the other nodes, whose lanes are bits each use reads in its
     /// own kind (an input, a texel, a constant word, a merge or a loop's value), and for an operation the walk makes of
-    /// memory (a load or store through a run-time index, an atomic's result, a subgroup operation). An operation whose
-    /// operand is of another kind reads that operand's bits as its own kind: a bitcast is between them.
+    /// memory (a load or store through a run-time index, an atomic's result, a subgroup operation).
     pub fn kind(&self, id: NodeId) -> Option<ScalarKind> {
-        self.kinds.get(usize::try_from(id.0).ok()?).copied().flatten()
+        self.kinds.get(usize::try_from(id.0).ok()?)?.result
+    }
+
+    /// The scalar kind operation `id` reads its operands in, where the program states one: an arithmetic operation's,
+    /// a comparison's (whose result is [`ScalarKind::Bool`]), a conversion's source kind, a select's accepted and
+    /// rejected values' and an index's candidates'. An operand of another kind has its bits read as this kind: a
+    /// bitcast is between them. `None` for a node that is no operation and for an operation the walk makes of memory
+    /// ([`Values::kind`]).
+    pub fn reads(&self, id: NodeId) -> Option<ScalarKind> {
+        self.kinds.get(usize::try_from(id.0).ok()?)?.reads
     }
 
     /// The node `id` names, `None` where this graph has no node of that number (an id from another graph).
@@ -702,8 +720,8 @@ struct Walker<'a> {
     function: &'a naga::Function,
     typifier: naga::front::Typifier,
     nodes: Vec<Node>,
-    kinds: Vec<Option<ScalarKind>>,
-    interned: HashMap<(Node, Option<ScalarKind>), NodeId>,
+    kinds: Vec<Kinds>,
+    interned: HashMap<(Node, Kinds), NodeId>,
     cache: Vec<Option<Val>>,
     arguments: Vec<Vec<NodeId>>,
     /// The result's lanes, each the (output, lane) it is.
@@ -741,7 +759,7 @@ impl<'a> Walker<'a> {
 
     /// Takes over `nodes` of `kinds`, a graph another function of the program was walked into, so equal nodes stay
     /// one.
-    fn adopt(&mut self, nodes: Vec<Node>, kinds: Vec<Option<ScalarKind>>) {
+    fn adopt(&mut self, nodes: Vec<Node>, kinds: Vec<Kinds>) {
         self.interned = nodes
             .iter()
             .zip(&kinds)
@@ -918,10 +936,10 @@ impl<'a> Walker<'a> {
 
     /// A node of no stated kind ([`Values::kind`]).
     fn intern(&mut self, node: Node) -> NodeId {
-        self.typed(node, None)
+        self.typed(node, Kinds::default())
     }
 
-    fn typed(&mut self, node: Node, kind: Option<ScalarKind>) -> NodeId {
+    fn typed(&mut self, node: Node, kind: Kinds) -> NodeId {
         let key = (node, kind);
         if let Some(&id) = self.interned.get(&key) {
             return id;
@@ -933,12 +951,25 @@ impl<'a> Walker<'a> {
         id
     }
 
-    fn op(&mut self, op: Op, kind: Option<ScalarKind>, operands: Vec<NodeId>) -> NodeId {
-        self.typed(Node::Op { op, operands }, kind)
+    /// An operation of result kind `kind` that reads its operands as `reads` ([`Values::reads`]).
+    fn op(
+        &mut self,
+        op: Op,
+        kind: Option<ScalarKind>,
+        reads: Option<ScalarKind>,
+        operands: Vec<NodeId>,
+    ) -> NodeId {
+        self.typed(Node::Op { op, operands }, Kinds { result: kind, reads })
     }
 
     fn literal(&mut self, v: f64, kind: Option<ScalarKind>) -> NodeId {
-        self.typed(Node::Literal(Literal(v)), kind)
+        self.typed(
+            Node::Literal(Literal(v)),
+            Kinds {
+                result: kind,
+                reads: None,
+            },
+        )
     }
 
     /// The scalar kind of expression `h`'s value.
@@ -1205,7 +1236,7 @@ impl<'a> Walker<'a> {
                         .collect();
                     operands.extend(&idx);
                     let kind = self.kind_of(h)?;
-                    out.push(self.op(Op::Index, kind, operands));
+                    out.push(self.op(Op::Index, kind, kind, operands));
                 }
                 lanes(out)
             }
@@ -1286,22 +1317,22 @@ impl<'a> Walker<'a> {
             }
             Expression::Unary { op, expr } => {
                 let v = self.lanes(expr, state)?;
-                let kind = self.kind_of(h)?;
+                let (kind, reads) = (self.kind_of(h)?, self.kind_of(expr)?);
                 lanes(
                     v.into_iter()
-                        .map(|x| self.op(Op::Unary(op), kind, vec![x]))
+                        .map(|x| self.op(Op::Unary(op), kind, reads, vec![x]))
                         .collect(),
                 )
             }
             Expression::Binary { op, left, right } => {
                 let (lt, rt, out) = (self.ty(left)?, self.ty(right)?, self.ty(h)?);
                 let width = self.width(&out);
-                let kind = scalar_kind(&out);
+                let (kind, reads) = (scalar_kind(&out), scalar_kind(&lt));
                 if matches!(lt, TypeInner::Matrix { .. }) || matches!(rt, TypeInner::Matrix { .. }) {
                     // a matrix product: every lane of the result from every lane of both
                     let mut all = self.lanes(left, state)?;
                     all.extend(self.lanes(right, state)?);
-                    let n = self.op(Op::Binary(op), kind, all);
+                    let n = self.op(Op::Binary(op), kind, reads, all);
                     return lanes(vec![n; width]);
                 }
                 let l = self.broadcast(left, width, state)?;
@@ -1309,7 +1340,7 @@ impl<'a> Walker<'a> {
                 lanes(
                     l.into_iter()
                         .zip(r)
-                        .map(|(a, b)| self.op(Op::Binary(op), kind, vec![a, b]))
+                        .map(|(a, b)| self.op(Op::Binary(op), kind, reads, vec![a, b]))
                         .collect(),
                 )
             }
@@ -1328,29 +1359,29 @@ impl<'a> Walker<'a> {
                     let (Some(&c), Some(&a), Some(&r)) = (c.get(k), a.get(k), r.get(k)) else {
                         return Err(format!("a select of {width} lanes with a shorter operand"));
                     };
-                    out.push(self.op(Op::Select, kind, vec![c, a, r]));
+                    out.push(self.op(Op::Select, kind, kind, vec![c, a, r]));
                 }
                 lanes(out)
             }
             Expression::Derivative { axis, ctrl, expr } => {
                 let v = self.lanes(expr, state)?;
-                let kind = self.kind_of(h)?;
+                let (kind, reads) = (self.kind_of(h)?, self.kind_of(expr)?);
                 lanes(
                     v.into_iter()
-                        .map(|x| self.op(Op::Derivative(axis, ctrl), kind, vec![x]))
+                        .map(|x| self.op(Op::Derivative(axis, ctrl), kind, reads, vec![x]))
                         .collect(),
                 )
             }
             Expression::Relational { fun, argument } => {
                 let v = self.lanes(argument, state)?;
-                let kind = self.kind_of(h)?;
+                let (kind, reads) = (self.kind_of(h)?, self.kind_of(argument)?);
                 match fun {
                     RelationalFunction::All | RelationalFunction::Any => {
-                        lanes(vec![self.op(Op::Relational(fun), kind, v)])
+                        lanes(vec![self.op(Op::Relational(fun), kind, reads, v)])
                     }
                     _ => lanes(
                         v.into_iter()
-                            .map(|x| self.op(Op::Relational(fun), kind, vec![x]))
+                            .map(|x| self.op(Op::Relational(fun), kind, reads, vec![x]))
                             .collect(),
                     ),
                 }
@@ -1363,7 +1394,7 @@ impl<'a> Walker<'a> {
                 arg3,
             } => {
                 let width = self.width_of(h)?;
-                let kind = self.kind_of(h)?;
+                let (kind, reads) = (self.kind_of(h)?, self.kind_of(arg)?);
                 let args: Vec<_> = [Some(arg), arg1, arg2, arg3].into_iter().flatten().collect();
                 if componentwise(fun) {
                     let mut per = Vec::new();
@@ -1376,7 +1407,7 @@ impl<'a> Walker<'a> {
                             .iter()
                             .filter_map(|p| p.get(k).or(p.first()).copied())
                             .collect();
-                        out.push(self.op(Op::Math(fun), kind, operands));
+                        out.push(self.op(Op::Math(fun), kind, reads, operands));
                     }
                     lanes(out)
                 } else {
@@ -1386,7 +1417,7 @@ impl<'a> Walker<'a> {
                     for a in &args {
                         all.extend(self.lanes(*a, state)?);
                     }
-                    let n = self.op(Op::Math(fun), kind, all);
+                    let n = self.op(Op::Math(fun), kind, reads, all);
                     lanes(vec![n; width.max(1)])
                 }
             }
@@ -1394,11 +1425,14 @@ impl<'a> Walker<'a> {
                 let v = self.lanes(expr, state)?;
                 match convert {
                     None => lanes(v),
-                    Some(_) => lanes(
-                        v.into_iter()
-                            .map(|x| self.op(Op::Convert(kind), Some(kind), vec![x]))
-                            .collect(),
-                    ),
+                    Some(_) => {
+                        let from = self.kind_of(expr)?;
+                        lanes(
+                            v.into_iter()
+                                .map(|x| self.op(Op::Convert(kind), Some(kind), from, vec![x]))
+                                .collect(),
+                        )
+                    }
                 }
             }
             Expression::CallResult(f) => Err(format!(
@@ -1630,7 +1664,7 @@ impl<'a> Walker<'a> {
             } else {
                 let mut operands = candidates;
                 operands.extend(&place.index);
-                self.op(Op::Index, None, operands)
+                self.op(Op::Index, None, None, operands)
             });
         }
         Ok(out)
@@ -1648,18 +1682,28 @@ impl<'a> Walker<'a> {
         use naga::AtomicFunction as F;
         let binary = |op| Op::Binary(op);
         match fun {
-            F::Add => self.op(binary(BinaryOperator::Add), None, vec![before, with]),
-            F::Subtract => self.op(binary(BinaryOperator::Subtract), None, vec![before, with]),
-            F::And => self.op(binary(BinaryOperator::And), None, vec![before, with]),
-            F::InclusiveOr => self.op(binary(BinaryOperator::InclusiveOr), None, vec![before, with]),
-            F::ExclusiveOr => self.op(binary(BinaryOperator::ExclusiveOr), None, vec![before, with]),
-            F::Min => self.op(Op::Math(MathFunction::Min), None, vec![before, with]),
-            F::Max => self.op(Op::Math(MathFunction::Max), None, vec![before, with]),
+            F::Add => self.op(binary(BinaryOperator::Add), None, None, vec![before, with]),
+            F::Subtract => self.op(binary(BinaryOperator::Subtract), None, None, vec![before, with]),
+            F::And => self.op(binary(BinaryOperator::And), None, None, vec![before, with]),
+            F::InclusiveOr => self.op(
+                binary(BinaryOperator::InclusiveOr),
+                None,
+                None,
+                vec![before, with],
+            ),
+            F::ExclusiveOr => self.op(
+                binary(BinaryOperator::ExclusiveOr),
+                None,
+                None,
+                vec![before, with],
+            ),
+            F::Min => self.op(Op::Math(MathFunction::Min), None, None, vec![before, with]),
+            F::Max => self.op(Op::Math(MathFunction::Max), None, None, vec![before, with]),
             F::Exchange { .. } => match compare {
                 None => with,
                 Some(compare) => {
-                    let equal = self.op(binary(BinaryOperator::Equal), None, vec![before, compare]);
-                    self.op(Op::Select, None, vec![equal, with, before])
+                    let equal = self.op(binary(BinaryOperator::Equal), None, None, vec![before, compare]);
+                    self.op(Op::Select, None, None, vec![equal, with, before])
                 }
             },
         }
@@ -1715,7 +1759,7 @@ impl<'a> Walker<'a> {
                     // a store through a run-time index may leave this element as it was
                     let mut operands = vec![old, lane];
                     operands.extend(&place.index);
-                    self.op(Op::Index, None, operands)
+                    self.op(Op::Index, None, None, operands)
                 };
                 if let Some(slot) = memory.get_mut(at) {
                     *slot = stored;
@@ -1989,7 +2033,7 @@ impl<'a> Walker<'a> {
                         Some(p) => self.lanes(*p, &state)?,
                         None => Vec::new(),
                     };
-                    let n = self.op(Op::Subgroup, None, operands);
+                    let n = self.op(Op::Subgroup, None, None, operands);
                     self.remember(*result, Val::Lanes(vec![n; 4]));
                 }
                 Statement::SubgroupCollectiveOperation { argument, result, .. }
@@ -1997,7 +2041,7 @@ impl<'a> Walker<'a> {
                     let v = self.lanes(*argument, &state)?;
                     let out = v
                         .into_iter()
-                        .map(|x| self.op(Op::Subgroup, None, vec![x]))
+                        .map(|x| self.op(Op::Subgroup, None, None, vec![x]))
                         .collect();
                     self.remember(*result, Val::Lanes(out));
                 }

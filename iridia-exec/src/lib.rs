@@ -89,6 +89,7 @@ mod run;
 mod stage;
 pub mod tessellation;
 pub mod tessellator;
+pub mod value;
 
 pub use flat::Executable;
 pub use mask::{Mask, Wide};

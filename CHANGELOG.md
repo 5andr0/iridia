@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- `iridia_exec::value`: `Evaluator` evaluates a node of a program's value graph from the words of the leaves it
+  reads, with the executor's own operations and word semantics (the operation tables `compile` and `run` use, now
+  shared): what a run computes for that lane where it is given the same leaves, bit for bit. The caller answers each
+  leaf (an input lane, a supplied value, a constant word, a run-time indexed constant at its index, a texel at its
+  coordinate, a query) or leaves it unknown; a node that needs an unknown leaf is `Evaluated::Unknown`, naming the
+  leaf, and a select whose condition is unknown is known where both its values are the same bits. A loop's value, a
+  merge whose arms differ, an element picked by a run-time index, a derivative, a subgroup operation and a math
+  function that mixes lanes (other than a dot product) are refused by name.
+- `iridia::flow::Values::reads`: the scalar kind an operation reads its operands in. Two operations alike but for
+  that kind are two nodes now: a comparison of the same bits as floats and as integers (a bitcast is no operation in
+  the graph) was one node, read as whichever was interned first.
+- Tests: `iridia/tests/flow.rs` reads `fixtures/flow_kinds.hlsl`'s comparisons as floats, unsigned and signed
+  integers as three nodes; `iridia-exec/tests/value.rs` evaluates every output lane of `fixtures/value.hlsl` (a
+  palette row picked by a record number rounded from an input, a saturated blend, comparisons in two kinds) against a
+  run of the program, bit for bit, across rounding, conversion saturation and wrap, NaN and out-of-range slots.
 - `iridia::blend`: layers a program lays over one another, read from its value graph with no game in it. `Over` is
   a lane made of a chain of interpolations (`weight * (layer - below) + below` in any operand order, the difference
   also as `layer + -below`, or naga's `mix`): its base and each layer's weight and value, bottom first; `Over::under`

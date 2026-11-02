@@ -419,3 +419,66 @@ fn a_texture_picked_from_an_array_by_a_run_time_index_is_a_texel_of_the_array_wi
         assert!(reads.contains(&(Read::Load, true)), "{name}: {reads:?}");
     }
 }
+
+/// The same two values compared as floats, as unsigned and as signed integers (`flow_kinds.hlsl`): a bitcast is no
+/// operation in the graph, so the three comparisons have the same operands, and they are three nodes, each reading its
+/// operands in its own kind.
+#[test]
+fn comparisons_of_the_same_bits_in_three_kinds_are_three_nodes() {
+    use iridia::flow::{BinaryOperator as B, ScalarKind};
+    for (name, program) in [
+        (
+            "dxbc",
+            iridia_dxbc::lift(include_bytes!("fixtures/flow_kinds.dxbc")).expect("fxc's program lifts"),
+        ),
+        (
+            "dxil",
+            iridia_dxil::lift(include_bytes!("fixtures/flow_kinds.dxil")).expect("dxc's program lifts"),
+        ),
+    ] {
+        let values = Values::of_program(&program).expect("the value graph");
+        let output = program
+            .interface
+            .outputs
+            .iter()
+            .position(|o| o.label == target())
+            .expect("the target");
+        let mut comparisons = Vec::new();
+        for lane in 0..3 {
+            let root = values.output(output, lane).expect("a written lane");
+            let found: Vec<NodeId> = values
+                .reached_from([root])
+                .into_iter()
+                .filter(|&id| {
+                    matches!(
+                        values.node(id),
+                        Node::Op {
+                            op: Op::Binary(B::Less | B::Greater | B::LessEqual | B::GreaterEqual),
+                            ..
+                        }
+                    )
+                })
+                .collect();
+            let [compare] = found[..] else {
+                panic!("{name}: lane {lane} has comparisons {found:?}");
+            };
+            comparisons.push(compare);
+        }
+        let kinds: Vec<_> = comparisons.iter().map(|&c| values.reads(c)).collect();
+        assert_eq!(
+            kinds,
+            [
+                Some(ScalarKind::Float),
+                Some(ScalarKind::Uint),
+                Some(ScalarKind::Sint)
+            ],
+            "{name}"
+        );
+        assert!(
+            comparisons
+                .iter()
+                .all(|&c| values.kind(c) == Some(ScalarKind::Bool)),
+            "{name}"
+        );
+    }
+}
