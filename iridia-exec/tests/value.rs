@@ -129,7 +129,7 @@ fn leaf<'a>(
             Some(v[*lane as usize].to_bits())
         }
         Node::Global { resource, at: place } => {
-            let r = program.interface.resource(resource.as_ref()?.clone())?;
+            let r = program.interface.resource((*resource)?)?;
             let d3d = r.provenance.d3d.as_ref()?;
             if d3d.class != D3dClass::ConstantBuffer {
                 return None;

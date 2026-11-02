@@ -152,8 +152,11 @@ impl<'v, L: FnMut(NodeId, &Node, &[u32]) -> Option<u32>> Evaluator<'v, L> {
             Node::Merge { arms, .. } => match self.words(arms) {
                 None => Step::Need(self.pending(arms)),
                 Some(Err(leaf)) => Step::Done(Evaluated::Unknown(leaf)),
-                Some(Ok(words)) if words.windows(2).all(|w| w[0] == w[1]) => {
-                    Step::Done(Evaluated::Word(words[0]))
+                Some(Ok(words))
+                    if let Some(&first) = words.first()
+                        && words.iter().all(|w| *w == first) =>
+                {
+                    Step::Done(Evaluated::Word(first))
                 }
                 Some(Ok(_)) => {
                     return Err(
@@ -181,7 +184,12 @@ impl<'v, L: FnMut(NodeId, &Node, &[u32]) -> Option<u32>> Evaluator<'v, L> {
                             let leaf = *leaf;
                             match self.words(&[accept, reject]) {
                                 None => Step::Need(self.pending(&[accept, reject])),
-                                Some(Ok(w)) if w[0] == w[1] => Step::Done(Evaluated::Word(w[0])),
+                                Some(Ok(w))
+                                    if let &[a, b] = w.as_slice()
+                                        && a == b =>
+                                {
+                                    Step::Done(Evaluated::Word(a))
+                                }
                                 Some(_) => Step::Done(Evaluated::Unknown(leaf)),
                             }
                         }
@@ -220,10 +228,19 @@ impl<'v, L: FnMut(NodeId, &Node, &[u32]) -> Option<u32>> Evaluator<'v, L> {
                 match m {
                     MathOp::Dot => {
                         let n = w.len() / 2;
-                        if w.len() % 2 != 0 || !(1..=4).contains(&n) {
-                            return Err(format!("a dot product of {} operands", w.len()));
+                        let dot = || format!("a dot product of {} operands", w.len());
+                        if !w.len().is_multiple_of(2) || !(1..=4).contains(&n) {
+                            return Err(dot());
                         }
-                        math(m, reg(&w[..n]), reg(&w[n..]), [0; 4], n as u8, ftz)[0]
+                        let (a, b) = w.split_at_checked(n).ok_or_else(dot)?;
+                        math(
+                            m,
+                            reg(a),
+                            reg(b),
+                            [0; 4],
+                            u8::try_from(n).map_err(|_| dot())?,
+                            ftz,
+                        )[0]
                     }
                     MathOp::Normalize | MathOp::PackHalf | MathOp::UnpackHalf => {
                         return Err(format!("{fun:?} mixes lanes: not evaluated"));
@@ -237,10 +254,11 @@ impl<'v, L: FnMut(NodeId, &Node, &[u32]) -> Option<u32>> Evaluator<'v, L> {
             }
             Op::Relational(fun) => {
                 let m = relational_op(fun);
-                if !(1..=4).contains(&w.len()) {
-                    return Err(format!("{fun:?} of {} lanes", w.len()));
-                }
-                math(m, reg(w), [0; 4], [0; 4], w.len() as u8, ftz)[0]
+                let lanes = u8::try_from(w.len())
+                    .ok()
+                    .filter(|n| (1..=4).contains(n))
+                    .ok_or_else(|| format!("{fun:?} of {} lanes", w.len()))?;
+                math(m, reg(w), [0; 4], [0; 4], lanes, ftz)[0]
             }
             Op::Select => {
                 if lane(0)? != 0 {
