@@ -30,6 +30,6 @@ float4 main(Input i) : SV_Target0
     float4 factor = index < 26 ? palette[index] : float4(0, 0, 0, 0);
     float4 t = albedo.Sample(wrap, i.uv);
     float3 colour = saturate(lerp(t.rgb, tint.rgb, tint.a)) * factor.rgb;
-    float kinds = (i.normal.x < i.normal.y ? 1.0 : 0.0) + (asuint(i.normal.x) < asuint(i.normal.y) ? 2.0 : 0.0);
+    float kinds = (i.normal.x < i.normal.y ? 1.0f : 0.0f) + (asuint(i.normal.x) < asuint(i.normal.y) ? 2.0f : 0.0f);
     return float4(colour, min(max(i.normal.z, tint.x), 2.0) + kinds);
 }
