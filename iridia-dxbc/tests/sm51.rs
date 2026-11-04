@@ -79,14 +79,61 @@ fn reflection_retains_constant_and_uav_arrays_and_an_unbounded_srv_range() {
 }
 
 #[test]
-fn lifting_refuses_sm51_before_a_declaration_id_can_be_mistaken_for_a_register() {
+fn lifting_resolves_sm51_declaration_ids_to_registers_and_spaces() {
     for bytes in [PIXEL, COMPUTE] {
         let decoded = dxbc_reader::decode(&dxbc_reader::code(bytes).unwrap()).unwrap();
         assert_eq!((decoded.major, decoded.minor), (5, 1));
-        let refusal = iridia_dxbc::lift(bytes).unwrap_err();
-        assert_eq!(
-            refusal.to_string(),
-            "DXBC at word 0: SM5.1 descriptor ranges and register spaces are not lifted"
-        );
+        let program = iridia_dxbc::lift(bytes).unwrap();
+        program.validate().unwrap();
+        let reflected = iridia_dxbc::resource_reflection(bytes).unwrap().unwrap();
+        for resource in &program.interface.resources {
+            let reference = reflected
+                .resources
+                .iter()
+                .find(|r| r.provenance.name == resource.provenance.name)
+                .unwrap();
+            assert_eq!(resource.provenance.d3d, reference.provenance.d3d);
+            assert_eq!(resource.count, reference.count);
+        }
+    }
+}
+
+#[test]
+fn stripped_sm51_keeps_declared_ranges_and_spaces() {
+    for bytes in [PIXEL, COMPUTE] {
+        let parts: Vec<_> = dxcontainer::chunks(bytes)
+            .unwrap()
+            .into_iter()
+            .filter(|p| &p.kind != b"RDEF")
+            .collect();
+        let stripped = dxcontainer::serialize(&parts).unwrap();
+        let program = iridia_dxbc::lift(&stripped).unwrap();
+        program.validate().unwrap();
+        let original = iridia_dxbc::lift(bytes).unwrap();
+        let bindings = |p: &iridia::Program| {
+            p.interface
+                .resources
+                .iter()
+                .map(|r| (r.provenance.d3d, r.count))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(bindings(&program), bindings(&original));
+    }
+}
+
+#[test]
+fn reflection_cannot_substitute_another_declaration_id_or_space() {
+    let rdef = dxbc_reader::rdef(PIXEL).unwrap().unwrap();
+    let at = rdef.bindings[0].word * 4;
+    for field in [8, 9] {
+        // SM5.1's appended space and declaration-ID words.
+        let mut parts = dxcontainer::chunks(PIXEL).unwrap();
+        let part = parts.iter_mut().find(|p| &p.kind == b"RDEF").unwrap();
+        let mut data = part.data.to_vec();
+        data[at + field * 4..at + field * 4 + 4].copy_from_slice(&999u32.to_le_bytes());
+        part.data = &data;
+        let bytes = dxcontainer::serialize(&parts).unwrap();
+        let error = iridia_dxbc::lift(&bytes).unwrap_err();
+        assert!(error.detail.contains("reflected declaration"), "{error}");
     }
 }

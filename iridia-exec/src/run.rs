@@ -22,7 +22,9 @@ enum Words<'a> {
     Rows(&'a [[u32; 4]]),
     Slice(&'a [u32]),
     /// The elements of an array of buffers; one the caller gave none of is `None`.
-    Elements(Vec<Option<&'a [u32]>>),
+    Elements(BTreeMap<u32, &'a [u32]>),
+    /// Independently bound descriptors of a constant-buffer array.
+    ConstantElements(BTreeMap<u32, &'a [[u32; 4]]>),
     /// A buffer the backend answers reads of.
     Backend,
 }
@@ -47,6 +49,8 @@ impl Bound<'_> {
 pub struct Resources {
     /// Constant buffers by interface resource: rows of four 32-bit words.
     pub constants: BTreeMap<ResourceId, Vec<[u32; 4]>>,
+    /// Constant-buffer array descriptors, keyed by resource and zero-based descriptor element.
+    pub constant_elements: BTreeMap<(ResourceId, u32), Vec<[u32; 4]>>,
     /// Buffers by interface resource: 32-bit words.
     pub buffers: BTreeMap<ResourceId, Vec<u32>>,
     /// The elements of arrays of buffers, by resource and element.
@@ -75,16 +79,68 @@ impl Executable {
         buffers: impl Fn(ResourceId) -> Option<&'a [u32]>,
         elements: impl Fn(ResourceId, u32) -> Option<&'a [u32]>,
     ) -> Result<Bound<'a>, String> {
+        if self
+            .globals
+            .iter()
+            .any(|g| matches!(g.kind, GlobalKind::StorageArray(_, iridia::Resource::UNBOUNDED)))
+        {
+            return Err("an unbounded buffer array needs bind_resources or bind_resource_arrays with explicit elements".into());
+        }
+        self.bind_resource_arrays(
+            constants,
+            buffers,
+            |id| {
+                let count = self
+                    .globals
+                    .iter()
+                    .find_map(|g| match g.kind {
+                        GlobalKind::StorageArray(r, count) if r == id => Some(count),
+                        _ => None,
+                    })
+                    .unwrap_or(0);
+                (0..count)
+                    .filter_map(|k| elements(id, k).map(|words| (k, words)))
+                    .collect()
+            },
+            |_| BTreeMap::new(),
+        )
+    }
+
+    /// Bind descriptor arrays by their supplied elements, including arrays of no stated size.
+    /// Keys are zero-based descriptor indices, independent of D3D register numbers. Missing
+    /// elements error only when read; a key past a bounded declaration's end errors at binding.
+    /// The maps are retained by the binding; the buffers themselves are borrowed without copying.
+    pub fn bind_resource_arrays<'a>(
+        &self,
+        constants: impl Fn(ResourceId) -> Option<&'a [[u32; 4]]>,
+        buffers: impl Fn(ResourceId) -> Option<&'a [u32]>,
+        elements: impl Fn(ResourceId) -> BTreeMap<u32, &'a [u32]>,
+        constant_elements: impl Fn(ResourceId) -> BTreeMap<u32, &'a [[u32; 4]]>,
+    ) -> Result<Bound<'a>, String> {
         let mut data = Vec::with_capacity(self.globals.len());
         for g in &self.globals {
             data.push(match &g.kind {
                 GlobalKind::Constants(id) => Words::Rows(
                     constants(*id).ok_or_else(|| format!("no constant buffer for resource {}", id.0))?,
                 ),
+                GlobalKind::ConstantsArray(id, count) => {
+                    let values = constant_elements(*id);
+                    if values.keys().any(|k| *k >= *count) {
+                        return Err(format!(
+                            "constant buffer {}: element past array count {count}",
+                            id.0
+                        ));
+                    }
+                    Words::ConstantElements(values)
+                }
                 GlobalKind::Private(words) => Words::Owned(words.clone()),
                 GlobalKind::Storage(id) => buffers(*id).map_or(Words::Backend, Words::Slice),
                 GlobalKind::StorageArray(id, count) => {
-                    Words::Elements((0..*count).map(|k| elements(*id, k)).collect())
+                    let values = elements(*id);
+                    if values.keys().any(|k| *k >= *count) {
+                        return Err(format!("buffer {}: element past array count {count}", id.0));
+                    }
+                    Words::Elements(values)
                 }
                 // thread-group memory is the run's own
                 GlobalKind::Workgroup(_) => Words::Owned(Vec::new()),
@@ -98,10 +154,23 @@ impl Executable {
 
     /// [`Executable::bind`] over a [`Resources`].
     pub fn bind_resources<'a>(&self, resources: &'a Resources) -> Result<Bound<'a>, String> {
-        let mut bound = self.bind_elements(
+        let mut bound = self.bind_resource_arrays(
             |id| resources.constants.get(&id).map(Vec::as_slice),
             |id| resources.buffers.get(&id).map(Vec::as_slice),
-            |id, k| resources.elements.get(&(id, k)).map(Vec::as_slice),
+            |id| {
+                resources
+                    .elements
+                    .iter()
+                    .filter_map(|(&(r, k), v)| (r == id).then_some((k, v.as_slice())))
+                    .collect()
+            },
+            |id| {
+                resources
+                    .constant_elements
+                    .iter()
+                    .filter_map(|(&(r, k), v)| (r == id).then_some((k, v.as_slice())))
+                    .collect()
+            },
         )?;
         for (id, scene) in &resources.scenes {
             bound.scenes.insert(*id, std::sync::Arc::new(Built::new(scene)?));
@@ -196,7 +265,7 @@ pub struct Runner<'a, const N: usize, M: Mask = u8> {
     /// The ray queries of each invocation, by query and lane.
     queries: Vec<Vec<Option<Query>>>,
     /// The same for the elements of arrays of buffers, by global and element.
-    elem_store: Vec<Vec<Option<Vec<u32>>>>,
+    elem_store: Vec<BTreeMap<u32, Vec<u32>>>,
     /// The lanes of a thread group, and those of them that have left the program.
     group: M,
     retired: M,
@@ -535,6 +604,21 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
             Loc::Elem(g, o, pick) => {
                 let base = offset(o, extra)?;
                 let e = self.element_index(g, pick, lane)?;
+                if let Words::ConstantElements(values) = self.b.data.at(g as usize)? {
+                    let rows = values
+                        .get(&e)
+                        .ok_or_else(|| format!("no constant buffer given for descriptor {e}"))?;
+                    let mut result = [0; 4];
+                    for (k, value) in result.iter_mut().take(n).enumerate() {
+                        let word = base.checked_add(k).ok_or("constant word index overflow")?;
+                        *value = rows
+                            .get(word / 4)
+                            .and_then(|row| row.get(word % 4))
+                            .copied()
+                            .ok_or("constant buffer index out of range")?;
+                    }
+                    return Ok(result);
+                }
                 let d = self.element_words(g, e)?;
                 take_words(d, base, n, "buffer")
             }
@@ -545,7 +629,9 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                 }
                 let bound = self.b;
                 match bound.data.at(g as usize)? {
-                    Words::Elements(_) => Err("an array of buffers read without an element".into()),
+                    Words::Elements(_) | Words::ConstantElements(_) => {
+                        Err("an array of buffers read without an element".into())
+                    }
                     Words::Owned(d) => take_words(d, base, n, "buffer"),
                     Words::Slice(d) => take_words(d, base, n, "buffer"),
                     Words::Rows(rows) => {
@@ -596,11 +682,7 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
             Loc::Elem(g, o, pick) => {
                 let e = self.element_index(g, pick, lane)?;
                 let at = offset(o, extra)?;
-                let Some(Some(d)) = self
-                    .elem_store
-                    .get_mut(g as usize)
-                    .and_then(|v| v.get_mut(e as usize))
-                else {
+                let Some(d) = self.elem_store.get_mut(g as usize).and_then(|v| v.get_mut(&e)) else {
                     return Err("a store to an element of an array of buffers the run does not write".into());
                 };
                 put_words(d, at, count, &v, "memory")
@@ -627,7 +709,9 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
             Pick::Slot(s) => self.rd(slot_at::<N>(s), lane)?[0],
         };
         match &self.c.globals.at(g as usize)?.kind {
-            GlobalKind::StorageArray(id, count) if index >= *count => {
+            GlobalKind::StorageArray(id, count) | GlobalKind::ConstantsArray(id, count)
+                if index >= *count =>
+            {
                 Err(format!("buffer {}: element {index} of an array of {count}", id.0))
             }
             _ => Ok(index),
@@ -635,14 +719,13 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
     }
     /// The words of element `e` of the array of buffers `g`: those the run writes, else those it was bound with.
     fn element_words(&self, g: u32, e: u32) -> Result<&[u32], String> {
-        if let Some(Some(d)) = self.elem_store.get(g as usize).and_then(|v| v.get(e as usize)) {
+        if let Some(d) = self.elem_store.get(g as usize).and_then(|v| v.get(&e)) {
             return Ok(d);
         }
         match self.b.data.at(g as usize)? {
             Words::Elements(v) => v
-                .get(e as usize)
+                .get(&e)
                 .copied()
-                .flatten()
                 .ok_or_else(|| format!("no words given for element {e} of an array of buffers")),
             _ => Err("a global that is not an array of buffers".into()),
         }
@@ -950,7 +1033,7 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                                 .and_then(Option::as_ref)
                                 .map_or(0, Vec::len),
                         )?,
-                        Words::Elements(_) => {
+                        Words::Elements(_) | Words::ConstantElements(_) => {
                             return Err("arrayLength of an array of buffers without an element".into());
                         }
                         Words::Owned(d) => count(d.len())?,
@@ -1345,13 +1428,10 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                                 None => 0,
                             };
                             let memory = match elem {
-                                Some(e) => self
-                                    .elem_store
-                                    .get_mut(g as usize)
-                                    .and_then(|v| v.get_mut(e as usize)),
-                                None => self.store.get_mut(g as usize),
+                                Some(e) => self.elem_store.get_mut(g as usize).and_then(|v| v.get_mut(&e)),
+                                None => self.store.get_mut(g as usize).and_then(Option::as_mut),
                             };
-                            let (old, swapped) = if let Some(Some(d)) = memory {
+                            let (old, swapped) = if let Some(d) = memory {
                                 let cell = d.get_mut(word).ok_or("atomic past the end of the memory")?;
                                 let old = *cell;
                                 let (new, swapped) = atomic(*fun, *signed, old, v, expected);
@@ -2354,14 +2434,21 @@ impl Executable {
                 _ => None,
             })
             .collect();
-        let elem_store: Vec<Vec<Option<Vec<u32>>>> = self
+        let elem_store: Vec<BTreeMap<u32, Vec<u32>>> = self
             .globals
             .iter()
-            .map(|g| match g.kind {
-                GlobalKind::StorageArray(id, count) => {
-                    (0..count).map(|k| elements.remove(&(id, k))).collect()
-                }
-                _ => Vec::new(),
+            .map(|g| {
+                let GlobalKind::StorageArray(id, count) = g.kind else {
+                    return BTreeMap::new();
+                };
+                let keys: Vec<_> = elements
+                    .keys()
+                    .filter(|(r, k)| *r == id && *k < count)
+                    .copied()
+                    .collect();
+                keys.into_iter()
+                    .filter_map(|key| elements.remove(&key).map(|words| (key.1, words)))
+                    .collect()
             })
             .collect();
         let scratch = Scratch::<N>::new(self);
@@ -2420,10 +2507,8 @@ impl Executable {
         }
         for (g, held) in self.globals.iter().zip(runner.elem_store) {
             if let GlobalKind::StorageArray(id, _) = g.kind {
-                for (k, words) in held.into_iter().enumerate() {
-                    if let Some(words) = words {
-                        elements.insert((id, u32::try_from(k).unwrap_or(u32::MAX)), words);
-                    }
+                for (k, words) in held {
+                    elements.insert((id, k), words);
                 }
             }
         }

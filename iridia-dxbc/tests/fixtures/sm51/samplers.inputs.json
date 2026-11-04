@@ -1,0 +1,112 @@
+{
+  "description": "All image descriptors are 2x2 with one mip. Texels and buffers are raw 32-bit words; samplers use point min/mag/mip, stated address mode on U/V, zero border, comparison LESS_EQUAL. Runs reset writable data. Array entries are descriptor elements, not texture layers.",
+  "runs": [
+    {
+      "constants": {},
+      "arguments": [
+        [
+          0,
+          0,
+          1,
+          0
+        ]
+      ]
+    },
+    {
+      "constants": {},
+      "arguments": [
+        [
+          1,
+          1,
+          1,
+          0
+        ]
+      ]
+    },
+    {
+      "constants": {},
+      "arguments": [
+        [
+          2,
+          0,
+          1,
+          0
+        ]
+      ]
+    },
+    {
+      "constants": {},
+      "arguments": [
+        [
+          3,
+          1,
+          1,
+          0
+        ]
+      ]
+    },
+    {
+      "constants": {},
+      "arguments": [
+        [
+          4,
+          0,
+          1,
+          0
+        ]
+      ]
+    },
+    {
+      "constants": {},
+      "arguments": [
+        [
+          5,
+          1,
+          1,
+          0
+        ]
+      ]
+    }
+  ],
+  "images": {
+    "tex": [
+      [
+        [
+          1065353216,
+          1073741824,
+          1077936128,
+          1082130432
+        ],
+        [
+          1084227584,
+          1086324736,
+          1088421888,
+          1090519040
+        ],
+        [
+          1091567616,
+          1092616192,
+          1093664768,
+          1094713344
+        ],
+        [
+          1095761920,
+          1096810496,
+          1097859072,
+          1098907648
+        ]
+      ]
+    ]
+  },
+  "buffers": {},
+  "samplers": {
+    "samplers": [
+      "wrap",
+      "clamp",
+      "border"
+    ]
+  },
+  "image_formats": {
+    "tex": "R32G32B32A32_FLOAT"
+  }
+}

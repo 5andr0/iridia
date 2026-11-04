@@ -38,7 +38,7 @@ use dxbc_reader::decode::{Decoded, decode};
 
 /// The version of the lifter: bumped when what it produces for the same bytecode changes, so a cache keyed by the
 /// bytecode's hash knows what is stale; gated by `tests/versions.rs` (the lifted fixtures hashed under it, `iridia::gate`).
-pub const LIFTER_VERSION: u32 = 9;
+pub const LIFTER_VERSION: u32 = 10;
 
 /// Lift a DXBC container's program: Shader Model 4 or 5, any stage. Every instruction or declaration the lifter does
 /// not carry (and every container that holds no such program) is an `Err` naming the word and the reason.
@@ -75,14 +75,6 @@ fn lift_program(bytes: &[u8], bound: &iridia::BoundSizes) -> Result<Program> {
         return Err(error(1, "program exceeds word budget"));
     }
     let decoded = decode(&words).map_err(crate::read)?;
-    // 5.1 addresses descriptors by declaration id, register and space. The 4/5.0 lowering below
-    // keys resources by register alone and must not mistake a 5.1 id for that register.
-    if decoded.major == 5 && decoded.minor == 1 {
-        return Err(error(
-            0,
-            "SM5.1 descriptor ranges and register spaces are not lifted",
-        ));
-    }
     let stage = crate::reflection::stage_of(decoded.kind);
     let mut setup = setup::Setup::new(bytes, &decoded, stage)?;
     setup.bind_sizes(bound)?;

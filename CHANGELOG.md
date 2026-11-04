@@ -2,11 +2,20 @@
 
 ## Unreleased
 
+- `iridia-dxbc` lifts SM5.1 resource ranges and spaces, including dynamically indexed and unbounded
+  CBV/SRV/UAV/sampler arrays and non-uniform descriptor selection. Declaration IDs are distinct from
+  registers and reflection must agree with the declarations. `LIFTER_VERSION` is 10.
+- `iridia-exec` binds constant-buffer arrays through `Resources::constant_elements` and
+  `Executable::bind_resource_arrays`. Buffer arrays and their compute writes use sparse element maps,
+  including unbounded arrays. `iridia-dxil` also lifts constant-buffer arrays (`LIFTER_VERSION` 9),
+  and program validation admits their binding-array capabilities and structure-wrapped rows.
+- Focused fxc SM5.1 fixtures are compared instruction by instruction with fxc disassembly and run on
+  the CPU against DXIL builds of the same source, plus SM5.0 where expressible. Their inputs and
+  expected outputs are saved beside the fixtures for external comparisons.
 - The three `dx` readers are pinned at `292b616`, which reads Shader Model 5.1. `iridia-dxbc`'s `reflection` and
   `resource_reflection` read 5.1 pixel, vertex and compute programs: register spaces, resource arrays (an array of no
-  stated size is `Resource::UNBOUNDED`) and the constant buffer variables the program never reads. Lifting refuses a
-  5.1 program by name, where its declaration ids would otherwise be taken for registers. Two fxc 10.0.26100.0
-  fixtures, `reflection_sm51` and `bindings_sm51`, check both.
+  stated size is `Resource::UNBOUNDED`) and the constant buffer variables the program never reads. Two fxc
+  10.0.26100.0 fixtures, `reflection_sm51` and `bindings_sm51`, check reflection and declaration resolution.
 - `iridia_exec::value`: `Evaluator` evaluates a node of a program's value graph from the words of the leaves it
   reads, with the executor's own operations and word semantics (the operation tables `compile` and `run` use, now
   shared): what a run computes for that lane where it is given the same leaves, bit for bit. The caller answers each

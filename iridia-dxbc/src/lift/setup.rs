@@ -14,7 +14,28 @@ use iridia::{
 use naga::ImageDimension;
 
 use crate::{Result, error, read, resource_reflection, varying};
-use dxbc_reader::decode::{Declared, Decoded, Register, Selection};
+use dxbc_reader::decode::{Declared, Decoded, Register, RegisterRange, Selection};
+
+/// A declaration ID's register range, independent of the other binding classes' ID namespaces.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Binding {
+    pub range: RegisterRange,
+    pub count: u32,
+}
+
+fn binding_id(d: &Declared) -> Option<(D3dClass, u32)> {
+    Some(match d {
+        Declared::ConstantBuffer { slot, .. } => (D3dClass::ConstantBuffer, *slot),
+        Declared::Sampler { slot, .. } => (D3dClass::Sampler, *slot),
+        Declared::Resource { slot, .. }
+        | Declared::ResourceRaw { slot, .. }
+        | Declared::ResourceStructured { slot, .. } => (D3dClass::ShaderResource, *slot),
+        Declared::UavTyped { slot, .. }
+        | Declared::UavRaw { slot, .. }
+        | Declared::UavStructured { slot, .. } => (D3dClass::UnorderedAccess, *slot),
+        _ => return None,
+    })
+}
 
 /// A phase of a hull program: the control-point phase, or a fork or join phase of its patch-constant function, with
 /// the words of the token stream it covers and how many instances it runs.
@@ -177,6 +198,8 @@ pub(crate) struct Texture {
 }
 
 pub(crate) struct Setup {
+    pub sm51: bool,
+    pub bindings: BTreeMap<(D3dClass, u32), Binding>,
     pub interface: Interface,
     pub io: EntryIo,
     pub early_depth_test: bool,
@@ -223,6 +246,8 @@ impl Setup {
 
     pub(crate) fn empty() -> Self {
         Self {
+            sm51: false,
+            bindings: BTreeMap::new(),
             interface: Interface {
                 stage: Stage::Pixel,
                 inputs: Vec::new(),
@@ -256,6 +281,7 @@ impl Setup {
             dxbc_reader::signature_elements(bytes).map_err(read)?;
         debug_assert_eq!(crate::reflection::stage_of(program_type), stage);
         let mut setup = Self::empty();
+        setup.sm51 = decoded.major == 5 && decoded.minor == 1;
         let refuse = |detail: String| error(0, detail);
         let phases = phases_of(decoded)?;
         // a declaration inside a fork or join phase is the patch-constant function's, else the control-point phase's
@@ -277,6 +303,21 @@ impl Setup {
         let mut declared_outputs: BTreeMap<u32, u8> = BTreeMap::new();
         for d in &decoded.declarations {
             let at = |detail: String| error(d.word, detail);
+            if let Some(key) = binding_id(&d.kind) {
+                let range = d.kind.registers().expect("a resource declaration has registers");
+                let count = if range.upper == u32::MAX {
+                    Resource::UNBOUNDED
+                } else {
+                    range
+                        .upper
+                        .checked_sub(range.lower)
+                        .and_then(|n| n.checked_add(1))
+                        .ok_or_else(|| at("a reversed register range".into()))?
+                };
+                if setup.bindings.insert(key, Binding { range, count }).is_some() {
+                    return Err(at(format!("duplicate binding declaration {key:?}")));
+                }
+            }
             match &d.kind {
                 // a hull program declares them again in each of its phases: the most any of them uses
                 Declared::Temps(n) => {
@@ -388,7 +429,7 @@ impl Setup {
                     dimensions,
                     ..
                 } => {
-                    if *dimensions > 2 {
+                    if *dimensions > 2 && !setup.sm51 {
                         return Err(at("SM5.1 constant buffer declaration".into()));
                     }
                     if *rows > MAX_CONSTANT_BUFFER_ROWS {
@@ -1043,8 +1084,63 @@ impl Setup {
         // resources, in declaration order; reflection, where the container has one this reader reads, names them and
         // lays out the constant buffers (one that doesn't parse is refused, not taken as absent)
         let rdef = resource_reflection(bytes).map_err(|e| refuse(format!("reflection: {e}")))?;
+        // Reflection's interface IDs are local numbering, not SM5.1 declaration IDs.
+        // Validate the file's own IDs before joining its layouts to declarations by register/space.
+        if setup.sm51 && rdef.is_some() {
+            let raw = dxbc_reader::rdef(bytes)
+                .map_err(read)?
+                .expect("reflection has RDEF");
+            let mut ids = BTreeSet::new();
+            for record in raw.bindings {
+                // D3D_SHADER_INPUT_TYPE: the kinds a Shader Model 5.1 program can bind
+                let class = match record.kind {
+                    0 => D3dClass::ConstantBuffer,
+                    3 => D3dClass::Sampler,
+                    1 | 2 | 5 | 7 => D3dClass::ShaderResource,
+                    4 | 6 | 8..=11 => D3dClass::UnorderedAccess,
+                    other => {
+                        return Err(error(
+                            record.word,
+                            format!(
+                                "reflected binding of input type {other}, which Shader Model 5.1 has not"
+                            ),
+                        ));
+                    }
+                };
+                let id = record
+                    .id
+                    .ok_or_else(|| error(record.word, "SM5.1 reflection has no declaration ID"))?;
+                let key = (class, id);
+                if !ids.insert(key) {
+                    return Err(error(
+                        record.word,
+                        format!("duplicate reflected declaration {key:?}"),
+                    ));
+                }
+                let Some(binding) = setup.bindings.get(&key) else {
+                    return Err(error(
+                        record.word,
+                        format!("reflected declaration {key:?} is not declared"),
+                    ));
+                };
+                let count = if record.count == 0 {
+                    Resource::UNBOUNDED
+                } else {
+                    record.count
+                };
+                if binding.range.lower != record.register
+                    || binding.range.space != record.space
+                    || binding.count != count
+                {
+                    return Err(error(
+                        record.word,
+                        format!("reflected declaration {key:?} disagrees with its register range or space"),
+                    ));
+                }
+            }
+        }
         for (i, d) in setup.declarations.iter_mut().enumerate() {
-            let (class, register, kind, default_name) = match d {
+            let (class, id, kind, default_name) = match d {
                 Declaration::ConstantBuffer { slot, rows } => (
                     D3dClass::ConstantBuffer,
                     *slot,
@@ -1162,16 +1258,36 @@ impl Setup {
                     format!("s{slot}"),
                 ),
             };
+            let binding = setup.bindings.get(&(class, id)).expect("declared binding");
+            let register = binding.range.lower;
+            let space = binding.range.space;
+            let default_name = if setup.sm51 {
+                let prefix = match class {
+                    D3dClass::ConstantBuffer => "cb",
+                    D3dClass::Sampler => "s",
+                    D3dClass::ShaderResource => "t",
+                    D3dClass::UnorderedAccess => "u",
+                };
+                format!("{prefix}{register}_space{space}")
+            } else {
+                default_name
+            };
             let reflected = rdef.as_ref().and_then(|r| {
                 r.resources.iter().find(|r| {
                     r.provenance
                         .d3d
-                        .is_some_and(|b| b.class == class && b.register == register)
+                        .is_some_and(|b| b.class == class && b.register == register && b.space == space)
                 })
             });
             let mut kind = kind;
             let mut name = default_name;
             if let Some(r) = reflected {
+                if setup.sm51 && r.count != binding.count {
+                    return Err(refuse(format!(
+                        "binding {class:?} {id}: reflected count {} disagrees with declared {}",
+                        r.count, binding.count
+                    )));
+                }
                 name = r.provenance.name.clone();
                 if let Some(layout) = &r.provenance.layout
                     && let ResourceKind::Buffer(BufferKind::Structured { stride })
@@ -1204,13 +1320,13 @@ impl Setup {
                     u32::try_from(i).map_err(|_| refuse("more than 4294967295 resources".into()))?,
                 ),
                 kind,
-                count: 1,
+                count: binding.count,
                 provenance: ResourceProvenance {
                     name,
                     d3d: Some(D3dBinding {
                         class,
                         register,
-                        space: 0,
+                        space,
                     }),
                     counter_of: None,
                     layout: reflected.and_then(|r| r.provenance.layout.clone()),

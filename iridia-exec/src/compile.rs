@@ -389,9 +389,13 @@ pub(super) fn compile(
     let mut gid_of: BTreeMap<usize, u32> = BTreeMap::new();
     for (h, g) in m.global_variables.iter() {
         let kind = match g.space {
-            naga::AddressSpace::Uniform => Some(GlobalKind::Constants(
-                resource_of.get(&h.index()).ok_or("unbound uniform")?.0,
-            )),
+            naga::AddressSpace::Uniform => {
+                let &(id, count) = resource_of.get(&h.index()).ok_or("unbound uniform")?;
+                Some(match &m.types[g.ty].inner {
+                    TypeInner::BindingArray { .. } => GlobalKind::ConstantsArray(id, count),
+                    _ => GlobalKind::Constants(id),
+                })
+            }
             naga::AddressSpace::Private => {
                 let init = g.init.ok_or("private global without initialiser")?;
                 Some(GlobalKind::Private(const_words(m, init)?))
@@ -1937,9 +1941,12 @@ fn is_buffer_array(
 ) -> bool {
     match f.expressions[h] {
         E::GlobalVariable(g) => gid_of.get(&g.index()).is_some_and(|&gid| {
-            globals
-                .get(gid as usize)
-                .is_some_and(|g| matches!(g.kind, GlobalKind::StorageArray(..)))
+            globals.get(gid as usize).is_some_and(|g| {
+                matches!(
+                    g.kind,
+                    GlobalKind::StorageArray(..) | GlobalKind::ConstantsArray(..)
+                )
+            })
         }),
         _ => false,
     }

@@ -39,6 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Guarantees and limits
 
+- `Resources::constant_elements` supplies constant-buffer arrays by (resource ID, descriptor index), with separate rows for every descriptor. `bind_resource_arrays` borrows explicit element maps for buffer and constant-buffer arrays, including unbounded arrays; `bind_resources` uses the maps in `Resources`. Missing descriptors error when accessed. These bindings and compute writes store only supplied elements, so an unbounded declaration does not allocate by its sentinel count. The older `bind_elements` callback needs a bounded declaration; use an explicit map for an unbounded one.
 - What a run does follows the program's `D3dModes`: a program that says its body spells out D3D's integer division, conversions and `min`/`max` runs as written, and one that expects denormals flushed to zero has every 32-bit float operation flush its operands and result (sign kept). Anything the program does that its module cannot make valid (an index past the end of a local array, an integer division by zero in the module) is an error of the run, never a silent value. Errors name their bytecode and location.
 - Every run has a step budget (`STEP_LIMIT`).
 - Sampling belongs to the caller: a scalar execution cannot infer derivatives, filtering or addressing, so a `Sampler` callback answers texture samples and the caller states the footprint, addressing, filtering and transfer. A quad run supplies the derivatives of its four invocations.

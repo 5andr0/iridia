@@ -12,6 +12,8 @@ A DXIL function is LLVM's: values in single static assignment form over basic bl
 
 Reflection without a lift: `interface(container)` reads the stage, the signatures (`ISG1`/`OSG1`/`PSG1`, with each pixel input's interpolation from the entry point's metadata), the resources (`dx.resources`) and the constant buffer layouts (`dx.typeAnnotations`, named from the `STAT` part when the container has one; the program's own metadata carries no names), and `subobjects(rdat)` maps the subobjects of a ray tracing library from its runtime data (`RDAT`).
 
+Constant-buffer descriptor arrays, including unbounded ones, use binding arrays of structures containing the rows. The descriptor and row indices remain separate. `iridia-exec::Resources::constant_elements` supplies each descriptor's data; focused cross-build tests in `iridia-dxbc/tests/sm51_exec.rs` compare their execution with fxc SM5.1 programs from the same source.
+
 ## Example
 
 ```rust

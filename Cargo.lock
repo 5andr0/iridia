@@ -246,6 +246,7 @@ dependencies = [
  "dxbc-reader",
  "dxcontainer",
  "iridia",
+ "iridia-dxil",
  "iridia-exec",
  "primase-naga",
  "primase-testdata",

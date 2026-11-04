@@ -508,6 +508,7 @@ pub(super) enum AtomOp {
 pub(super) enum GlobalKind {
     /// A constant buffer of the interface.
     Constants(ResourceId),
+    ConstantsArray(ResourceId, u32),
     /// Private data: an immediate constant buffer's words.
     Private(Vec<u32>),
     /// A buffer of the interface read through the storage address space.

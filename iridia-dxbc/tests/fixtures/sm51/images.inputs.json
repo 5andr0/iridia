@@ -1,0 +1,111 @@
+{
+  "description": "All image descriptors are 2x2 with one mip. Texels and buffers are raw 32-bit words; samplers use point min/mag/mip, stated address mode on U/V, zero border, comparison LESS_EQUAL. Runs reset writable data. Array entries are descriptor elements, not texture layers.",
+  "runs": [
+    {
+      "constants": {
+        "Params": [
+          [
+            0,
+            0,
+            0,
+            0
+          ]
+        ]
+      },
+      "groups": [
+        2,
+        1,
+        1
+      ]
+    },
+    {
+      "constants": {
+        "Params": [
+          [
+            1,
+            0,
+            0,
+            0
+          ]
+        ]
+      },
+      "groups": [
+        2,
+        1,
+        1
+      ]
+    },
+    {
+      "constants": {
+        "Params": [
+          [
+            2,
+            0,
+            0,
+            0
+          ]
+        ]
+      },
+      "groups": [
+        2,
+        1,
+        1
+      ]
+    },
+    {
+      "constants": {
+        "Params": [
+          [
+            0,
+            0,
+            0,
+            0
+          ]
+        ]
+      },
+      "groups": [
+        2,
+        1,
+        1
+      ]
+    },
+    {
+      "constants": {
+        "Params": [
+          [
+            1,
+            0,
+            0,
+            0
+          ]
+        ]
+      },
+      "groups": [
+        2,
+        1,
+        1
+      ]
+    },
+    {
+      "constants": {
+        "Params": [
+          [
+            2,
+            0,
+            0,
+            0
+          ]
+        ]
+      },
+      "groups": [
+        2,
+        1,
+        1
+      ]
+    }
+  ],
+  "images": {},
+  "buffers": {},
+  "samplers": {},
+  "image_formats": {}
+}

@@ -19,6 +19,14 @@ fn what_the_lifter_makes_of_its_fixtures_is_the_versions() {
         .filter(|name| name.ends_with(".dxbc"))
         .collect();
     names.sort();
+    names.extend(
+        std::fs::read_dir(dir.join("fixtures/sm51"))
+            .unwrap()
+            .map(|e| e.unwrap().file_name().into_string().unwrap())
+            .filter(|name| name.ends_with(".dxbc"))
+            .map(|name| format!("sm51/{name}")),
+    );
+    names.sort();
     let outcomes: Vec<_> = names
         .into_iter()
         .map(|name| {

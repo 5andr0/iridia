@@ -445,6 +445,7 @@ impl Setup {
                 && !matches!(
                     original.kind,
                     ResourceKind::Texture { .. }
+                        | ResourceKind::ConstantBuffer { .. }
                         | ResourceKind::Sampler { .. }
                         | ResourceKind::Buffer(_)
                         | ResourceKind::Storage { .. }

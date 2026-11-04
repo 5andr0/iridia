@@ -382,7 +382,8 @@ impl Lift<'_> {
             let ty = if resource.is_array() {
                 let buffers = matches!(
                     resource.kind,
-                    ResourceKind::Buffer(_)
+                    ResourceKind::ConstantBuffer { .. }
+                        | ResourceKind::Buffer(_)
                         | ResourceKind::Storage {
                             target: StorageTarget::Buffer(_),
                             ..
@@ -395,7 +396,9 @@ impl Lift<'_> {
                         ..
                     }
                 );
-                self.notes.insert(if buffers {
+                self.notes.insert(if matches!(resource.kind, ResourceKind::ConstantBuffer { .. }) {
+                    "a constant-buffer array needs BUFFER_BINDING_ARRAY (with non-uniform indexing), each element a structure holding the buffer's rows, and an unbounded one is sized by the bound data".into()
+                } else if buffers {
                     "a resource array is a binding array: it needs STORAGE_BUFFER_BINDING_ARRAY (with non-uniform \
                      indexing), each element a structure holding the buffer's words, and an unbounded one is sized by \
                      the bound data"
@@ -412,6 +415,11 @@ impl Lift<'_> {
                 // a buffer is a structure holding its runtime-sized array, for naga to bind several of them
                 let base = if buffers {
                     let stride = match &resource.kind {
+                        ResourceKind::ConstantBuffer { layout } => {
+                            layout.size.div_ceil(16).max(1).checked_mul(16).ok_or_else(|| {
+                                crate::error(self.at, "constant buffer array element size overflows")
+                            })?
+                        }
                         ResourceKind::Buffer(BufferKind::Typed(_))
                         | ResourceKind::Storage {
                             target: StorageTarget::Buffer(BufferKind::Typed(_)),
@@ -568,21 +576,6 @@ impl Lift<'_> {
                 ..
             } => Ok((*dim, *arrayed, false, kind_of_sample(*sample), false)),
             _ => self.refuse("a handle that is not a texture"),
-        }
-    }
-
-    /// The interface resource a handle of `class` names, where the resource is one binding.
-    pub(super) fn handle(&mut self, v: ValueId, class: u8) -> Result<usize> {
-        match self.get(v)? {
-            Lv::Handle {
-                class: c,
-                resource,
-                element: None,
-            } if c == class => Ok(resource),
-            Lv::Handle { element: Some(_), .. } => {
-                self.refuse("an element of a resource array where only a texture or a sampler is read")
-            }
-            _ => self.refuse(format!("a handle of class {class} was expected")),
         }
     }
 
@@ -807,8 +800,7 @@ impl Lift<'_> {
 
     /// `CBufferLoadLegacy(handle, row)`: a row of four 32-bit lanes as the call's overload type.
     pub(super) fn cbuffer_load(&mut self, inst: &Instruction, args: &[ValueId]) -> Result<()> {
-        let resource = self.handle(self.arg(args, 1)?, 2)?;
-        let g = self.global_of(resource)?;
+        let (resource, pointer) = self.buffer_words(self.arg(args, 1)?, 2)?;
         let rows = match self.setup.kind(resource) {
             ResourceKind::ConstantBuffer { layout } => layout.size.div_ceil(16).max(1),
             _ => return self.refuse("a constant load from a non-buffer"),
@@ -816,7 +808,6 @@ impl Lift<'_> {
         // a row known to be inside the buffer needs no guard
         let lanes = match const_int(self.m, self.f, self.arg(args, 2)?) {
             Some(r) if (0..i64::from(rows)).contains(&r) => {
-                let pointer = self.b.global_ptr(g);
                 let element = self.b.app(E::AccessIndex {
                     base: pointer,
                     index: super::low32(r as u64),
@@ -825,7 +816,7 @@ impl Lift<'_> {
             }
             _ => {
                 let row = self.uint(self.arg(args, 2)?)?;
-                self.guarded_row(g, row, rows)
+                self.guarded_row(pointer, row, rows)
             }
         };
         let Some((_, ty)) = inst.result else {
@@ -849,8 +840,7 @@ impl Lift<'_> {
     }
 
     /// Row `row` of a `vec4<u32>` array global, zero out of range as D3D reads.
-    fn guarded_row(&mut self, g: Handle<GlobalVariable>, row: Val, rows: u32) -> Val {
-        let pointer = self.b.global_ptr(g);
+    fn guarded_row(&mut self, pointer: Handle<E>, row: Val, rows: u32) -> Val {
         let length = self.b.lit_u(rows);
         let inside = self.b.binary(Bo::Less, row, length);
         let zero = self.b.lit_u(0);

@@ -12,7 +12,7 @@ use naga::{
 
 use super::Lift;
 use super::operands::OperandAt;
-use super::setup::{Declaration, Shared, Texture, UavBuffer, UavKind, View};
+use super::setup::{Binding, Declaration, Shared, Texture, UavBuffer, UavKind, View};
 use crate::Result;
 use dxbc_reader::decode::{Instruction, Operand, Selection};
 
@@ -27,6 +27,8 @@ pub(super) enum Buffer {
 
 #[derive(Default)]
 pub(super) struct Resources {
+    /// SM5.1 globals: register range and whether an array element wraps buffer words in a struct.
+    pub bindings: BTreeMap<Handle<GlobalVariable>, (Binding, bool)>,
     /// Each resource of the interface and its global.
     pub bound: Vec<(ResourceId, Handle<GlobalVariable>)>,
     pub constant_buffers: BTreeMap<u32, (Handle<GlobalVariable>, u32)>,
@@ -48,6 +50,60 @@ pub(super) fn lanes_of(mask: u8) -> Vec<u8> {
 }
 
 impl Lift<'_> {
+    /// Select a descriptor using its absolute register expression, then expose a buffer element's words.
+    pub(super) fn resource_pointer(
+        &mut self,
+        global: Handle<GlobalVariable>,
+        op: &Operand,
+    ) -> Result<Handle<E>> {
+        let pointer = self.b.global_ptr(global);
+        let Some((binding, wrapper)) = self.resources.bindings.get(&global).copied() else {
+            return Ok(pointer);
+        };
+        let id = self.index_of(op, 0)?;
+        if id.relative.is_some() {
+            return self.refuse("a relative declaration ID");
+        }
+        let expected = if op.register == dxbc_reader::Register::Constant {
+            3
+        } else {
+            2
+        };
+        if op.indices.len() != expected {
+            return self.refuse(format!("an SM5.1 resource operand needs {expected} indices"));
+        }
+        let index = self.index_of(op, 1)?.clone();
+        if index.relative.is_none() && (index.base < binding.range.lower || index.base > binding.range.upper)
+        {
+            return self.refuse(format!(
+                "register {} outside declared range {}..={}",
+                index.base, binding.range.lower, binding.range.upper
+            ));
+        }
+        if op.non_uniform {
+            self.notes
+                .insert("a descriptor index is explicitly non-uniform".into());
+        }
+        if binding.count == 1 {
+            return Ok(pointer);
+        }
+        let absolute = self.index_expr(&index)?;
+        let lower = self.b.lit_u(binding.range.lower);
+        let element = self.b.binary(Bo::Subtract, absolute, lower);
+        let selected = self.b.app(E::Access {
+            base: pointer,
+            index: element.expr,
+        });
+        Ok(if wrapper {
+            self.b.app(E::AccessIndex {
+                base: selected,
+                index: 0,
+            })
+        } else {
+            selected
+        })
+    }
+
     /// One global per declared resource, and the immediate constant buffer.
     pub(super) fn declare_resources(&mut self) -> Result<()> {
         let u4 = self.u4();
@@ -173,15 +229,66 @@ impl Lift<'_> {
                     )
                 }
             };
+            let resource = self
+                .setup
+                .interface
+                .resources
+                .get(i)
+                .expect("one resource per declaration");
+            let class = resource.provenance.d3d.expect("declared binding").class;
+            let binding = *self.setup.bindings.get(&(class, slot)).expect("declared binding");
+            let array = binding.count != 1;
+            let wrapper = array && matches!(space, AddressSpace::Storage { .. } | AddressSpace::Uniform);
+            let ty = if array {
+                let base = if wrapper {
+                    let span = match self.b.module.types[ty].inner {
+                        TypeInner::Array {
+                            stride,
+                            size: ArraySize::Constant(n),
+                            ..
+                        } => stride.checked_mul(n.get()).expect("bounded constant rows"),
+                        TypeInner::Array { stride, .. } => stride,
+                        _ => unreachable!("buffer words"),
+                    };
+                    self.b.ty(TypeInner::Struct {
+                        members: vec![naga::StructMember {
+                            name: Some("data".into()),
+                            ty,
+                            binding: None,
+                            offset: 0,
+                        }],
+                        span,
+                    })
+                } else {
+                    ty
+                };
+                let size = if binding.count == iridia::Resource::UNBOUNDED {
+                    ArraySize::Dynamic
+                } else {
+                    ArraySize::Constant(NonZeroU32::new(binding.count).expect("nonempty range"))
+                };
+                self.notes.insert("a descriptor array needs binding-array support; an unbounded array is sized by the bound data".into());
+                self.b.ty(TypeInner::BindingArray { base, size })
+            } else {
+                ty
+            };
+            // A separate dense binding per declaration cannot collide across register spaces.
+            let module_binding = if self.setup.sm51 { id.0 } else { slot };
             let global = self.b.global(GlobalVariable {
                 name: Some(name),
                 space,
-                binding: Some(ResourceBinding { group, binding: slot }),
+                binding: Some(ResourceBinding {
+                    group,
+                    binding: module_binding,
+                }),
                 ty,
                 init: None,
                 memory_decorations: Default::default(),
             });
             self.resources.bound.push((id, global));
+            if self.setup.sm51 {
+                self.resources.bindings.insert(global, (binding, wrapper));
+            }
             match d {
                 Declaration::ConstantBuffer { slot, rows } => {
                     self.resources
@@ -287,13 +394,12 @@ impl Lift<'_> {
     /// range: D3D's answer for constant buffers, the immediate constant buffer and buffer views, which WGSL leaves open.
     pub(super) fn guarded_load(
         &mut self,
-        g: Handle<GlobalVariable>,
+        pointer: Handle<E>,
         index: Val,
         len: Option<u32>,
         kind: Kind,
         width: Width,
     ) -> Val {
-        let pointer = self.b.global_ptr(g);
         let length = match len {
             Some(n) => self.b.lit_u(n),
             None => Val {
@@ -305,7 +411,6 @@ impl Lift<'_> {
         let inside = self.b.binary(Bo::Less, index, length);
         let zero = self.b.lit_u(0);
         let safe = self.b.select(inside, index, zero);
-        let pointer = self.b.global_ptr(g);
         let element = self.b.app(E::Access {
             base: pointer,
             index: safe.expr,
@@ -469,8 +574,8 @@ impl Lift<'_> {
             ),
             other => return self.refuse(format!("{other} is not lifted")),
         };
-        let image = self.b.global_ptr(image);
-        let sampler = self.b.global_ptr(sampler);
+        let image = self.resource_pointer(image, ins.operand(2)?)?;
+        let sampler = self.resource_pointer(sampler, ins.operand(3)?)?;
         let expr = self.b.app(E::ImageSample {
             image,
             sampler,
@@ -515,7 +620,8 @@ impl Lift<'_> {
             };
             self.notes_typed_buffer();
             let address = self.read(ins.operand(1)?, 1, Kind::U)?;
-            let row = self.guarded_load(g, address, None, Kind::U, Width::Four);
+            let pointer = self.resource_pointer(g, ins.operand(2)?)?;
+            let row = self.guarded_load(pointer, address, None, Kind::U, Width::Four);
             let picked = self.pick(row, ins.operand(2)?, mask);
             return self.write(ins.operand(0)?, picked, false);
         }
@@ -531,7 +637,7 @@ impl Lift<'_> {
         } else {
             None
         };
-        let image = self.b.global_ptr(image);
+        let image = self.resource_pointer(image, ins.operand(2)?)?;
         let expr = self.b.app(E::ImageLoad {
             image,
             coordinate: coordinate.expr,
@@ -566,7 +672,7 @@ impl Lift<'_> {
         let (image, t) = self.texture(slot)?;
         let mask = self.dest_mask(ins.operand(0)?);
         let count = if t.multi {
-            let g = self.b.global_ptr(image);
+            let g = self.resource_pointer(image, ins.operand(1)?)?;
             Val {
                 expr: self.b.app(E::ImageQuery {
                     image: g,
@@ -618,7 +724,7 @@ impl Lift<'_> {
         };
         let mask = self.dest_mask(ins.operand(0)?);
         let mip = self.read(ins.operand(1)?, 1, Kind::U)?;
-        let g = self.b.global_ptr(image);
+        let g = self.resource_pointer(image, ins.operand(2)?)?;
         let dims = match t.dim {
             naga::ImageDimension::D1 => Width::One,
             naga::ImageDimension::D2 => Width::Two,
@@ -637,7 +743,7 @@ impl Lift<'_> {
         let levels = if t.multi {
             self.b.lit_u(1)
         } else {
-            let g = self.b.global_ptr(image);
+            let g = self.resource_pointer(image, ins.operand(2)?)?;
             Val {
                 expr: self.b.app(E::ImageQuery {
                     image: g,
@@ -650,7 +756,7 @@ impl Lift<'_> {
         let zero = self.b.lit_u(0);
         let mut parts: Vec<Val> = size.width.lanes().map(|i| self.b.lane(size, i)).collect();
         if t.arrayed {
-            let g = self.b.global_ptr(image);
+            let g = self.resource_pointer(image, ins.operand(2)?)?;
             parts.push(Val {
                 expr: self.b.app(E::ImageQuery {
                     image: g,
@@ -681,7 +787,14 @@ impl Lift<'_> {
     }
 
     /// The lanes of a raw or structured load: word `word` plus each result lane's source component.
-    fn load_words(&mut self, g: Handle<GlobalVariable>, word: Val, resource: &Operand, mask: u8) -> Val {
+    fn load_words(
+        &mut self,
+        g: Handle<GlobalVariable>,
+        word: Val,
+        resource: &Operand,
+        mask: u8,
+    ) -> Result<Val> {
+        let pointer = self.resource_pointer(g, resource)?;
         let components: Vec<u8> = lanes_of(mask)
             .iter()
             .map(|l| match resource.selection {
@@ -694,9 +807,9 @@ impl Lift<'_> {
         for c in components {
             let offset = self.b.lit_u(u32::from(c));
             let index = self.b.binary(Bo::Add, word, offset);
-            lanes.push(self.guarded_load(g, index, None, Kind::U, Width::One));
+            lanes.push(self.guarded_load(pointer, index, None, Kind::U, Width::One));
         }
-        self.b.compose(&lanes)
+        Ok(self.b.compose(&lanes))
     }
 
     pub(super) fn load_raw(&mut self, ins: &Instruction) -> Result<()> {
@@ -711,7 +824,7 @@ impl Lift<'_> {
         let offset = self.read(ins.operand(1)?, 1, Kind::U)?;
         let two = self.b.lit_u(2);
         let word = self.b.binary(Bo::ShiftRight, offset, two);
-        let result = self.load_words(g, word, ins.operand(2)?, mask);
+        let result = self.load_words(g, word, ins.operand(2)?, mask)?;
         self.write(ins.operand(0)?, result, false)
     }
 
@@ -731,7 +844,7 @@ impl Lift<'_> {
         let byte = self.b.binary(Bo::Add, base, offset);
         let two = self.b.lit_u(2);
         let word = self.b.binary(Bo::ShiftRight, byte, two);
-        let result = self.load_words(g, word, ins.operand(3)?, mask);
+        let result = self.load_words(g, word, ins.operand(3)?, mask)?;
         self.write(ins.operand(0)?, result, false)
     }
 
@@ -772,7 +885,7 @@ impl Lift<'_> {
         }
         let (coordinate, array_index) = self.view_address(ins.operand(1)?, &v)?;
         let value = self.read_lanes(ins.operand(2)?, &[0, 1, 2, 3], v.kind)?;
-        let image = self.b.global_ptr(global);
+        let image = self.resource_pointer(global, ins.operand(0)?)?;
         self.b.push(naga::Statement::ImageStore {
             image,
             coordinate: coordinate.expr,
@@ -788,7 +901,7 @@ impl Lift<'_> {
         let (global, v) = self.view(slot)?;
         let mask = self.dest_mask(ins.operand(0)?);
         let (coordinate, array_index) = self.view_address(ins.operand(1)?, &v)?;
-        let image = self.b.global_ptr(global);
+        let image = self.resource_pointer(global, ins.operand(2)?)?;
         let expr = self.b.app(E::ImageLoad {
             image,
             coordinate: coordinate.expr,

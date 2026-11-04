@@ -23,5 +23,6 @@ primase-testdata.workspace = true
 serde_json.workspace = true
 
 iridia-exec.workspace = true
+iridia-dxil.workspace = true
 [lints]
 workspace = true

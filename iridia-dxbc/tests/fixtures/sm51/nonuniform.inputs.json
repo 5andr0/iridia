@@ -1,0 +1,159 @@
+{
+  "description": "All image descriptors are 2x2 with one mip. Texels and buffers are raw 32-bit words; samplers use point min/mag/mip, stated address mode on U/V, zero border, comparison LESS_EQUAL. Runs reset writable data. Array entries are descriptor elements, not texture layers.",
+  "runs": [
+    {
+      "constants": {},
+      "groups": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "constants": {},
+      "groups": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "constants": {},
+      "groups": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "constants": {},
+      "groups": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "constants": {},
+      "groups": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "constants": {},
+      "groups": [
+        1,
+        1,
+        1
+      ]
+    }
+  ],
+  "images": {
+    "tex": [
+      [
+        [
+          1,
+          2,
+          3,
+          4
+        ],
+        [
+          11,
+          12,
+          13,
+          14
+        ],
+        [
+          21,
+          22,
+          23,
+          24
+        ],
+        [
+          31,
+          32,
+          33,
+          34
+        ]
+      ],
+      [
+        [
+          101,
+          102,
+          103,
+          104
+        ],
+        [
+          111,
+          112,
+          113,
+          114
+        ],
+        [
+          121,
+          122,
+          123,
+          124
+        ],
+        [
+          131,
+          132,
+          133,
+          134
+        ]
+      ],
+      [
+        [
+          201,
+          202,
+          203,
+          204
+        ],
+        [
+          211,
+          212,
+          213,
+          214
+        ],
+        [
+          221,
+          222,
+          223,
+          224
+        ],
+        [
+          231,
+          232,
+          233,
+          234
+        ]
+      ]
+    ]
+  },
+  "buffers": {
+    "output": [
+      4277009102,
+      4277009102,
+      4277009102,
+      4277009102,
+      4277009102,
+      4277009102,
+      4277009102,
+      4277009102,
+      4277009102,
+      4277009102,
+      4277009102,
+      4277009102,
+      4277009102,
+      4277009102,
+      4277009102,
+      4277009102
+    ]
+  },
+  "samplers": {},
+  "image_formats": {
+    "tex": "R32G32B32A32_UINT"
+  }
+}

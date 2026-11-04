@@ -196,11 +196,12 @@ impl Lift<'_> {
                 let Some(&(g, rows)) = self.resources.constant_buffers.get(&slot) else {
                     return self.refuse(format!("cb{slot} is used but not declared"));
                 };
-                let index = self.index_expr(&self.index_of(op, 1)?.clone())?;
-                if self.index_of(op, 1)?.relative.is_some() {
-                    return Ok(self.guarded_load(g, index, Some(rows), Kind::U, Width::Four));
+                let row_index = if self.setup.sm51 { 2 } else { 1 };
+                let index = self.index_expr(&self.index_of(op, row_index)?.clone())?;
+                let p = self.resource_pointer(g, op)?;
+                if self.index_of(op, row_index)?.relative.is_some() {
+                    return Ok(self.guarded_load(p, index, Some(rows), Kind::U, Width::Four));
                 }
-                let p = self.b.global_ptr(g);
                 let element = self.b.app(E::Access {
                     base: p,
                     index: index.expr,
@@ -213,7 +214,8 @@ impl Lift<'_> {
                 };
                 let index = self.index_expr(&self.index_of(op, 0)?.clone())?;
                 if self.index_of(op, 0)?.relative.is_some() {
-                    return Ok(self.guarded_load(g, index, Some(rows), Kind::U, Width::Four));
+                    let p = self.b.global_ptr(g);
+                    return Ok(self.guarded_load(p, index, Some(rows), Kind::U, Width::Four));
                 }
                 let p = self.b.global_ptr(g);
                 let element = self.b.app(E::Access {

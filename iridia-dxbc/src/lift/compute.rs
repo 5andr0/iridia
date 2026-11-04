@@ -2,7 +2,7 @@
 //! buffers and thread-group shared memory, and barriers.
 
 use iridia::build::{Kind, Val, Width};
-use naga::{AtomicFunction, BinaryOperator as Bo, Expression as E, GlobalVariable, Handle, Statement};
+use naga::{AtomicFunction, BinaryOperator as Bo, Expression as E, Handle, Statement};
 
 use super::Lift;
 use super::operands::OperandAt;
@@ -14,7 +14,7 @@ use dxbc_reader::decode::{Instruction, Operand, Register};
 /// The memory a word-addressed instruction reaches.
 #[derive(Clone, Copy)]
 pub(super) struct Mem {
-    pub global: Handle<GlobalVariable>,
+    pub pointer: Handle<E>,
     /// Its length in words; `None` for a buffer sized at run time.
     pub len: Option<u32>,
     /// The element type: the atomic integer type when atomic operations reach it, else unsigned.
@@ -36,12 +36,12 @@ impl Mem {
 
 impl Lift<'_> {
     /// The memory a resource operand names: an unordered-access buffer `u<n>` or thread-group memory `g<n>`.
-    pub(super) fn memory(&self, op: &Operand) -> Result<Mem> {
+    pub(super) fn memory(&mut self, op: &Operand) -> Result<Mem> {
         let index = op.indices.first().map_or(0, |i| i.base);
         match op.register {
-            Register::Uav => match self.resources.uav_buffers.get(&index) {
+            Register::Uav => match self.resources.uav_buffers.get(&index).copied() {
                 Some((global, b)) => Ok(Mem {
-                    global: *global,
+                    pointer: self.resource_pointer(global, op)?,
                     len: None,
                     atomic: b.atomic,
                     stride: match b.kind {
@@ -55,9 +55,9 @@ impl Lift<'_> {
                 )),
                 None => self.refuse(format!("u{index} is not an unordered-access buffer")),
             },
-            Register::GroupSharedMemory => match self.resources.shared.get(&index) {
+            Register::GroupSharedMemory => match self.resources.shared.get(&index).copied() {
                 Some((global, g)) => Ok(Mem {
-                    global: *global,
+                    pointer: self.b.global_ptr(global),
                     len: Some(g.words),
                     atomic: g.atomic,
                     stride: g.stride,
@@ -103,7 +103,7 @@ impl Lift<'_> {
             };
             self.b.bitcast_to(layer, Kind::I).expr
         });
-        let image = self.b.global_ptr(global);
+        let image = self.resource_pointer(global, ins.operand(at)?)?;
         let old = wants_old.then(|| self.b.image_atomic_result(kind));
         self.b.push(Statement::ImageAtomic {
             image,
@@ -155,7 +155,7 @@ impl Lift<'_> {
 
     /// The word `index` of `mem` as unsigned bits, zero past its end (D3D's answer for a buffer).
     fn read_word(&mut self, mem: &Mem, index: Val) -> Val {
-        let word = self.guarded_load(mem.global, index, mem.len, mem.kind(), Width::One);
+        let word = self.guarded_load(mem.pointer, index, mem.len, mem.kind(), Width::One);
         self.b.bitcast_to(word, Kind::U)
     }
 
@@ -195,7 +195,7 @@ impl Lift<'_> {
         let mask = self.dest_mask(ins.operand(0)?);
         let element = self.read(ins.operand(1)?, 1, Kind::U)?;
         let row = match mem.atomic {
-            None => self.guarded_load(mem.global, element, None, Kind::U, Width::Four),
+            None => self.guarded_load(mem.pointer, element, None, Kind::U, Width::Four),
             // the element is four atomic words: read each, zero past the end
             Some(_) => {
                 let mut lanes = Vec::new();
@@ -218,7 +218,7 @@ impl Lift<'_> {
         }
         let element = self.read(ins.operand(1)?, 1, Kind::U)?;
         let value = self.read_lanes(ins.operand(2)?, &[0, 1, 2, 3], Kind::U)?;
-        let pointer = self.b.global_ptr(mem.global);
+        let pointer = mem.pointer;
         let length = Val {
             expr: self.b.app(E::ArrayLength(pointer)),
             kind: Kind::U,
@@ -226,7 +226,7 @@ impl Lift<'_> {
         };
         let inside = self.b.binary(Bo::Less, element, length);
         self.b.when(inside, |b| {
-            let pointer = b.global_ptr(mem.global);
+            let pointer = mem.pointer;
             let target = b.app(E::Access {
                 base: pointer,
                 index: element.expr,
@@ -251,7 +251,7 @@ impl Lift<'_> {
 
     /// Word `k` of element `element` of a typed buffer made of atomic words, as unsigned bits; zero past the end.
     fn guarded_word_of_quad(&mut self, mem: &Mem, element: Val, k: u32) -> Val {
-        let pointer = self.b.global_ptr(mem.global);
+        let pointer = mem.pointer;
         let length = Val {
             expr: self.b.app(E::ArrayLength(pointer)),
             kind: Kind::U,
@@ -260,7 +260,7 @@ impl Lift<'_> {
         let inside = self.b.binary(Bo::Less, element, length);
         let zero = self.b.lit_u(0);
         let safe = self.b.select(inside, element, zero);
-        let pointer = self.b.global_ptr(mem.global);
+        let pointer = mem.pointer;
         let row = self.b.app(E::Access {
             base: pointer,
             index: safe.expr,
@@ -296,7 +296,7 @@ impl Lift<'_> {
 
     /// Word `at` of `mem` set to the unsigned bits `value`, unless it is past the end.
     fn write_word(&mut self, mem: &Mem, at: Val, value: Val) {
-        let pointer = self.b.global_ptr(mem.global);
+        let pointer = mem.pointer;
         let length = match mem.len {
             Some(n) => self.b.lit_u(n),
             None => Val {
@@ -308,7 +308,7 @@ impl Lift<'_> {
         let inside = self.b.binary(Bo::Less, at, length);
         let mem = *mem;
         self.b.when(inside, |b| {
-            let pointer = b.global_ptr(mem.global);
+            let pointer = mem.pointer;
             let target = b.app(E::Access {
                 base: pointer,
                 index: at.expr,
@@ -368,7 +368,7 @@ impl Lift<'_> {
             Some(self.atomic_function(name)?)
         };
         // past the end of the memory the operation does nothing and its old value is zero, as in D3D
-        let pointer = self.b.global_ptr(mem.global);
+        let pointer = mem.pointer;
         let length = match mem.len {
             Some(n) => self.b.lit_u(n),
             None => Val {
