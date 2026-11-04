@@ -75,6 +75,14 @@ fn lift_program(bytes: &[u8], bound: &iridia::BoundSizes) -> Result<Program> {
         return Err(error(1, "program exceeds word budget"));
     }
     let decoded = decode(&words).map_err(crate::read)?;
+    // 5.1 addresses descriptors by declaration id, register and space. The 4/5.0 lowering below
+    // keys resources by register alone and must not mistake a 5.1 id for that register.
+    if decoded.major == 5 && decoded.minor == 1 {
+        return Err(error(
+            0,
+            "SM5.1 descriptor ranges and register spaces are not lifted",
+        ));
+    }
     let stage = crate::reflection::stage_of(decoded.kind);
     let mut setup = setup::Setup::new(bytes, &decoded, stage)?;
     setup.bind_sizes(bound)?;

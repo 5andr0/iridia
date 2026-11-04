@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The three `dx` readers are pinned at `292b616`, which reads Shader Model 5.1. `iridia-dxbc`'s `reflection` and
+  `resource_reflection` read 5.1 pixel, vertex and compute programs: register spaces, resource arrays (an array of no
+  stated size is `Resource::UNBOUNDED`) and the constant buffer variables the program never reads. Lifting refuses a
+  5.1 program by name, where its declaration ids would otherwise be taken for registers. Two fxc 10.0.26100.0
+  fixtures, `reflection_sm51` and `bindings_sm51`, check both.
 - `iridia_exec::value`: `Evaluator` evaluates a node of a program's value graph from the words of the leaves it
   reads, with the executor's own operations and word semantics (the operation tables `compile` and `run` use, now
   shared): what a run computes for that lane where it is given the same leaves, bit for bit. The caller answers each

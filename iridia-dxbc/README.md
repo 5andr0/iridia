@@ -13,7 +13,7 @@ Part of [iridia](https://github.com/Kalmarv/iridia), which turns compiled Direct
 
 A pixel input's interpolation comes from the `dcl_input_ps` declarations; a stage that is not an entry point in WGSL (hull, domain, geometry, a vertex program that feeds a tessellator) lifts as functions (`iridia::stage_functions`), which `iridia-exec` runs.
 
-Reflection without a lift: `reflection` (resources and signatures), `signatures` (for a container whose `RDEF` was stripped, as some engines ship them; the constant layout is then the caller's), `resource_reflection` (resources only; `None` for a program whose `RDEF` is not Shader Model 5.0 pixel or vertex, whose resources the lift names from their declarations). A stripped program's resources are named by register.
+Reflection without a lift: `reflection` (resources and signatures), `signatures` (for a container whose `RDEF` was stripped, as some engines ship them; the constant layout is then the caller's), `resource_reflection` (resources only; `None` for a program whose `RDEF` is not Shader Model 5.0 or 5.1 pixel, vertex or compute). Reflection preserves register spaces, resource-array counts (including unbounded SM5.1 ranges), and unused constant fields. A stripped program's resources are named by register when lifted.
 
 ## Example
 
@@ -49,7 +49,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## What it does not carry
 
-Refused by name: double precision (the global flag), Shader Model 5.1 constant buffer declarations, mono samplers, append and consume buffer counters, geometry output to a stream other than 0, a store through a view with a partial write mask, a sample of a multisampled texture and any opcode not in its table. The sample count of the rasterizer is the pipeline's, not the program's, and is refused for the same reason. Sampling is not part of lifting: it is the caller's when a lifted program runs (`iridia-exec`).
+Refused by name: double precision (the global flag), Shader Model 5.1 programs, mono samplers, append and consume buffer counters, geometry output to a stream other than 0, a store through a view with a partial write mask, a sample of a multisampled texture and any opcode not in its table. Shader Model 5.1 reflection reads (`reflection`, `resource_reflection`); lifting a 5.1 program needs its declarations' ids, register ranges and spaces resolved, which the lift does not do yet. The sample count of the rasterizer is the pipeline's, not the program's, and is refused for the same reason. Sampling is not part of lifting: it is the caller's when a lifted program runs (`iridia-exec`).
 
 ## Tests
 

@@ -1,5 +1,6 @@
 # lifted fixtures of iridia-dxbc
 # versions lifter=9 program=3
+bindings_sm51.cs.dxbc	refused	DXBC at word 0: SM5.1 descriptor ranges and register spaces are not lifted
 bound_palette_vs.dxbc	lifted	f5f1823bc79681ea4f3c9ce885c6ba1354c6d2e7094112d410aeb6a20dff1922
 compute_basic.dxbc	lifted	ba39680d2ad39a727431f93160417f4f16701eb3ddd2a4f5d1adc84718bf69ad
 compute_basic.od.dxbc	lifted	f6eeabb33b55abf57ab9e7d955fd027b4e42683dd6850062a70d545d39d6cfb8
@@ -15,6 +16,7 @@ min16_patch.hs.dxbc	lifted	7ad447bde19c9bd6fbf385efb505680418a402194a7b9ac08629c
 min16_patch.plain.ds.dxbc	lifted	8b8321a3cd3ba26b8b6ecb4d589ebd0285da20c27472320ffae970e9954941a6
 min16_patch.plain.hs.dxbc	lifted	200f85dd70ca2b75deb9d0b45572f99b9cf60b9739044d9eb2a15c21e246a05f
 modes.dxbc	lifted	757cc2f8d607b60f84586784aa228f74e47c114ff89332421edefd5d9870bbba
+reflection_sm51.ps51.dxbc	refused	DXBC at word 0: SM5.1 descriptor ranges and register spaces are not lifted
 structured_layout.dxbc	lifted	6d1942c3974f9a6896e9d449b40d1f2ec97ff9db9dfca2ac0f5b95f4b50bc938
 structured_tail.dxbc	refused	DXBC at word 2: double precision is enabled (global flag): doubles are not lifted
 tessellation.ds.dxbc	lifted	25eaa4e4a1094394dee6be7c0836f98dc655291815e1ff6b2fc1223932e05092

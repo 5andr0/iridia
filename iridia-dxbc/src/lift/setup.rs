@@ -401,7 +401,7 @@ impl Setup {
                         rows: *rows,
                     });
                 }
-                Declared::Sampler { slot, mode } => {
+                Declared::Sampler { slot, mode, .. } => {
                     if *mode == 2 {
                         return Err(at("mono sampler".into()));
                     }
@@ -445,10 +445,10 @@ impl Setup {
                         depth: false,
                     }));
                 }
-                Declared::ResourceRaw { slot } => {
+                Declared::ResourceRaw { slot, .. } => {
                     setup.declarations.push(Declaration::RawBuffer { slot: *slot })
                 }
-                Declared::ResourceStructured { slot, stride } => {
+                Declared::ResourceStructured { slot, stride, .. } => {
                     if *stride > MAX_STRUCTURE_STRIDE {
                         return Err(at(format!(
                             "dcl_resource_structured t{slot}: a stride of {stride} bytes, D3D has at most \

@@ -297,7 +297,7 @@ fn declared(program: &Decoded) -> (Vec<Resource>, Vec<Resource>) {
                 shape: shape(*dimension, *samples),
                 returns: returns(*token),
             }),
-            Declared::ResourceStructured { slot, stride } => resources.push(Resource {
+            Declared::ResourceStructured { slot, stride, .. } => resources.push(Resource {
                 slot: *slot,
                 shape: format!("structured {stride}"),
                 returns: "mixed".into(),

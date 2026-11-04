@@ -261,12 +261,14 @@ fn constant_type(ty: &RdefType, packing: d3d::Packing) -> Result<ConstantType> {
 }
 
 /// A container's reflection ([`reflection`]) where it has one this reader reads: `None` where it has no RDEF chunk, or
-/// its RDEF's target isn't an SM5.0 pixel, vertex or compute program (another stage or an earlier model: the lift then
+/// its RDEF's target isn't an SM5.0/5.1 pixel, vertex or compute program (another stage or an earlier model: the lift then
 /// names its resources from their declarations, as without reflection). An RDEF of a target it reads that doesn't
 /// parse is an error, never taken as absent.
 pub fn resource_reflection(bytes: &[u8]) -> Result<Option<Interface>> {
     match dxbc_reader::rdef_target(bytes).map_err(read)? {
-        Some(0xffff_0500 | 0xfffe_0500 | 0x4353_0500) => reflection(bytes).map(Some),
+        Some(0xffff_0500 | 0xfffe_0500 | 0x4353_0500 | 0xffff_0501 | 0xfffe_0501 | 0x4353_0501) => {
+            reflection(bytes).map(Some)
+        }
         _ => Ok(None),
     }
 }
@@ -277,16 +279,17 @@ pub fn reflection(bytes: &[u8]) -> Result<Interface> {
     let rdef = dxbc_reader::rdef(bytes)
         .map_err(read)?
         .ok_or_else(|| error(0, "missing reflection chunk RDEF"))?;
-    // SM5.0 pixel, vertex or compute shader (the stage is the RDEF's own target, so reflection reads a container
+    // SM5.0/5.1 pixel, vertex or compute shader (the stage is the RDEF's own target, so reflection reads a container
     // without its code)
     let program_stage = match rdef.target {
-        0xffff_0500 => Stage::Pixel,
-        0xfffe_0500 => Stage::Vertex,
-        0x4353_0500 => Stage::Compute,
-        _ => return Err(error(4, "expected SM5.0 pixel, vertex or compute RDEF")),
+        0xffff_0500 | 0xffff_0501 => Stage::Pixel,
+        0xfffe_0500 | 0xfffe_0501 => Stage::Vertex,
+        0x4353_0500 | 0x4353_0501 => Stage::Compute,
+        _ => return Err(error(4, "expected SM5.0/5.1 pixel, vertex or compute RDEF")),
     };
+    let sm51 = rdef.target & 0xffff == 0x0501;
     for binding in &rdef.bindings {
-        if binding.count == 0 || binding.flags & !0x1f != 0 {
+        if (binding.count == 0 && !sm51) || binding.flags & !0x1f != 0 {
             return Err(error(
                 binding.word,
                 format!(
@@ -400,9 +403,15 @@ pub fn reflection(bytes: &[u8]) -> Result<Interface> {
         } else {
             let kind = binding.kind().map_err(fail)?;
             if matches!(record.kind, 5 | 6 | 9 | 10 | 11)
-                && let Some((_, layout, claimed, _)) = layouts
-                    .iter_mut()
-                    .find(|(name, _, _, table)| *name == record.name && *table == 3)
+                && let Some((_, layout, claimed, _)) = layouts.iter_mut().find(|(name, _, _, table)| {
+                    // fxc's SM5.1 resource-array binding names the range, but its structured
+                    // element layout names the first descriptor (for example lights_out[0]).
+                    *table == 3
+                        && (*name == record.name
+                            || (sm51
+                                && record.count != 1
+                                && name.strip_suffix("[0]") == Some(record.name.as_str())))
+                })
             {
                 if std::mem::replace(claimed, true) {
                     return Err(fail(format!(
@@ -423,13 +432,17 @@ pub fn reflection(bytes: &[u8]) -> Result<Interface> {
         resources.push(Resource {
             id: ResourceId(u32::try_from(i).map_err(|_| error(0, "more than 4294967295 resources"))?),
             kind,
-            count: record.count,
+            count: if sm51 && record.count == 0 {
+                Resource::UNBOUNDED
+            } else {
+                record.count
+            },
             provenance: ResourceProvenance {
                 name: record.name.clone(),
                 d3d: Some(D3dBinding {
                     class,
                     register: record.register,
-                    space: 0,
+                    space: record.space,
                 }),
                 counter_of: None,
                 layout: table_layout,
