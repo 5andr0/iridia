@@ -59,6 +59,7 @@
 //! # Ok::<(), serde_json::Error>(())
 //! ```
 #![deny(missing_docs)]
+#![no_std]
 #![deny(clippy::disallowed_methods, clippy::disallowed_types)]
 #![cfg_attr(
     not(test),
@@ -74,28 +75,4 @@
 #[doc = include_str!("../README.md")]
 struct ReadmeExamples;
 
-mod binding;
-mod facts;
-mod interface;
-mod resource;
-mod stage;
-mod state;
-
-pub use binding::{AlphaComparison, ConstantBufferBinding, MatrixLines, OutputUse, Unshown};
-pub use facts::{InstructionCount, InstructionUnit};
-pub use interface::{
-    D3dSignature, DomainFacts, GeometryFacts, GsInput, GsOutput, HitGroup, HitGroupKind, HullFacts,
-    Interface, InterpMode, InterpSampling, Interpolation, Label, MeshFacts, MeshTopology, Partitioning,
-    RayTracingFacts, ScalarType, StageFacts, Subobject, SystemValue, TessDomain, TessTopology, Value,
-    Varying, VaryingProvenance,
-};
-pub use resource::{
-    Access, BufferKind, BufferLayout, Constant, ConstantType, D3dBinding, D3dClass, Majorness, Member,
-    Resource, ResourceId, ResourceKind, ResourceProvenance, SampleType, StorageTarget, TextureDim,
-};
-pub use stage::{ShaderFormat, Stage};
-pub use state::{
-    AddressMode, AlphaTest, Blend, BlendEquation, BlendFactor, BlendOp, Compare, Cull, DepthBias, DepthState,
-    Fill, Filter, Filters, MipFilter, RenderState, SamplerState, Stencil, StencilFace, StencilOp,
-    TargetState,
-};
+pub use iridia_ir::interface::*;

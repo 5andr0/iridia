@@ -1,0 +1,22 @@
+[package]
+name = "iridia-ir"
+description = "iridia's shader IR: typed SSA values and operations in structured regions or a control flow graph, with the interface vocabulary, a validator and a text form"
+readme = "README.md"
+keywords = ["shader", "ir", "ssa", "wgsl", "direct3d"]
+categories = ["graphics", "compilers", "no-std"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde = { version = "1", default-features = false, features = ["alloc", "derive"] }
+sha2.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

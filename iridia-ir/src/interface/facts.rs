@@ -1,4 +1,7 @@
 //! How large a program is, in the unit its reader counts.
+#[allow(unused_imports)]
+use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+
 use serde::Serialize;
 
 /// The source's counting unit. DXBC counts decoded instructions including control flow, excluding declarations;

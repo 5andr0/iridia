@@ -91,7 +91,6 @@ pub use iridia_interface::{
     ResourceProvenance, SampleType, ScalarType, ShaderFormat, Stage, StageFacts, StorageTarget, Subobject,
     SystemValue, TessDomain, TessTopology, TextureDim, Value, Varying, VaryingProvenance,
 };
-mod refusal;
 pub use bound::BoundSizes;
 pub use limits::{WEBGPU_BASELINE, compute_limit_notes, interface_notes};
 pub use program::{
@@ -100,6 +99,6 @@ pub use program::{
     stage_functions,
 };
 pub use reads::{ProgramGraph, WordsRead};
-pub use refusal::{Refusal, Unit, source_hash};
+pub use iridia_ir::{Refusal, Unit, source_hash};
 
 pub mod specialise;

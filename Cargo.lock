@@ -230,6 +230,7 @@ dependencies = [
  "iridia-dxil",
  "iridia-exec",
  "iridia-interface",
+ "iridia-ir",
  "iridia-mojo",
  "primase-naga",
  "sha2",
@@ -242,10 +243,19 @@ version = "0.4.1"
 dependencies = [
  "d3d9-reader",
  "iridia",
+ "iridia-d3d9-ir",
  "iridia-exec",
  "iridia-interface",
  "primase-naga",
  "primase-testdata",
+]
+
+[[package]]
+name = "iridia-d3d9-ir"
+version = "0.4.1"
+dependencies = [
+ "d3d9-reader",
+ "iridia-ir",
 ]
 
 [[package]]
@@ -294,8 +304,18 @@ dependencies = [
 name = "iridia-interface"
 version = "0.4.1"
 dependencies = [
+ "iridia-ir",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "iridia-ir"
+version = "0.4.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]

@@ -1,4 +1,7 @@
 //! A program's interface: the varyings it reads and writes, and the system values among them.
+#[allow(unused_imports)]
+use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+
 
 use serde::Serialize;
 
@@ -732,7 +735,7 @@ fn layout_fits(name: &str, layout: &BufferLayout) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
+    use crate::interface::{
         BufferLayout, Constant, ConstantType, D3dBinding, ResourceProvenance, SampleType, TextureDim,
     };
 
@@ -794,7 +797,7 @@ mod tests {
     fn storage() -> ResourceKind {
         ResourceKind::Storage {
             target: StorageTarget::Buffer(BufferKind::Raw),
-            access: crate::Access::ReadWrite,
+            access: crate::interface::Access::ReadWrite,
         }
     }
     fn broken(i: &Interface, expect: &str) {

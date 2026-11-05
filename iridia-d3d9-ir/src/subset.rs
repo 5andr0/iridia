@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 
 use d3d9_reader::{Comment, Declared, Item, Literal, Modifier, RegisterType, TextureType};
-use iridia::{Stage, TextureDim};
+use iridia_ir::interface::{Stage, TextureDim};
 
 use crate::{ConstantTable, Result, error};
 
@@ -47,7 +47,7 @@ pub struct Source {
 
 impl Source {
     /// Source register lanes needed for selected result lanes after the operand's swizzle.
-    pub(crate) fn read_mask(self, needed: u8) -> u8 {
+    pub fn read_mask(self, needed: u8) -> u8 {
         self.swizzle
             .iter()
             .enumerate()
@@ -215,7 +215,7 @@ pub struct Instruction {
 
 impl Instruction {
     /// Source operand `n`, an error naming the instruction when it has fewer.
-    pub(crate) fn source(&self, n: usize) -> Result<Source> {
+    pub fn source(&self, n: usize) -> Result<Source> {
         self.sources.get(n).copied().ok_or_else(|| {
             error(
                 self.word,
@@ -229,7 +229,7 @@ impl Instruction {
     }
 
     /// Arithmetic operand lanes before swizzle; shared by execution and backwards output slicing.
-    pub(crate) fn source_mask(&self, operand: usize) -> u8 {
+    pub fn source_mask(&self, operand: usize) -> u8 {
         let mask = self.destination.map_or(0, |d| d.mask);
         match self.opcode {
             Opcode::Rcp | Opcode::Rsq | Opcode::Exp | Opcode::Log | Opcode::Pow | Opcode::SinCos => 1,

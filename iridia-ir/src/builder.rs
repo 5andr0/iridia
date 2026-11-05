@@ -1,0 +1,221 @@
+//! A builder of `Regions` functions: values are placed in the region being filled, and constructs are opened and
+//! closed in source order, the way a structured source reads.
+
+use alloc::{format, string::String, vec, vec::Vec};
+
+use crate::{
+    Body, End, Function, LabelId, Node, Op, Origin, Precision, Region, Type, ValueDef, ValueId, Var, VarId,
+    derived_type,
+};
+
+/// An open construct.
+#[derive(Debug)]
+enum Frame {
+    If { cond: ValueId, accept: Option<Region> },
+    Block { label: LabelId },
+    Loop { label: LabelId, params: Vec<ValueId>, inits: Vec<ValueId> },
+}
+
+/// Builds a function in the `Regions` phase.
+#[derive(Debug)]
+pub struct Builder {
+    f: Function,
+    /// Each open construct with the region it is placed in.
+    stack: Vec<(Frame, Region)>,
+    /// The region being filled.
+    current: Region,
+    labels: u32,
+    origin: Option<Origin>,
+    precision: Precision,
+}
+
+impl Builder {
+    /// A builder of a function named `name`.
+    pub fn new(name: &str) -> Builder {
+        Builder {
+            f: Function { name: name.into(), values: Vec::new(), vars: Vec::new(), body: Body::Regions(Region::default()) },
+            stack: Vec::new(),
+            current: Region::default(),
+            labels: 0,
+            origin: None,
+            precision: Precision::Full,
+        }
+    }
+
+    /// The function so far (its values and variables).
+    pub fn function(&self) -> &Function {
+        &self.f
+    }
+
+    /// The type of a value made so far.
+    pub fn ty(&self, v: ValueId) -> Option<Type> {
+        self.f.ty(v)
+    }
+
+    /// Set the source origin of the values made from here on.
+    pub fn at(&mut self, origin: Option<Origin>) {
+        self.origin = origin;
+    }
+
+    /// Set the precision permission of the values made from here on.
+    pub fn precision(&mut self, precision: Precision) {
+        self.precision = precision;
+    }
+
+    /// A new variable.
+    pub fn var(&mut self, name: &str, ty: Type) -> VarId {
+        let id = VarId(u32::try_from(self.f.vars.len()).unwrap_or(u32::MAX));
+        self.f.vars.push(Var { name: name.into(), ty });
+        id
+    }
+
+    fn def(&mut self, ty: Type, op: Op) -> ValueId {
+        let id = ValueId(u32::try_from(self.f.values.len()).unwrap_or(u32::MAX));
+        self.f.values.push(ValueDef { ty, op, origin: self.origin, precision: self.precision });
+        id
+    }
+
+    /// A value of a stated type, placed in the current region.
+    pub fn value(&mut self, ty: Type, op: Op) -> ValueId {
+        let id = self.def(ty, op);
+        self.current.nodes.push(Node::Value(id));
+        id
+    }
+
+    /// A value whose type its operation gives, placed in the current region; an error names the rule the operands
+    /// break, or says the operation's type must be stated.
+    pub fn op(&mut self, op: Op) -> Result<ValueId, String> {
+        match derived_type(&op, |v| self.f.ty(v))? {
+            Some(ty) => Ok(self.value(ty, op)),
+            None => Err(format!("{op:?} needs its type stated")),
+        }
+    }
+
+    /// A literal of `ty`, each lane's bits in `lanes` (a scalar's in the first).
+    pub fn literal(&mut self, ty: Type, lanes: [u64; 4]) -> ValueId {
+        self.value(ty, Op::Literal(lanes))
+    }
+
+    /// An `f32` literal.
+    pub fn f32(&mut self, x: f32) -> ValueId {
+        self.literal(Type::F32, [u64::from(x.to_bits()), 0, 0, 0])
+    }
+
+    /// A `vec4<f32>` literal.
+    pub fn f32x4(&mut self, x: [f32; 4]) -> ValueId {
+        self.literal(Type::F32X4, x.map(|l| u64::from(l.to_bits())))
+    }
+
+    /// A `u32` literal.
+    pub fn u32(&mut self, x: u32) -> ValueId {
+        self.literal(Type::U32, [u64::from(x), 0, 0, 0])
+    }
+
+    /// An `i32` literal.
+    pub fn i32(&mut self, x: i32) -> ValueId {
+        self.literal(Type::I32, [u64::from(x.cast_unsigned()), 0, 0, 0])
+    }
+
+    /// A `bool` literal.
+    pub fn bool(&mut self, x: bool) -> ValueId {
+        self.literal(Type::BOOL, [u64::from(x), 0, 0, 0])
+    }
+
+    /// The variable takes the value.
+    pub fn store_var(&mut self, var: VarId, value: ValueId) {
+        self.current.nodes.push(Node::StoreVar(var, value));
+    }
+
+    /// The interface output `slot` takes the value.
+    pub fn store_output(&mut self, slot: u32, value: ValueId) {
+        self.current.nodes.push(Node::StoreOutput(slot, value));
+    }
+
+    fn label(&mut self) -> LabelId {
+        let l = LabelId(self.labels);
+        self.labels = self.labels.saturating_add(1);
+        l
+    }
+
+    fn open(&mut self, frame: Frame) {
+        let outer = core::mem::take(&mut self.current);
+        self.stack.push((frame, outer));
+    }
+
+    /// Open an `If` on a scalar bool: what follows is its accept arm.
+    pub fn open_if(&mut self, cond: ValueId) {
+        self.open(Frame::If { cond, accept: None });
+    }
+
+    /// End the accept arm of the innermost open `If` with `end`: what follows is its reject arm.
+    pub fn else_(&mut self, end: End) -> Result<(), String> {
+        self.current.end = Some(end);
+        let arm = core::mem::take(&mut self.current);
+        match self.stack.last_mut() {
+            Some((Frame::If { accept: accept @ None, .. }, _)) => {
+                *accept = Some(arm);
+                Ok(())
+            }
+            _ => Err("an else with no open if".into()),
+        }
+    }
+
+    /// Open a `Block`: its label is what a `Br` names to leave it.
+    pub fn open_block(&mut self) -> LabelId {
+        let label = self.label();
+        self.open(Frame::Block { label });
+        label
+    }
+
+    /// Open a `Loop` whose parameters start as `inits`: its label and the parameters, visible in its body.
+    pub fn open_loop(&mut self, inits: &[ValueId]) -> Result<(LabelId, Vec<ValueId>), String> {
+        let label = self.label();
+        let mut params = Vec::new();
+        for i in inits {
+            let ty = self.f.ty(*i).ok_or_else(|| format!("loop initial value %{} does not exist", i.0))?;
+            params.push(self.def(ty, Op::Param));
+        }
+        self.open(Frame::Loop { label, params: params.clone(), inits: inits.to_vec() });
+        Ok((label, params))
+    }
+
+    /// End the region being filled with `end` and close the innermost open construct, which defines values of the
+    /// `results` types (given by its yields and breaks). An `If` with no else arm has a reject arm that yields
+    /// nothing, so it can have no results.
+    pub fn close(&mut self, end: End, results: &[Type]) -> Result<Vec<ValueId>, String> {
+        self.current.end = Some(end);
+        let body = core::mem::take(&mut self.current);
+        let (frame, outer) = self.stack.pop().ok_or("a close with no open construct")?;
+        self.current = outer;
+        let results: Vec<ValueId> = results.iter().map(|t| self.def(*t, Op::Param)).collect();
+        let node = match frame {
+            Frame::If { cond, accept: Some(accept) } => Node::If { cond, accept, reject: body, results: results.clone() },
+            Frame::If { cond, accept: None } => {
+                if !results.is_empty() {
+                    return Err("an if with results and no else arm".into());
+                }
+                let reject = Region { nodes: Vec::new(), end: Some(End::Yield(vec![])) };
+                Node::If { cond, accept: body, reject, results: results.clone() }
+            }
+            Frame::Block { label } => Node::Block { label, body, results: results.clone() },
+            Frame::Loop { label, params, inits } => Node::Loop { label, params, inits, body, results: results.clone() },
+        };
+        self.current.nodes.push(node);
+        Ok(results)
+    }
+
+    /// Whether a construct is open.
+    pub fn is_open(&self) -> bool {
+        !self.stack.is_empty()
+    }
+
+    /// End the body with `end` and give the function.
+    pub fn finish(mut self, end: End) -> Result<Function, String> {
+        if self.is_open() {
+            return Err(format!("{} constructs left open", self.stack.len()));
+        }
+        self.current.end = Some(end);
+        self.f.body = Body::Regions(self.current);
+        Ok(self.f)
+    }
+}

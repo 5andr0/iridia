@@ -1,12 +1,13 @@
 //! Why a lifter refused a program, and the hash of the bytes it was given: what the three lifters (DXBC, DXIL and
 //! MojoShader's GLSL) share about saying no.
 
-use std::fmt;
+use alloc::{format, string::String};
+use core::fmt;
 
 use sha2::{Digest, Sha256};
 
-/// What an offset in a [`Refusal`] counts, in the source's own terms.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// What an offset in a [`Refusal`] or an [`crate::Origin`] counts, in the source's own terms.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
 pub enum Unit {
     /// A 32-bit word of a DXBC token stream.
     Word,
@@ -28,8 +29,7 @@ impl fmt::Display for Unit {
 
 /// A program a lifter did not lift, or a container it could not read: the bytecode, where in it and the reason, by name.
 /// The reason is stated whole, numbers included; [`Refusal::group`] is the key to count refusals by.
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
-#[error("{bytecode} at {unit} {at}: {detail}")]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Refusal {
     /// The bytecode's name (`DXBC`, `DXIL`, `MojoShader GLSL`).
     pub bytecode: &'static str,
@@ -40,6 +40,14 @@ pub struct Refusal {
     /// The reason, with the numbers it concerns.
     pub detail: String,
 }
+
+impl fmt::Display for Refusal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} at {} {}: {}", self.bytecode, self.unit, self.at, self.detail)
+    }
+}
+
+impl core::error::Error for Refusal {}
 
 impl Refusal {
     /// A refusal of `bytecode` at offset `at` (counted in `unit`) for `detail`.

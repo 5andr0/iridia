@@ -1,4 +1,7 @@
 //! What a program is and where it runs: its encoding and its pipeline stage.
+#[allow(unused_imports)]
+use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+
 use serde::Serialize;
 
 /// How a shader program's bytes are encoded. Only the encoding lives here; reading one is the job of the crate that
@@ -31,14 +34,14 @@ pub enum Stage {
     /// A compute program: no varyings, system inputs naming the invocation, a thread group size.
     Compute,
     /// A hull program: the control-point phase and the patch-constant function of a tessellated patch (see
-    /// [`crate::StageFacts::Hull`]).
+    /// [`super::StageFacts::Hull`]).
     Hull,
-    /// A domain program: a vertex of a tessellated patch from its domain location (see [`crate::StageFacts::Domain`]).
+    /// A domain program: a vertex of a tessellated patch from its domain location (see [`super::StageFacts::Domain`]).
     Domain,
     /// A geometry program.
     Geometry,
     /// A mesh program: a thread group that writes the vertices and primitives of one meshlet (see
-    /// [`crate::StageFacts::Mesh`]); its outputs are the per-vertex varyings of the interface.
+    /// [`super::StageFacts::Mesh`]); its outputs are the per-vertex varyings of the interface.
     Mesh,
     /// A ray generation program: the start of a ray tracing dispatch, one invocation per dispatched ray position.
     RayGeneration,

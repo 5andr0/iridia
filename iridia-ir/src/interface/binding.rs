@@ -2,10 +2,13 @@
 //! discard compares a constant with, and what an output's lanes are tested or blended by. These are observations the
 //! analyses of `iridia` make (`iridia::matrix`, `iridia::output_uses`), held as plain data so that a consumer without
 //! naga can keep them; what an observation makes a value stand for is the consumer's to decide.
+#[allow(unused_imports)]
+use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+
 
 use serde::Serialize;
 
-use crate::{Label, ResourceId};
+use super::{Label, ResourceId};
 
 /// What a discard compares against a constant word (an alpha reference), proved from the program's data flow
 /// (`iridia::output_uses::discard_compares`).
@@ -43,7 +46,7 @@ pub enum MatrixLines {
     Unshown(Unshown),
 }
 /// Why a program does not show a matrix's lines ([`MatrixLines::Unshown`]): the kind a consumer branches on, its text
-/// ([`std::fmt::Display`]) the reason.
+/// ([`core::fmt::Display`]) the reason.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Unshown {
@@ -65,8 +68,8 @@ pub enum Unshown {
         why: String,
     },
 }
-impl std::fmt::Display for Unshown {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for Unshown {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Unshown::NotRead => f.write_str("the program's results are made of none of the matrix's words"),
             Unshown::NotApplied => f.write_str(

@@ -1,4 +1,7 @@
 //! A program's resources: constant buffers with explicit layouts, textures, samplers, buffers and storage.
+#[allow(unused_imports)]
+use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+
 
 use serde::Serialize;
 

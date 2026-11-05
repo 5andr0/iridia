@@ -1,10 +1,7 @@
 use std::{collections::BTreeMap, num::NonZeroU32};
 
 use iridia::{
-    BufferLayout, Constant as Field, ConstantType, Conventions, D3dBinding, D3dClass, D3dModes, D3dSignature,
-    Interface, InterpMode, InterpSampling, Interpolation, Label, Majorness, Program, Provenance, Resource,
-    ResourceId, ResourceKind, ResourceProvenance, SampleType, ScalarType, ShaderFormat, Stage, StageFacts,
-    SystemValue, TextureDim, Value, Varying, VaryingProvenance,
+    Conventions, D3dModes, Interface, Program, Provenance, ResourceId, ShaderFormat, Stage, StageFacts, TextureDim,
     build::{Builder, Kind, Val, Width},
     entry_io,
 };
@@ -15,26 +12,6 @@ use naga::{
 };
 
 use crate::{Destination, Instruction, LIFTER_VERSION, Opcode, Register, Result, Shader, Source, error};
-
-const SEMANTICS: [&str; 14] = [
-    "POSITION",
-    "BLENDWEIGHT",
-    "BLENDINDICES",
-    "NORMAL",
-    "PSIZE",
-    "TEXCOORD",
-    "TANGENT",
-    "BINORMAL",
-    "TESSFACTOR",
-    "POSITIONT",
-    "COLOR",
-    "FOG",
-    "DEPTH",
-    "SAMPLE",
-];
-
-/// The float constant registers of a `vs_3_0` program, the rows a relative read can reach.
-const VERTEX_CONSTANTS: u32 = 256;
 
 struct Lower<'a> {
     source: &'a Shader,
@@ -52,166 +29,9 @@ struct Lower<'a> {
     at: usize,
 }
 
-fn value(width: u8) -> Value {
-    Value {
-        scalar: ScalarType::Float,
-        width,
-    }
-}
-/// How many lanes a write mask names.
-fn lanes_in(mask: u8) -> u8 {
-    u8::try_from(mask.count_ones()).unwrap_or(4)
-}
-/// The semantic name of a declaration usage.
-fn semantic(usage: u8, at: usize) -> Result<&'static str> {
-    SEMANTICS.get(usize::from(usage)).copied().ok_or_else(|| {
-        error(
-            at,
-            format!(
-                "declaration usage {usage}, where D3DDECLUSAGE is 0 to {}",
-                SEMANTICS.len().saturating_sub(1)
-            ),
-        )
-    })
-}
 /// The index of an entry point argument.
 fn argument(index: usize, at: usize) -> Result<u32> {
     u32::try_from(index).map_err(|_| error(at, "more than 4294967295 inputs"))
-}
-fn varying(name: &str, index: u32, mask: u8, register: u32, system: Option<SystemValue>) -> Varying {
-    Varying {
-        label: Label {
-            name: name.into(),
-            index,
-        },
-        system,
-        value: value(lanes_in(mask)),
-        interp: None,
-        used: false,
-        provenance: VaryingProvenance {
-            d3d: Some(D3dSignature {
-                register,
-                mask,
-                read_write_mask: 0,
-            }),
-        },
-    }
-}
-
-/// The bank's register layout is exact even for an optimized partial array. CTAB's unshortened type is retained
-/// by `read`; the interface describes only the allocation that the compiled shader actually binds.
-fn field(c: &crate::Constant) -> Result<Field> {
-    let t = &c.ty;
-    if c.register_set != 2
-        || t.kind != 3
-        || !t.members.is_empty()
-        || !(1..=4).contains(&t.rows)
-        || !(1..=4).contains(&t.columns)
-        || t.elements == 0
-    {
-        return Err(error(
-            0,
-            format!("CTAB {}: non-float/structured/empty type {:?}", c.name, t),
-        ));
-    }
-    // rows and columns are 1 to 4, checked above
-    let lanes = |n: u16| u8::try_from(n).map_err(|_| error(0, format!("CTAB {}: {n} lanes", c.name)));
-    let element = match t.class {
-        0 if t.rows == 1 && t.columns == 1 => ConstantType::Scalar(ScalarType::Float),
-        1 if t.rows == 1 => ConstantType::Vector(value(lanes(t.columns)?)),
-        2 | 3 => ConstantType::Matrix {
-            scalar: ScalarType::Float,
-            rows: lanes(t.rows)?,
-            columns: lanes(t.columns)?,
-            major: if t.class == 2 {
-                Majorness::Row
-            } else {
-                Majorness::Column
-            },
-            stride: 16,
-        },
-        _ => return Err(error(0, format!("CTAB {}: parameter class {}", c.name, t.class))),
-    };
-    let registers = if t.class == 2 {
-        t.rows
-    } else if t.class == 3 {
-        t.columns
-    } else {
-        1
-    };
-    // a single matrix the compiler allocated fewer lines than it has (its last rows or columns are never read) is
-    // described by the lines allocated, as a partial array is
-    let element = match element {
-        ConstantType::Matrix {
-            scalar,
-            rows,
-            columns,
-            major,
-            stride,
-        } if t.elements == 1 && (1..registers).contains(&c.count) => {
-            let kept = lanes(c.count)?;
-            let (rows, columns) = match major {
-                Majorness::Row => (kept, columns),
-                Majorness::Column => (rows, kept),
-            };
-            ConstantType::Matrix {
-                scalar,
-                rows,
-                columns,
-                major,
-                stride,
-            }
-        }
-        element => element,
-    };
-    let partial_matrix = t.elements == 1 && (1..registers).contains(&c.count);
-    let Some(count) = c
-        .count
-        .checked_div(registers)
-        .filter(|&n| partial_matrix || (c.count.is_multiple_of(registers) && n <= t.elements))
-    else {
-        return Err(error(
-            0,
-            format!(
-                "CTAB {}: an allocation of {} registers is not a whole number of the type's elements ({} registers each, at most {})",
-                c.name, c.count, registers, t.elements
-            ),
-        ));
-    };
-    let ty = if t.elements > 1 {
-        ConstantType::Array {
-            element: Box::new(element),
-            count: count.into(),
-            stride: u32::from(registers).saturating_mul(16),
-        }
-    } else {
-        element
-    };
-    let default_size = ty
-        .size()
-        .ok_or_else(|| error(0, "CTAB normalized type size overflow"))? as usize;
-    let default = c
-        .default
-        .as_ref()
-        .map(|bytes| {
-            bytes.get(..default_size).map(<[u8]>::to_vec).ok_or_else(|| {
-                error(
-                    0,
-                    format!(
-                        "CTAB {}: a default of {} bytes, where its type takes {default_size}",
-                        c.name,
-                        bytes.len()
-                    ),
-                )
-            })
-        })
-        .transpose()?;
-    Ok(Field {
-        name: c.name.clone(),
-        offset: u32::from(c.register).saturating_mul(16),
-        ty,
-        default,
-    })
 }
 
 pub(crate) fn lift(source: &Shader, bytes: &[u8]) -> Result<Program> {
@@ -304,7 +124,7 @@ fn lower(
             ));
             if tail {
                 let index = l.interface.inputs.len();
-                let mut input = varying("DERIVED_RGB", 0, 7, 31, None);
+                let mut input = iridia_d3d9_ir::varying("DERIVED_RGB", 0, 7, 31, None);
                 input.used = true;
                 l.interface.inputs.push(input);
                 let arg = Val {
@@ -375,36 +195,6 @@ fn lower(
 }
 
 impl Lower<'_> {
-    fn resource(
-        &mut self,
-        kind: ResourceKind,
-        name: String,
-        class: D3dClass,
-        register: u32,
-        global: Handle<GlobalVariable>,
-    ) -> Result<()> {
-        let id = ResourceId(
-            u32::try_from(self.interface.resources.len())
-                .map_err(|_| error(self.at, "more than 4294967295 resources"))?,
-        );
-        self.interface.resources.push(Resource {
-            id,
-            kind,
-            count: 1,
-            provenance: ResourceProvenance {
-                name,
-                d3d: Some(D3dBinding {
-                    class,
-                    register,
-                    space: 0,
-                }),
-                counter_of: None,
-                layout: None,
-            },
-        });
-        self.bindings.push((id, global));
-        Ok(())
-    }
     fn global(
         &mut self,
         name: String,
@@ -423,108 +213,39 @@ impl Lower<'_> {
         })
     }
     fn prepare(&mut self) -> Result<()> {
+        let signature = iridia_d3d9_ir::signature(self.source)?;
+        self.interface = signature.interface;
+        self.notes.extend(signature.notes);
         for i in &self.source.inputs {
-            let mut v = varying(
-                semantic(i.usage, self.at)?,
-                i.index.into(),
-                i.mask,
-                i.register,
-                None,
-            );
-            v.interp = (self.source.stage == Stage::Pixel).then_some(Interpolation {
-                mode: InterpMode::Perspective,
-                sampling: if i.centroid {
-                    InterpSampling::Centroid
-                } else {
-                    InterpSampling::Center
-                },
-            });
-            if i.partial_precision {
-                self.notes
-                    .push("partial-precision requests computed at f32".into());
-            }
-            let index = self.interface.inputs.len();
+            let &(slot, mask) = signature
+                .inputs
+                .get(&i.register)
+                .ok_or_else(|| error(self.at, format!("input v{} has no slot", i.register)))?;
+            let index = slot as usize;
+            let width = self.interface.inputs.get(index).map_or(0, |v| v.value.width);
             let arg = Val {
-                expr: self.b.app(E::FunctionArgument(argument(index, self.at)?)),
+                expr: self.b.app(E::FunctionArgument(slot)),
                 kind: Kind::F,
-                width: Width::try_from(v.value.width)
-                    .map_err(|e| error(self.at, format!("an input of {e}")))?,
+                width: Width::try_from(width).map_err(|e| error(self.at, format!("an input of {e}")))?,
             };
             let zero = self.b.lit_f(0.0);
             let mut parts = [zero; 4];
             let mut lane = 0;
             for (n, p) in parts.iter_mut().enumerate() {
-                if i.mask & (1 << n) != 0 {
+                if mask & (1 << n) != 0 {
                     *p = self.b.lane(arg, lane);
                     lane = lane.saturating_add(1);
                 }
             }
             let expanded = self.b.compose(&parts);
-            self.inputs.insert(i.register, (expanded, i.mask, index));
-            self.interface.inputs.push(v);
+            self.inputs.insert(i.register, (expanded, mask, index));
         }
         for (&n, words) in &self.source.definitions {
             let parts: Vec<_> = words.iter().map(|w| self.b.lit_f(f32::from_bits(*w))).collect();
             self.definitions.insert(n, self.b.compose(&parts));
         }
-        let mut rows = 0;
-        for i in &self.source.instructions {
-            for s in &i.sources {
-                if s.relative.is_some() {
-                    // a relative read can reach any row of the vertex constant file
-                    rows = rows.max(VERTEX_CONSTANTS);
-                } else if let Register::Constant(n) = s.register
-                    && !self.source.definitions.contains_key(&n)
-                {
-                    rows = rows.max(n.saturating_add(1));
-                }
-            }
-        }
-        let mut fields = Vec::new();
-        if let Some(ctab) = &self.source.constants {
-            for c in &ctab.constants {
-                match c.register_set {
-                    2 => {
-                        rows = rows.max(u32::from(c.register).saturating_add(u32::from(c.count)));
-                        fields.push(field(c)?);
-                        let t = &c.ty;
-                        let lines = if t.class == 2 {
-                            t.rows
-                        } else if t.class == 3 {
-                            t.columns
-                        } else {
-                            1
-                        };
-                        if u32::from(c.count) < u32::from(t.elements).saturating_mul(u32::from(lines)) {
-                            self.notes.push(format!("CTAB {} retains its declared type; its optimized allocation binds {} registers",c.name,c.count));
-                        }
-                    }
-                    3 => {
-                        if c.count != 1 || c.ty.class != 4 || !matches!(c.ty.kind, 12..=14) {
-                            return Err(error(
-                                0,
-                                format!("CTAB {}: sampler array or type {:?}", c.name, c.ty),
-                            ));
-                        }
-                        let expected = match c.ty.kind {
-                            12 => TextureDim::D2,
-                            13 => TextureDim::D3,
-                            _ => TextureDim::Cube,
-                        };
-                        if self.source.samplers.get(&u32::from(c.register)) != Some(&expected) {
-                            return Err(error(0, format!("CTAB {} sampler disagrees with DCL", c.name)));
-                        }
-                    }
-                    _ => {
-                        return Err(error(
-                            0,
-                            format!("CTAB {}: register set {} not lifted", c.name, c.register_set),
-                        ));
-                    }
-                }
-            }
-        }
-        if let Some(rows) = NonZeroU32::new(rows) {
+        if let Some(bank) = signature.bank {
+            let rows = NonZeroU32::new(bank.rows).ok_or_else(|| error(self.at, "an empty constant bank"))?;
             let u4 = self.b.ty_of(Kind::U, Width::Four);
             let ty = self.b.ty(TypeInner::Array {
                 base: u4,
@@ -533,26 +254,15 @@ impl Lower<'_> {
             });
             let g = self.global("cb0".into(), ty, 0, 0, AddressSpace::Uniform);
             self.constants = Some(g);
-            self.rows = rows.get();
-            self.resource(
-                ResourceKind::ConstantBuffer {
-                    layout: BufferLayout {
-                        size: rows.get().saturating_mul(16),
-                        constants: fields,
-                    },
-                },
-                "ps_float_constants".into(),
-                D3dClass::ConstantBuffer,
-                0,
-                g,
-            )?;
+            self.rows = bank.rows;
+            self.bindings.push((bank.resource, g));
         }
-        for (&slot, &dim) in &self.source.samplers {
-            let naga_dim = match dim {
+        for (&slot, s) in &signature.samplers {
+            let naga_dim = match s.dim {
                 TextureDim::D2 => ImageDimension::D2,
                 TextureDim::D3 => ImageDimension::D3,
                 TextureDim::Cube => ImageDimension::Cube,
-                _ => return Err(error(0, "1D sampler")),
+                TextureDim::D1 => return Err(error(0, "1D sampler")),
             };
             let ty = self.b.ty(TypeInner::Image {
                 dim: naga_dim,
@@ -565,36 +275,9 @@ impl Lower<'_> {
             let texture = self.global(format!("t{slot}"), ty, 1, slot, AddressSpace::Handle);
             let ty = self.b.ty(TypeInner::Sampler { comparison: false });
             let sampler = self.global(format!("s{slot}"), ty, 2, slot, AddressSpace::Handle);
-            let name = self
-                .source
-                .constants
-                .as_ref()
-                .and_then(|c| {
-                    c.constants
-                        .iter()
-                        .find(|c| c.register_set == 3 && u32::from(c.register) == slot)
-                })
-                .map_or_else(|| format!("s{slot}"), |c| c.name.clone());
-            self.resource(
-                ResourceKind::Texture {
-                    dim,
-                    arrayed: false,
-                    multisampled: false,
-                    sample: SampleType::Float,
-                },
-                name.clone(),
-                D3dClass::ShaderResource,
-                slot,
-                texture,
-            )?;
-            self.resource(
-                ResourceKind::Sampler { comparison: false },
-                name,
-                D3dClass::Sampler,
-                slot,
-                sampler,
-            )?;
-            self.samplers.insert(slot, (texture, sampler, dim));
+            self.bindings.push((s.texture, texture));
+            self.bindings.push((s.sampler, sampler));
+            self.samplers.insert(slot, (texture, sampler, s.dim));
         }
         Ok(())
     }
@@ -1003,61 +686,13 @@ impl Lower<'_> {
     }
     fn finish(mut self, bytes: &[u8]) -> Result<Program> {
         let mut outputs = Vec::new();
-        let outgoing: Vec<_> = if self.source.stage == Stage::Vertex {
-            self.source
-                .outputs
-                .iter()
-                .map(|o| {
-                    let system = (o.usage == 0 && o.index == 0).then_some(SystemValue::ClipPosition);
-                    Ok((
-                        Register::Output(o.register),
-                        varying(
-                            semantic(o.usage, self.at)?,
-                            o.index.into(),
-                            o.mask,
-                            o.register,
-                            system,
-                        ),
-                    ))
-                })
-                .collect::<Result<_>>()?
-        } else {
-            self.locals
-                .iter()
-                .filter_map(|(&r, &(_, mask))| {
-                    if let Register::Target(n) = r {
-                        Some((r, varying("SV_Target", n, mask, n, Some(SystemValue::Target(n)))))
-                    } else {
-                        None
-                    }
-                })
-                .collect()
-        };
-        if self.source.stage == Stage::Vertex
-            && !outgoing
-                .iter()
-                .any(|(_, v)| v.system == Some(SystemValue::ClipPosition))
-        {
-            return Err(error(0, "vertex program has no declared POSITION0 clip output"));
-        }
-        for (r, mut v) in outgoing {
-            let mask = v
-                .provenance
-                .d3d
-                .as_ref()
-                .ok_or_else(|| error(self.at, "output signature missing"))?
-                .mask;
-            let &(local, written) = self
+        let written: BTreeMap<Register, u8> = self.locals.iter().map(|(&r, &(_, mask))| (r, mask)).collect();
+        for (r, v) in iridia_d3d9_ir::outputs(self.source, &written, self.at)? {
+            let mask = v.provenance.d3d.as_ref().map_or(0, |d| d.mask);
+            let &(local, _) = self
                 .locals
                 .get(&r)
                 .ok_or_else(|| error(self.at, format!("uninitialized output {r:?}")))?;
-            if mask & !written != 0 {
-                return Err(error(
-                    self.at,
-                    format!("{r:?}: uninitialized output lanes {:#x}", mask & !written),
-                ));
-            }
-            v.used = true;
             self.interface.outputs.push(v);
             let ptr = self.b.local_ptr(local);
             let v = self.b.load(ptr, Kind::F, Width::Four);

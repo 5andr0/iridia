@@ -14,6 +14,7 @@ publish.workspace = true
 
 [dependencies]
 d3d9-reader.workspace = true
+iridia-d3d9-ir.workspace = true
 iridia-interface.workspace = true
 iridia.workspace = true
 naga.workspace = true
