@@ -329,6 +329,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "iridia-naga"
+version = "0.4.1"
+dependencies = [
+ "iridia-ir",
+ "naga",
+]
+
+[[package]]
+name = "iridia-passes"
+version = "0.4.1"
+dependencies = [
+ "iridia-ir",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -357,6 +372,30 @@ name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
+
+[[package]]
+name = "naga"
+version = "30.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a616d2fb8c89516ac2723a581f69d6c18576046bed761bd6b305e5618e6ae130"
+dependencies = [
+ "arrayvec",
+ "bit-set",
+ "bitflags",
+ "cfg-if",
+ "cfg_aliases",
+ "codespan-reporting",
+ "half",
+ "hashbrown",
+ "indexmap",
+ "libm",
+ "log",
+ "naga-types",
+ "num-traits",
+ "once_cell",
+ "rustc-hash",
+ "thiserror",
+]
 
 [[package]]
 name = "naga-types"

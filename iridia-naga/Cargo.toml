@@ -1,0 +1,25 @@
+[package]
+name = "iridia-naga"
+description = "Lower iridia's shader IR to a stock naga module, for naga's writers (WGSL)"
+readme = "README.md"
+keywords = ["shader", "ir", "naga", "wgsl", "webgpu"]
+categories = ["graphics", "compilers"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[features]
+default = ["wgsl"]
+# naga's WGSL writer
+wgsl = ["naga/wgsl-out"]
+
+[dependencies]
+iridia-ir.workspace = true
+# stock naga, pinned: every naga node this crate builds is in `lower.rs`
+naga = { version = "=30.0.1", default-features = false }
+
+[lints]
+workspace = true
