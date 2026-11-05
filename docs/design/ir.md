@@ -31,7 +31,7 @@ function state to programs, and the analyses (lane provenance, matrix majorness,
 
 | # | Decision | Rejected alternatives |
 |---|----------|-----------------------|
-| 1 | One vocabulary of typed SSA values and operations, with two validated control phases: `Cfg` (basic blocks with block parameters) and `Regions` (a tree of block, loop, if and switch with labelled exits that carry values). Structured sources build `Regions` directly; graph sources (DXIL, RSX vertex programs, microcode, SPIR-V in) build `Cfg`. A program may stay in `Cfg` through specialisation and execution; a structured target asks for `Regions`, made once by the one shared structurizer and then frozen. Source structure is semantics (it fixes convergence), never a hint. | SSA CFG only, structure rebuilt per output: every CFG rewrite could move a reconvergence point. Regions only: refuses graphs that specialisation would make structurable (section 1.4). SPIR-V merge annotations on a mutable CFG. |
+| 1 | One vocabulary of typed SSA values and operations, with two validated control phases: `Cfg` (basic blocks with block parameters) and `Regions` (a tree of block, loop, if and switch with labelled exits that carry values). Structured sources build `Regions` directly; graph sources (DXIL, RSX vertex programs, microcode, SPIR-V in) build `Cfg`. A program may stay in `Cfg` through specialisation and execution; a structured target asks for `Regions`, made at most once per output by the one shared structurizer. Source structure constrains convergence under the source's recorded convergence contract, kept through both phases; it is never a hint. | SSA CFG only, structure rebuilt per output: every CFG rewrite could move a reconvergence point. Regions only: refuses graphs that specialisation would make structurable (section 1.4). SPIR-V merge annotations on a mutable CFG. |
 | 2 | Scalars `bool`, `i/u 8/16/32/64`, `f16/f32/f64`; vectors of 2 to 4; matrices where a source states one. Aggregates live in memory and I/O, not in SSA values. Constants are exact bits. Minimum precision is a typed precision policy on an operation (a permission), never a type. Fixed point is not a type: clamp, quantize, pack and unpack are explicit operations. | A `MinF16` type; native f16 for every min-precision annotation; f64 narrowed to f32; a fixed-point type without evidenced arithmetic. |
 | 3 | The IR names resources and interface slots by id. Resource kind, element type and layout are stated once, in the shared vocabulary, with per-source provenance as a list of typed source addresses (D3D register, D3D9 bank, RSX unit, Vulkan set and binding, GL name). Target bindings are an output artifact, the `BindingPlan`. Pipeline state that code depends on is declared: state that changes types (a `ps_1_x` texture's dimension) needs a specialisation or distinct typed resources; numeric state (bump matrices, projection flags) may also lower to a state block. | naga globals plus a bindings table (today); one global binding layout; unknown texture types as a uniform. |
 | 4 | Behaviour lives in the operation. Where sources' rules differ, the operation is distinct or carries a mandatory semantic enum (`MinNum`, `UDiv { on_zero }`, `FToI { out_of_range }`, `MulZeroWins`, `ClampRange`, `Quantize`), named for the behaviour, never for a source. Each operation states its allowed results (exact, or a stated latitude). Constraints (`precise`, `nonuniform`, convergence) and permissions (minimum precision, contraction) are separate typed fields. Floating-point controls are module defaults with per-operation overrides. Target legalization is a sequence of checked passes driven by a target profile. | Program-wide mode flags whose meaning the body must agree with (today's `D3dModes`); expansions in each lifter or each back end; a source-intrinsic escape hatch. |
@@ -49,7 +49,7 @@ function state to programs, and the analyses (lane provenance, matrix majorness,
 |--------|------------------------|
 | D3D9 | structured: `if`/`ifc`/`else`/`endif`, `loop aL, i#`, `rep i#`, `break`/`breakc`/`breakp`, `call`/`callnz`/`label`/`ret`, predication |
 | DXBC | structured: `if`, `loop`, `switch`, `break(c)`, `continue(c)`, `ret(c)`, `call`, subroutines |
-| DXIL | an SSA CFG with phis, reducible in dxc's output in practice |
+| DXIL | an SSA CFG with phis; reducibility is required (DXIL.rst, validation rule `FLOW.REDUCIBLE`) |
 | SPIR-V (later) | a structured CFG with merge and continue declarations |
 | RSX fragment programs | structured (`IFE`, `LOOP`, `REP`); vertex programs branch to addresses |
 | console microcode | arbitrary branches |
@@ -88,15 +88,21 @@ region and the regions nested in it, so dominance is nesting.
   divergent lanes rejoin, which decides what a derivative, an implicit-LOD sample or a wave operation computes), so
   they are semantics. A pass that changes them must justify the convergence effect; the first passes do not
   (no jump threading, no block merging across constructs).
+- Nesting alone does not define convergence. Each function records its source's convergence contract (D3D's
+  structured reconvergence, ordinary structured SPIR-V, or SPIR-V with `SPV_KHR_maximal_reconvergence`, which
+  promises more) and the region identities that contract depends on. Both phases and every `Regions`-to-`Cfg`
+  projection keep them; a transformation preserves the contract or refuses.
 - Graph sources build `Cfg`. A `Cfg` program is valid, specialisable, analysable and executable as it is.
 - `structurize` turns `Cfg` into `Regions`. It is the existing `build::structure` (Ramsey, "Beyond Relooper", ICFP
   2022), which already takes a naga-free graph (`Cfg`/`Term`) and returns the `Block`/`Loop`/`Br`/`Continue` tree
   this phase uses. It moves to `iridia-passes`, is checked against the graph classes it accepts today, and refuses
   an irreducible graph by name. Node splitting can be added there later; a per-invocation program counter loop is
   not a safe default because it changes reconvergence of barriers, derivatives and wave operations.
-- An output pipeline asks for the phase it needs. Structured targets run `structurize` once, after specialisation
-  and before target legalization, and the result is frozen for that pipeline. A `Regions` program projects to a
-  `Cfg` view cheaply where an analysis or the executor prefers edges.
+- An output pipeline asks for the phase it needs, in one order: specialise; legalization that does not need
+  structure; `structurize` if the program is in `Cfg` (programs that start in `Regions` skip it); structured
+  legalization such as `break_flags`, with its convergence checks; validate and freeze; emit. Structurization
+  happens at most once per pipeline, and nothing changes control after the final validation. A `Regions` program
+  projects to a `Cfg` view cheaply where an analysis or the executor prefers edges.
 
 Labelled multi-level exits are allowed in `Regions`, because any reducible graph maps into them without new state.
 For targets with innermost-only `break`, the pass `break_flags` adds a jump variable only where an exit crosses a
@@ -124,8 +130,9 @@ entry: if state -> A else B        A: if x -> B else exit        B: if y -> A el
 
 With `state` unknown, the cycle {A, B} has two entries; with `state = true` known, it has one. `Program::specialise`
 runs after the lift, so the graph must be a valid program until then. This shape is a synthetic test case, not
-something found in a corpus. The `Cfg` phase also lets the executor and DXIL output run a program no structured
-target can take.
+something found in a corpus, and not valid DXIL input (DXIL must be reducible). The `Cfg` phase also lets a
+program no structured target can take be inspected, specialised and run by the executor; DXIL output has its own
+reducibility check.
 
 ## 2. Types and values
 
@@ -307,8 +314,9 @@ iridia-cli, iridia-web (the browser page, wasm32)
 
 - `iridia-naga` depends on `naga = "=30.0.1"`, the version wgpu `=30.0.1` uses, so a lowered module goes straight
   into wgpu.
-- Before lowering: the naga profile's legalization passes (quirk operations to naga expressions, minimum precision
-  policy, `break_flags`), and `structurize` if the program is in `Cfg`.
+- Before lowering, in the order of section 1.2: the naga profile's legalization (quirk operations to naga
+  expressions, minimum precision policy), `structurize` if the program is in `Cfg`, then `break_flags`, validation
+  and freeze.
 - Lowering: `Regions` to naga statements; SSA values to expressions with `Emit` ranges, keeping effect order;
   region results and loop parameters to locals; interface slots to entry arguments and the result struct; the
   `BindingPlan` to globals with group and binding.
@@ -325,7 +333,7 @@ iridia-cli, iridia-web (the browser page, wasm32)
 |---------|----------------------|-----------------|--------------|-----------|
 | texture atomic whose old value is read | no result field | no | no | `iridia-spirv` |
 | image exchange, compare-exchange | rejected by the validator | no | no | `iridia-spirv` |
-| texture atomic, result unused | yes (subtract as add of the negation) | yes | needs the feature | naga |
+| texture atomic, result unused | yes (subtract as add of the negation) | yes | no (`TEXTURE_ATOMIC` is native-only in wgpu 30.0.1; WGSL atomics live in workgroup and storage buffers) | naga for native targets; refused for browsers |
 | ray queries | yes, and naga's SPIR-V writer | panics (`writer.rs:1066`) | no | naga to SPIR-V; WGSL refused |
 | f16 | yes | yes (`enable f16`) | `shader-f16` | naga |
 | f64 | yes | yes, naga's dialect | no | naga (native), refused for browsers |
@@ -428,7 +436,7 @@ Old crates keep working until each replacement passes its bar; nothing is delete
 
 | Step | Work | Bar |
 |------|------|-----|
-| 1 | `iridia-ir`, `iridia-passes` (structurize moved, promote, fold, specialise, `break_flags`), `iridia-naga`, text form; an `iridia-exec` subset over the IR (straight-line arithmetic, sampling, kill, loops) | unit fixtures in IR text with hand-worked values; the synthetic counterexample of 1.4; `cargo build --target wasm32-unknown-unknown` for every new crate except `iridia-naga`'s optional writers |
+| 1 | `iridia-ir`, `iridia-passes` (structurize moved, promote, fold, specialise, `break_flags`), `iridia-naga`, text form; an `iridia-exec` subset over the IR (straight-line arithmetic, sampling, kill, loops) | unit fixtures in IR text with hand-worked values; the synthetic counterexample of 1.4; `cargo build --target wasm32-unknown-unknown` for every new library crate with each supported writer feature, including the WGSL path stage 2 uses |
 | 2 | D3D9 `vs_3_0`/`ps_3_0` on the IR, a new crate beside `iridia-d3d9` until cut-over | all 7,308 SWS programs lift, IR-validate, lower, naga-validate and write WGSL; interface and layouts identical to ecb915c; old and new WGSL saved and every difference classified with its reason; three-way execution (ecb915c lift in the current executor, the IR in the new executor, the new WGSL re-parsed and run in the current executor) on the measured runnable subset, which is reported; the Microsoft disassembler test (Windows); `tests/tokens.rs`-style synthetic fixtures re-run |
 | 3 | D3D9 SM1.x and SM2.x on the IR (the work put on hold), from the fixture drafts | one-feature fixtures per version and modifier, assembled by Microsoft's assembler; the relevant vkd3d `d3dbc` tests; the SWS gate unchanged; `ps_1_x` policies tested for each choice |
 | 4 | DXBC | every DXBC corpus manifest keeps its outcome; existing synthetic, `exec_warp*` and vkd3d tests; image atomics with old values and exchange need a working route (`iridia-spirv` brought forward) before the fork path retires |
