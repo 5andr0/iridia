@@ -90,7 +90,7 @@ fn vertex_refuses_undeclared_unwritten_and_unsupported_features() {
                 instruction(88, &[0x800f_0000, 0x90e4_000f, 0x90e4_000f, 0x90e4_000f]),
             ]
             .concat(),
-            "pixel-only SM3 opcode",
+            "is a pixel instruction, not one of vs_3_0",
         ),
         (
             [
@@ -98,7 +98,7 @@ fn vertex_refuses_undeclared_unwritten_and_unsupported_features() {
                 instruction(90, &[0x800f_0000, 0x90e4_000f, 0x90e4_000f, 0x90e4_000f]),
             ]
             .concat(),
-            "pixel-only SM3 opcode",
+            "is a pixel instruction, not one of vs_3_0",
         ),
         (vec![], "no declared POSITION0"),
         (position(), "uninitialized output"),
@@ -124,7 +124,7 @@ fn vertex_refuses_undeclared_unwritten_and_unsupported_features() {
         ),
         (
             [position(), instruction(1, &[0x800f_0800, 0x90e4_000f])].concat(),
-            "outside the supported",
+            "register type 8 is not a register of vs_3_0",
         ),
         (
             [position(), dcl(5, 0, 0xe003_0007)].concat(),
@@ -138,7 +138,7 @@ fn vertex_refuses_undeclared_unwritten_and_unsupported_features() {
         ([position(), dcl(4, 0, 0xe00f_0006)].concat(), "PSIZE"),
         (
             [position(), instruction(65, &[0x800f_0000])].concat(),
-            "pixel sampling/discard",
+            "is a pixel instruction, not one of vs_3_0",
         ),
         (
             [
@@ -146,7 +146,7 @@ fn vertex_refuses_undeclared_unwritten_and_unsupported_features() {
                 instruction(66, &[0x800f_0000, 0x90e4_000f, 0xa0e4_0800]),
             ]
             .concat(),
-            "pixel sampling/discard",
+            "is a pixel instruction, not one of vs_3_0",
         ),
         (
             // `mova` is lifted: the program is refused for the declared position it never writes

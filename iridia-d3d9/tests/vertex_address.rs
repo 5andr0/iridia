@@ -205,9 +205,13 @@ fn what_the_address_register_cannot_do_is_refused_by_name() {
     // the relative address token must be a0 with one lane replicated
     for (address, why) in [
         (0xb0e4_0000u32, "does not replicate one lane"),
-        (0xf000_0000, "aL is not supported"),
-        (0xa000_0000, "other than the vertex address register"),
-        (0xb100_0000, "with a modifier"),
+        // aL is register type 15: 7 in bits 28 to 30, 1 in bits 11 to 12
+        (0xf000_0800, "aL is not supported"),
+        (
+            0xa000_0000,
+            "where it is the address register a0 or the loop counter aL",
+        ),
+        (0xb100_0000, "has source modifier 1"),
     ] {
         let tokens = instruction(1, &[O7, 0xa0e4_2000, address]);
         assert!(
@@ -226,7 +230,7 @@ fn what_the_address_register_cannot_do_is_refused_by_name() {
     );
     // a relative destination
     let tokens = instruction(1, &[O7 | 0x2000, 0x90e4_000f]);
-    assert!(refusal(&body(&tokens)).contains("relative addressing of a destination"));
+    assert!(refusal(&body(&tokens)).contains("relative address token of a destination"));
     // a0 read before mova wrote it
     let no_mova = [position(), instruction(1, &[O7, 0xa0e4_2000, 0xb000_0000])].concat();
     assert!(refusal(&no_mova).contains("before any mova"));
@@ -239,7 +243,12 @@ fn what_the_address_register_cannot_do_is_refused_by_name() {
         .chain([0xffff])
         .flat_map(u32::to_le_bytes)
         .collect();
-    assert!(read(&pixel).unwrap_err().to_string().contains("vertex-only"));
+    assert!(
+        read(&pixel)
+            .unwrap_err()
+            .to_string()
+            .contains("is a vertex instruction, not one of ps_3_0")
+    );
     // sincos writes x, y or xy only
     let bad = [position(), instruction(37, &[0x800f_0000, V15_X])].concat();
     assert!(refusal(&bad).contains("SINCOS writes only"));

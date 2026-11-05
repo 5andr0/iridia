@@ -119,6 +119,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "d3d9-reader"
+version = "0.4.0"
+source = "git+https://github.com/Kalmarv/dx?rev=5b58dd383e54b9ad118edb78d0ca0f57e51db068#5b58dd383e54b9ad118edb78d0ca0f57e51db068"
+dependencies = [
+ "thiserror",
+]
+
+[[package]]
 name = "digest"
 version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -131,7 +139,7 @@ dependencies = [
 [[package]]
 name = "dxbc-reader"
 version = "0.4.0"
-source = "git+https://github.com/Kalmarv/dx?rev=292b61605311a69921eff208b68795093daa5431#292b61605311a69921eff208b68795093daa5431"
+source = "git+https://github.com/Kalmarv/dx?rev=5b58dd383e54b9ad118edb78d0ca0f57e51db068#5b58dd383e54b9ad118edb78d0ca0f57e51db068"
 dependencies = [
  "dxcontainer",
  "thiserror",
@@ -140,7 +148,7 @@ dependencies = [
 [[package]]
 name = "dxcontainer"
 version = "0.4.0"
-source = "git+https://github.com/Kalmarv/dx?rev=292b61605311a69921eff208b68795093daa5431#292b61605311a69921eff208b68795093daa5431"
+source = "git+https://github.com/Kalmarv/dx?rev=5b58dd383e54b9ad118edb78d0ca0f57e51db068#5b58dd383e54b9ad118edb78d0ca0f57e51db068"
 dependencies = [
  "primase-foundations",
  "thiserror",
@@ -149,7 +157,7 @@ dependencies = [
 [[package]]
 name = "dxil-reader"
 version = "0.4.0"
-source = "git+https://github.com/Kalmarv/dx?rev=292b61605311a69921eff208b68795093daa5431#292b61605311a69921eff208b68795093daa5431"
+source = "git+https://github.com/Kalmarv/dx?rev=5b58dd383e54b9ad118edb78d0ca0f57e51db068#5b58dd383e54b9ad118edb78d0ca0f57e51db068"
 dependencies = [
  "dxcontainer",
  "primase-foundations",
@@ -232,6 +240,7 @@ dependencies = [
 name = "iridia-d3d9"
 version = "0.4.1"
 dependencies = [
+ "d3d9-reader",
  "iridia",
  "iridia-exec",
  "iridia-interface",

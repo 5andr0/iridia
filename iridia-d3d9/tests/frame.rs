@@ -33,7 +33,8 @@ fn frame_keeps_both_stage_versions_and_leaves_container_bytes() {
         }
     }
     assert!(
-        iridia_d3d9::frame(&[0, 2, 255, 255])
+        // a complete ps_2_0 program: read, then refused for its version
+        iridia_d3d9::frame(&[0, 2, 255, 255, 255, 255, 0, 0])
             .unwrap_err()
             .detail
             .contains("version")

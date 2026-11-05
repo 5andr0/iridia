@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- `iridia-d3d9` reads its tokens through `dx`'s new `d3d9-reader` (pinned by git rev), which reads every Direct3D 9
+  version as stored; the crate's own token reader and CTAB reader are gone, and `ConstantTable`, `Constant`, `Type`,
+  `TypeMember` and `Comment` are `d3d9-reader`'s, re-exported (`Constant` gains `word`). `read` and `lift` take the
+  same `vs_3_0`/`ps_3_0` subset as before and lift every program identically, but a malformed stream is now refused
+  with the reader's account of it (an opcode or register of the other stage, an `aL` or address token that is not
+  `a0`/`aL`, a relative address without its token), so `LIFTER_VERSION` is 3 and the `*versions.tsv` tables are
+  regenerated. `frame` reads the program with `d3d9_reader::frame` and refuses versions other than `vs_3_0`/`ps_3_0`.
+  The four `dx` crates are pinned at `5b58dd3`.
 - `iridia-dxbc` lifts SM5.1 resource ranges and spaces, including dynamically indexed and unbounded
   CBV/SRV/UAV/sampler arrays and non-uniform descriptor selection. Declaration IDs are distinct from
   registers and reflection must agree with the declarations. `LIFTER_VERSION` is 10.
@@ -12,7 +20,7 @@
 - Focused fxc SM5.1 fixtures are compared instruction by instruction with fxc disassembly and run on
   the CPU against DXIL builds of the same source, plus SM5.0 where expressible. Their inputs and
   expected outputs are saved beside the fixtures for external comparisons.
-- The three `dx` readers are pinned at `292b616`, which reads Shader Model 5.1. `iridia-dxbc`'s `reflection` and
+- The three `dx` readers were pinned at `292b616`, which reads Shader Model 5.1. `iridia-dxbc`'s `reflection` and
   `resource_reflection` read 5.1 pixel, vertex and compute programs: register spaces, resource arrays (an array of no
   stated size is `Resource::UNBOUNDED`) and the constant buffer variables the program never reads. Two fxc
   10.0.26100.0 fixtures, `reflection_sm51` and `bindings_sm51`, check reflection and declaration resolution.

@@ -1,7 +1,9 @@
 //! Read raw Direct3D 9 `ps_3_0` and `vs_3_0` shader tokens and their CTAB constant table, and lift them to an
 //! [`iridia::Program`].
 //!
-//! The input is the token stream a Direct3D 9 compiler writes, version token to `END` (no container). [`read`] decodes
+//! The input is the token stream a Direct3D 9 compiler writes, version token to `END` (no container). The tokens are
+//! read by [`d3d9_reader`], which reads every Direct3D 9 version as stored; this crate keeps the `vs_3_0` and `ps_3_0`
+//! subset it lifts. [`read`] decodes
 //! it into declarations, instructions, immediate definitions, every comment and the CTAB (creator, target, flags, named
 //! register allocations, types and raw defaults). [`lift`] turns it into a `naga::Module` with an interface, which can
 //! then be validated and written as WGSL ([`iridia::emit::wgsl`]). No translated text and no native compiler is needed.
@@ -71,15 +73,14 @@
 #[doc = include_str!("../README.md")]
 struct ReadmeExamples;
 
-mod ctab;
 mod lower;
 mod sampler;
 pub use sampler::sampler_states;
-mod tokens;
+mod subset;
 mod vertex_output;
 
-pub use ctab::{Constant, ConstantTable, Type, TypeMember};
-pub use tokens::{Comment, Destination, Input, Instruction, Opcode, Output, Register, Shader, Source, read};
+pub use d3d9_reader::{Comment, Constant, ConstantTable, Type, TypeMember};
+pub use subset::{Destination, Input, Instruction, Opcode, Output, Register, Shader, Source, read};
 
 /// A refusal states the word offset in the raw token stream and the unsupported or malformed feature.
 pub type Error = iridia::Refusal;
@@ -90,7 +91,7 @@ pub(crate) fn error(at: usize, detail: impl Into<String>) -> Error {
 }
 
 /// Increment when the same tokens lift differently. Hand-worked fixtures gate this version.
-pub const LIFTER_VERSION: u32 = 2;
+pub const LIFTER_VERSION: u32 = 3;
 
 /// Lift one complete `ps_3_0` or `vs_3_0` program; trailing bytes and unknown features are errors.
 pub fn lift(bytes: &[u8]) -> Result<iridia::Program> {
@@ -128,58 +129,22 @@ pub fn reencode(bytes: &[u8], cut: Projection) -> Result<iridia::Program> {
 
 /// Frame the first raw SM3 vertex or pixel program in a container's remaining bytes.
 /// Returns its stage and exact bytes through END; subsequent container metadata is not consumed.
-/// This checks token/comment spans, not instruction semantics: an unsupported operation is retained as
-/// bytecode for a later lifter to refuse. It never searches for END inside operands or comments.
+/// `d3d9-reader` reads every record up to END, so END is never searched for inside operands or comments; an
+/// operation the lifter does not support is retained as bytecode for [`lift`] to refuse.
 pub fn frame(bytes: &[u8]) -> Result<(iridia::Stage, &[u8])> {
     use iridia::Stage;
-    let word = |at: usize| -> Result<u32> {
-        let b = bytes
-            .get(at..at.saturating_add(4))
-            .ok_or_else(|| error(at / 4, "truncated raw program token"))?;
-        let a: [u8; 4] = b
-            .try_into()
-            .map_err(|_| error(at / 4, "truncated raw program word"))?;
-        Ok(u32::from_le_bytes(a))
-    };
-    let stage = match word(0)? {
+    let (program, span) = d3d9_reader::frame(bytes).map_err(|e| error(e.word, e.detail))?;
+    let stage = match program.version.token() {
         0xfffe_0300 => Stage::Vertex,
         0xffff_0300 => Stage::Pixel,
-        version => {
+        _ => {
             return Err(error(
                 0,
-                format!("raw program version {version:#x}, expected vs_3_0 or ps_3_0"),
+                format!("version {}: only vs_3_0 and ps_3_0 are framed", program.version),
             ));
         }
     };
-    let mut at = 4usize;
-    while at / 4 < 1_048_576 {
-        let token = word(at)?;
-        let token_word = at / 4;
-        at = at.saturating_add(4);
-        if token == 0xffff {
-            let program = bytes
-                .get(..at)
-                .ok_or_else(|| error(token_word, "raw program END is past the container"))?;
-            return Ok((stage, program));
-        }
-        let count = if token & 65535 == 65534 {
-            (token >> 16) & 32767
-        } else {
-            (token >> 24) & 15
-        };
-        let end = at.saturating_add((count as usize).saturating_mul(4));
-        if end > bytes.len() {
-            return Err(error(
-                token_word,
-                format!(
-                    "raw program operand/comment span of {count} words exceeds the container's {} bytes",
-                    bytes.len()
-                ),
-            ));
-        }
-        at = end;
-    }
-    Err(error(at / 4, "raw program exceeds 1,048,576 words or lacks END"))
+    Ok((stage, span))
 }
 
 /// Project selected lanes of a declared `vs_3_0` output into a derived invocation program.

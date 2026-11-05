@@ -266,7 +266,7 @@ fn malformed_and_unsupported_programs_are_refused_without_panics() {
         (instruction(1, &[0x800f_0800, 0xa0e4_2000]), "relative"),
         (
             instruction(1 | 1 << 28, &[0x800f_0800, 0xa0e4_0000]),
-            "predication",
+            "predicate token",
         ),
         (instruction(1, &[0x800f_0800, 0xa2e4_0000]), "modifier"),
         (
