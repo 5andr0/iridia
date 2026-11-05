@@ -11,7 +11,7 @@ RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
 
 Rust 1.99 or newer (`rust-toolchain.toml` pins it). The tests need no game files: the fixtures are small compiled shaders and the HLSL they were built from, in each crate's `tests/fixtures`. Tests that read files this repository cannot ship skip with one line naming the input; the [README](README.md#running-the-tests) says how to point them at your own game files with `GAME_DATA`, and each crate's `tests/inputs/README.md` lists what its tests read.
 
-The examples in the READMEs are checked: each crate's README is run as a doc test, and the repository README must contain `iridia/examples/lift.rs` exactly (`iridia/tests/readme.rs`).
+The examples in the crate READMEs are checked: each crate's README is run as a doc test.
 
 ## No I/O in libraries
 
