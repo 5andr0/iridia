@@ -1,6 +1,6 @@
 # iridia's own shader IR
 
-Status: proposed, for approval before any code moves. Written 2026-11-05 against iridia `ecb915c`, dx `04624ef`.
+Status: approved 2026-11-05. Written 2026-11-05 against iridia `ecb915c`, dx `04624ef`.
 
 iridia lifts shaders into naga modules today, built with the fork `primase-naga` (naga 30.0.1 plus three commits:
 a WGSL ray-query writer, an optional result on `ImageAtomic`, and `Exchange` on images). This document designs the
@@ -475,9 +475,10 @@ mirror), shadPS4 `98ef621`, RPCS3 `eee3f0f`, wgpu `9e74495` and `v30.0.1`, rspir
   header, continue and merge distinct, construct entry and exit rules. rspirv (Apache-2.0) builds instructions as
   laid out in the binary and checks little else, so `iridia-spirv` validates with `spirv-val`.
 
-## 11. Decisions for Caleb
+## 11. Decisions made
 
-1. `ps_1_x` default policy: follow what DXVK reports (`PixelShader1xMaxValue = FLT_MAX`, so no range clamp beyond
-   `c#` and `v#`, and no quantization), or default to a finite early-hardware range and 8-bit quantization (the
-   exact values to be taken from fixtures or documented caps, not assumed). Either is a recorded policy; the other
-   stays available as an option.
+- Approved by Caleb on 2026-11-05, with stage 2 (the D3D9 SM3 prototype) to start.
+- `ps_1_x` default policy (Caleb, 2026-11-05): like modern drivers and DXVK (`PixelShader1xMaxValue = FLT_MAX`):
+  only the documented clamps of `c#` to -1..1 and `v#` to 0..1, no register range clamp and no quantization. The
+  early-hardware policy (a finite range and about 8 fractional bits, values from fixtures or caps) stays available
+  as an option.
