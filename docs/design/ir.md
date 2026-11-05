@@ -35,7 +35,7 @@ function state to programs, and the analyses (lane provenance, matrix majorness,
 | 2 | Scalars `bool`, `i/u 8/16/32/64`, `f16/f32/f64`; vectors of 2 to 4; matrices where a source states one. Aggregates live in memory and I/O, not in SSA values. Constants are exact bits. Minimum precision is a typed precision policy on an operation (a permission), never a type. Fixed point is not a type: clamp, quantize, pack and unpack are explicit operations. | A `MinF16` type; native f16 for every min-precision annotation; f64 narrowed to f32; a fixed-point type without evidenced arithmetic. |
 | 3 | The IR names resources and interface slots by id. Resource kind, element type and layout are stated once, in the shared vocabulary, with per-source provenance as a list of typed source addresses (D3D register, D3D9 bank, RSX unit, Vulkan set and binding, GL name). Target bindings are an output artifact, the `BindingPlan`. Pipeline state that code depends on is declared: state that changes types (a `ps_1_x` texture's dimension) needs a specialisation or distinct typed resources; numeric state (bump matrices, projection flags) may also lower to a state block. | naga globals plus a bindings table (today); one global binding layout; unknown texture types as a uniform. |
 | 4 | Behaviour lives in the operation. Where sources' rules differ, the operation is distinct or carries a mandatory semantic enum (`MinNum`, `UDiv { on_zero }`, `FToI { out_of_range }`, `MulZeroWins`, `ClampRange`, `Quantize`), named for the behaviour, never for a source. Each operation states its allowed results (exact, or a stated latitude). Constraints (`precise`, `nonuniform`, convergence) and permissions (minimum precision, contraction) are separate typed fields. Floating-point controls are module defaults with per-operation overrides. Target legalization is a sequence of checked passes driven by a target profile. | Program-wide mode flags whose meaning the body must agree with (today's `D3dModes`); expansions in each lifter or each back end; a source-intrinsic escape hatch. |
-| 5 | Small crates: `iridia-ir` (no dependencies by default, `no_std` + `alloc`; it owns the interface vocabulary, with `serde` an optional feature), `iridia-passes`, `iridia-analysis`, one crate per source and per target, `iridia-naga` holding the only naga dependency, `iridia-exec`, the facade `iridia` with pipelines, `iridia-cli`, `iridia-web`. `Program::module` is replaced by `Program::ir`; `iridia_naga::lower` returns a stock `naga::Module`, its `ModuleInfo` and the binding and provenance maps. | One crate; naga behind a feature of `iridia`. |
+| 5 | Small crates: `iridia-ir` (`no_std` + `alloc`, `serde` its only dependency; it owns the interface vocabulary), `iridia-passes`, `iridia-analysis`, one crate per source and per target, `iridia-naga` holding the only naga dependency, `iridia-exec`, the facade `iridia` with pipelines, `iridia-cli`, `iridia-web`. `Program::module` is replaced by `Program::ir`; `iridia_naga::lower` returns a stock `naga::Module`, its `ModuleInfo` and the binding and provenance maps. | One crate; naga behind a feature of `iridia`. |
 | 6 | `iridia-naga` pins wgpu's naga (`=30.0.1`), builds every naga node in one adapter module, checks a per-feature preflight table before lowering and validates every result with naga. What stock naga cannot hold (a texture atomic whose old value is read, image exchange) or its writer cannot write (WGSL ray queries) is refused by name and carried by iridia's own SPIR-V writer. naga's next IR break (`As` reworked, `Expression::Bitcast` added) changes the adapter only. | Keeping the fork for three constructs; serde moves between naga versions (they drop fields silently). |
 | 7 | Three validation layers: the IR validator (types, scoping, effects, convergence, layouts, stage rules), validation after every pass in tests, and target validation (naga's validator, `spirv-val`, the reference compilers). | Validating through naga only. |
 | 8 | Verification is part of the design: a corpus matrix with committed manifests, an evidence ladder from decoding to execution, differential execution against several oracles, per-feature probes with interaction cases, random programs with a resumable journal, external suites run as tools. Every migration step's bar is drawn from it. | |
@@ -162,13 +162,10 @@ target can take.
 - `Program { ir, interface, provenance, notes }`. `bindings` goes (the IR names resources by id); `conventions`
   move into the interface (clip depth and origins are facts of the interface); `D3dModes` goes (section 4).
 - One source of layout truth, in the core. The interface vocabulary (resource kinds, element types, buffer layouts
-  with offsets, strides, sizes and matrix majorness, varyings, ids) moves into `iridia-ir`, with `serde` derives
-  behind an optional feature that is off by default, so the core has no dependencies unless a user asks for
-  serialization. `iridia-interface` stays as a thin crate re-exporting those types with `serde` on, so code that
-  wants interface data without lifting keeps its import path. The IR refers to resources and slots by
-  `ResourceId` and `SlotId`. (The task asked for a core with no dependencies; an optional, default-off `serde` is
-  the one exception, and the alternative, a second copy of the layout types outside the core, would be a second
-  source of truth.) The existing normalisation rule stays: D3D register packing, DX9 constant packing and
+  with offsets, strides, sizes and matrix majorness, varyings, ids) moves into `iridia-ir`, serializable with `serde`
+  (the core's only dependency, `default-features = false` with `alloc`, so `no_std` holds). `iridia-interface`
+  stays as a thin crate re-exporting those types, so code that wants interface data without lifting keeps its
+  import path. The IR refers to resources and slots by `ResourceId` and `SlotId`. The existing normalisation rule stays: D3D register packing, DX9 constant packing and
   std140 become explicit offsets and strides, the original kept in provenance.
 - Provenance is a list of typed source addresses per resource and per varying: `D3d { class, register, space,
   range }`, `D3d9 { bank, register }`, `Rsx { unit }`, `Vulkan { set, binding }`, `Gl { name, location }`, and
@@ -262,8 +259,8 @@ clamp the back ends implement or legalize.
 
 ```
 iridia-ir          types, operations, module, both control phases, the interface vocabulary, builder, validator,
-                   text printer and parser; no dependencies by default (serde optional), no_std + alloc
-iridia-interface   re-exports the interface vocabulary with serde on
+                   text printer and parser; no_std + alloc; serde its only dependency
+iridia-interface   re-exports the interface vocabulary
 iridia-passes      structurize, promote (Var to SSA), dce, cse, fold, specialise, target legalization passes,
                    scalarize, break_flags; no_std + alloc
 iridia-analysis    flow (Values, Flow, link, VertexDemand), matrix, output stores and uses, constant reads
