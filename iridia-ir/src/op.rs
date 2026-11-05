@@ -239,10 +239,14 @@ pub enum Op {
     Convert(ValueId, FloatToInt),
     /// The same bits as another type of the same total size.
     Bitcast(ValueId),
-    /// The value of an interface input (`interface.inputs[slot]`), as its varying's type.
-    LoadInput(u32),
+    /// Lanes of an interface input (`interface.inputs[slot]`): the lanes of mask `.1` (bit n is lane n, at least one,
+    /// within the varying's width), in ascending order, as a value of the varying's scalar type.
+    LoadInput(u32, u8),
     /// The value a variable holds.
     LoadVar(VarId),
+    /// The value of a pipeline state resource (a [`crate::interface::ResourceKind::PipelineState`]), as its
+    /// [`crate::interface::StateParam::value`].
+    LoadState(ResourceId),
     /// Words of a buffer resource: the byte at `offset + stride * index` and the result's size after it.
     LoadBuffer {
         /// The buffer (a constant buffer).
@@ -274,8 +278,15 @@ impl Op {
     pub fn operands(&self) -> Vec<ValueId> {
         let mut v = Vec::new();
         match self {
-            Op::Literal(_) | Op::Undef | Op::Param | Op::LoadInput(_) | Op::LoadVar(_) => {}
-            Op::Unary(_, a) | Op::Swizzle(a, _) | Op::Splat(a) | Op::Convert(a, _) | Op::Bitcast(a) => v.push(*a),
+            Op::Literal(_)
+            | Op::Undef
+            | Op::Param
+            | Op::LoadInput(..)
+            | Op::LoadVar(_)
+            | Op::LoadState(_) => {}
+            Op::Unary(_, a) | Op::Swizzle(a, _) | Op::Splat(a) | Op::Convert(a, _) | Op::Bitcast(a) => {
+                v.push(*a)
+            }
             Op::Binary(_, a, b) | Op::Dot(a, b) => {
                 v.push(*a);
                 v.push(*b);
@@ -296,14 +307,24 @@ impl Op {
     /// Whether the operation reads state other than its operands (inputs, variables, resources); such a value is
     /// placed where its node is and is not moved across stores.
     pub fn reads_state(&self) -> bool {
-        matches!(self, Op::LoadInput(_) | Op::LoadVar(_) | Op::LoadBuffer { .. } | Op::Sample { .. })
+        matches!(
+            self,
+            Op::LoadInput(..) | Op::LoadVar(_) | Op::LoadState(_) | Op::LoadBuffer { .. } | Op::Sample { .. }
+        )
     }
 
     /// Replace each operand by `f` of it.
     pub fn map_operands(&mut self, mut f: impl FnMut(ValueId) -> ValueId) {
         match self {
-            Op::Literal(_) | Op::Undef | Op::Param | Op::LoadInput(_) | Op::LoadVar(_) => {}
-            Op::Unary(_, a) | Op::Swizzle(a, _) | Op::Splat(a) | Op::Convert(a, _) | Op::Bitcast(a) => *a = f(*a),
+            Op::Literal(_)
+            | Op::Undef
+            | Op::Param
+            | Op::LoadInput(..)
+            | Op::LoadVar(_)
+            | Op::LoadState(_) => {}
+            Op::Unary(_, a) | Op::Swizzle(a, _) | Op::Splat(a) | Op::Convert(a, _) | Op::Bitcast(a) => {
+                *a = f(*a)
+            }
             Op::Binary(_, a, b) | Op::Dot(a, b) => {
                 *a = f(*a);
                 *b = f(*b);

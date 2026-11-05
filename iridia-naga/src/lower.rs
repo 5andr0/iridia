@@ -9,13 +9,18 @@ use iridia_ir::{
     interface::{ResourceId, ResourceKind, Stage, TextureDim, Value},
 };
 use naga::{
-    AddressSpace, ArraySize, BinaryOperator as Bo, Block, EntryPoint, Expression as E, GlobalVariable, Handle,
-    ImageClass, ImageDimension, Literal, LocalVariable, MathFunction as Mf, RelationalFunction, ResourceBinding,
-    SampleLevel, ScalarKind, ShaderStage, Span, Statement, StructMember, SwizzleComponent, TypeInner,
-    UnaryOperator, VectorSize,
+    AddressSpace, ArraySize, BinaryOperator as Bo, Block, EntryPoint, Expression as E, GlobalVariable,
+    Handle, ImageClass, ImageDimension, Literal, LocalVariable, MathFunction as Mf, RelationalFunction,
+    ResourceBinding, SampleLevel, ScalarKind, ShaderStage, Span, Statement, StructMember, SwizzleComponent,
+    TypeInner, UnaryOperator, VectorSize,
 };
 
 use crate::{BindingPlan, Error, io::entry_io};
+
+/// The lanes a mask names, in ascending order.
+fn masked(mask: u8) -> impl Iterator<Item = u8> {
+    (0..4u8).filter(move |n| mask >> n & 1 != 0)
+}
 
 fn err(message: impl Into<String>) -> Error {
     Error(message.into())
@@ -24,10 +29,16 @@ fn err(message: impl Into<String>) -> Error {
 fn naga_scalar(s: Scalar) -> Result<naga::Scalar, Error> {
     Ok(match s {
         Scalar::Bool => naga::Scalar::BOOL,
-        Scalar::I16 => naga::Scalar { kind: ScalarKind::Sint, width: 2 },
+        Scalar::I16 => naga::Scalar {
+            kind: ScalarKind::Sint,
+            width: 2,
+        },
         Scalar::I32 => naga::Scalar::I32,
         Scalar::I64 => naga::Scalar::I64,
-        Scalar::U16 => naga::Scalar { kind: ScalarKind::Uint, width: 2 },
+        Scalar::U16 => naga::Scalar {
+            kind: ScalarKind::Uint,
+            width: 2,
+        },
         Scalar::U32 => naga::Scalar::U32,
         Scalar::U64 => naga::Scalar::U64,
         Scalar::F16 => naga::Scalar::F16,
@@ -113,11 +124,20 @@ struct Lower<'a> {
 
 impl Lower<'_> {
     fn ty(&mut self, inner: TypeInner) -> Handle<naga::Type> {
-        self.module.types.insert(naga::Type { name: None, inner }, Span::UNDEFINED)
+        self.module
+            .types
+            .insert(naga::Type { name: None, inner }, Span::UNDEFINED)
     }
     fn ty_of(&mut self, t: Type) -> Result<Handle<naga::Type>, Error> {
         let scalar = naga_scalar(t.scalar)?;
-        let inner = if t.lanes == 1 { TypeInner::Scalar(scalar) } else { TypeInner::Vector { size: size(t.lanes)?, scalar } };
+        let inner = if t.lanes == 1 {
+            TypeInner::Scalar(scalar)
+        } else {
+            TypeInner::Vector {
+                size: size(t.lanes)?,
+                scalar,
+            }
+        };
         Ok(self.ty(inner))
     }
     /// Close the open emit range of the innermost block.
@@ -126,7 +146,10 @@ impl Lower<'_> {
             && let Some(first) = start.take()
             && let Some(last) = self.func.expressions.iter().last().map(|(h, _)| h)
         {
-            block.push(Statement::Emit(naga::Range::new_from_bounds(first, last)), Span::UNDEFINED);
+            block.push(
+                Statement::Emit(naga::Range::new_from_bounds(first, last)),
+                Span::UNDEFINED,
+            );
         }
     }
     fn expr(&mut self, e: E) -> Handle<E> {
@@ -135,24 +158,38 @@ impl Lower<'_> {
             self.flush();
         }
         let h = self.func.expressions.append(e, Span::UNDEFINED);
-        if !pre && let Some((_, start)) = self.blocks.last_mut() && start.is_none() {
+        if !pre
+            && let Some((_, start)) = self.blocks.last_mut()
+            && start.is_none()
+        {
             *start = Some(h);
         }
         h
     }
     fn statement(&mut self, s: Statement) -> Result<(), Error> {
         self.flush();
-        self.blocks.last_mut().ok_or_else(|| err("no open block"))?.0.push(s, Span::UNDEFINED);
+        self.blocks
+            .last_mut()
+            .ok_or_else(|| err("no open block"))?
+            .0
+            .push(s, Span::UNDEFINED);
         Ok(())
     }
     fn get(&self, v: ValueId) -> Result<Handle<E>, Error> {
-        self.values.get(v.0 as usize).copied().flatten().ok_or_else(|| err(format!("%{} is used before it is computed", v.0)))
+        self.values
+            .get(v.0 as usize)
+            .copied()
+            .flatten()
+            .ok_or_else(|| err(format!("%{} is used before it is computed", v.0)))
     }
     fn vty(&self, v: ValueId) -> Result<Type, Error> {
         self.f.ty(v).ok_or_else(|| err(format!("%{} has no type", v.0)))
     }
     fn set(&mut self, v: ValueId, h: Handle<E>) -> Result<(), Error> {
-        *self.values.get_mut(v.0 as usize).ok_or_else(|| err(format!("%{} is out of range", v.0)))? = Some(h);
+        *self
+            .values
+            .get_mut(v.0 as usize)
+            .ok_or_else(|| err(format!("%{} is out of range", v.0)))? = Some(h);
         Ok(())
     }
 
@@ -197,13 +234,27 @@ impl Lower<'_> {
         self.expr(E::Binary { op, left, right })
     }
     fn math(&mut self, fun: Mf, arg: Handle<E>, rest: &[Handle<E>]) -> Handle<E> {
-        self.expr(E::Math { fun, arg, arg1: rest.first().copied(), arg2: rest.get(1).copied(), arg3: rest.get(2).copied() })
+        self.expr(E::Math {
+            fun,
+            arg,
+            arg1: rest.first().copied(),
+            arg2: rest.get(1).copied(),
+            arg3: rest.get(2).copied(),
+        })
     }
     fn select(&mut self, condition: Handle<E>, accept: Handle<E>, reject: Handle<E>) -> Handle<E> {
-        self.expr(E::Select { condition, accept, reject })
+        self.expr(E::Select {
+            condition,
+            accept,
+            reject,
+        })
     }
     fn bitcast(&mut self, x: Handle<E>, kind: ScalarKind) -> Handle<E> {
-        self.expr(E::As { expr: x, kind, convert: None })
+        self.expr(E::As {
+            expr: x,
+            kind,
+            convert: None,
+        })
     }
     /// Whether a float is NaN, by its bits (WGSL has no `isNan`, and a compiler may assume no NaNs in comparisons).
     fn is_nan(&mut self, x: Handle<E>, t: Type) -> Result<Handle<E>, Error> {
@@ -228,7 +279,14 @@ impl Lower<'_> {
             }
         }
     }
-    fn min_max(&mut self, fun: Mf, a: Handle<E>, b: Handle<E>, t: Type, nan: MinMaxNan) -> Result<Handle<E>, Error> {
+    fn min_max(
+        &mut self,
+        fun: Mf,
+        a: Handle<E>,
+        b: Handle<E>,
+        t: Type,
+        nan: MinMaxNan,
+    ) -> Result<Handle<E>, Error> {
         let plain = self.math(fun, a, &[b]);
         match nan {
             MinMaxNan::Any => Ok(plain),
@@ -248,21 +306,45 @@ impl Lower<'_> {
         }
     }
     /// D3D's `ftoi` and `ftou`: truncate toward zero, saturate to the integer type's range, NaN gives 0.
-    fn float_to_int(&mut self, x: Handle<E>, from: Type, to: Type, rule: FloatToInt) -> Result<Handle<E>, Error> {
+    fn float_to_int(
+        &mut self,
+        x: Handle<E>,
+        from: Type,
+        to: Type,
+        rule: FloatToInt,
+    ) -> Result<Handle<E>, Error> {
         let kind = naga_scalar(to.scalar)?.kind;
-        let convert = |l: &mut Self, v: Handle<E>| l.expr(E::As { expr: v, kind, convert: Some(4) });
+        let convert = |l: &mut Self, v: Handle<E>| {
+            l.expr(E::As {
+                expr: v,
+                kind,
+                convert: Some(4),
+            })
+        };
         if rule == FloatToInt::Undef {
             return Ok(convert(self, x));
         }
         // the largest floats below 2^31 and 2^32 are 2147483520 and 4294967040; from those limits on the result is
         // the type's maximum
         let (low, high, limit, max) = match to.scalar {
-            Scalar::I32 => (-2_147_483_648.0, 2_147_483_520.0, 2_147_483_648.0, u64::from(i32::MAX.cast_unsigned())),
+            Scalar::I32 => (
+                -2_147_483_648.0,
+                2_147_483_520.0,
+                2_147_483_648.0,
+                u64::from(i32::MAX.cast_unsigned()),
+            ),
             Scalar::U32 => (0.0, 4_294_967_040.0, 4_294_967_296.0, u64::from(u32::MAX)),
-            other => return Err(err(format!("a saturating conversion to {} is not lowered yet", other.name()))),
+            other => {
+                return Err(err(format!(
+                    "a saturating conversion to {} is not lowered yet",
+                    other.name()
+                )));
+            }
         };
         if from.scalar != Scalar::F32 {
-            return Err(err(format!("a saturating conversion from {from} is not lowered yet")));
+            return Err(err(format!(
+                "a saturating conversion from {from} is not lowered yet"
+            )));
         }
         let low = self.f32s(from, low)?;
         let high = self.f32s(from, high)?;
@@ -288,7 +370,14 @@ impl Lower<'_> {
         let away = self.binary(Bo::Add, truncated, sign);
         Ok(self.select(up, away, truncated))
     }
-    fn unsigned_divide(&mut self, op: Bo, a: Handle<E>, b: Handle<E>, t: Type, zero: OnZero) -> Result<Handle<E>, Error> {
+    fn unsigned_divide(
+        &mut self,
+        op: Bo,
+        a: Handle<E>,
+        b: Handle<E>,
+        t: Type,
+        zero: OnZero,
+    ) -> Result<Handle<E>, Error> {
         match zero {
             OnZero::Dividend | OnZero::Undef => Ok(self.binary(op, a, b)),
             OnZero::AllOnes => {
@@ -304,22 +393,45 @@ impl Lower<'_> {
     }
 
     fn global(&self, id: ResourceId) -> Result<Handle<GlobalVariable>, Error> {
-        self.globals.iter().find(|(r, _)| *r == id).map(|(_, g)| *g).ok_or_else(|| err(format!("resource {} has no binding", id.0)))
+        self.globals
+            .iter()
+            .find(|(r, _)| *r == id)
+            .map(|(_, g)| *g)
+            .ok_or_else(|| err(format!("resource {} has no binding", id.0)))
     }
     fn constant_rows(&self, id: ResourceId) -> Result<u32, Error> {
-        match self.program.interface.resources.iter().find(|r| r.id == id).map(|r| &r.kind) {
+        match self
+            .program
+            .interface
+            .resources
+            .iter()
+            .find(|r| r.id == id)
+            .map(|r| &r.kind)
+        {
             Some(ResourceKind::ConstantBuffer { layout }) => Ok(layout.size.div_ceil(16)),
             _ => Err(err(format!("resource {} is not a constant buffer", id.0))),
         }
     }
     /// A constant buffer read: rows of `vec4<u32>`, the result's bits from the row (and lane) the address names.
-    fn load_buffer(&mut self, resource: ResourceId, index: Option<ValueId>, stride: u32, offset: u32, oob: OutOfBounds, t: Type) -> Result<Handle<E>, Error> {
+    fn load_buffer(
+        &mut self,
+        resource: ResourceId,
+        index: Option<ValueId>,
+        stride: u32,
+        offset: u32,
+        oob: OutOfBounds,
+        t: Type,
+    ) -> Result<Handle<E>, Error> {
         if t.scalar.bits() != 32 || !stride.is_multiple_of(16) || !offset.is_multiple_of(4) {
-            return Err(err(format!("a buffer read of {t} at stride {stride}, offset {offset} is not lowered yet")));
+            return Err(err(format!(
+                "a buffer read of {t} at stride {stride}, offset {offset} is not lowered yet"
+            )));
         }
         let lane = (offset % 16) / 4;
         if lane.saturating_add(u32::from(t.lanes)) > 4 {
-            return Err(err(format!("a buffer read of {t} across a row at offset {offset}")));
+            return Err(err(format!(
+                "a buffer read of {t} across a row at offset {offset}"
+            )));
         }
         let rows = self.constant_rows(resource)?;
         let g = self.global(resource)?;
@@ -330,7 +442,10 @@ impl Lower<'_> {
                 if first >= rows {
                     return Err(err(format!("a read of row {first} of a buffer of {rows}")));
                 }
-                let p = self.expr(E::AccessIndex { base: bank, index: first });
+                let p = self.expr(E::AccessIndex {
+                    base: bank,
+                    index: first,
+                });
                 (p, None)
             }
             Some(i) => {
@@ -348,7 +463,8 @@ impl Lower<'_> {
                     let first = self.literal_bits(Scalar::I32, u64::from(first))?;
                     index = self.binary(Bo::Add, index, first);
                 }
-                let last = i32::try_from(rows.saturating_sub(1)).map_err(|_| err("a buffer of more than 2^31 rows"))?;
+                let last = i32::try_from(rows.saturating_sub(1))
+                    .map_err(|_| err("a buffer of more than 2^31 rows"))?;
                 let zero = self.literal_bits(Scalar::I32, 0)?;
                 let last = self.literal_bits(Scalar::I32, u64::from(last.cast_unsigned()))?;
                 let above = self.binary(Bo::GreaterEqual, index, zero);
@@ -356,23 +472,37 @@ impl Lower<'_> {
                 let inside = self.binary(Bo::LogicalAnd, above, below);
                 let raised = self.math(Mf::Max, index, &[zero]);
                 let clamped = self.math(Mf::Min, raised, &[last]);
-                let p = self.expr(E::Access { base: bank, index: clamped });
+                let p = self.expr(E::Access {
+                    base: bank,
+                    index: clamped,
+                });
                 (p, Some(inside))
             }
         };
         let raw = self.expr(E::Load { pointer: row });
         let mut bits = raw;
         if t.lanes == 1 {
-            bits = self.expr(E::AccessIndex { base: raw, index: lane });
+            bits = self.expr(E::AccessIndex {
+                base: raw,
+                index: lane,
+            });
         } else if !(lane == 0 && t.lanes == 4) {
             let mut pattern = [SwizzleComponent::X; 4];
             for (n, p) in (0u8..t.lanes).zip(pattern.iter_mut()) {
                 *p = component(u8::try_from(lane).unwrap_or(0).saturating_add(n))?;
             }
-            bits = self.expr(E::Swizzle { size: size(t.lanes)?, vector: raw, pattern });
+            bits = self.expr(E::Swizzle {
+                size: size(t.lanes)?,
+                vector: raw,
+                pattern,
+            });
         }
         let kind = naga_scalar(t.scalar)?.kind;
-        let v = if kind == ScalarKind::Uint { bits } else { self.bitcast(bits, kind) };
+        let v = if kind == ScalarKind::Uint {
+            bits
+        } else {
+            self.bitcast(bits, kind)
+        };
         Ok(match (inside, oob) {
             (Some(inside), OutOfBounds::Zero) => {
                 let zero = self.constant(t, t.scalar, 0)?;
@@ -383,7 +513,10 @@ impl Lower<'_> {
     }
 
     fn op(&mut self, v: ValueId) -> Result<Handle<E>, Error> {
-        let def = self.f.value(v).ok_or_else(|| err(format!("%{} is not a value", v.0)))?;
+        let def = self
+            .f
+            .value(v)
+            .ok_or_else(|| err(format!("%{} is not a value", v.0)))?;
         let t = def.ty;
         let op = def.op.clone();
         Ok(match op {
@@ -397,7 +530,10 @@ impl Lower<'_> {
                     [one] => *one,
                     _ => {
                         let ty = self.ty_of(t)?;
-                        self.expr(E::Compose { ty, components: lanes })
+                        self.expr(E::Compose {
+                            ty,
+                            components: lanes,
+                        })
                     }
                 }
             }
@@ -410,7 +546,10 @@ impl Lower<'_> {
                 let at = self.vty(a)?;
                 let x = self.get(a)?;
                 match u {
-                    Unary::FNeg | Unary::INeg => self.expr(E::Unary { op: UnaryOperator::Negate, expr: x }),
+                    Unary::FNeg | Unary::INeg => self.expr(E::Unary {
+                        op: UnaryOperator::Negate,
+                        expr: x,
+                    }),
                     Unary::FAbs => self.math(Mf::Abs, x, &[]),
                     Unary::FFract => self.math(Mf::Fract, x, &[]),
                     Unary::FRound(Rounding::Floor) => self.math(Mf::Floor, x, &[]),
@@ -425,10 +564,22 @@ impl Lower<'_> {
                     Unary::FSin => self.math(Mf::Sin, x, &[]),
                     Unary::FCos => self.math(Mf::Cos, x, &[]),
                     Unary::Saturate(nan) => self.saturate(x, at, nan)?,
-                    Unary::Not if at.scalar == Scalar::Bool => self.expr(E::Unary { op: UnaryOperator::LogicalNot, expr: x }),
-                    Unary::Not => self.expr(E::Unary { op: UnaryOperator::BitwiseNot, expr: x }),
-                    Unary::Any => self.expr(E::Relational { fun: RelationalFunction::Any, argument: x }),
-                    Unary::All => self.expr(E::Relational { fun: RelationalFunction::All, argument: x }),
+                    Unary::Not if at.scalar == Scalar::Bool => self.expr(E::Unary {
+                        op: UnaryOperator::LogicalNot,
+                        expr: x,
+                    }),
+                    Unary::Not => self.expr(E::Unary {
+                        op: UnaryOperator::BitwiseNot,
+                        expr: x,
+                    }),
+                    Unary::Any => self.expr(E::Relational {
+                        fun: RelationalFunction::Any,
+                        argument: x,
+                    }),
+                    Unary::All => self.expr(E::Relational {
+                        fun: RelationalFunction::All,
+                        argument: x,
+                    }),
                     Unary::IsNan => self.is_nan(x, at)?,
                 }
             }
@@ -476,20 +627,30 @@ impl Lower<'_> {
                 self.select(c, a, r)
             }
             Op::Compose(parts) => {
-                let components = parts.iter().map(|p| self.get(*p)).collect::<Result<Vec<_>, _>>()?;
+                let components = parts
+                    .iter()
+                    .map(|p| self.get(*p))
+                    .collect::<Result<Vec<_>, _>>()?;
                 let ty = self.ty_of(t)?;
                 self.expr(E::Compose { ty, components })
             }
             Op::Swizzle(a, lanes) => {
                 let x = self.get(a)?;
                 if t.lanes == 1 {
-                    self.expr(E::AccessIndex { base: x, index: u32::from(lanes[0]) })
+                    self.expr(E::AccessIndex {
+                        base: x,
+                        index: u32::from(lanes[0]),
+                    })
                 } else {
                     let mut pattern = [SwizzleComponent::X; 4];
                     for (p, &l) in pattern.iter_mut().zip(lanes.iter()).take(usize::from(t.lanes)) {
                         *p = component(l)?;
                     }
-                    self.expr(E::Swizzle { size: size(t.lanes)?, vector: x, pattern })
+                    self.expr(E::Swizzle {
+                        size: size(t.lanes)?,
+                        vector: x,
+                        pattern,
+                    })
                 }
             }
             Op::Splat(a) => {
@@ -507,29 +668,78 @@ impl Lower<'_> {
                     self.float_to_int(x, from, t, rule)?
                 } else {
                     let s = naga_scalar(t.scalar)?;
-                    self.expr(E::As { expr: x, kind: s.kind, convert: Some(s.width) })
+                    self.expr(E::As {
+                        expr: x,
+                        kind: s.kind,
+                        convert: Some(s.width),
+                    })
                 }
             }
             Op::Bitcast(a) => {
                 let x = self.get(a)?;
                 self.bitcast(x, naga_scalar(t.scalar)?.kind)
             }
-            Op::LoadInput(slot) => {
+            Op::LoadInput(slot, mask) => {
                 let arg = self
                     .arguments
                     .get(slot as usize)
                     .copied()
                     .flatten()
                     .ok_or_else(|| err(format!("input {slot} is not an argument of the entry point")))?;
-                self.expr(E::FunctionArgument(arg))
+                let all = self.expr(E::FunctionArgument(arg));
+                let width = self
+                    .program
+                    .interface
+                    .inputs
+                    .get(slot as usize)
+                    .map_or(0, |v| v.value.width);
+                let lanes: Vec<u8> = masked(mask).collect();
+                match lanes.as_slice() {
+                    _ if lanes.len() == usize::from(width) => all,
+                    [one] => self.expr(E::AccessIndex {
+                        base: all,
+                        index: u32::from(*one),
+                    }),
+                    _ => {
+                        let mut pattern = [SwizzleComponent::X; 4];
+                        for (p, &l) in pattern.iter_mut().zip(&lanes) {
+                            *p = component(l)?;
+                        }
+                        self.expr(E::Swizzle {
+                            size: size(t.lanes)?,
+                            vector: all,
+                            pattern,
+                        })
+                    }
+                }
+            }
+            Op::LoadState(r) => {
+                return Err(err(format!(
+                    "pipeline state r{} is read: specialise it first (a state block is not lowered yet)",
+                    r.0
+                )));
             }
             Op::LoadVar(var) => {
-                let local = *self.vars.get(var.0 as usize).ok_or_else(|| err(format!("variable {} does not exist", var.0)))?;
+                let local = *self
+                    .vars
+                    .get(var.0 as usize)
+                    .ok_or_else(|| err(format!("variable {} does not exist", var.0)))?;
                 let p = self.expr(E::LocalVariable(local));
                 self.expr(E::Load { pointer: p })
             }
-            Op::LoadBuffer { resource, index, stride, offset, oob } => self.load_buffer(resource, index, stride, offset, oob, t)?,
-            Op::Sample { texture, sampler, coord, level } => {
+            Op::LoadBuffer {
+                resource,
+                index,
+                stride,
+                offset,
+                oob,
+            } => self.load_buffer(resource, index, stride, offset, oob, t)?,
+            Op::Sample {
+                texture,
+                sampler,
+                coord,
+                level,
+            } => {
                 let image = self.global(texture)?;
                 let image = self.expr(E::GlobalVariable(image));
                 let s = self.global(sampler)?;
@@ -558,7 +768,14 @@ impl Lower<'_> {
 
     fn local(&mut self, t: Type) -> Result<Handle<LocalVariable>, Error> {
         let ty = self.ty_of(t)?;
-        Ok(self.func.local_variables.append(LocalVariable { name: None, ty, init: None }, Span::UNDEFINED))
+        Ok(self.func.local_variables.append(
+            LocalVariable {
+                name: None,
+                ty,
+                init: None,
+            },
+            Span::UNDEFINED,
+        ))
     }
     fn store_local(&mut self, local: Handle<LocalVariable>, value: Handle<E>) -> Result<(), Error> {
         let pointer = self.expr(E::LocalVariable(local));
@@ -575,7 +792,9 @@ impl Lower<'_> {
     }
     fn store_all(&mut self, locals: &[Handle<LocalVariable>], vs: &[ValueId]) -> Result<(), Error> {
         if locals.len() != vs.len() {
-            return Err(err("an exit with another number of values than its construct takes"));
+            return Err(err(
+                "an exit with another number of values than its construct takes",
+            ));
         }
         for (&l, &v) in locals.iter().zip(vs) {
             let value = self.get(v)?;
@@ -585,7 +804,10 @@ impl Lower<'_> {
     }
     fn output_value(&mut self, slot: usize, value: Handle<E>) -> Result<Handle<E>, Error> {
         // a pixel target narrower than four lanes is carried as four: the lanes it lacks are zero
-        let &(carried, own) = self.members.get(slot).ok_or_else(|| err(format!("output {slot} is not carried")))?;
+        let &(carried, own) = self
+            .members
+            .get(slot)
+            .ok_or_else(|| err(format!("output {slot} is not carried")))?;
         if carried.width == own.width {
             return Ok(value);
         }
@@ -594,13 +816,70 @@ impl Lower<'_> {
         let mut parts = Vec::new();
         for n in 0..ct.lanes {
             if n < ot.lanes {
-                parts.push(if ot.lanes == 1 { value } else { self.expr(E::AccessIndex { base: value, index: u32::from(n) }) });
+                parts.push(if ot.lanes == 1 {
+                    value
+                } else {
+                    self.expr(E::AccessIndex {
+                        base: value,
+                        index: u32::from(n),
+                    })
+                });
             } else {
                 parts.push(self.literal_bits(ot.scalar, 0)?);
             }
         }
         let ty = self.ty_of(ct)?;
-        Ok(self.expr(E::Compose { ty, components: parts }))
+        Ok(self.expr(E::Compose {
+            ty,
+            components: parts,
+        }))
+    }
+    /// The whole value of output `slot` after lanes `mask` take `value`: the lanes it does not name are the slot's
+    /// current ones (zero before its first store).
+    fn merge_output(&mut self, slot: usize, mask: u8, value: Handle<E>) -> Result<Handle<E>, Error> {
+        let &(_, own) = self
+            .members
+            .get(slot)
+            .ok_or_else(|| err(format!("output {slot} is not carried")))?;
+        let ot = value_type(own);
+        let lanes: Vec<u8> = masked(mask).collect();
+        if lanes.len() == usize::from(ot.lanes) {
+            return Ok(value);
+        }
+        let current = match &self.outputs {
+            Outputs::Direct(values) => values.get(slot).copied().flatten(),
+            Outputs::Locals(locals) => match locals.get(slot).copied() {
+                Some(l) => {
+                    let pointer = self.expr(E::LocalVariable(l));
+                    Some(self.expr(E::Load { pointer }))
+                }
+                None => None,
+            },
+        };
+        let ty = self.ty_of(ot)?;
+        let current = match current {
+            Some(c) => c,
+            None => self.expr(E::ZeroValue(ty)),
+        };
+        let mut parts = Vec::new();
+        for n in 0..ot.lanes {
+            let part = match lanes.iter().position(|&l| l == n) {
+                Some(_) if lanes.len() == 1 => value,
+                Some(k) => {
+                    let index = u32::try_from(k).map_err(|_| err("a lane past w"))?;
+                    self.expr(E::AccessIndex { base: value, index })
+                }
+                None => self.expr(E::AccessIndex {
+                    base: current,
+                    index: u32::from(n),
+                }),
+            };
+            parts.push(part);
+        }
+        Ok(self.expr(E::Compose {
+            ty,
+            components: parts,
+        }))
     }
     fn ret(&mut self) -> Result<(), Error> {
         let Some(result) = self.result else {
@@ -622,14 +901,20 @@ impl Lower<'_> {
             let value = match value {
                 Some(v) => v,
                 None => {
-                    let &(_, own) = self.members.get(slot).ok_or_else(|| err("an output with no member"))?;
+                    let &(_, own) = self
+                        .members
+                        .get(slot)
+                        .ok_or_else(|| err("an output with no member"))?;
                     let ty = self.ty_of(value_type(own))?;
                     self.expr(E::ZeroValue(ty))
                 }
             };
             components.push(self.output_value(slot, value)?);
         }
-        let value = self.expr(E::Compose { ty: result, components });
+        let value = self.expr(E::Compose {
+            ty: result,
+            components,
+        });
         self.statement(Statement::Return { value: Some(value) })
     }
     fn construct(&self, l: iridia_ir::LabelId) -> Result<(usize, &Construct), Error> {
@@ -638,12 +923,23 @@ impl Lower<'_> {
             .enumerate()
             .rev()
             .find(|(_, c)| c.label == l)
-            .ok_or_else(|| err(format!("an exit to label {}, which no enclosing construct has", l.0)))
+            .ok_or_else(|| {
+                err(format!(
+                    "an exit to label {}, which no enclosing construct has",
+                    l.0
+                ))
+            })
     }
     /// An exit to construct `at` is a naga `Break` or `Continue` only when no naga loop lies between.
     fn innermost_loop(&self, at: usize) -> Result<(), Error> {
         let last = self.constructs.iter().rposition(|c| c.naga_loop);
-        if last == Some(at) { Ok(()) } else { Err(err("an exit past an enclosing construct needs break_flags, which is not run yet")) }
+        if last == Some(at) {
+            Ok(())
+        } else {
+            Err(err(
+                "an exit past an enclosing construct needs break_flags, which is not run yet",
+            ))
+        }
     }
     fn region(&mut self, r: &Region, yields: Yield<'_>) -> Result<(), Error> {
         for n in &r.nodes {
@@ -665,14 +961,19 @@ impl Lower<'_> {
                 let (locals, naga_loop) = (c.results.clone(), c.naga_loop);
                 self.store_all(&locals, vs)?;
                 if !naga_loop {
-                    return Err(err("a break out of a block needs break_flags, which is not run yet"));
+                    return Err(err(
+                        "a break out of a block needs break_flags, which is not run yet",
+                    ));
                 }
                 self.innermost_loop(at)?;
                 self.statement(Statement::Break)?;
             }
             Some(End::Continue(l, vs)) => {
                 let (at, c) = self.construct(*l)?;
-                let locals = c.params.clone().ok_or_else(|| err("a continue to a construct that is not a loop"))?;
+                let locals = c
+                    .params
+                    .clone()
+                    .ok_or_else(|| err("a continue to a construct that is not a loop"))?;
                 self.store_all(&locals, vs)?;
                 self.innermost_loop(at)?;
                 self.statement(Statement::Continue)?;
@@ -692,10 +993,12 @@ impl Lower<'_> {
         Ok(self.blocks.pop().ok_or_else(|| err("no open block"))?.0)
     }
     fn locals_for(&mut self, vs: &[ValueId]) -> Result<Vec<Handle<LocalVariable>>, Error> {
-        vs.iter().map(|v| {
-            let t = self.vty(*v)?;
-            self.local(t)
-        }).collect()
+        vs.iter()
+            .map(|v| {
+                let t = self.vty(*v)?;
+                self.local(t)
+            })
+            .collect()
     }
     fn node(&mut self, n: &Node) -> Result<(), Error> {
         match n {
@@ -704,24 +1007,37 @@ impl Lower<'_> {
                 self.set(*v, h)?;
             }
             Node::StoreVar(var, x) => {
-                let local = *self.vars.get(var.0 as usize).ok_or_else(|| err(format!("variable {} does not exist", var.0)))?;
+                let local = *self
+                    .vars
+                    .get(var.0 as usize)
+                    .ok_or_else(|| err(format!("variable {} does not exist", var.0)))?;
                 let value = self.get(*x)?;
                 self.store_local(local, value)?;
             }
-            Node::StoreOutput(slot, x) => {
+            Node::StoreOutput(slot, mask, x) => {
                 let value = self.get(*x)?;
                 let slot = *slot as usize;
+                let value = self.merge_output(slot, *mask, value)?;
                 match &mut self.outputs {
                     Outputs::Direct(values) => {
-                        *values.get_mut(slot).ok_or_else(|| err(format!("output {slot} is not carried")))? = Some(value);
+                        *values
+                            .get_mut(slot)
+                            .ok_or_else(|| err(format!("output {slot} is not carried")))? = Some(value);
                     }
                     Outputs::Locals(locals) => {
-                        let l = *locals.get(slot).ok_or_else(|| err(format!("output {slot} is not carried")))?;
+                        let l = *locals
+                            .get(slot)
+                            .ok_or_else(|| err(format!("output {slot} is not carried")))?;
                         self.store_local(l, value)?;
                     }
                 }
             }
-            Node::If { cond, accept, reject, results } => {
+            Node::If {
+                cond,
+                accept,
+                reject,
+                results,
+            } => {
                 let condition = self.get(*cond)?;
                 let locals = self.locals_for(results)?;
                 self.open();
@@ -730,12 +1046,21 @@ impl Lower<'_> {
                 self.open();
                 self.region(reject, Yield::Fall(&locals))?;
                 let b = self.close()?;
-                self.statement(Statement::If { condition, accept: a, reject: b })?;
+                self.statement(Statement::If {
+                    condition,
+                    accept: a,
+                    reject: b,
+                })?;
                 self.load_locals(results, &locals)?;
             }
             Node::Block { label, body, results } => {
                 let locals = self.locals_for(results)?;
-                self.constructs.push(Construct { label: *label, results: locals.clone(), params: None, naga_loop: false });
+                self.constructs.push(Construct {
+                    label: *label,
+                    results: locals.clone(),
+                    params: None,
+                    naga_loop: false,
+                });
                 self.open();
                 self.region(body, Yield::Fall(&locals))?;
                 let b = self.close()?;
@@ -743,7 +1068,13 @@ impl Lower<'_> {
                 self.statement(Statement::Block(b))?;
                 self.load_locals(results, &locals)?;
             }
-            Node::Loop { label, params, inits, body, results } => {
+            Node::Loop {
+                label,
+                params,
+                inits,
+                body,
+                results,
+            } => {
                 let param_locals = self.locals_for(params)?;
                 self.store_all(&param_locals, inits)?;
                 let locals = self.locals_for(results)?;
@@ -758,7 +1089,11 @@ impl Lower<'_> {
                 self.region(body, Yield::Break(&locals))?;
                 let b = self.close()?;
                 self.constructs.pop();
-                self.statement(Statement::Loop { body: b, continuing: Block::new(), break_if: None })?;
+                self.statement(Statement::Loop {
+                    body: b,
+                    continuing: Block::new(),
+                    break_if: None,
+                })?;
                 self.load_locals(results, &locals)?;
             }
         }
@@ -771,7 +1106,9 @@ fn direct(body: &Region) -> bool {
     fn nested(r: &Region) -> bool {
         r.nodes.iter().any(|n| match n {
             Node::StoreOutput(..) => true,
-            Node::If { accept, reject, .. } => nested(accept) || nested(reject) || returns(accept) || returns(reject),
+            Node::If { accept, reject, .. } => {
+                nested(accept) || nested(reject) || returns(accept) || returns(reject)
+            }
             Node::Block { body, .. } | Node::Loop { body, .. } => nested(body) || returns(body),
             _ => false,
         })
@@ -785,7 +1122,9 @@ fn direct(body: &Region) -> bool {
             })
     }
     !body.nodes.iter().any(|n| match n {
-        Node::If { accept, reject, .. } => nested(accept) || nested(reject) || returns(accept) || returns(reject),
+        Node::If { accept, reject, .. } => {
+            nested(accept) || nested(reject) || returns(accept) || returns(reject)
+        }
         Node::Block { body, .. } | Node::Loop { body, .. } => nested(body) || returns(body),
         _ => false,
     })
@@ -831,30 +1170,67 @@ pub fn module(program: &Program, plan: &BindingPlan) -> Result<naga::Module, Err
             .ok_or_else(|| err("an output with no varying"))?;
         // WGSL's layout: a vector of three lanes is aligned as one of four
         let bytes = item.value.scalar.bytes();
-        let lanes = if item.value.width == 3 { 4 } else { u32::from(item.value.width) };
+        let lanes = if item.value.width == 3 {
+            4
+        } else {
+            u32::from(item.value.width)
+        };
         let a = lanes.saturating_mul(bytes).max(1);
         offset = offset.div_ceil(a).saturating_mul(a);
         align = align.max(a);
-        members.push(StructMember { name: Some(item.name.clone()), ty, binding: Some(item.binding.clone()), offset });
+        members.push(StructMember {
+            name: Some(item.name.clone()),
+            ty,
+            binding: Some(item.binding.clone()),
+            offset,
+        });
         offset = offset.saturating_add(u32::from(item.value.width).saturating_mul(bytes));
         l.members.push((item.value, own));
     }
     if !members.is_empty() {
         let span = offset.div_ceil(align).saturating_mul(align);
-        let out = naga::Type { name: Some("Out".into()), inner: TypeInner::Struct { members, span } };
+        let out = naga::Type {
+            name: Some("Out".into()),
+            inner: TypeInner::Struct { members, span },
+        };
         l.result = Some(l.module.types.insert(out, Span::UNDEFINED));
     }
-    for r in &program.interface.resources {
+    // pipeline state has no global: a read of it is refused where it is read
+    for r in program
+        .interface
+        .resources
+        .iter()
+        .filter(|r| !matches!(r.kind, ResourceKind::PipelineState(_)))
+    {
         let Some(bind) = plan.bindings.iter().find(|b| b.resource == r.id) else {
-            return Err(err(format!("resource {} ({}) has no binding in the plan", r.id.0, r.provenance.name)));
+            return Err(err(format!(
+                "resource {} ({}) has no binding in the plan",
+                r.id.0, r.provenance.name
+            )));
         };
         let (ty, space) = match &r.kind {
             ResourceKind::ConstantBuffer { layout } => {
-                let rows = core::num::NonZeroU32::new(layout.size.div_ceil(16)).ok_or_else(|| err("an empty constant buffer"))?;
-                let row = l.ty(TypeInner::Vector { size: VectorSize::Quad, scalar: naga::Scalar::U32 });
-                (l.ty(TypeInner::Array { base: row, size: ArraySize::Constant(rows), stride: 16 }), AddressSpace::Uniform)
+                let rows = core::num::NonZeroU32::new(layout.size.div_ceil(16))
+                    .ok_or_else(|| err("an empty constant buffer"))?;
+                let row = l.ty(TypeInner::Vector {
+                    size: VectorSize::Quad,
+                    scalar: naga::Scalar::U32,
+                });
+                (
+                    l.ty(TypeInner::Array {
+                        base: row,
+                        size: ArraySize::Constant(rows),
+                        stride: 16,
+                    }),
+                    AddressSpace::Uniform,
+                )
             }
-            ResourceKind::Texture { dim, arrayed, multisampled, sample } => {
+            ResourceKind::Texture {
+                dim,
+                arrayed,
+                multisampled,
+                sample,
+            } => {
                 let dim = match dim {
                     TextureDim::D1 => ImageDimension::D1,
                     TextureDim::D2 => ImageDimension::D2,
@@ -865,19 +1241,39 @@ pub fn module(program: &Program, plan: &BindingPlan) -> Result<naga::Module, Err
                     iridia_ir::interface::SampleType::Float => ScalarKind::Float,
                     iridia_ir::interface::SampleType::Sint => ScalarKind::Sint,
                     iridia_ir::interface::SampleType::Uint => ScalarKind::Uint,
-                    iridia_ir::interface::SampleType::Depth => return Err(err("a depth texture is not lowered yet")),
+                    iridia_ir::interface::SampleType::Depth => {
+                        return Err(err("a depth texture is not lowered yet"));
+                    }
                 };
-                let class = ImageClass::Sampled { kind, multi: *multisampled };
-                (l.ty(TypeInner::Image { dim, arrayed: *arrayed, class }), AddressSpace::Handle)
+                let class = ImageClass::Sampled {
+                    kind,
+                    multi: *multisampled,
+                };
+                (
+                    l.ty(TypeInner::Image {
+                        dim,
+                        arrayed: *arrayed,
+                        class,
+                    }),
+                    AddressSpace::Handle,
+                )
             }
-            ResourceKind::Sampler { comparison } => (l.ty(TypeInner::Sampler { comparison: *comparison }), AddressSpace::Handle),
+            ResourceKind::Sampler { comparison } => (
+                l.ty(TypeInner::Sampler {
+                    comparison: *comparison,
+                }),
+                AddressSpace::Handle,
+            ),
             other => return Err(err(format!("a {other:?} resource is not lowered yet"))),
         };
         let g = l.module.global_variables.append(
             GlobalVariable {
                 name: Some(bind.name.clone()),
                 space,
-                binding: Some(ResourceBinding { group: bind.group, binding: bind.binding }),
+                binding: Some(ResourceBinding {
+                    group: bind.group,
+                    binding: bind.binding,
+                }),
                 ty,
                 init: None,
                 memory_decorations: Default::default(),
@@ -888,14 +1284,25 @@ pub fn module(program: &Program, plan: &BindingPlan) -> Result<naga::Module, Err
     }
     for (n, item) in io.arguments.iter().enumerate() {
         let ty = l.ty_of(value_type(item.value))?;
-        l.func.arguments.push(naga::FunctionArgument { name: Some(item.name.clone()), ty, binding: Some(item.binding.clone()) });
+        l.func.arguments.push(naga::FunctionArgument {
+            name: Some(item.name.clone()),
+            ty,
+            binding: Some(item.binding.clone()),
+        });
         if let Some(a) = l.arguments.get_mut(item.varying) {
             *a = Some(u32::try_from(n).map_err(|_| err("more than 2^32 arguments"))?);
         }
     }
     for var in &f.vars {
         let ty = l.ty_of(var.ty)?;
-        let local = l.func.local_variables.append(LocalVariable { name: Some(var.name.clone()), ty, init: None }, Span::UNDEFINED);
+        let local = l.func.local_variables.append(
+            LocalVariable {
+                name: Some(var.name.clone()),
+                ty,
+                init: None,
+            },
+            Span::UNDEFINED,
+        );
         l.vars.push(local);
     }
     l.outputs = if direct(body) {
@@ -912,7 +1319,8 @@ pub fn module(program: &Program, plan: &BindingPlan) -> Result<naga::Module, Err
     l.func.body = block;
     l.func.result = l.result.map(|ty| naga::FunctionResult { ty, binding: None });
     l.func.name = Some("main".into());
-    let function = core::mem::take(&mut l.func);
+    let mut function = core::mem::take(&mut l.func);
+    name_shared(&l.module, stage, &mut function, &l.values)?;
     l.module.entry_points.push(EntryPoint {
         name: "main".into(),
         stage,
@@ -925,4 +1333,80 @@ pub fn module(program: &Program, plan: &BindingPlan) -> Result<naga::Module, Err
         incoming_ray_payload: None,
     });
     Ok(l.module)
+}
+
+/// Whether naga's writers write `e` once, as a `let`, given how many times it is referenced: naga's
+/// `back::Expression::bake_ref_count` (accesses never, samples, loads and derivatives at one reference, the rest at
+/// two), or a name.
+fn baked(f: &naga::Function, refs: &[usize], h: Handle<E>) -> bool {
+    let at = refs.get(h.index()).copied().unwrap_or(0);
+    let wanted = match f.expressions[h] {
+        E::Access { .. } | E::AccessIndex { .. } => usize::MAX,
+        E::ImageSample { .. } | E::ImageLoad { .. } | E::Derivative { .. } | E::Load { .. } => 1,
+        _ => 2,
+    };
+    at >= wanted || f.named_expressions.contains_key(&h)
+}
+
+/// Name every access referenced more than once whose base the writer would write in place, so each IR value is
+/// computed once in the text. naga's writers never give an access a `let` of its own (a pointer access must stay a
+/// place), so a lane of an unnamed expression used twice would repeat the whole expression at each use; a value
+/// here is never a pointer, so naming it is safe. Named for its IR value (`vN`) where it is one.
+fn name_shared(
+    module: &naga::Module,
+    stage: ShaderStage,
+    f: &mut naga::Function,
+    values: &[Option<Handle<E>>],
+) -> Result<(), Error> {
+    // the reference counts are the validator's, of the function as the entry point it becomes
+    let ep = naga::EntryPoint {
+        name: "main".into(),
+        stage,
+        early_depth_test: None,
+        workgroup_size: [0; 3],
+        workgroup_size_overrides: None,
+        function: f.clone(),
+        mesh_info: None,
+        task_payload: None,
+        incoming_ray_payload: None,
+    };
+    let mut probe = module.clone();
+    probe.entry_points.push(ep);
+    let info = crate::validate(&probe)?;
+    let fi = info.get_entry_point(0);
+    let refs: Vec<usize> = f.expressions.iter().map(|(h, _)| fi[h].ref_count).collect();
+    let mut value_of = alloc::collections::BTreeMap::new();
+    for (n, h) in values.iter().enumerate() {
+        if let Some(h) = h {
+            value_of.entry(*h).or_insert(n);
+        }
+    }
+    let leaf = |e: &E| {
+        matches!(
+            e,
+            E::FunctionArgument(_)
+                | E::GlobalVariable(_)
+                | E::LocalVariable(_)
+                | E::Literal(_)
+                | E::Constant(_)
+                | E::ZeroValue(_)
+        )
+    };
+    let handles: Vec<Handle<E>> = f.expressions.iter().map(|(h, _)| h).collect();
+    for h in handles {
+        let (E::Access { base, .. } | E::AccessIndex { base, .. }) = f.expressions[h] else {
+            continue;
+        };
+        if refs.get(h.index()).copied().unwrap_or(0) < 2
+            || leaf(&f.expressions[base])
+            || baked(f, &refs, base)
+        {
+            continue;
+        }
+        let name = value_of
+            .get(&h)
+            .map_or_else(|| format!("x{}", h.index()), |n| format!("v{n}"));
+        f.named_expressions.insert(h, name);
+    }
+    Ok(())
 }

@@ -1,6 +1,6 @@
 //! The text form of a function, for fixtures, diffs and notes: one line per node, indented by construct, values as
 //! `%n`, variables by name, labels as `'n`. The first line names the schema and its version, bumped when the form
-//! changes.
+//! changes. [`parse`] reads it back.
 
 use alloc::string::String;
 use core::fmt::Write;
@@ -9,6 +9,10 @@ use crate::{
     Binary, Body, End, Function, Level, Node, Op, Precision, Region, Scalar, Target, Terminator, Type, Unary,
     ValueId,
 };
+
+mod parse;
+
+pub use parse::{TextError, parse};
 
 /// The schema line every text form starts with.
 pub const SCHEMA: &str = "iridia-ir 1";
@@ -20,8 +24,23 @@ fn list(out: &mut String, vs: &[ValueId]) {
     }
 }
 
-/// A literal's lanes in the type's own notation: floats as their exact bits where the decimal form would not give
-/// them back (`f32:0x7fc00000`), otherwise as decimals.
+fn lane(l: u8) -> char {
+    match l {
+        0 => 'x',
+        1 => 'y',
+        2 => 'z',
+        3 => 'w',
+        _ => '?',
+    }
+}
+
+/// The lanes of a mask by name, in ascending order: `xz` for `0b0101`.
+fn lanes(mask: u8) -> String {
+    (0..8u8).filter(|n| mask >> n & 1 != 0).map(lane).collect()
+}
+
+/// A literal's lanes in the type's own notation: a float that is not finite as its exact bits (`0x7fc00000`), a
+/// finite one as the shortest decimal that gives its bits back, an integer as a decimal.
 fn literal(out: &mut String, ty: Type, bits: &[u64; 4]) {
     let lanes = usize::from(ty.lanes);
     let _ = write!(out, "{ty}(");
@@ -32,11 +51,19 @@ fn literal(out: &mut String, ty: Type, bits: &[u64; 4]) {
         let _ = match ty.scalar {
             Scalar::F32 => {
                 let x = f32::from_bits(u32::try_from(*b).unwrap_or(0));
-                if x.is_finite() { write!(out, "{x:?}") } else { write!(out, "0x{b:08x}") }
+                if x.is_finite() {
+                    write!(out, "{x:?}")
+                } else {
+                    write!(out, "0x{b:08x}")
+                }
             }
             Scalar::F64 => {
                 let x = f64::from_bits(*b);
-                if x.is_finite() { write!(out, "{x:?}") } else { write!(out, "0x{b:016x}") }
+                if x.is_finite() {
+                    write!(out, "{x:?}")
+                } else {
+                    write!(out, "0x{b:016x}")
+                }
             }
             Scalar::Bool => write!(out, "{}", *b != 0),
             s if s.is_signed() => {
@@ -84,39 +111,56 @@ fn op(out: &mut String, f: &Function, ty: Type, o: &Op) {
         Op::Param => write!(out, "param"),
         Op::Unary(u, a) => write!(out, "{} %{}", unary(u), a.0),
         Op::Binary(b, x, y) => write!(out, "{} %{}, %{}", binary(b), x.0, y.0),
-        Op::Select { cond, accept, reject } => write!(out, "select %{}, %{}, %{}", cond.0, accept.0, reject.0),
+        Op::Select { cond, accept, reject } => {
+            write!(out, "select %{}, %{}, %{}", cond.0, accept.0, reject.0)
+        }
         Op::Compose(parts) => {
             out.push_str("compose ");
             list(out, parts);
             Ok(())
         }
         Op::Swizzle(a, lanes) => {
-            let names = lanes.iter().take(usize::from(ty.lanes)).map(|&l| match l {
-                0 => 'x',
-                1 => 'y',
-                2 => 'z',
-                3 => 'w',
-                _ => '?',
-            });
+            let names = lanes.iter().take(usize::from(ty.lanes)).map(|&l| lane(l));
             write!(out, "%{}.{}", a.0, names.collect::<String>())
         }
         Op::Splat(a) => write!(out, "splat %{}", a.0),
         Op::Dot(x, y) => write!(out, "dot %{}, %{}", x.0, y.0),
-        Op::Convert(a, rule) => write!(out, "convert.{} %{}", alloc::format!("{rule:?}").to_lowercase(), a.0),
+        Op::Convert(a, rule) => write!(
+            out,
+            "convert.{} %{}",
+            alloc::format!("{rule:?}").to_lowercase(),
+            a.0
+        ),
         Op::Bitcast(a) => write!(out, "bitcast %{}", a.0),
-        Op::LoadInput(slot) => write!(out, "input {slot}"),
+        Op::LoadInput(slot, mask) => write!(out, "input {slot}.{}", lanes(*mask)),
         Op::LoadVar(v) => match f.vars.get(v.0 as usize) {
             Some(var) => write!(out, "load {}", var.name),
             None => write!(out, "load ?{}", v.0),
         },
-        Op::LoadBuffer { resource, index, stride, offset, oob } => {
+        Op::LoadState(r) => write!(out, "state r{}", r.0),
+        Op::LoadBuffer {
+            resource,
+            index,
+            stride,
+            offset,
+            oob,
+        } => {
             let _ = write!(out, "buffer r{}", resource.0);
             if let Some(i) = index {
                 let _ = write!(out, "[%{} * {stride}]", i.0);
             }
-            write!(out, " + {offset} oob.{}", alloc::format!("{oob:?}").to_lowercase())
+            write!(
+                out,
+                " + {offset} oob.{}",
+                alloc::format!("{oob:?}").to_lowercase()
+            )
         }
-        Op::Sample { texture, sampler, coord, level } => {
+        Op::Sample {
+            texture,
+            sampler,
+            coord,
+            level,
+        } => {
             let _ = write!(out, "sample r{}, r{}, %{}", texture.0, sampler.0, coord.0);
             match level {
                 Level::Auto => Ok(()),
@@ -144,7 +188,11 @@ impl Printer<'_> {
         self.indent();
         match self.f.value(v) {
             Some(d) => {
-                let pp = if d.precision == Precision::AtLeast16 { " pp" } else { "" };
+                let pp = if d.precision == Precision::AtLeast16 {
+                    " pp"
+                } else {
+                    ""
+                };
                 let _ = write!(self.out, "%{}: {}{pp} = ", v.0, d.ty);
                 op(&mut self.out, self.f, d.ty, &d.op);
             }
@@ -208,11 +256,16 @@ impl Printer<'_> {
                 let name = self.f.vars.get(var.0 as usize).map_or("?", |d| d.name.as_str());
                 let _ = writeln!(self.out, "{name} = %{}", v.0);
             }
-            Node::StoreOutput(slot, v) => {
+            Node::StoreOutput(slot, mask, v) => {
                 self.indent();
-                let _ = writeln!(self.out, "output {slot} = %{}", v.0);
+                let _ = writeln!(self.out, "output {slot}.{} = %{}", lanes(*mask), v.0);
             }
-            Node::If { cond, accept, reject, results } => {
+            Node::If {
+                cond,
+                accept,
+                reject,
+                results,
+            } => {
                 self.indent();
                 let _ = writeln!(self.out, "if %{} {{", cond.0);
                 self.region(accept);
@@ -227,7 +280,13 @@ impl Printer<'_> {
                 self.region(body);
                 self.close(results);
             }
-            Node::Loop { label, params, inits, body, results } => {
+            Node::Loop {
+                label,
+                params,
+                inits,
+                body,
+                results,
+            } => {
                 self.indent();
                 let _ = write!(self.out, "loop '{} (", label.0);
                 self.params(params);
@@ -248,7 +307,11 @@ impl Printer<'_> {
 
 /// The text form of a function.
 pub fn print(f: &Function) -> String {
-    let mut p = Printer { f, out: String::new(), depth: 0 };
+    let mut p = Printer {
+        f,
+        out: String::new(),
+        depth: 0,
+    };
     let _ = writeln!(p.out, "{SCHEMA}\nfn {} {{", f.name);
     for var in &f.vars {
         let _ = writeln!(p.out, "  var {}: {}", var.name, var.ty);

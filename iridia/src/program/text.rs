@@ -206,6 +206,9 @@ pub(super) fn text(p: &Program) -> Result<String, Error> {
             ResourceKind::Storage { target, access } => {
                 let _ = write!(out, " storage {target:?} {access:?}");
             }
+            ResourceKind::PipelineState(s) => {
+                let _ = write!(out, " pipeline_state {s:?}");
+            }
         }
         if let Some(b) = r.provenance.d3d {
             let _ = write!(out, " d3d={:?}{}", b.class, b.register);

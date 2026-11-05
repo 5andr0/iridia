@@ -232,6 +232,7 @@ dependencies = [
  "iridia-interface",
  "iridia-ir",
  "iridia-mojo",
+ "iridia-passes",
  "primase-naga",
  "sha2",
  "thiserror",
@@ -255,7 +256,11 @@ name = "iridia-d3d9-ir"
 version = "0.4.1"
 dependencies = [
  "d3d9-reader",
+ "iridia-exec-ir",
  "iridia-ir",
+ "iridia-naga",
+ "iridia-passes",
+ "primase-testdata",
 ]
 
 [[package]]
@@ -301,6 +306,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "iridia-exec-ir"
+version = "0.4.1"
+dependencies = [
+ "iridia-ir",
+]
+
+[[package]]
 name = "iridia-interface"
 version = "0.4.1"
 dependencies = [
@@ -340,7 +352,9 @@ dependencies = [
 name = "iridia-passes"
 version = "0.4.1"
 dependencies = [
+ "iridia-exec-ir",
  "iridia-ir",
+ "iridia-naga",
 ]
 
 [[package]]

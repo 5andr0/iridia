@@ -235,7 +235,13 @@ fn field(c: &Constant) -> Result<Field> {
     })
 }
 
-fn resource(interface: &mut Interface, kind: ResourceKind, name: String, class: D3dClass, register: u32) -> Result<ResourceId> {
+fn resource(
+    interface: &mut Interface,
+    kind: ResourceKind,
+    name: String,
+    class: D3dClass,
+    register: u32,
+) -> Result<ResourceId> {
     let id = ResourceId(
         u32::try_from(interface.resources.len()).map_err(|_| error(0, "more than 4294967295 resources"))?,
     );
@@ -285,7 +291,8 @@ pub fn signature(source: &Shader) -> Result<Signature> {
         if i.partial_precision {
             s.notes.push(PARTIAL_PRECISION.into());
         }
-        let slot = u32::try_from(s.interface.inputs.len()).map_err(|_| error(0, "more than 4294967295 inputs"))?;
+        let slot =
+            u32::try_from(s.interface.inputs.len()).map_err(|_| error(0, "more than 4294967295 inputs"))?;
         s.inputs.insert(i.register, (slot, i.mask));
         s.interface.inputs.push(v);
     }
@@ -326,7 +333,10 @@ pub fn signature(source: &Shader) -> Result<Signature> {
                 }
                 3 => {
                     if c.count != 1 || c.ty.class != 4 || !matches!(c.ty.kind, 12..=14) {
-                        return Err(error(0, format!("CTAB {}: sampler array or type {:?}", c.name, c.ty)));
+                        return Err(error(
+                            0,
+                            format!("CTAB {}: sampler array or type {:?}", c.name, c.ty),
+                        ));
                     }
                     let expected = match c.ty.kind {
                         12 => TextureDim::D2,
@@ -379,7 +389,13 @@ pub fn signature(source: &Shader) -> Result<Signature> {
             multisampled: false,
             sample: SampleType::Float,
         };
-        let texture = resource(&mut s.interface, kind, name.clone(), D3dClass::ShaderResource, slot)?;
+        let texture = resource(
+            &mut s.interface,
+            kind,
+            name.clone(),
+            D3dClass::ShaderResource,
+            slot,
+        )?;
         let sampler = resource(
             &mut s.interface,
             ResourceKind::Sampler { comparison: false },
@@ -387,7 +403,14 @@ pub fn signature(source: &Shader) -> Result<Signature> {
             D3dClass::Sampler,
             slot,
         )?;
-        s.samplers.insert(slot, Sampler { texture, sampler, dim });
+        s.samplers.insert(
+            slot,
+            Sampler {
+                texture,
+                sampler,
+                dim,
+            },
+        );
     }
     Ok(s)
 }
@@ -396,7 +419,11 @@ pub fn signature(source: &Shader) -> Result<Signature> {
 /// outputs in declaration order, or a pixel program's written colour targets in register order. Each is the register
 /// it is read from with its varying, marked used; a vertex program with no `POSITION0`, and a declared lane that is
 /// never written, are refused (`at` is where the refusal points).
-pub fn outputs(source: &Shader, written: &BTreeMap<Register, u8>, at: usize) -> Result<Vec<(Register, Varying)>> {
+pub fn outputs(
+    source: &Shader,
+    written: &BTreeMap<Register, u8>,
+    at: usize,
+) -> Result<Vec<(Register, Varying)>> {
     let outgoing: Vec<_> = if source.stage == Stage::Vertex {
         source
             .outputs
@@ -413,20 +440,36 @@ pub fn outputs(source: &Shader, written: &BTreeMap<Register, u8>, at: usize) -> 
         written
             .iter()
             .filter_map(|(&r, &mask)| match r {
-                Register::Target(n) => Some((r, varying("SV_Target", n, mask, n, Some(SystemValue::Target(n))))),
+                Register::Target(n) => {
+                    Some((r, varying("SV_Target", n, mask, n, Some(SystemValue::Target(n)))))
+                }
                 _ => None,
             })
             .collect()
     };
-    if source.stage == Stage::Vertex && !outgoing.iter().any(|(_, v)| v.system == Some(SystemValue::ClipPosition)) {
+    if source.stage == Stage::Vertex
+        && !outgoing
+            .iter()
+            .any(|(_, v)| v.system == Some(SystemValue::ClipPosition))
+    {
         return Err(error(0, "vertex program has no declared POSITION0 clip output"));
     }
     let mut out = Vec::new();
     for (r, mut v) in outgoing {
-        let mask = v.provenance.d3d.as_ref().ok_or_else(|| error(at, "output signature missing"))?.mask;
-        let &done = written.get(&r).ok_or_else(|| error(at, format!("uninitialized output {r:?}")))?;
+        let mask = v
+            .provenance
+            .d3d
+            .as_ref()
+            .ok_or_else(|| error(at, "output signature missing"))?
+            .mask;
+        let &done = written
+            .get(&r)
+            .ok_or_else(|| error(at, format!("uninitialized output {r:?}")))?;
         if mask & !done != 0 {
-            return Err(error(at, format!("{r:?}: uninitialized output lanes {:#x}", mask & !done)));
+            return Err(error(
+                at,
+                format!("{r:?}: uninitialized output lanes {:#x}", mask & !done),
+            ));
         }
         v.used = true;
         out.push((r, v));
@@ -436,15 +479,19 @@ pub fn outputs(source: &Shader, written: &BTreeMap<Register, u8>, at: usize) -> 
 
 /// Mark lanes `required` of input register `v{n}` read: refused where the program does not declare them.
 pub fn read_input(s: &mut Signature, n: u32, required: u8, at: usize) -> Result<u32> {
-    let &(slot, mask) = s.inputs.get(&n).ok_or_else(|| error(at, format!("undeclared input v{n}")))?;
+    let &(slot, mask) = s
+        .inputs
+        .get(&n)
+        .ok_or_else(|| error(at, format!("undeclared input v{n}")))?;
     if required & !mask != 0 {
         return Err(error(at, format!("v{n}: read of undeclared lanes {required:#x}")));
     }
-    let input = s
-        .interface
-        .inputs
-        .get_mut(slot as usize)
-        .ok_or_else(|| error(at, format!("input v{n} is input {slot} of a list that is shorter")))?;
+    let input = s.interface.inputs.get_mut(slot as usize).ok_or_else(|| {
+        error(
+            at,
+            format!("input v{n} is input {slot} of a list that is shorter"),
+        )
+    })?;
     input.used = true;
     if let Some(d) = &mut input.provenance.d3d {
         d.read_write_mask |= required;

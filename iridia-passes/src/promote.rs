@@ -40,12 +40,24 @@ fn stored(r: &Region, out: &mut BTreeSet<VarId>) {
 
 impl Promote<'_> {
     fn id(&self) -> Result<ValueId, String> {
-        u32::try_from(self.f.values.len()).map(ValueId).map_err(|_| "more than 2^32 values".into())
+        u32::try_from(self.f.values.len())
+            .map(ValueId)
+            .map_err(|_| "more than 2^32 values".into())
     }
     fn new_value(&mut self, var: VarId, op: Op) -> Result<ValueId, String> {
-        let ty = self.f.vars.get(var.0 as usize).ok_or_else(|| format!("variable {} does not exist", var.0))?.ty;
+        let ty = self
+            .f
+            .vars
+            .get(var.0 as usize)
+            .ok_or_else(|| format!("variable {} does not exist", var.0))?
+            .ty;
         let id = self.id()?;
-        self.f.values.push(ValueDef { ty, op, origin: None, precision: Precision::Full });
+        self.f.values.push(ValueDef {
+            ty,
+            op,
+            origin: None,
+            precision: Precision::Full,
+        });
         Ok(id)
     }
     fn sub(&self, v: ValueId) -> ValueId {
@@ -66,7 +78,10 @@ impl Promote<'_> {
         Ok(v)
     }
     fn set(&mut self, var: VarId, v: ValueId) -> Result<(), String> {
-        let slot = self.env.get_mut(var.0 as usize).ok_or_else(|| format!("variable {} does not exist", var.0))?;
+        let slot = self
+            .env
+            .get_mut(var.0 as usize)
+            .ok_or_else(|| format!("variable {} does not exist", var.0))?;
         *slot = Some(v);
         Ok(())
     }
@@ -122,8 +137,13 @@ impl Promote<'_> {
                     let x = self.sub(x);
                     self.set(var, x)?;
                 }
-                Node::StoreOutput(slot, x) => out.push(Node::StoreOutput(slot, self.sub(x))),
-                Node::If { cond, accept, reject, mut results } => {
+                Node::StoreOutput(slot, mask, x) => out.push(Node::StoreOutput(slot, mask, self.sub(x))),
+                Node::If {
+                    cond,
+                    accept,
+                    reject,
+                    mut results,
+                } => {
                     let mut carried = BTreeSet::new();
                     stored(&accept, &mut carried);
                     stored(&reject, &mut carried);
@@ -137,14 +157,26 @@ impl Promote<'_> {
                     for (&var, p) in carried.iter().zip(new) {
                         self.set(var, p)?;
                     }
-                    out.push(Node::If { cond: self.sub(cond), accept, reject, results });
+                    out.push(Node::If {
+                        cond: self.sub(cond),
+                        accept,
+                        reject,
+                        results,
+                    });
                 }
-                Node::Block { label, body, mut results } => {
+                Node::Block {
+                    label,
+                    body,
+                    mut results,
+                } => {
                     let mut carried = BTreeSet::new();
                     stored(&body, &mut carried);
                     let carried: Vec<VarId> = carried.into_iter().collect();
                     let before = self.env.clone();
-                    self.labels.push(Label { id: label, carried: carried.clone() });
+                    self.labels.push(Label {
+                        id: label,
+                        carried: carried.clone(),
+                    });
                     let body = self.region(body, &carried)?;
                     self.labels.pop();
                     self.env = before;
@@ -154,7 +186,13 @@ impl Promote<'_> {
                     }
                     out.push(Node::Block { label, body, results });
                 }
-                Node::Loop { label, mut params, mut inits, body, mut results } => {
+                Node::Loop {
+                    label,
+                    mut params,
+                    mut inits,
+                    body,
+                    mut results,
+                } => {
                     let mut carried = BTreeSet::new();
                     stored(&body, &mut carried);
                     let carried: Vec<VarId> = carried.into_iter().collect();
@@ -165,7 +203,10 @@ impl Promote<'_> {
                     for (&var, p) in carried.iter().zip(new) {
                         self.set(var, p)?;
                     }
-                    self.labels.push(Label { id: label, carried: carried.clone() });
+                    self.labels.push(Label {
+                        id: label,
+                        carried: carried.clone(),
+                    });
                     let body = self.region(body, &carried)?;
                     self.labels.pop();
                     self.env = before;
@@ -173,7 +214,13 @@ impl Promote<'_> {
                     for (&var, p) in carried.iter().zip(new) {
                         self.set(var, p)?;
                     }
-                    out.push(Node::Loop { label, params, inits, body, results });
+                    out.push(Node::Loop {
+                        label,
+                        params,
+                        inits,
+                        body,
+                        results,
+                    });
                 }
             }
         }

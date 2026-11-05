@@ -52,8 +52,10 @@ pub enum Node {
     Value(ValueId),
     /// The variable takes the value.
     StoreVar(VarId, ValueId),
-    /// The interface output `slot` takes the value (its varying's type).
-    StoreOutput(u32, ValueId),
+    /// Lanes of the interface output `slot` take the value: the lanes of mask `.1` (bit n is lane n, at least one,
+    /// within the varying's width), in ascending order, from the value's lanes in order. The value has the varying's
+    /// scalar type and one lane per lane written. A lane never written is zero when the program returns.
+    StoreOutput(u32, u8, ValueId),
     /// Two-way choice. Each arm ends in a yield of the results' values, or an exit that leaves it.
     If {
         /// A scalar bool.

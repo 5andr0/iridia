@@ -23,7 +23,8 @@ mod subset;
 pub use d3d9_reader::{Comment, Constant, ConstantTable, Type, TypeMember};
 pub use lift::{LIFTER, LIFTER_VERSION, lift};
 pub use signature::{
-    Bank, PARTIAL_PRECISION, Sampler, Signature, VERTEX_CONSTANTS, lanes_in, outputs, read_input, signature, varying,
+    Bank, PARTIAL_PRECISION, Sampler, Signature, VERTEX_CONSTANTS, lanes_in, outputs, read_input, signature,
+    varying,
 };
 pub use subset::{Destination, Input, Instruction, Opcode, Output, Register, Shader, Source, read};
 
@@ -34,3 +35,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub(crate) fn error(at: usize, detail: impl Into<String>) -> Error {
     Error::new("D3D9", iridia_ir::Unit::Word, at, detail)
 }
+
+// Run the examples in the README as doc tests.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct ReadmeExamples;

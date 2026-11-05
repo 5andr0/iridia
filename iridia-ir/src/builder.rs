@@ -11,9 +11,18 @@ use crate::{
 /// An open construct.
 #[derive(Debug)]
 enum Frame {
-    If { cond: ValueId, accept: Option<Region> },
-    Block { label: LabelId },
-    Loop { label: LabelId, params: Vec<ValueId>, inits: Vec<ValueId> },
+    If {
+        cond: ValueId,
+        accept: Option<Region>,
+    },
+    Block {
+        label: LabelId,
+    },
+    Loop {
+        label: LabelId,
+        params: Vec<ValueId>,
+        inits: Vec<ValueId>,
+    },
 }
 
 /// Builds a function in the `Regions` phase.
@@ -33,7 +42,12 @@ impl Builder {
     /// A builder of a function named `name`.
     pub fn new(name: &str) -> Builder {
         Builder {
-            f: Function { name: name.into(), values: Vec::new(), vars: Vec::new(), body: Body::Regions(Region::default()) },
+            f: Function {
+                name: name.into(),
+                values: Vec::new(),
+                vars: Vec::new(),
+                body: Body::Regions(Region::default()),
+            },
             stack: Vec::new(),
             current: Region::default(),
             labels: 0,
@@ -65,13 +79,21 @@ impl Builder {
     /// A new variable.
     pub fn var(&mut self, name: &str, ty: Type) -> VarId {
         let id = VarId(u32::try_from(self.f.vars.len()).unwrap_or(u32::MAX));
-        self.f.vars.push(Var { name: name.into(), ty });
+        self.f.vars.push(Var {
+            name: name.into(),
+            ty,
+        });
         id
     }
 
     fn def(&mut self, ty: Type, op: Op) -> ValueId {
         let id = ValueId(u32::try_from(self.f.values.len()).unwrap_or(u32::MAX));
-        self.f.values.push(ValueDef { ty, op, origin: self.origin, precision: self.precision });
+        self.f.values.push(ValueDef {
+            ty,
+            op,
+            origin: self.origin,
+            precision: self.precision,
+        });
         id
     }
 
@@ -126,9 +148,9 @@ impl Builder {
         self.current.nodes.push(Node::StoreVar(var, value));
     }
 
-    /// The interface output `slot` takes the value.
-    pub fn store_output(&mut self, slot: u32, value: ValueId) {
-        self.current.nodes.push(Node::StoreOutput(slot, value));
+    /// Lanes `mask` of the interface output `slot` take the value.
+    pub fn store_output(&mut self, slot: u32, mask: u8, value: ValueId) {
+        self.current.nodes.push(Node::StoreOutput(slot, mask, value));
     }
 
     fn label(&mut self) -> LabelId {
@@ -152,7 +174,13 @@ impl Builder {
         self.current.end = Some(end);
         let arm = core::mem::take(&mut self.current);
         match self.stack.last_mut() {
-            Some((Frame::If { accept: accept @ None, .. }, _)) => {
+            Some((
+                Frame::If {
+                    accept: accept @ None,
+                    ..
+                },
+                _,
+            )) => {
                 *accept = Some(arm);
                 Ok(())
             }
@@ -172,10 +200,17 @@ impl Builder {
         let label = self.label();
         let mut params = Vec::new();
         for i in inits {
-            let ty = self.f.ty(*i).ok_or_else(|| format!("loop initial value %{} does not exist", i.0))?;
+            let ty = self
+                .f
+                .ty(*i)
+                .ok_or_else(|| format!("loop initial value %{} does not exist", i.0))?;
             params.push(self.def(ty, Op::Param));
         }
-        self.open(Frame::Loop { label, params: params.clone(), inits: inits.to_vec() });
+        self.open(Frame::Loop {
+            label,
+            params: params.clone(),
+            inits: inits.to_vec(),
+        });
         Ok((label, params))
     }
 
@@ -189,16 +224,42 @@ impl Builder {
         self.current = outer;
         let results: Vec<ValueId> = results.iter().map(|t| self.def(*t, Op::Param)).collect();
         let node = match frame {
-            Frame::If { cond, accept: Some(accept) } => Node::If { cond, accept, reject: body, results: results.clone() },
+            Frame::If {
+                cond,
+                accept: Some(accept),
+            } => Node::If {
+                cond,
+                accept,
+                reject: body,
+                results: results.clone(),
+            },
             Frame::If { cond, accept: None } => {
                 if !results.is_empty() {
                     return Err("an if with results and no else arm".into());
                 }
-                let reject = Region { nodes: Vec::new(), end: Some(End::Yield(vec![])) };
-                Node::If { cond, accept: body, reject, results: results.clone() }
+                let reject = Region {
+                    nodes: Vec::new(),
+                    end: Some(End::Yield(vec![])),
+                };
+                Node::If {
+                    cond,
+                    accept: body,
+                    reject,
+                    results: results.clone(),
+                }
             }
-            Frame::Block { label } => Node::Block { label, body, results: results.clone() },
-            Frame::Loop { label, params, inits } => Node::Loop { label, params, inits, body, results: results.clone() },
+            Frame::Block { label } => Node::Block {
+                label,
+                body,
+                results: results.clone(),
+            },
+            Frame::Loop { label, params, inits } => Node::Loop {
+                label,
+                params,
+                inits,
+                body,
+                results: results.clone(),
+            },
         };
         self.current.nodes.push(node);
         Ok(results)

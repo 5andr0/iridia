@@ -1,6 +1,12 @@
 //! How large a program is, in the unit its reader counts.
 #[allow(unused_imports)]
-use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 use serde::Serialize;
 

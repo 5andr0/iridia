@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["iridia", "iridia-d3d9", "iridia-d3d9-ir", "iridia-dxbc", "iridia-dxil", "iridia-exec", "iridia-interface", "iridia-ir", "iridia-mojo", "iridia-naga", "iridia-passes"]
+members = ["iridia", "iridia-d3d9", "iridia-d3d9-ir", "iridia-dxbc", "iridia-dxil", "iridia-exec", "iridia-exec-ir", "iridia-interface", "iridia-ir", "iridia-mojo", "iridia-naga", "iridia-passes"]
 
 [workspace.package]
 version = "0.4.1"
@@ -18,6 +18,8 @@ dxil-reader = { version = "0.4.0", git = "https://github.com/Kalmarv/dx", rev = 
 half = { version = "=2.7.1", default-features = false }
 iridia = { version = "0.4.1", path = "iridia" }
 iridia-d3d9-ir = { version = "0.4.1", path = "iridia-d3d9-ir" }
+iridia-exec-ir = { version = "0.4.1", path = "iridia-exec-ir" }
+iridia-naga = { version = "0.4.1", path = "iridia-naga", default-features = false }
 iridia-dxbc = { path = "iridia-dxbc" }
 iridia-dxil = { path = "iridia-dxil" }
 iridia-exec = { path = "iridia-exec" }

@@ -1,7 +1,12 @@
 //! A program's resources: constant buffers with explicit layouts, textures, samplers, buffers and storage.
 #[allow(unused_imports)]
-use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
-
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 use serde::Serialize;
 
@@ -258,6 +263,54 @@ pub enum ResourceKind {
     },
     /// A ray tracing acceleration structure the program traces rays into.
     AccelerationStructure,
+    /// Fixed-function pipeline state the code depends on, set by the host with the draw rather than in a buffer.
+    PipelineState(StateParam),
+}
+
+/// A piece of pipeline state a program reads (`Op::LoadState`), by the stage or unit it belongs to. A known one is
+/// folded into literals by specialisation; an unknown numeric one is carried in a state block the binding plan
+/// places; an unknown one that changes types (a texture's dimension) has no uniform form.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StateParam {
+    /// Whether texture stage `n` divides its coordinate by its last lane before sampling (D3D9's
+    /// `D3DTTFF_PROJECTED`): a `bool`.
+    Projected(u32),
+    /// The dimension of the texture bound to stage `n` (what D3D9's `ps_1_x` `tex` samples): a `u32`, the
+    /// [`TextureDim::state_code`] of it. It changes the type of the sample, so only specialisation lowers it.
+    TextureDim(u32),
+    /// Stage `n`'s bump environment matrix (D3D9's `D3DTSS_BUMPENVMAT00`, `01`, `10`, `11`, in that order): a
+    /// `vec4<f32>`.
+    BumpEnvMat(u32),
+    /// Stage `n`'s bump luminance scale (D3D9's `D3DTSS_BUMPENVLSCALE`): an `f32`.
+    BumpLScale(u32),
+    /// Stage `n`'s bump luminance offset (D3D9's `D3DTSS_BUMPENVLOFFSET`): an `f32`.
+    BumpLOffset(u32),
+}
+
+impl StateParam {
+    /// The value the program reads.
+    pub fn value(self) -> Value {
+        let (scalar, width) = match self {
+            StateParam::Projected(_) => (ScalarType::Bool, 1),
+            StateParam::TextureDim(_) => (ScalarType::Uint, 1),
+            StateParam::BumpEnvMat(_) => (ScalarType::Float, 4),
+            StateParam::BumpLScale(_) | StateParam::BumpLOffset(_) => (ScalarType::Float, 1),
+        };
+        Value { scalar, width }
+    }
+}
+
+impl TextureDim {
+    /// The value [`StateParam::TextureDim`] reads for this dimension: 1, 2 and 3 for 1D, 2D and volume, 4 for a cube.
+    pub fn state_code(self) -> u32 {
+        match self {
+            TextureDim::D1 => 1,
+            TextureDim::D2 => 2,
+            TextureDim::D3 => 3,
+            TextureDim::Cube => 4,
+        }
+    }
 }
 
 /// The register class of a D3D binding: `b`, `t`, `s` or `u`.

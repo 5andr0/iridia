@@ -40,8 +40,23 @@ pub fn value_type(v: Value) -> Type {
     Type::vector(scalar, v.width)
 }
 
+/// The type of the lanes `mask` selects of an interface value: its scalar, one lane per bit. An error says why the
+/// mask selects none of it or lanes it does not have.
+pub fn masked_type(v: Value, mask: u8) -> Result<Type, String> {
+    let all = value_type(v);
+    let lanes = u8::try_from(mask.count_ones()).unwrap_or(0);
+    if mask == 0 || lanes > all.lanes || mask >> all.lanes != 0 {
+        return Err(format!("lane mask {mask:#06b} of a value of {all}"));
+    }
+    Ok(Type::vector(all.scalar, lanes))
+}
+
 fn same(a: Type, b: Type, what: &str) -> Result<(), String> {
-    if a == b { Ok(()) } else { Err(format!("{what}: {a} and {b} differ")) }
+    if a == b {
+        Ok(())
+    } else {
+        Err(format!("{what}: {a} and {b} differ"))
+    }
 }
 
 /// The type an operation gives from its operands' types (`ty` looks them up), or `None` where the operation's type is
@@ -50,11 +65,23 @@ fn same(a: Type, b: Type, what: &str) -> Result<(), String> {
 pub fn derived_type(op: &Op, ty: impl Fn(ValueId) -> Option<Type>) -> Result<Option<Type>, String> {
     let get = |v: ValueId| ty(v).ok_or_else(|| format!("operand %{} is not a value of the function", v.0));
     let float = |t: Type, what: &str| {
-        if t.scalar.is_float() { Ok(()) } else { Err(format!("{what} of {t}, which is not a float")) }
+        if t.scalar.is_float() {
+            Ok(())
+        } else {
+            Err(format!("{what} of {t}, which is not a float"))
+        }
     };
     Ok(Some(match op {
-        Op::Literal(_) | Op::Undef | Op::Param | Op::Convert(..) | Op::Bitcast(_) | Op::LoadInput(_)
-        | Op::LoadVar(_) | Op::LoadBuffer { .. } | Op::Sample { .. } => return Ok(None),
+        Op::Literal(_)
+        | Op::Undef
+        | Op::Param
+        | Op::Convert(..)
+        | Op::Bitcast(_)
+        | Op::LoadInput(..)
+        | Op::LoadVar(_)
+        | Op::LoadState(_)
+        | Op::LoadBuffer { .. }
+        | Op::Sample { .. } => return Ok(None),
         Op::Unary(u, a) => {
             let t = get(*a)?;
             match u {
@@ -90,7 +117,12 @@ pub fn derived_type(op: &Op, ty: impl Fn(ValueId) -> Option<Type>) -> Result<Opt
             let (a, c) = (get(*x)?, get(*y)?);
             same(a, c, "binary operands")?;
             match b {
-                Binary::FAdd | Binary::FSub | Binary::FMul(_) | Binary::FDiv | Binary::FMin(_) | Binary::FMax(_)
+                Binary::FAdd
+                | Binary::FSub
+                | Binary::FMul(_)
+                | Binary::FDiv
+                | Binary::FMin(_)
+                | Binary::FMax(_)
                 | Binary::FPow => {
                     float(a, "a float operation")?;
                     a
@@ -105,8 +137,14 @@ pub fn derived_type(op: &Op, ty: impl Fn(ValueId) -> Option<Type>) -> Result<Opt
                     }
                     a.with(Scalar::Bool)
                 }
-                Binary::IAdd | Binary::ISub | Binary::IMul | Binary::UDiv(_) | Binary::URem(_) | Binary::SMin
-                | Binary::SMax | Binary::Xor => {
+                Binary::IAdd
+                | Binary::ISub
+                | Binary::IMul
+                | Binary::UDiv(_)
+                | Binary::URem(_)
+                | Binary::SMin
+                | Binary::SMax
+                | Binary::Xor => {
                     if !a.scalar.is_integer() {
                         return Err(format!("an integer operation of {a}"));
                     }
@@ -172,7 +210,10 @@ pub fn derived_type(op: &Op, ty: impl Fn(ValueId) -> Option<Type>) -> Result<Opt
 
 /// Check an operation whose type is stated: the operands' types and the stated type agree with the rule.
 fn stated(op: &Op, t: Type, f: &Function, interface: &Interface) -> Result<(), String> {
-    let get = |v: ValueId| f.ty(v).ok_or_else(|| format!("operand %{} is not a value of the function", v.0));
+    let get = |v: ValueId| {
+        f.ty(v)
+            .ok_or_else(|| format!("operand %{} is not a value of the function", v.0))
+    };
     match op {
         Op::Literal(_) | Op::Undef | Op::Param => Ok(()),
         Op::Convert(a, _) => {
@@ -192,7 +233,11 @@ fn stated(op: &Op, t: Type, f: &Function, interface: &Interface) -> Result<(), S
         }
         Op::Swizzle(a, _) => {
             let a = get(*a)?;
-            if a.scalar == t.scalar { Ok(()) } else { Err(format!("swizzle of {a} to {t}")) }
+            if a.scalar == t.scalar {
+                Ok(())
+            } else {
+                Err(format!("swizzle of {a} to {t}"))
+            }
         }
         Op::Splat(a) => {
             if get(*a)? == Type::scalar(t.scalar) && t.lanes >= 2 {
@@ -201,16 +246,32 @@ fn stated(op: &Op, t: Type, f: &Function, interface: &Interface) -> Result<(), S
                 Err(format!("splat of {} to {t}", get(*a)?))
             }
         }
-        Op::LoadInput(slot) => {
-            let v = interface
-                .inputs
-                .get(*slot as usize)
-                .ok_or_else(|| format!("input slot {slot}, where the interface has {}", interface.inputs.len()))?;
-            same(value_type(v.value), t, "input")
+        Op::LoadInput(slot, mask) => {
+            let v = interface.inputs.get(*slot as usize).ok_or_else(|| {
+                format!(
+                    "input slot {slot}, where the interface has {}",
+                    interface.inputs.len()
+                )
+            })?;
+            same(masked_type(v.value, *mask)?, t, "input")
         }
         Op::LoadVar(var) => {
-            let v = f.vars.get(var.0 as usize).ok_or_else(|| format!("variable {} does not exist", var.0))?;
+            let v = f
+                .vars
+                .get(var.0 as usize)
+                .ok_or_else(|| format!("variable {} does not exist", var.0))?;
             same(v.ty, t, "variable load")
+        }
+        Op::LoadState(resource) => {
+            let r = interface
+                .resources
+                .iter()
+                .find(|r| r.id == *resource)
+                .ok_or_else(|| format!("resource {} is not in the interface", resource.0))?;
+            match r.kind {
+                ResourceKind::PipelineState(p) => same(value_type(p.value()), t, "state load"),
+                _ => Err(format!("state load from {:?}", r.kind)),
+            }
         }
         Op::LoadBuffer { resource, index, .. } => {
             let r = interface
@@ -232,7 +293,12 @@ fn stated(op: &Op, t: Type, f: &Function, interface: &Interface) -> Result<(), S
             }
             Ok(())
         }
-        Op::Sample { texture, sampler, coord, level } => {
+        Op::Sample {
+            texture,
+            sampler,
+            coord,
+            level,
+        } => {
             let kind = |id| {
                 interface
                     .resources
@@ -253,7 +319,11 @@ fn stated(op: &Op, t: Type, f: &Function, interface: &Interface) -> Result<(), S
                 (TextureDim::D2, true) | (TextureDim::D3 | TextureDim::Cube, false) => 3,
                 (TextureDim::D3 | TextureDim::Cube, true) => 4,
             };
-            same(get(*coord)?, Type::vector(Scalar::F32, lanes), "sample coordinate")?;
+            same(
+                get(*coord)?,
+                Type::vector(Scalar::F32, lanes),
+                "sample coordinate",
+            )?;
             if let Level::Bias(x) | Level::Exact(x) = level {
                 same(get(*x)?, Type::F32, "sample level")?;
             }
@@ -275,14 +345,23 @@ struct Checker<'a> {
 
 impl Checker<'_> {
     fn problem(&mut self, value: Option<ValueId>, message: impl Into<String>) {
-        self.problems.push(Problem { value, message: message.into() });
+        self.problems.push(Problem {
+            value,
+            message: message.into(),
+        });
     }
     fn ty(&self, v: ValueId) -> Option<Type> {
         self.f.ty(v)
     }
     fn uses(&mut self, at: Option<ValueId>, v: ValueId) {
         if !self.visible.get(v.0 as usize).copied().unwrap_or(false) {
-            self.problem(at, format!("uses %{}, which is not defined before it in an enclosing region", v.0));
+            self.problem(
+                at,
+                format!(
+                    "uses %{}, which is not defined before it in an enclosing region",
+                    v.0
+                ),
+            );
         }
     }
     fn define(&mut self, v: ValueId, param: bool) {
@@ -291,7 +370,14 @@ impl Checker<'_> {
             return;
         };
         if (def.op == Op::Param) != param {
-            self.problem(Some(v), if param { "a construct value that is not a parameter" } else { "a parameter placed as a node" });
+            self.problem(
+                Some(v),
+                if param {
+                    "a construct value that is not a parameter"
+                } else {
+                    "a parameter placed as a node"
+                },
+            );
         }
         match self.placed.get_mut(v.0 as usize) {
             Some(p) if *p => self.problem(Some(v), "is defined twice"),
@@ -317,14 +403,24 @@ impl Checker<'_> {
             self.problem(Some(v), format!("type {} has no lanes count of 1 to 4", def.ty));
         }
         match derived_type(&def.op, |o| self.ty(o)) {
-            Ok(Some(t)) if t != def.ty => self.problem(Some(v), format!("states {} where its operation gives {t}", def.ty)),
+            Ok(Some(t)) if t != def.ty => self.problem(
+                Some(v),
+                format!("states {} where its operation gives {t}", def.ty),
+            ),
             Ok(_) => {}
             Err(e) => self.problem(Some(v), e),
         }
         if let Err(e) = stated(&def.op, def.ty, self.f, self.interface) {
             self.problem(Some(v), e);
         }
-        if matches!(def.op, Op::Sample { level: Level::Auto | Level::Bias(_), .. }) && self.stage != Stage::Pixel {
+        if matches!(
+            def.op,
+            Op::Sample {
+                level: Level::Auto | Level::Bias(_),
+                ..
+            }
+        ) && self.stage != Stage::Pixel
+        {
             self.problem(Some(v), "an implicit-level sample outside a pixel program");
         }
     }
@@ -342,21 +438,41 @@ impl Checker<'_> {
                         let m = format!("stores {t} into variable {} of {}", d.name, d.ty);
                         self.problem(Some(*value), m);
                     }
-                    _ => self.problem(Some(*value), format!("store to variable {}, which does not exist", var.0)),
+                    _ => self.problem(
+                        Some(*value),
+                        format!("store to variable {}, which does not exist", var.0),
+                    ),
                 }
             }
-            Node::StoreOutput(slot, value) => {
+            Node::StoreOutput(slot, mask, value) => {
                 self.uses(None, *value);
-                match self.interface.outputs.get(*slot as usize) {
-                    Some(o) if Some(value_type(o.value)) == self.ty(*value) => {}
-                    Some(o) => {
-                        let m = format!("output {slot} of {} takes {:?}", value_type(o.value), self.ty(*value));
+                match self
+                    .interface
+                    .outputs
+                    .get(*slot as usize)
+                    .map(|o| masked_type(o.value, *mask))
+                {
+                    Some(Ok(t)) if Some(t) == self.ty(*value) => {}
+                    Some(Ok(t)) => {
+                        let m = format!(
+                            "output {slot} lanes {mask:#06b} of {t} take {:?}",
+                            self.ty(*value)
+                        );
                         self.problem(Some(*value), m);
                     }
-                    None => self.problem(Some(*value), format!("output slot {slot} is not in the interface")),
+                    Some(Err(e)) => self.problem(Some(*value), format!("output {slot}: {e}")),
+                    None => self.problem(
+                        Some(*value),
+                        format!("output slot {slot} is not in the interface"),
+                    ),
                 }
             }
-            Node::If { cond, accept, reject, results } => {
+            Node::If {
+                cond,
+                accept,
+                reject,
+                results,
+            } => {
                 self.uses(None, *cond);
                 if self.ty(*cond) != Some(Type::BOOL) {
                     self.problem(Some(*cond), "an if condition that is not a bool");
@@ -380,14 +496,23 @@ impl Checker<'_> {
                     self.define(*r, true);
                 }
             }
-            Node::Loop { label, params, inits, body, results } => {
+            Node::Loop {
+                label,
+                params,
+                inits,
+                body,
+                results,
+            } => {
                 if params.len() != inits.len() {
                     self.problem(None, "a loop with as many initial values as parameters");
                 }
                 for (p, i) in params.iter().zip(inits) {
                     self.uses(Some(*p), *i);
                     if self.ty(*p) != self.ty(*i) {
-                        self.problem(Some(*p), "a loop parameter of another type than its initial value");
+                        self.problem(
+                            Some(*p),
+                            "a loop parameter of another type than its initial value",
+                        );
                     }
                 }
                 let before = self.visible.clone();
@@ -410,7 +535,14 @@ impl Checker<'_> {
         }
         let types = |c: &Self, vs: &[ValueId]| vs.iter().map(|v| c.ty(*v)).collect::<Vec<_>>();
         if types(self, given) != types(self, wanted) {
-            self.problem(None, format!("{what} gives {} values that do not match the {} it fills", given.len(), wanted.len()));
+            self.problem(
+                None,
+                format!(
+                    "{what} gives {} values that do not match the {} it fills",
+                    given.len(),
+                    wanted.len()
+                ),
+            );
         }
     }
     fn region(&mut self, r: &Region, results: Option<&Vec<ValueId>>) {
@@ -425,14 +557,22 @@ impl Checker<'_> {
             }
             Some(End::Br(l, vs)) => match self.labels.iter().rev().find(|(x, ..)| x == l).cloned() {
                 Some((_, results, _)) => self.args("a break", vs, &results),
-                None => self.problem(None, format!("a break to label {}, which no enclosing construct has", l.0)),
+                None => self.problem(
+                    None,
+                    format!("a break to label {}, which no enclosing construct has", l.0),
+                ),
             },
             Some(End::Continue(l, vs)) => match self.labels.iter().rev().find(|(x, ..)| x == l).cloned() {
                 Some((_, _, Some(params))) => self.args("a continue", vs, &params),
                 Some(_) => self.problem(None, format!("a continue to label {}, which is not a loop", l.0)),
-                None => self.problem(None, format!("a continue to label {}, which no enclosing construct has", l.0)),
+                None => self.problem(
+                    None,
+                    format!("a continue to label {}, which no enclosing construct has", l.0),
+                ),
             },
-            Some(End::Kill) if self.stage != Stage::Pixel => self.problem(None, "a kill outside a pixel program"),
+            Some(End::Kill) if self.stage != Stage::Pixel => {
+                self.problem(None, "a kill outside a pixel program")
+            }
             Some(End::Return | End::Kill | End::Unreachable) => {}
         }
     }
@@ -462,20 +602,31 @@ impl Checker<'_> {
                 }
             }
         }
-        let dominates = |a: usize, mut b: usize| loop {
-            if a == b {
+        // every path from the entry to a block it does not reach passes every block (none does): each dominates it.
+        // Its code is still checked, by every rule but this one
+        let dominates = |a: usize, mut b: usize| {
+            if b != 0 && idom.get(b).copied().flatten().is_none() {
                 return true;
             }
-            match idom.get(b).copied().flatten() {
-                Some(p) if p != b => b = p,
-                _ => return false,
+            loop {
+                if a == b {
+                    return true;
+                }
+                match idom.get(b).copied().flatten() {
+                    Some(p) if p != b => b = p,
+                    _ => return false,
+                }
             }
         };
         for (i, b) in blocks.iter().enumerate() {
             let mut local = Vec::new();
             let seen = |c: &mut Self, local: &Vec<ValueId>, at: Option<ValueId>, v: ValueId| {
                 let ok = local.contains(&v)
-                    || home.get(v.0 as usize).copied().flatten().is_some_and(|h| h != i && dominates(h, i));
+                    || home
+                        .get(v.0 as usize)
+                        .copied()
+                        .flatten()
+                        .is_some_and(|h| h != i && dominates(h, i));
                 if !ok {
                     c.problem(at, format!("uses %{}, which does not dominate it", v.0));
                 }
@@ -500,7 +651,7 @@ impl Checker<'_> {
                         self.define(*v, false);
                         local.push(*v);
                     }
-                    Node::StoreVar(_, x) | Node::StoreOutput(_, x) => {
+                    Node::StoreVar(_, x) | Node::StoreOutput(_, _, x) => {
                         seen(self, &local, None, *x);
                         let saved = self.visible.clone();
                         self.visible.iter_mut().for_each(|s| *s = true);
@@ -534,7 +685,13 @@ impl Checker<'_> {
                         }
                         let types = |vs: &[ValueId]| vs.iter().map(|v| self.ty(*v)).collect::<Vec<_>>();
                         if types(&t.args) != types(&to.params) {
-                            self.problem(None, format!("a branch to block {} whose arguments do not match its parameters", t.block));
+                            self.problem(
+                                None,
+                                format!(
+                                    "a branch to block {} whose arguments do not match its parameters",
+                                    t.block
+                                ),
+                            );
                         }
                     }
                 }
@@ -642,11 +799,18 @@ pub fn validate(p: &Program) -> Result<(), Vec<Problem>> {
     match &f.body {
         Body::Regions(r) => {
             c.region(r, None);
-            if !matches!(r.end, Some(End::Return | End::Kill | End::Unreachable | End::Yield(_))) {
+            if !matches!(
+                r.end,
+                Some(End::Return | End::Kill | End::Unreachable | End::Yield(_))
+            ) {
                 c.problem(None, "the body ends in an exit to a construct it is not in");
             }
         }
         Body::Cfg(blocks) => c.cfg(blocks),
     }
-    if c.problems.is_empty() { Ok(()) } else { Err(c.problems) }
+    if c.problems.is_empty() {
+        Ok(())
+    } else {
+        Err(c.problems)
+    }
 }

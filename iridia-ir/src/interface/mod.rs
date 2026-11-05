@@ -61,26 +61,27 @@
 
 mod binding;
 mod facts;
-mod varying;
 mod resource;
 mod stage;
 mod state;
+mod varying;
 
 pub use binding::{AlphaComparison, ConstantBufferBinding, MatrixLines, OutputUse, Unshown};
 pub use facts::{InstructionCount, InstructionUnit};
-pub use varying::{
-    D3dSignature, DomainFacts, GeometryFacts, GsInput, GsOutput, HitGroup, HitGroupKind, HullFacts,
-    Interface, InterpMode, InterpSampling, Interpolation, Label, MeshFacts, MeshTopology, Partitioning,
-    RayTracingFacts, ScalarType, StageFacts, Subobject, SystemValue, TessDomain, TessTopology, Value,
-    Varying, VaryingProvenance,
-};
 pub use resource::{
     Access, BufferKind, BufferLayout, Constant, ConstantType, D3dBinding, D3dClass, Majorness, Member,
-    Resource, ResourceId, ResourceKind, ResourceProvenance, SampleType, StorageTarget, TextureDim,
+    Resource, ResourceId, ResourceKind, ResourceProvenance, SampleType, StateParam, StorageTarget,
+    TextureDim,
 };
 pub use stage::{ShaderFormat, Stage};
 pub use state::{
     AddressMode, AlphaTest, Blend, BlendEquation, BlendFactor, BlendOp, Compare, Cull, DepthBias, DepthState,
     Fill, Filter, Filters, MipFilter, RenderState, SamplerState, Stencil, StencilFace, StencilOp,
     TargetState,
+};
+pub use varying::{
+    D3dSignature, DomainFacts, GeometryFacts, GsInput, GsOutput, HitGroup, HitGroupKind, HullFacts,
+    Interface, InterpMode, InterpSampling, Interpolation, Label, MeshFacts, MeshTopology, Partitioning,
+    RayTracingFacts, ScalarType, StageFacts, Subobject, SystemValue, TessDomain, TessTopology, Value,
+    Varying, VaryingProvenance,
 };

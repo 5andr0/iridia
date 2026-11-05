@@ -1,0 +1,18 @@
+[package]
+name = "iridia-exec-ir"
+description = "Run a program of iridia's shader IR once on the CPU, by the IR's own definition of each operation"
+readme = "README.md"
+keywords = ["shader", "ir", "interpreter", "reference"]
+categories = ["graphics", "compilers"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+iridia-ir.workspace = true
+
+[lints]
+workspace = true

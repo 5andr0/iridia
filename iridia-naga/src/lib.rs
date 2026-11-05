@@ -24,10 +24,7 @@ mod lower;
 use alloc::{format, string::String, vec::Vec};
 use core::fmt;
 
-use iridia_ir::{
-    Program,
-    interface::{D3dClass, Interface, ResourceId},
-};
+use iridia_ir::interface::{D3dClass, Interface, ResourceId, ResourceKind};
 
 pub use io::{EntryIo, Item, entry_io};
 pub use lower::module;
@@ -66,16 +63,22 @@ pub struct BindingPlan {
 
 impl BindingPlan {
     /// Direct3D's register classes as bind groups, each register its binding: constant buffers in group 0 (`cbN`),
-    /// shader resources in group 1 (`tN`), samplers in group 2 (`sN`), unordered-access views in group 3 (`uN`). A
-    /// resource with no D3D register is refused.
+    /// shader resources in group 1 (`tN`), samplers in group 2 (`sN`), unordered-access views in group 3 (`uN`).
+    /// Pipeline state is not bound. A resource with no D3D register is refused.
     pub fn d3d(interface: &Interface) -> Result<BindingPlan, Error> {
         let mut bindings = Vec::new();
-        for r in &interface.resources {
-            let d = r
-                .provenance
-                .d3d
-                .as_ref()
-                .ok_or_else(|| Error(format!("resource {} ({}) has no D3D register", r.id.0, r.provenance.name)))?;
+        // pipeline state is set with the draw, not bound: specialisation folds it (a state block would be planned here)
+        for r in interface
+            .resources
+            .iter()
+            .filter(|r| !matches!(r.kind, ResourceKind::PipelineState(_)))
+        {
+            let d = r.provenance.d3d.as_ref().ok_or_else(|| {
+                Error(format!(
+                    "resource {} ({}) has no D3D register",
+                    r.id.0, r.provenance.name
+                ))
+            })?;
             let (group, prefix) = match d.class {
                 D3dClass::ConstantBuffer => (0, "cb"),
                 D3dClass::ShaderResource => (1, "t"),
@@ -83,9 +86,17 @@ impl BindingPlan {
                 D3dClass::UnorderedAccess => (3, "u"),
             };
             if d.space != 0 {
-                return Err(Error(format!("resource {} is in register space {}", r.provenance.name, d.space)));
+                return Err(Error(format!(
+                    "resource {} is in register space {}",
+                    r.provenance.name, d.space
+                )));
             }
-            bindings.push(Bind { resource: r.id, group, binding: d.register, name: format!("{prefix}{}", d.register) });
+            bindings.push(Bind {
+                resource: r.id,
+                group,
+                binding: d.register,
+                name: format!("{prefix}{}", d.register),
+            });
         }
         Ok(BindingPlan { bindings })
     }
@@ -93,17 +104,25 @@ impl BindingPlan {
 
 /// Run naga's validator on a module, with every capability the module may use.
 pub fn validate(module: &naga::Module) -> Result<naga::valid::ModuleInfo, Error> {
-    naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all())
-        .validate(module)
-        .map_err(|e| Error(format!("naga validation: {}", e.as_inner())))
+    naga::valid::Validator::new(
+        naga::valid::ValidationFlags::all(),
+        naga::valid::Capabilities::all(),
+    )
+    .validate(module)
+    .map_err(|e| Error(format!("naga validation: {}", e.as_inner())))
 }
 
 /// The WGSL of a program, with the D3D binding plan.
 #[cfg(feature = "wgsl")]
-pub fn wgsl(program: &Program) -> Result<String, Error> {
+pub fn wgsl(program: &iridia_ir::Program) -> Result<String, Error> {
     let plan = BindingPlan::d3d(&program.interface)?;
     let module = module(program, &plan)?;
     let info = validate(&module)?;
     naga::back::wgsl::write_string(&module, &info, naga::back::wgsl::WriterFlags::empty())
         .map_err(|e| Error(format!("naga's WGSL writer: {e}")))
 }
+
+// Run the examples in the README as doc tests.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct ReadmeExamples;

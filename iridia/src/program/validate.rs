@@ -585,6 +585,8 @@ fn resources(p: &Program, problems: &mut Vec<Problem>) {
                     }
                 }
             }
+            // pipeline state is set with the draw: no global of a module holds it
+            ResourceKind::PipelineState(_) => false,
         };
         if !ok {
             fail(format!(

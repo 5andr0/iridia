@@ -3,8 +3,13 @@
 //! analyses of `iridia` make (`iridia::matrix`, `iridia::output_uses`), held as plain data so that a consumer without
 //! naga can keep them; what an observation makes a value stand for is the consumer's to decide.
 #[allow(unused_imports)]
-use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
-
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 use serde::Serialize;
 

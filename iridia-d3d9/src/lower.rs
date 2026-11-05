@@ -1,7 +1,8 @@
 use std::{collections::BTreeMap, num::NonZeroU32};
 
 use iridia::{
-    Conventions, D3dModes, Interface, Program, Provenance, ResourceId, ShaderFormat, Stage, StageFacts, TextureDim,
+    Conventions, D3dModes, Interface, Program, Provenance, ResourceId, ShaderFormat, Stage, StageFacts,
+    TextureDim,
     build::{Builder, Kind, Val, Width},
     entry_io,
 };

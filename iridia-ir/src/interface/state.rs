@@ -1,8 +1,13 @@
 //! Fixed-function state as Direct3D states it: the sampler state a texture is read through and the blend, depth,
 //! stencil, cull, fill and alpha test a program is drawn with.
 #[allow(unused_imports)]
-use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
-
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 use serde::Serialize;
 

@@ -43,7 +43,11 @@ pub struct Refusal {
 
 impl fmt::Display for Refusal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} at {} {}: {}", self.bytecode, self.unit, self.at, self.detail)
+        write!(
+            f,
+            "{} at {} {}: {}",
+            self.bytecode, self.unit, self.at, self.detail
+        )
     }
 }
 

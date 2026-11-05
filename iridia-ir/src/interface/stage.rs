@@ -1,6 +1,12 @@
 //! What a program is and where it runs: its encoding and its pipeline stage.
 #[allow(unused_imports)]
-use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 use serde::Serialize;
 

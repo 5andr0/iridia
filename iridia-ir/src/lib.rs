@@ -12,6 +12,8 @@
 //!   parameters and [`Terminator`]s, block 0 the entry).
 //! - A [`Program`] is the entry function with its [`interface::Interface`], [`Conventions`], [`FloatEnv`],
 //!   [`Provenance`] and notes. [`validate()`] checks it; [`Builder`] makes one; [`text`] prints it.
+//! - [`VERSION`] names the IR's meaning and text form; with a lifter's version it keys caches, and [`gate`] checks a
+//!   lifter's fixtures against it.
 #![no_std]
 #![deny(missing_docs)]
 #![deny(clippy::disallowed_methods, clippy::disallowed_types)]
@@ -28,6 +30,7 @@ extern crate alloc;
 
 mod builder;
 mod func;
+pub mod gate;
 pub mod interface;
 mod op;
 mod program;
@@ -36,13 +39,24 @@ pub mod text;
 mod ty;
 mod validate;
 
+/// The version of the IR's meaning and text form: bumped when what a program means or how [`text`] prints it
+/// changes, so a program cached under an older one is stale.
+pub const VERSION: u32 = 1;
+
 pub use builder::Builder;
-pub use func::{Block, Body, End, Function, Node, Origin, Precision, Region, Target, Terminator, ValueDef, Var};
+pub use func::{
+    Block, Body, End, Function, Node, Origin, Precision, Region, Target, Terminator, ValueDef, Var,
+};
 pub use op::{
-    Binary, Cmp, FloatToInt, LabelId, Level, MinMaxNan, MulZero, Op, OnZero, OutOfBounds, Rounding, SaturateNan,
-    Unary, ValueId, VarId,
+    Binary, Cmp, FloatToInt, LabelId, Level, MinMaxNan, MulZero, OnZero, Op, OutOfBounds, Rounding,
+    SaturateNan, Unary, ValueId, VarId,
 };
 pub use program::{ClipDepth, Conventions, Corner, Denormals, FloatEnv, Program, Provenance};
 pub use refusal::{Refusal, Unit, source_hash};
 pub use ty::{Scalar, Type};
-pub use validate::{Problem, derived_type, dominators, validate, value_type};
+pub use validate::{Problem, derived_type, dominators, masked_type, validate, value_type};
+
+// Run the examples in the README as doc tests.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct ReadmeExamples;

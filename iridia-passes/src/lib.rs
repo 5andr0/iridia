@@ -1,8 +1,12 @@
 //! Passes over iridia's shader IR ([`iridia_ir`]): each takes a function and gives one that means the same, in a form
 //! closer to what an output needs.
 //!
+//! - [`break_flags`]: exits innermost-only `break` and `continue` cannot take, routed through a jump variable.
 //! - [`promote`]: variables to values, carried out of constructs as results and loop parameters.
 //! - [`simplify`]: lane bookkeeping (swizzles of swizzles, composes of lanes) folded, unused values removed.
+//! - [`specialise`]: known pipeline state folded in, with the branches it decides.
+//! - [`structurize`]: a `Cfg` body made `Regions`.
+//! - [`structure`]: Ramsey's structuring of a reducible control flow graph, by node and edge.
 #![no_std]
 #![deny(missing_docs)]
 #![deny(clippy::disallowed_methods, clippy::disallowed_types)]
@@ -17,8 +21,20 @@
 
 extern crate alloc;
 
+mod break_flags;
 mod promote;
 mod simplify;
+mod specialise;
+pub mod structure;
+mod structurize;
 
+pub use break_flags::break_flags;
 pub use promote::promote;
 pub use simplify::simplify;
+pub use specialise::specialise;
+pub use structurize::structurize;
+
+// Run the examples in the README as doc tests.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct ReadmeExamples;

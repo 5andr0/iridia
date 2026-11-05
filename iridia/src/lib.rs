@@ -83,6 +83,7 @@ pub mod output_uses;
 mod program;
 mod reads;
 pub mod rt;
+pub use bound::BoundSizes;
 pub use iridia_interface::{
     Access, BufferKind, BufferLayout, Constant, ConstantType, D3dBinding, D3dClass, D3dSignature,
     DomainFacts, GeometryFacts, GsInput, GsOutput, HitGroup, HitGroupKind, HullFacts, InstructionCount,
@@ -91,7 +92,7 @@ pub use iridia_interface::{
     ResourceProvenance, SampleType, ScalarType, ShaderFormat, Stage, StageFacts, StorageTarget, Subobject,
     SystemValue, TessDomain, TessTopology, TextureDim, Value, Varying, VaryingProvenance,
 };
-pub use bound::BoundSizes;
+pub use iridia_ir::{Refusal, Unit, source_hash};
 pub use limits::{WEBGPU_BASELINE, compute_limit_notes, interface_notes};
 pub use program::{
     ClipDepth, Conventions, D3dModes, EntryIo, Error as ProgramError, FnItem, FunctionSig, IoItem, IoType,
@@ -99,6 +100,5 @@ pub use program::{
     stage_functions,
 };
 pub use reads::{ProgramGraph, WordsRead};
-pub use iridia_ir::{Refusal, Unit, source_hash};
 
 pub mod specialise;

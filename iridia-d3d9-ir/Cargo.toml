@@ -15,5 +15,11 @@ publish.workspace = true
 d3d9-reader.workspace = true
 iridia-ir.workspace = true
 
+[dev-dependencies]
+iridia-exec-ir.workspace = true
+iridia-naga = { workspace = true, features = ["wgsl"] }
+iridia-passes.workspace = true
+primase-testdata.workspace = true
+
 [lints]
 workspace = true

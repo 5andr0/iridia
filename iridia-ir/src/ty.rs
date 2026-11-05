@@ -127,7 +127,10 @@ impl Type {
     pub const BOOL: Type = Type::scalar(Scalar::Bool);
     /// The same shape with another scalar.
     pub const fn with(self, scalar: Scalar) -> Type {
-        Type { scalar, lanes: self.lanes }
+        Type {
+            scalar,
+            lanes: self.lanes,
+        }
     }
     /// Whether the lane count is one a value can have.
     pub const fn is_valid(self) -> bool {

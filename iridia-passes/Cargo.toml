@@ -14,5 +14,9 @@ publish.workspace = true
 [dependencies]
 iridia-ir.workspace = true
 
+[dev-dependencies]
+iridia-exec-ir.workspace = true
+iridia-naga = { workspace = true, features = ["wgsl"] }
+
 [lints]
 workspace = true

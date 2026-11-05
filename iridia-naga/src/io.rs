@@ -4,7 +4,9 @@
 
 use alloc::{format, string::String, vec::Vec};
 
-use iridia_ir::interface::{InterpMode, InterpSampling, Interface, ScalarType, Stage, SystemValue, Value, Varying};
+use iridia_ir::interface::{
+    Interface, InterpMode, InterpSampling, ScalarType, Stage, SystemValue, Value, Varying,
+};
 use naga::Binding;
 
 /// One argument or result member.
@@ -93,18 +95,31 @@ fn location(stage: Stage, output: bool, v: &Varying, at: u32) -> Binding {
                 )
             });
             match declared {
-                Some((mode, sampling)) if float && mode != naga::Interpolation::Flat => (Some(mode), sampling),
+                Some((mode, sampling)) if float && mode != naga::Interpolation::Flat => {
+                    (Some(mode), sampling)
+                }
                 Some(_) => (Some(naga::Interpolation::Flat), None),
                 None if float => (Some(naga::Interpolation::Perspective), None),
                 None => (Some(naga::Interpolation::Flat), None),
             }
         }
-        (Stage::Vertex, true) => {
-            (Some(if float { naga::Interpolation::Perspective } else { naga::Interpolation::Flat }), None)
-        }
+        (Stage::Vertex, true) => (
+            Some(if float {
+                naga::Interpolation::Perspective
+            } else {
+                naga::Interpolation::Flat
+            }),
+            None,
+        ),
         _ => (None, None),
     };
-    Binding::Location { location: at, interpolation, sampling, blend_src: None, per_primitive: false }
+    Binding::Location {
+        location: at,
+        interpolation,
+        sampling,
+        blend_src: None,
+        per_primitive: false,
+    }
 }
 
 /// The entry point's arguments and result members for a vertex or pixel interface. `Err` says why the module cannot
@@ -116,7 +131,11 @@ pub fn entry_io(interface: &Interface) -> Result<EntryIo, String> {
     }
     let mut io = EntryIo::default();
     for output in [false, true] {
-        let list = if output { &interface.outputs } else { &interface.inputs };
+        let list = if output {
+            &interface.outputs
+        } else {
+            &interface.inputs
+        };
         let mut next = 0u32;
         let mut items = Vec::new();
         for (i, v) in list.iter().enumerate() {
@@ -128,9 +147,13 @@ pub fn entry_io(interface: &Interface) -> Result<EntryIo, String> {
                 location(stage, output, v, at)
             };
             let binding = match v.system {
-                Some(SystemValue::Target(n)) if stage == Stage::Pixel && output => {
-                    Binding::Location { location: n, interpolation: None, sampling: None, blend_src: None, per_primitive: false }
-                }
+                Some(SystemValue::Target(n)) if stage == Stage::Pixel && output => Binding::Location {
+                    location: n,
+                    interpolation: None,
+                    sampling: None,
+                    blend_src: None,
+                    per_primitive: false,
+                },
                 Some(SystemValue::ClipDistance | SystemValue::CullDistance) => {
                     return Err(format!("{name}: clip and cull distances are not lowered yet"));
                 }
@@ -138,11 +161,20 @@ pub fn entry_io(interface: &Interface) -> Result<EntryIo, String> {
                 Some(system) => match builtin(stage, output, system) {
                     Some(b) => Binding::BuiltIn(b),
                     None if !v.used => continue,
-                    None => return Err(format!("{name}: {system:?} as a {stage:?} {direction} has no built-in binding")),
+                    None => {
+                        return Err(format!(
+                            "{name}: {system:?} as a {stage:?} {direction} has no built-in binding"
+                        ));
+                    }
                 },
                 None => plain(v),
             };
-            items.push(Item { name, value: carried(stage, output, v), binding, varying: i });
+            items.push(Item {
+                name,
+                value: carried(stage, output, v),
+                binding,
+                varying: i,
+            });
         }
         if output {
             io.results = items;

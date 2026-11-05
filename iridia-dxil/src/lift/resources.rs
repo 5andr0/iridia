@@ -251,6 +251,10 @@ impl Lift<'_> {
                     }
                     (format!("t{}", range.lower), AddressSpace::Handle, 1, ty)
                 }
+                // DXIL states no fixed-function state: its resources come from its own metadata
+                ResourceKind::PipelineState(_) => {
+                    return Err(crate::error(self.at, "a DXIL resource is pipeline state"));
+                }
                 ResourceKind::AccelerationStructure => {
                     let ty = self
                         .b

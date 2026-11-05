@@ -44,8 +44,10 @@ fn fold(f: &Function, v: ValueId) -> Option<Fold> {
                     Some(Fold::Op(Op::Swizzle(*y, all)))
                 }
                 Op::Compose(parts) if parts.iter().all(|p| ty(f, *p).is_some_and(|t| t.lanes == 1)) => {
-                    let chosen: Vec<ValueId> =
-                        picked.iter().map(|&l| parts.get(usize::from(l)).copied()).collect::<Option<_>>()?;
+                    let chosen: Vec<ValueId> = picked
+                        .iter()
+                        .map(|&l| parts.get(usize::from(l)).copied())
+                        .collect::<Option<_>>()?;
                     match chosen.as_slice() {
                         [one] => Some(Fold::Same(*one)),
                         _ => Some(Fold::Op(Op::Compose(chosen))),
@@ -137,8 +139,10 @@ impl Simplify<'_> {
                         continue;
                     }
                 }
-                Node::StoreVar(_, x) | Node::StoreOutput(_, x) => *x = self.sub(*x),
-                Node::If { cond, accept, reject, .. } => {
+                Node::StoreVar(_, x) | Node::StoreOutput(_, _, x) => *x = self.sub(*x),
+                Node::If {
+                    cond, accept, reject, ..
+                } => {
                     *cond = self.sub(*cond);
                     self.region(accept);
                     self.region(reject);
@@ -171,8 +175,10 @@ fn count(f: &Function, r: &Region, uses: &mut [u32]) {
                     d.op.operands().into_iter().for_each(|o| add(uses, o));
                 }
             }
-            Node::StoreVar(_, x) | Node::StoreOutput(_, x) => add(uses, *x),
-            Node::If { cond, accept, reject, .. } => {
+            Node::StoreVar(_, x) | Node::StoreOutput(_, _, x) => add(uses, *x),
+            Node::If {
+                cond, accept, reject, ..
+            } => {
                 add(uses, *cond);
                 count(f, accept, uses);
                 count(f, reject, uses);
@@ -191,7 +197,8 @@ fn count(f: &Function, r: &Region, uses: &mut [u32]) {
 
 fn drop_unused(r: &mut Region, uses: &[u32]) -> bool {
     let before = r.nodes.len();
-    r.nodes.retain(|n| !matches!(n, Node::Value(v) if uses.get(v.0 as usize).copied().unwrap_or(1) == 0));
+    r.nodes
+        .retain(|n| !matches!(n, Node::Value(v) if uses.get(v.0 as usize).copied().unwrap_or(1) == 0));
     let mut changed = r.nodes.len() != before;
     for n in &mut r.nodes {
         match n {
@@ -211,7 +218,10 @@ pub fn simplify(f: &mut Function) {
     let Body::Regions(mut body) = core::mem::replace(&mut f.body, Body::Regions(Region::default())) else {
         return;
     };
-    let mut s = Simplify { subst: vec![None; f.values.len()], f };
+    let mut s = Simplify {
+        subst: vec![None; f.values.len()],
+        f,
+    };
     s.region(&mut body);
     // every operation is pure: a value nothing uses is removed, until none is left
     loop {

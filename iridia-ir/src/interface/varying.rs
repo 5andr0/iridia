@@ -1,7 +1,12 @@
 //! A program's interface: the varyings it reads and writes, and the system values among them.
 #[allow(unused_imports)]
-use alloc::{boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
-
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec,
+    vec::Vec,
+};
 
 use serde::Serialize;
 
@@ -674,6 +679,11 @@ impl Interface {
                     | ResourceKind::AccelerationStructure => D3dClass::ShaderResource,
                     ResourceKind::Sampler { .. } => D3dClass::Sampler,
                     ResourceKind::Storage { .. } => D3dClass::UnorderedAccess,
+                    ResourceKind::PipelineState(_) => {
+                        return Err(format!(
+                            "resource {name} is pipeline state, set with the draw, and has a binding"
+                        ));
+                    }
                 };
                 if d3d.class != class {
                     return Err(format!(
