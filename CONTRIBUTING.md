@@ -9,7 +9,7 @@ cargo test --workspace
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
 ```
 
-Rust 1.99 or newer (`rust-toolchain.toml` pins it). The tests need no game files: the fixtures are small compiled shaders and the HLSL they were built from, in each crate's `tests/fixtures`. Tests that read files this repository cannot ship skip with one line naming the input; the [README](README.md#running-the-tests) says how to point them at your own game files with `GAME_DATA`, and each crate's `tests/inputs/README.md` lists what its tests read.
+Rust 1.99 or newer (`rust-toolchain.toml` pins it). The tests need no game files: the fixtures are small compiled shaders and the HLSL they were built from, in each crate's `tests/fixtures`. Tests that read files this repository cannot ship skip with one line naming the input; point them at your own game files with a `GAME_DATA` file in the [primase-testdata](https://github.com/Kalmarv/primase-testdata) layout, and each crate's `tests/inputs/README.md` lists what its tests read.
 
 The examples in the crate READMEs are checked: each crate's README is run as a doc test.
 
