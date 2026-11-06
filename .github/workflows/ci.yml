@@ -20,3 +20,16 @@ jobs:
       - run: cargo doc --workspace --no-deps --locked
         env:
           RUSTDOCFLAGS: "-D warnings"
+  wasm:
+    # every library crate builds for the browser, with each writer feature the IR path uses
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.99.0"
+          targets: wasm32-unknown-unknown
+      - run: cargo build --locked --target wasm32-unknown-unknown -p iridia-ir -p iridia-interface -p iridia-passes -p iridia-exec-ir -p iridia-d3d9-ir
+      - run: cargo build --locked --target wasm32-unknown-unknown -p iridia -p iridia-d3d9 -p iridia-dxbc -p iridia-dxil -p iridia-mojo -p iridia-exec
+      - run: cargo build --locked --target wasm32-unknown-unknown -p iridia-naga --no-default-features
+      - run: cargo build --locked --target wasm32-unknown-unknown -p iridia-naga --features wgsl
