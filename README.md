@@ -2,6 +2,8 @@
 
 [![crates.io](https://img.shields.io/crates/v/iridia)](https://crates.io/crates/iridia) [![docs.rs](https://img.shields.io/docsrs/iridia)](https://docs.rs/iridia) [![CI](https://img.shields.io/github/actions/workflow/status/Kalmarv/iridia/ci.yml?branch=main&label=CI)](https://github.com/Kalmarv/iridia/actions/workflows/ci.yml)
 
+**Try it in your browser:** [kalmarv.github.io/iridia-dx-web](https://kalmarv.github.io/iridia-dx-web/)
+
 A set of Rust libraries that translate compiled Direct3D shaders into programs that can be validated, run on the CPU
 and written out as WGSL or SPIR-V. The lifters for DXBC, DXIL, Direct3D 9 and MojoShader GLSL produce
 [naga](https://github.com/gfx-rs/wgpu/tree/trunk/naga) modules; iridia's own shader IR, which will replace naga as the internal representation, is being built beside them.
