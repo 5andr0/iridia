@@ -277,6 +277,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "iridia-coverage"
+version = "0.5.0"
+dependencies = [
+ "d3d9-reader",
+ "dxbc-reader",
+ "dxcontainer",
+ "dxil-reader",
+ "half",
+ "iridia",
+ "iridia-d3d9-ir",
+ "iridia-dxbc",
+ "iridia-dxil",
+ "iridia-exec",
+ "iridia-exec-ir",
+ "iridia-ir",
+ "iridia-naga",
+ "iridia-passes",
+ "primase-naga",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "iridia-d3d9"
 version = "0.5.0"
 dependencies = [

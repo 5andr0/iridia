@@ -1,0 +1,34 @@
+[package]
+name = "iridia-coverage"
+description = "What iridia and dx read, list, lift, run and write, per construct, measured by running them over test suites"
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+d3d9-reader.workspace = true
+dxbc-reader.workspace = true
+dxil-reader.workspace = true
+dxcontainer.workspace = true
+iridia.workspace = true
+iridia-d3d9-ir.workspace = true
+iridia-dxbc.workspace = true
+iridia-dxil.workspace = true
+iridia-exec.workspace = true
+iridia-exec-ir.workspace = true
+iridia-ir.workspace = true
+iridia-naga = { workspace = true, features = ["wgsl"] }
+iridia-passes.workspace = true
+# the naga-path lifters' naga, with its WGSL front end to read the WGSL back
+naga = { workspace = true, features = ["wgsl-in"] }
+half.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+
+[lints]
+workspace = true

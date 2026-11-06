@@ -34,9 +34,26 @@ jobs:
       - run: cargo build --locked --target wasm32-unknown-unknown -p iridia -p iridia-d3d9 -p iridia-dxbc -p iridia-dxil -p iridia-mojo -p iridia-exec
       - run: cargo build --locked --target wasm32-unknown-unknown -p iridia-naga --no-default-features
       - run: cargo build --locked --target wasm32-unknown-unknown -p iridia-naga --features wgsl
+  coverage:
+    # the coverage table (docs/coverage) is made from the suites' runs; a change that moves it must commit it
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # the golden images the offload-test-suite's image tests compare with, at the commit its case file names
+          repository: llvm/offload-golden-images
+          ref: ede89923b6369d9f34b8ad9a6b58b82a30762339
+          path: offload-golden-images
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: "1.99.0"
+      - run: cargo run --release --locked -p iridia-coverage -- table docs/coverage offload-golden-images
+      # intent to add, so a table the commit lacks shows as a difference too
+      - run: git add --intent-to-add docs/coverage && git diff --exit-code -- docs/coverage
   release:
     # a commit on main that raises a version releases it once every check passed (CONTRIBUTING.md, Releasing)
-    needs: [check, wasm]
+    needs: [check, wasm, coverage]
     if: github.event_name != 'pull_request' && github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
     concurrency: release

@@ -52,6 +52,13 @@
   by register and the buffers in the order declared, so each binding takes the layout that holds the rows its
   declaration states, and a program whose declarations leave that open (and whose layouts differ) is refused naming
   them. Fixtures: `tests/fixtures/reflection_sm4.hlsl` in three variants.
+- `iridia-coverage` (`tools/coverage`, not published): the coverage table, per construct of the suites' programs, of
+  what dx decodes and lists as Microsoft's tools do, what iridia lifts and writes as WGSL naga reads back, and what
+  runs in `iridia-exec` to the result the suite expects, with the runs that prove it. Its runners run vkd3d's HLSL
+  shader tests (d3d9, d3d11, d3d12 and d3d12-dxc, shader models 2.0 to 6.6) and LLVM's offload-test-suite (lit's
+  DirectX configuration with DXC, its FileCheck and imgdiff checks and the golden images) on a device that holds
+  Direct3D's resources and pipeline state and draws and dispatches with `iridia-exec`; each run that does not pass
+  says why. CI makes the table again (`docs/coverage`) and fails when it differs from the one committed.
 - `iridia-exec`: `draw` draws points and lines as well as triangles (every list and strip topology), each primitive
   numbered for `SV_PrimitiveID`; an aliased line by the diamond exit rule (3.4.3), which an NVIDIA RTX 5070 Ti draws
   exactly on every pixel of 10,640 recorded lines and WARP differs from in four classes the tests name and count;
