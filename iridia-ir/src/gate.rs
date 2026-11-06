@@ -78,6 +78,16 @@ fn hex(bytes: &[u8]) -> String {
     })
 }
 
+/// The first names of a list, and how many more there are.
+fn some(names: &[impl AsRef<str>]) -> String {
+    const SHOWN: usize = 12;
+    let first: Vec<&str> = names.iter().take(SHOWN).map(AsRef::as_ref).collect();
+    match names.len().checked_sub(SHOWN) {
+        Some(more) if more > 0 => format!("{} and {more} more", first.join(", ")),
+        _ => first.join(", "),
+    }
+}
+
 fn versions(table: &str) -> Option<&str> {
     table.lines().find(|l| l.starts_with("# versions "))
 }
@@ -117,12 +127,12 @@ pub fn check(committed: &str, current: &str) -> Result<(), String> {
         what.push(format!(
             "the outcome of {} fixtures differs from the committed one: {}",
             changed.len(),
-            changed.join(", ")
+            some(&changed)
         ));
     }
     for (list, how) in [(&added, "added"), (&removed, "taken away")] {
         if !list.is_empty() {
-            what.push(format!("{} fixtures {how}: {}", list.len(), list.join(", ")));
+            what.push(format!("{} fixtures {how}: {}", list.len(), some(list)));
         }
     }
     let what = if what.is_empty() {
