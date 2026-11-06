@@ -70,6 +70,15 @@ Two ps_position(VOut i, bool front : SV_IsFrontFace) {
     return o;
 }
 
+// the pixel's input coverage (one sample a pixel: bit 0) and sample index (0), beside a flat and a perspective-correct
+// value
+Two ps_coverage(VOut i, uint coverage : SV_Coverage, uint sample : SV_SampleIndex) {
+    Two o;
+    o.a = float4(coverage, i.id.x, i.col.x, 1.0);
+    o.b = float4(i.pos.xy, coverage * 2.0 + sample * 4.0, 0.0);
+    return o;
+}
+
 // the primitive's number in the draw, beside a flat and a perspective-correct value
 Two ps_primitive(VOut i, uint primitive : SV_PrimitiveID) {
     Two o;

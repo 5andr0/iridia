@@ -247,7 +247,6 @@
 21d1c26df58af1e934b477363d002764d500c2ef36b5585f6c0e6304d0380de6	A	lift: dx.op.checkAccessFullyMapped.iN: dx.op N is not lifted
 21e878fc4598baca86ae3c3891d2f3ad2663b8e3f8395083e230963a493d1b88	A	lift: double-precision floats are not lifted
 21fdedf64289bf41d71bf0e1b0b6fe7d02adba3ac3f71888d9f8f7d43ae0c3cd	A	lift: memory of type Integer(N)
-22096ad855c0c8b5cc28533a1a5a3c29d3055cf1e133d14aa166e24cffcbb259	A	lift: dx.op.coverage.iN: dx.op N is not lifted
 22124b0e942f9330e5e329d5300a5ba29ac539599d87ae71f056fdd22b125fce	A	lift: mesh output topology N is not mapped
 2224a01e84e7a367025982a969eb0250f601ebff0659e774c8b1972feb4bbb59	A	lift: memory of type Half
 2259f9c7feeb2fff9a32e26f29eb0f28202f57e2f24600015f8eb09440e92297	A	lift: dx.entryPoints: expected exactly one entry point with a function, found N
@@ -547,7 +546,6 @@
 4ab5d8722a290ce945e0e720c663467d0db52291b544cc6802b7a53c1f974164	A	lift: structured layout size N disagrees with stride N
 4ab6820cc83d1d21b06ccdc9774c5f0fd0bcc9144382e591f15a5ccd5df7afee	A	WGSL read back, validation: error: Entry point main at Fragment is invalid  = The `return` expression None does not match the declared return type Some([N])  
 4ac034018f81ef2d5ee715a747d5c64c2444a3e4bf87d72975e24996ebb83f41	A	lift: a scalar was expected, found Agg([Scalar(Val { expr: [N], kind: U, width: One }), Scalar(Val { expr: [N], kind: U, width: One })])
-4ae13ad6c9d59154af3cb59bc5996519b57156b810b2687ab58146c942da31e4	A	lift: dx.op.coverage.iN: dx.op N is not lifted
 4ae794ccd343b0cc8b89dbbef92ffd74f78e491167a37e5e88c35013458ada3a	A	lift: INN: signature component type N is not a known value
 4b2155d3b53323b8e3b364e59ee248b5fe1716af34c339771b88fc143dbb7fba	A	lift: a scalar was expected, found Agg([Scalar(Val { expr: [N], kind: U, width: One }), Scalar(Val { expr: [N], kind: U, width: One })])
 4b298ef20fc2b8d39c4bbfbc5a0a133b0e02f68ac8ac230a6583487ab017cbe6	A	lift: OUTN: signature component type N is not a known value
@@ -1688,7 +1686,7 @@ ecd862df510dd3e27aa290e156efd24165290d6c6202bd5bb6605e98df3eec5b	A	lift: dx.op.r
 ece05d90416e9ed1fa2f203c867c83f8af4df56720ec711e7ab38c67fd7f56b9	A	lift: TEXCOORDN: signature component type N is not a known value
 ed152a73d9455368f3003b9ddb50bcc37a95057c9bb5e6a2247fd32ba48e6979	A	lift: dx.op.viewID.iN: dx.op N is not lifted
 ed21019a792279f8067f092c2210b43c8bdf6711525d16d3685373b91ced9c8b	A	lift: geometry input primitive N is not mapped
-ed280ab4de44b910a960ee9ee44318be49387ce10d85c79cd139052fcd1b0141	A	lift: dx.op.coverage.iN: dx.op N is not lifted
+ed280ab4de44b910a960ee9ee44318be49387ce10d85c79cd139052fcd1b0141	A	lift: dx.op.isHelperLane.iN: dx.op N is not lifted
 ed55abe78c97755e9ec87f8f80bfce2a1f48220fac0e30105804f71620205083	A	lift: dx.op.dotNAddPacked.iN: dx.op N is not lifted
 ed71b84bf4b86e9eb1927730ae109ad0fe54ffb6592ba40d6fad5b59f34d7a6c	A	lift: dx.op.rawBufferVectorLoad.vNiN: dx.op N is not lifted
 edb605917c2bf344f365e8f65e7955f6584c6eefccf5a148e366f7b22caeb0f4	A	lift: memory of type Half
@@ -1724,7 +1722,7 @@ f1c7ca79b8579311b6a7f840b1cecd5757c6d336a6724a6c861da6ae5151ed31	A	lift: structu
 f2135c9196fbea2692ae7b0967dd331c75d80edf6e44dd833267d6ae6946fa0d	A	WGSL: wgsl cannot write this program: Unsupported texture atomic result (WGSL's texture atomics return nothing): [N]
 f21ab74b0449020543a55e5be18383300d8f04af7ba6c0e3cbde648f448e4144	A	WGSL: wgsl cannot write this program: Unsupported texture atomic result (WGSL's texture atomics return nothing): [N]
 f2284fe560f068d6a21c48054c7bb7e58c9792f17554144f9e57918368477798	A	lift: a scalar was expected, found Agg([Scalar(Val { expr: [N], kind: U, width: One }), Scalar(Val { expr: [N], kind: U, width: One })])
-f230d47d09ef05d1c26ca34e295eca7225247a7ecaf2c023f91d38505b249a2e	A	lift: dx.op.coverage.iN: dx.op N is not lifted
+f230d47d09ef05d1c26ca34e295eca7225247a7ecaf2c023f91d38505b249a2e	A	lift: the global dx.ishelper (address space N)
 f25e49758126532bf2c843497e6d0e55e14cfe76dd3bbb4769777026b53b871f	A	lift: a constant load of other than four N-bit lanes (N-bit and N-bit rows are not lifted)
 f2a0131e1ac0da5fb7f2d05c68ef57389e456442e6f8acb200a7e540bae90fe6	A	lift: memory of type Half
 f2a1ba486bbc335b63ef4bf17b4a106dbfbefaf6f728d652a77cde6563dd26fb	A	lift: memory of type Half

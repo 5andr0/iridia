@@ -291,6 +291,11 @@ impl Lift<'_> {
                 let index = self.system_input(SystemValue::SampleIndex)?;
                 scalar!(index)
             }
+            // Coverage: the samples of the pixel the primitive covers, ANDed with the sample mask
+            91 => {
+                let coverage = self.system_input(SystemValue::Coverage)?;
+                scalar!(coverage)
+            }
             // ThreadId, GroupId, ThreadIdInGroup (a component of the id), FlattenedThreadIdInGroup
             93..=95 => {
                 let system = match code {

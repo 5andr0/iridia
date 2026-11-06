@@ -994,6 +994,7 @@ fn raster(
         clip_planes: [None; 6],
         point_size: None,
         point_sprite: false,
+        flat_colours: false,
     };
     let l = layout(p, rs)?;
     let (mut device, constants) = device_of(p, &l)?;

@@ -23,7 +23,7 @@ use crate::device::format::{Class, named};
 use crate::device::resource::{Counter, Dim, Kind, Resource};
 use crate::device::sample::{Address, Compare, Reduction, Sampler};
 use crate::device::{Device, Dispatch, SlotRequests};
-use crate::front::{Lifts, Programs, Ready, Stop};
+use crate::front::{Form, Lifts, Programs, Ready, Stop};
 use crate::stages::{Assembly, Bank, Stages, Stopped as StageStop};
 
 /// The wave width compute programs run with: 32 lanes, as most Direct3D 12 hardware reports.
@@ -172,7 +172,7 @@ impl RunResult {
 }
 
 /// A run's state besides the device.
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct State {
     input_layout: Vec<InputElement>,
     depth: Option<Compare>,
@@ -184,6 +184,8 @@ struct State {
     point_size: Option<PointSize>,
     /// Direct3D 9's point sprites.
     point_sprite: bool,
+    /// Direct3D 9's flat shade mode (`shade mode flat`), which only vkd3d's Direct3D 9 runs take.
+    flat: bool,
     viewports: BTreeMap<u32, [f32; 4]>,
     sample_mask: Option<u32>,
     /// The fixed-function state set that this runner does not model, by name.
@@ -629,10 +631,15 @@ fn run_as(programs: &Programs<'_>, run: &Run, flushed: bool) -> RunResult {
                             let m = value.as_u64().unwrap_or(u64::from(u32::MAX)) as u32;
                             state.sample_mask = (m != 0).then_some(m);
                         }
-                        // state at its default does not change a draw
-                        "flat" if value == &serde_json::Value::Bool(false) => {
-                            state.unmodelled.remove(name);
-                        }
+                        "flat" => match value.as_bool() {
+                            Some(on) => {
+                                state.flat = on;
+                                state.unmodelled.remove(name);
+                            }
+                            None => {
+                                state.unmodelled.insert(name.clone(), value.to_string());
+                            }
+                        },
                         "point_sprite" => match value.as_bool() {
                             Some(on) => {
                                 state.point_sprite = on;
@@ -719,7 +726,42 @@ fn run_as(programs: &Programs<'_>, run: &Run, flushed: bool) -> RunResult {
                 for name in draw.values() {
                     used.entry(name.clone()).or_insert(None);
                 }
-                let done = draw_step(programs, &mut device, &mut state, draw, &shape, d3d9, flushed);
+                // a Direct3D 9 draw again from the IR, on what the device and state were before, which must write
+                // what the WGSL's draw writes
+                let before = d3d9.then(|| (device.clone(), state.clone()));
+                let mut done = draw_step(
+                    programs,
+                    &mut device,
+                    &mut state,
+                    draw,
+                    &shape,
+                    d3d9,
+                    flushed,
+                    Form::Lifted,
+                );
+                if let (Ok(()), Some((mut ir_device, mut ir_state))) = (&done, before) {
+                    let ps = draw.get("ps").cloned().unwrap_or_default();
+                    let ir_done = draw_step(
+                        programs,
+                        &mut ir_device,
+                        &mut ir_state,
+                        draw,
+                        &shape,
+                        d3d9,
+                        flushed,
+                        Form::Ir,
+                    );
+                    done = match ir_done {
+                        Ok(()) => match drawn_otherwise(&device, &ir_device) {
+                            None => Ok(()),
+                            Some(d) => Err(Outcome::Failed(
+                                ps,
+                                format!("the IR draws otherwise than its WGSL: {d}"),
+                            )),
+                        },
+                        Err(why) => Err(Outcome::Failed(ps, format!("the IR's draw: {}", why.detail()))),
+                    };
+                }
                 if let Err(why) = done {
                     for name in draw.values() {
                         if let Some(slot) = used.get_mut(name)
@@ -924,7 +966,43 @@ fn unknown_read(device: &Device, state: &State, interfaces: &[&Interface]) -> Re
     }
 }
 
-/// Run a draw.
+/// Where two devices' render targets and depth buffers differ, after the same draw by two forms of its programs: the
+/// first texel that does, in words; `None` where none does. A float target's lanes are alike where both are NaN
+/// (IEEE 754 states no NaN's payload but through the sign operations, and two forms may keep different ones).
+fn drawn_otherwise(a: &Device, b: &Device) -> Option<String> {
+    for (key, r) in a
+        .resources
+        .iter()
+        .filter(|(k, _)| matches!(k.0, Kind::Rtv | Kind::Dsv))
+    {
+        let Some(other) = b.resources.get(key) else {
+            return Some(format!("{key:?} is only in the first"));
+        };
+        let size = (r.format.size as usize).max(1);
+        let float = r.format.class == Class::Float;
+        for (n, (x, y)) in r.data.chunks(size).zip(other.data.chunks(size)).enumerate() {
+            let alike = x == y
+                || float
+                    && x.len() == y.len()
+                    && x.chunks(4).zip(y.chunks(4)).all(|(p, q)| {
+                        let word =
+                            |w: &[u8]| f32::from_bits(u32::from_le_bytes(w.try_into().unwrap_or([0; 4])));
+                        p == q || word(p).is_nan() && word(q).is_nan()
+                    });
+            if !alike {
+                return Some(format!(
+                    "{key:?} texel {n}: {:x?} and {:x?}",
+                    r.format.read(x),
+                    other.format.read(y)
+                ));
+            }
+        }
+    }
+    None
+}
+
+/// Run a draw, its programs in `form`.
+#[allow(clippy::too_many_arguments)]
 fn draw_step(
     programs: &Programs<'_>,
     device: &mut Device,
@@ -933,6 +1011,7 @@ fn draw_step(
     shape: &Shape,
     d3d9: bool,
     flushed: bool,
+    form: Form,
 ) -> Result<(), Outcome> {
     if let Some((name, value)) = state.unmodelled.iter().next() {
         return Err(Outcome::NotModelled(format!("the state {name} {value}")));
@@ -950,15 +1029,16 @@ fn draw_step(
         .ok_or_else(|| Outcome::NotModelled("a draw with no pixel program".into()))?;
     let vs = ready(programs, vs_name)?;
     let ps = ready(programs, ps_name)?;
-    let shader = |r: &Ready, name: &str| -> Result<(), Outcome> {
-        r.shader(flushed)
+    let shader = |r: &'_ Ready, name: &str| -> Result<(), Outcome> {
+        r.shader(form, flushed)
+            .ok_or_else(|| Outcome::Error(name.to_owned(), format!("no {form:?} form")))?
             .as_ref()
             .map(|_| ())
             .map_err(|e| Outcome::Error(name.to_owned(), e.clone()))
     };
     shader(&vs, vs_name)?;
     shader(&ps, ps_name)?;
-    let (Ok(vsh), Ok(psh)) = (vs.shader(flushed), ps.shader(flushed)) else {
+    let (Some(Ok(vsh)), Some(Ok(psh))) = (vs.shader(form, flushed), ps.shader(form, flushed)) else {
         return Err(Outcome::Error(vs_name.clone(), "no shader".into()));
     };
     // the stages between the vertex and the pixel program, from their lifted programs
@@ -1137,7 +1217,11 @@ fn draw_step(
         }
         None => None,
     };
-    // the viewports by index (one the test does not set has no area, as Direct3D's), the target's whole by default
+    // the viewports by index (one the test does not set has no area, as Direct3D's), the target's whole by default.
+    // Direct3D 9 samples pixel (x, y) at (x, y), where a later API samples it at (x + 1/2, y + 1/2), so a Direct3D 9
+    // viewport is half a pixel right and down of the one set (as wined3d offsets its positions); the IR's vPos is
+    // the window position half a pixel back again, the pixel's whole coordinates.
+    let centre = if d3d9 { 0.5 } else { 0.0 };
     let last = state.viewports.keys().max().map_or(0, |&i| i as usize + 1);
     let viewports = (0..last.max(1))
         .map(|i| {
@@ -1147,8 +1231,8 @@ fn draw_step(
                 None => [0.0; 4],
             };
             Viewport {
-                x,
-                y,
+                x: x + centre,
+                y: y + centre,
                 width,
                 height,
                 min_depth: 0.0,
@@ -1166,6 +1250,7 @@ fn draw_step(
         clip_planes: state.clip_planes,
         point_size: state.point_size,
         point_sprite: state.point_sprite,
+        flat_colours: d3d9 && state.flat,
     };
     let vs_constants = constant_rows(vsh, device);
     let ps_constants = constant_rows(psh, device);

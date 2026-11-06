@@ -277,6 +277,8 @@ fn cases() -> Vec<DrawCase> {
             indices: vec![0, 1, 2, 3, 4, 5, 6, 7, 8],
             ..one("primitive", "primitive", &layered, vec![0, 1])
         },
+        // the pixel's input coverage and sample index: one sample a pixel
+        one("coverage", "coverage", &layered, vec![0, 1]),
         DrawCase {
             vs: "vs_distances",
             ..one("distances", "colour", &distances, vec![0, 1])
@@ -453,6 +455,7 @@ fn state_of(c: &DrawCase) -> Rasterizer {
         clip_planes: [None; 6],
         point_size: None,
         point_sprite: false,
+        flat_colours: false,
     }
 }
 

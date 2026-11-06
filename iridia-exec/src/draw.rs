@@ -74,11 +74,12 @@
 //!     which changed 1 pixel on the viewport's border. Points it draws as the GPU does.
 //! - **Interpolation.** At the pixel centre, from the snapped positions: perspective-correct (the default), linear in
 //!   screen space (`noperspective`) or the provoking vertex's value (`nointerpolation`, integers; the primitive's first
-//!   vertex). On a line the weight is the centre's place along the line's major axis; on a point every value is the
-//!   vertex's. Centroid and sample interpolation are the centre's (one sample a pixel). Depth is linear in screen
-//!   space; the depth test and write clamp it to the viewport's depth range, but `SV_Position.z` is the value before
-//!   the clamp (a line's pixel whose centre is past an end the near plane cut reads a depth below 0 on WARP and the
-//!   GPU).
+//!   vertex). Direct3D 9's flat shade mode ([`Rasterizer::flat_colours`]) gives the colour inputs (`COLOR`) the
+//!   provoking vertex's value and leaves the rest as they are. On a line the weight is the centre's place along the
+//!   line's major axis; on a point every value is the vertex's. Centroid and sample interpolation are the centre's (one
+//!   sample a pixel). Depth is linear in screen space; the depth test and write clamp it to the viewport's depth range,
+//!   but `SV_Position.z` is the value before the clamp (a line's pixel whose centre is past an end the near plane cut
+//!   reads a depth below 0 on WARP and the GPU).
 //! - **Pixels.** In 2 x 2 quads aligned to even pixels, uncovered lanes run as helpers (their inputs extrapolated) so
 //!   derivatives and implicit levels of detail are the quad's; a helper writes nothing. A discarded pixel writes
 //!   nothing, and neither does one that fails Direct3D 9's alpha test ([`Rasterizer::alpha_test`]), which compares
@@ -195,6 +196,9 @@ pub struct Rasterizer {
     /// Direct3D 9's point sprites (`D3DRS_POINTSPRITEENABLE`): a point's texture coordinates are each pixel's place on
     /// its square.
     pub point_sprite: bool,
+    /// Direct3D 9's flat shade mode (`D3DSHADE_FLAT`): the pixel program's colour inputs (`COLOR`) are the provoking
+    /// vertex's, whatever their interpolation; its other inputs are interpolated as they would be.
+    pub flat_colours: bool,
 }
 
 /// Direct3D 9's point size: `D3DRS_POINTSIZE`, which a vertex program's `PSIZE` output replaces, held to
@@ -349,8 +353,9 @@ impl Primitive {
 /// Where a pixel program input comes from.
 #[derive(Clone, Debug)]
 enum Source {
-    /// A vertex program output: its register and lanes, the pixel input's register and lanes, the interpolation, and
-    /// whether it is a texture coordinate (`TEXCOORD`), which a point sprite replaces.
+    /// A vertex program output: its register and lanes, the pixel input's register and lanes, the interpolation,
+    /// whether it is a texture coordinate (`TEXCOORD`), which a point sprite replaces, and whether it is a colour
+    /// (`COLOR`), which Direct3D 9's flat shade mode makes flat.
     Varying {
         from_register: usize,
         from_lanes: Vec<u8>,
@@ -358,6 +363,7 @@ enum Source {
         to_lanes: Vec<u8>,
         mode: InterpMode,
         texcoord: bool,
+        colour: bool,
     },
     Position {
         register: usize,
@@ -604,6 +610,7 @@ impl<'a> Raster<'a> {
                             to_lanes: vec![lane],
                             mode: InterpMode::Flat,
                             texcoord: false,
+                            colour: false,
                         });
                     }
                     None => sources.push(match system {
@@ -676,6 +683,7 @@ impl<'a> Raster<'a> {
                 to_lanes,
                 mode,
                 texcoord: v.label.name.eq_ignore_ascii_case("TEXCOORD"),
+                colour: v.label.name.eq_ignore_ascii_case("COLOR"),
             });
         }
         Ok(Self {
@@ -899,7 +907,7 @@ impl<'a> Raster<'a> {
                     *covered = f.covered && px < w && py < h;
                     *depth = f.depth.clamp(depth_range.0, depth_range.1);
                     let centre = [px as f32 + 0.5, py as f32 + 0.5];
-                    self.inputs_at(drawn, &f, centre, *covered, state.sample_mask, lane_input);
+                    self.inputs_at(drawn, &f, centre, *covered, state, lane_input);
                 }
                 if !covered.iter().any(|c| *c) {
                     continue;
@@ -976,7 +984,7 @@ impl<'a> Raster<'a> {
         f: &Fragment,
         centre: [f32; 2],
         covered: bool,
-        sample_mask: u32,
+        state: &Rasterizer,
         into: &mut Vec<[u32; 4]>,
     ) {
         into.clear();
@@ -1001,7 +1009,12 @@ impl<'a> Raster<'a> {
                 Source::Primitive { register, lane } => put(into, *register, *lane as usize, drawn.id),
                 Source::Word { register, lane, word } => put(into, *register, *lane as usize, *word),
                 Source::Coverage { register, lane } => {
-                    put(into, *register, *lane as usize, u32::from(covered) & sample_mask);
+                    put(
+                        into,
+                        *register,
+                        *lane as usize,
+                        u32::from(covered) & state.sample_mask,
+                    );
                 }
                 Source::Varying {
                     from_register,
@@ -1010,7 +1023,13 @@ impl<'a> Raster<'a> {
                     to_lanes,
                     mode,
                     texcoord,
+                    colour,
                 } => {
+                    let mode = if *colour && state.flat_colours {
+                        InterpMode::Flat
+                    } else {
+                        *mode
+                    };
                     for (k, to) in to_lanes.iter().enumerate() {
                         // a point sprite's texture coordinate: the pixel's place on its square
                         if let Some(place) = f.sprite.filter(|_| *texcoord)

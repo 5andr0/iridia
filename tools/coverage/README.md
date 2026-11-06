@@ -31,6 +31,8 @@ For each vkd3d run (a test file at a shader model on one of vkd3d's Windows runn
 
 A run's status is its most severe probe's: `fail`, then `error`, `refused`, `not-modelled`, `compiler-refused`, among the probes of the sections vkd3d's runner runs at that model (`selected`). The case files also hold the runs at the models in a test file's range that vkd3d's own runs leave out, and the sections it leaves out of the runs it makes: these are extended, the same expectations at a model where they need not hold on any device (fxc places registers and folds constants differently at shader model 5.1, say). A run vkd3d runs none of is `selected: false`, its status that of all its probes; the probes left out of the others give their `extended_status`. `totals` and `probe_totals` count the selected runs and probes by status, `extended_totals` and `extended_probe_totals` the others, so a run that fails on one probe of forty shows as one failing probe and thirty-nine others.
 
+A Direct3D 9 draw follows Direct3D 9's rules where a later API's differ: it samples pixel (x, y) at (x, y), the viewport half a pixel on as wined3d places it (the IR's `vPos` is the window position half a pixel back), and its flat shade mode makes the colour inputs the provoking vertex's. Its programs run as their WGSL read back by naga, and the draw runs again from the lifted IR (`ProgramShader::from_ir`, in the WGSL's register view): where that writes otherwise than the WGSL's draw, the run fails, the detail saying where.
+
 A probe after a step that failed is judged only when it reads nothing that step would have written: a resource a failed draw or dispatch would have written is unknown, and so is anything a later draw or dispatch makes reading it.
 
 ## The runners

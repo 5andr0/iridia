@@ -248,3 +248,27 @@ fn target_and_viewport_indices_pick_the_slice_and_viewport() {
         }
     }
 }
+
+/// Direct3D 9 samples pixel `(x, y)` at `(x, y)`, half a pixel before a later API: the linear texture coordinate of
+/// pixel (320, 0) is the quad's at x = 0, y = 1 exactly; its flat shade mode makes the colours the first vertex's and
+/// leaves the texture coordinates interpolated; and `vPos` reads the pixel's whole coordinates.
+#[test]
+fn d3d9_draws_sample_at_whole_pixels_and_shade_colours_flat() {
+    for test in ["shade-mode.shader_test", "pixel-position.shader_test"] {
+        assert_selected_pass(&vkd3d_runs("vkd3d/d3d9.json.gz", test));
+    }
+}
+
+/// A Direct3D 9 draw runs again from the IR, which must write what the WGSL's draw writes: the colour (`v#`) and
+/// texture coordinate (`t#`) inputs share register numbers, and `vPos` and `vFace` have none, so the IR's
+/// varyings take the WGSL's register view.
+#[test]
+fn d3d9_draws_from_the_ir_as_from_its_wgsl() {
+    for test in [
+        "many-semantics.shader_test",
+        "sm1-interstage-interface.shader_test",
+        "is-front-face.shader_test",
+    ] {
+        assert_selected_pass(&vkd3d_runs("vkd3d/d3d9.json.gz", test));
+    }
+}

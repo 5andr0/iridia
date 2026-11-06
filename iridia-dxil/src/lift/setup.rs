@@ -249,6 +249,10 @@ impl Setup {
                     90 => {
                         system_inputs.insert(SystemValue::SampleIndex);
                     }
+                    // Coverage: the pixel's input coverage, which the input signature does not list
+                    91 => {
+                        system_inputs.insert(SystemValue::Coverage);
+                    }
                     // ThreadId, GroupId, ThreadIdInGroup, FlattenedThreadIdInGroup
                     93 => {
                         system_inputs.insert(SystemValue::DispatchThreadId);
@@ -361,6 +365,7 @@ impl Setup {
             }
             let (name, width) = match system {
                 SystemValue::SampleIndex => ("SV_SampleIndex", 1),
+                SystemValue::Coverage => ("SV_Coverage", 1),
                 SystemValue::DispatchThreadId => ("SV_DispatchThreadID", 3),
                 SystemValue::GroupId => ("SV_GroupID", 3),
                 SystemValue::GroupThreadId => ("SV_GroupThreadID", 3),

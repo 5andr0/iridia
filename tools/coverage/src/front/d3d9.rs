@@ -33,6 +33,30 @@ pub fn lanes_of(mask: u8) -> Vec<usize> {
     (0..4).filter(|n| mask & (1 << n) != 0).collect()
 }
 
+/// Give each varying of a Direct3D 9 program's interface a register of its own in `iridia-exec`'s register view: input
+/// `n` register `n`, output `n` register `n`. A pixel program's colour inputs (`v#`) and texture coordinates (`t#`)
+/// are register files of their own, both from 0, and its position and facing (`vPos`, `vFace`) have no register, so
+/// the D3D registers alone would put two inputs in one register or one in none.
+pub fn own_registers(interface: &mut Interface) -> Result<(), String> {
+    for (n, v) in interface.inputs.iter_mut().enumerate() {
+        v.provenance.d3d = Some(D3dSignature {
+            register: u32::try_from(n).map_err(|e| e.to_string())?,
+            mask: v
+                .provenance
+                .d3d
+                .map_or(if v.value.width == 1 { 1 } else { 0b1111 }, |d| d.mask),
+            read_write_mask: 0,
+        });
+    }
+    // every output with a register, the position too: a vertex program's register view carries its position
+    for (n, v) in interface.outputs.iter_mut().enumerate() {
+        if let Some(d) = &mut v.provenance.d3d {
+            d.register = u32::try_from(n).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
 /// That `f` prints as text that parses back to what prints the same.
 pub fn round_trip(f: &iridia_ir::Function) -> Result<(), String> {
     let text = iridia_ir::text::print(f);
@@ -145,22 +169,7 @@ pub fn from_wgsl(p: &iridia_ir::Program, wgsl: &str) -> Result<iridia::Program, 
         bindings.push((b.resource, g));
     }
     let mut interface = p.interface.clone();
-    for (n, v) in interface.inputs.iter_mut().enumerate() {
-        v.provenance.d3d = Some(D3dSignature {
-            register: u32::try_from(n).map_err(|e| e.to_string())?,
-            mask: v
-                .provenance
-                .d3d
-                .map_or(if v.value.width == 1 { 1 } else { 0b1111 }, |d| d.mask),
-            read_write_mask: 0,
-        });
-    }
-    // every output with a register, the position too: a vertex program's register view carries its position
-    for (n, v) in interface.outputs.iter_mut().enumerate() {
-        if let Some(d) = &mut v.provenance.d3d {
-            d.register = u32::try_from(n).map_err(|e| e.to_string())?;
-        }
-    }
+    own_registers(&mut interface)?;
     let io = iridia::entry_io(&interface)?;
     let ep = module
         .entry_points

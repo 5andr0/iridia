@@ -3,7 +3,8 @@
 //!
 //! - Direct3D 9 token streams: `iridia-d3d9-ir` lifts into iridia's IR, `iridia-passes` promotes and simplifies it,
 //!   `iridia-naga` writes WGSL, and the WGSL read back by naga's front end is what `iridia-exec` runs; the IR itself
-//!   runs in `iridia-exec-ir` beside it ([`d3d9`]).
+//!   runs in `iridia-exec-ir` beside it ([`d3d9`]), and in `iridia-exec` too ([`Form::Ir`]), where a runner draws
+//!   with it again and holds it to the WGSL's draw.
 //! - DXBC (Shader Model 4 and 5) and DXIL (Shader Model 6): `iridia-dxbc` and `iridia-dxil` lift into naga modules,
 //!   which `iridia-exec` runs and `iridia::emit` writes as WGSL, read back by naga's front end to check it.
 pub mod d3d9;
@@ -133,18 +134,33 @@ pub struct Ready {
     /// Where the program leaves denormals open ([`Lifted::denormals_open`]): [`Ready::shader`] with 32-bit denormals
     /// flushed, which `shader` keeps.
     pub flushed: Option<Result<ProgramShader, String>>,
+    /// Direct3D 9: its IR as `iridia-exec` runs it ([`ProgramShader::from_ir`]), or why not; and with denormals
+    /// flushed.
+    pub ir_shader: Option<Result<ProgramShader, String>>,
+    /// Direct3D 9: [`Ready::ir_shader`] with 32-bit denormals flushed, where the program leaves them open.
+    pub ir_flushed: Option<Result<ProgramShader, String>>,
     /// It as `iridia-exec` runs any program, or why not.
     pub executable: Result<Executable, String>,
 }
 
+/// The form of a program a draw runs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Form {
+    /// As lifted (DXBC, DXIL), or its WGSL read back (Direct3D 9).
+    Lifted,
+    /// Its IR (Direct3D 9).
+    Ir,
+}
+
 impl Ready {
-    /// The vertex or pixel program `iridia-exec` runs, its denormals flushed where `flushed` and the program leaves
-    /// them open.
-    pub fn shader(&self, flushed: bool) -> &Result<ProgramShader, String> {
-        match &self.flushed {
-            Some(f) if flushed => f,
-            _ => &self.shader,
-        }
+    /// The vertex or pixel program `iridia-exec` runs in `form`, its denormals flushed where `flushed` and the
+    /// program leaves them open; `None` where the program has no such form (an IR of DXBC or DXIL).
+    pub fn shader(&self, form: Form, flushed: bool) -> Option<&Result<ProgramShader, String>> {
+        let (kept, flush) = match form {
+            Form::Lifted => (Some(&self.shader), self.flushed.as_ref()),
+            Form::Ir => (self.ir_shader.as_ref(), self.ir_flushed.as_ref()),
+        };
+        if flushed { flush.or(kept) } else { kept }
     }
 }
 
@@ -194,10 +210,25 @@ impl<'f> Programs<'f> {
                 ProgramShader::new(program).map_err(|e| e.to_string())
             });
             let executable = Executable::new(&lifted.program).map_err(|e| e.to_string());
+            // the IR in the register view the WGSL runs in
+            let ir = lifted.ir.as_ref().map(|p| {
+                let mut ir = p.ir.clone();
+                d3d9::own_registers(&mut ir.interface).map(|()| ir)
+            });
+            let ir_shader = ir
+                .clone()
+                .map(|p| ProgramShader::from_ir(p?).map_err(|e| e.to_string()));
+            let ir_flushed = ir.filter(|_| lifted.denormals_open()).map(|p| {
+                let mut p = p?;
+                p.float.f32 = iridia_ir::Denormals::Flush;
+                ProgramShader::from_ir(p).map_err(|e| e.to_string())
+            });
             Arc::new(Ready {
                 lifted,
                 shader,
                 flushed,
+                ir_shader,
+                ir_flushed,
                 executable,
             })
         });
