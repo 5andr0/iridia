@@ -1,7 +1,8 @@
 //! Known pipeline state folded into the program: each read of a known [`StateParam`] becomes a literal, what is
 //! computed from literals is folded ([`crate::fold`]: a comparison of a texture's dimension, a select on it), each
-//! branch on a literal condition takes its one way, and code no longer reached is removed. The state resources folded leave the
-//! interface: the program no longer depends on them.
+//! branch on a literal condition takes its one way, and code no longer reached is removed. The state resources folded
+//! leave the interface, and so does every resource that only the code removed read (the textures of a pixel 1.x stage's
+//! other dimensions): the program no longer depends on them. A resource it never read stays.
 //!
 //! [`StateParam`]: iridia_ir::interface::StateParam
 
@@ -218,6 +219,7 @@ pub fn specialise(p: &mut Program, known_state: &[(ResourceId, [u64; 4])]) -> Re
             return Err(format!("state {} ({param:?}, {t}) cannot hold {bits:?}", id.0));
         }
     }
+    let read_before = read(&p.entry);
     let f = &mut p.entry;
     for d in &mut f.values {
         if let Op::LoadState(r) = d.op
@@ -240,8 +242,41 @@ pub fn specialise(p: &mut Program, known_state: &[(ResourceId, [u64; 4])]) -> Re
             Body::Regions(r)
         }
     };
-    p.interface
-        .resources
-        .retain(|r| !known_state.iter().any(|(id, _)| *id == r.id));
+    let read_after = read(&p.entry);
+    p.interface.resources.retain(|r| {
+        !known_state.iter().any(|(id, _)| *id == r.id)
+            && (read_after.contains(&r.id) || !read_before.contains(&r.id))
+    });
     Ok(())
+}
+
+/// The resources the values a function's body places read.
+fn read(f: &Function) -> Vec<ResourceId> {
+    fn region(f: &Function, r: &Region, out: &mut Vec<ResourceId>) {
+        for n in &r.nodes {
+            nodes(f, n, out);
+        }
+    }
+    fn nodes(f: &Function, n: &Node, out: &mut Vec<ResourceId>) {
+        match n {
+            Node::Value(v) => out.extend(f.value(*v).map(|d| d.op.resources()).unwrap_or_default()),
+            Node::If { accept, reject, .. } => {
+                region(f, accept, out);
+                region(f, reject, out);
+            }
+            Node::Block { body, .. } | Node::Loop { body, .. } => region(f, body, out),
+            Node::StoreVar(..) | Node::StoreOutput(..) => {}
+        }
+    }
+    let mut out = Vec::new();
+    match &f.body {
+        Body::Regions(r) => region(f, r, &mut out),
+        Body::Cfg(blocks) => blocks
+            .iter()
+            .flat_map(|b| &b.nodes)
+            .for_each(|n| nodes(f, n, &mut out)),
+    }
+    out.sort_unstable();
+    out.dedup();
+    out
 }

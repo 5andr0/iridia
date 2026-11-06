@@ -327,8 +327,12 @@ impl Build {
 /// Make `f`'s body `Regions` if it is a `Cfg` (a `Regions` body is left as it is), then promote the variables the
 /// translation introduced. Refused: an irreducible graph, by the loop and the second entry into it.
 pub fn structurize(f: &mut Function) -> Result<(), String> {
-    let Body::Cfg(mut blocks) = core::mem::replace(&mut f.body, Body::Cfg(Vec::new())) else {
-        return Ok(());
+    let mut blocks = match core::mem::replace(&mut f.body, Body::Cfg(Vec::new())) {
+        Body::Cfg(blocks) => blocks,
+        regions => {
+            f.body = regions;
+            return Ok(());
+        }
     };
     let cfg = Cfg {
         terms: blocks

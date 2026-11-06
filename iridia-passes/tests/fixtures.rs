@@ -1,11 +1,13 @@
-//! `promote`, `simplify` and `specialise` on programs in IR text, each checked against the form it should give and
-//! by running it before and after on hand-worked inputs.
+//! `flatten`, `promote`, `simplify` and `specialise` on programs in IR text, each checked against the form it should
+//! give and by running it before and after on hand-worked inputs.
 
 #![allow(clippy::unwrap_used, reason = "hand-worked fixtures")]
 
 mod support;
 
-use iridia_ir::interface::{Resource, ResourceId, ResourceKind, ResourceProvenance, ScalarType, StateParam};
+use iridia_ir::interface::{
+    Resource, ResourceId, ResourceKind, ResourceProvenance, SampleType, ScalarType, StateParam, TextureDim,
+};
 use support::{from_text, run};
 
 const F1: (ScalarType, u8) = (ScalarType::Float, 1);
@@ -258,5 +260,149 @@ fn main {
         let (out, _) = run(&p, &[f(5.0)], &[(ResourceId(0), [dim, 0, 0, 0])]).unwrap();
         assert_eq!(out[0].unwrap()[0], want.to_bits());
         iridia_naga::wgsl(&q, &iridia_naga::Profile::BROWSER).unwrap();
+    }
+}
+
+#[test]
+fn flatten_makes_blocks_of_every_construct_and_structurize_takes_them_back() {
+    // b = x < 0 ? -x (leaving the block early) : x; then double b until it reaches 10, carried as a loop parameter
+    let text = "iridia-ir 1
+fn main {
+  %0: f32 = input 0.x
+  %1: f32 = f32(0.0)
+  %2: f32 = f32(10.0)
+  %3: f32 = f32(2.0)
+  block '0 {
+    %4: bool = fcmp.lt %0, %1
+    if %4 {
+      %5: f32 = fneg %0
+      br '0 %5
+    } else {
+      yield
+    }
+    yield %0
+  } -> %6: f32
+  loop '1 (%7: f32) = (%6) {
+    %8: bool = fcmp.ge %7, %2
+    if %8 {
+      br '1 %7
+    } else {
+      yield
+    }
+    %9: f32 = fmul.ieee %7, %3
+    continue '1 %9
+  } -> %10: f32
+  output 0.x = %10
+  return
+}
+";
+    let p = from_text(text, &[F1], &[F1], Vec::new());
+    let mut graph = p.clone();
+    iridia_passes::flatten(&mut graph.entry).unwrap();
+    iridia_ir::validate(&graph).unwrap_or_else(|e| panic!("{e:?}\n{}", iridia_ir::text::print(&graph.entry)));
+    let iridia_ir::Body::Cfg(blocks) = &graph.entry.body else {
+        panic!("not a graph")
+    };
+    // the loop's header carries its parameter, and the block's and the loop's exits their results
+    assert!(blocks.iter().any(|b| b.params == [iridia_ir::ValueId(7)]));
+    assert!(blocks.iter().any(|b| b.params == [iridia_ir::ValueId(6)]));
+    assert!(blocks.iter().any(|b| b.params == [iridia_ir::ValueId(10)]));
+    let mut again = graph.clone();
+    iridia_passes::structurize(&mut again.entry).unwrap();
+    iridia_ir::validate(&again).unwrap_or_else(|e| panic!("{e:?}\n{}", iridia_ir::text::print(&again.entry)));
+    // -3 -> 3 -> 6 -> 12; 0.5 -> 16; 20 stays; -40 -> 40
+    for (x, want) in [(-3.0f32, 12.0f32), (0.5, 16.0), (20.0, 20.0), (-40.0, 40.0)] {
+        for prog in [&p, &graph, &again] {
+            let (out, _) = run(prog, &[f(x)], &[]).unwrap();
+            assert_eq!(out[0].unwrap()[0], want.to_bits(), "x {x}");
+        }
+    }
+}
+
+#[test]
+fn flatten_and_structurize_leave_the_other_form_alone_and_flatten_refuses_an_exit_to_no_construct() {
+    let ok = "iridia-ir 1
+fn main {
+  %0: f32 = input 0.x
+  output 0.x = %0
+  return
+}
+";
+    let mut p = from_text(ok, &[F1], &[F1], Vec::new());
+    let mut bad = p.clone();
+    let iridia_ir::Body::Regions(r) = &mut bad.entry.body else {
+        panic!("not regions")
+    };
+    r.end = Some(iridia_ir::End::Br(iridia_ir::LabelId(3), Vec::new()));
+    let e = iridia_passes::flatten(&mut bad.entry).unwrap_err();
+    assert!(e.contains("label 3"), "{e}");
+    // structurize leaves regions as they are, flatten a graph
+    let regions = p.entry.body.clone();
+    iridia_passes::structurize(&mut p.entry).unwrap();
+    assert_eq!(p.entry.body, regions);
+    iridia_passes::flatten(&mut p.entry).unwrap();
+    let graph = p.entry.body.clone();
+    iridia_passes::flatten(&mut p.entry).unwrap();
+    assert_eq!(p.entry.body, graph);
+}
+
+#[test]
+fn specialise_takes_away_the_textures_only_the_folded_branch_sampled() {
+    // a ps_1_x stage of unknown dimension: a cube texture and a 2D one at the same stage, picked by the state; a third
+    // texture the program never samples stays
+    let text = "iridia-ir 1
+fn main {
+  %0: u32 = state r0
+  %1: u32 = u32(4)
+  %2: bool = ucmp.eq %0, %1
+  %3: vec4<f32> = input 0.xyzw
+  if %2 {
+    %4: vec3<f32> = %3.xyz
+    %5: vec4<f32> = sample r2, r3, %4
+    yield %5
+  } else {
+    %6: vec2<f32> = %3.xy
+    %7: vec4<f32> = sample r1, r3, %6
+    yield %7
+  } -> %8: vec4<f32>
+  output 0.xyzw = %8
+  return
+}
+";
+    let resource = |id, kind, name: &str| Resource {
+        id: ResourceId(id),
+        kind,
+        count: 1,
+        provenance: ResourceProvenance {
+            name: name.into(),
+            ..ResourceProvenance::default()
+        },
+    };
+    let texture = |dim| ResourceKind::Texture {
+        dim,
+        arrayed: false,
+        multisampled: false,
+        sample: SampleType::Float,
+    };
+    let resources = vec![
+        resource(0, ResourceKind::PipelineState(StateParam::TextureDim(0)), "dim0"),
+        resource(1, texture(TextureDim::D2), "s0_D2"),
+        resource(2, texture(TextureDim::Cube), "s0_Cube"),
+        resource(3, ResourceKind::Sampler { comparison: false }, "s0"),
+        resource(4, texture(TextureDim::D2), "s1"),
+    ];
+    let p = from_text(
+        text,
+        &[(ScalarType::Float, 4)],
+        &[(ScalarType::Float, 4)],
+        resources,
+    );
+    for (dim, kept) in [(TextureDim::Cube, 2), (TextureDim::D2, 1)] {
+        let mut q = p.clone();
+        iridia_passes::specialise(&mut q, &[(ResourceId(0), [u64::from(dim.state_code()), 0, 0, 0])])
+            .unwrap();
+        iridia_ir::validate(&q).unwrap();
+        let ids: Vec<u32> = q.interface.resources.iter().map(|r| r.id.0).collect();
+        assert_eq!(ids, [kept, 3, 4], "{dim:?}");
     }
 }

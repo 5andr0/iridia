@@ -97,6 +97,7 @@ pub fn run(p: &Program, inputs: &[[u32; 4]], state: &[(ResourceId, [u32; 4])]) -
         buffers: &[],
         state,
         sampler: &mut sampler,
+        denormals: iridia_ir::Denormals::Any,
     };
     let r = iridia_exec_ir::run(p, &mut bound)?;
     Ok((r.outputs, r.killed))

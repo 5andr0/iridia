@@ -349,6 +349,15 @@ impl Op {
         v
     }
 
+    /// The resources the operation reads, in operand order.
+    pub fn resources(&self) -> Vec<ResourceId> {
+        match self {
+            Op::LoadState(r) | Op::LoadBuffer { resource: r, .. } => alloc::vec![*r],
+            Op::Sample { texture, sampler, .. } => alloc::vec![*texture, *sampler],
+            _ => Vec::new(),
+        }
+    }
+
     /// Whether the operation reads state other than its operands (inputs, variables, resources); such a value is
     /// placed where its node is and is not moved across stores.
     pub fn reads_state(&self) -> bool {
