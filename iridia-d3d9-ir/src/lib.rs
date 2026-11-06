@@ -1,10 +1,10 @@
-//! Reads raw Direct3D 9 `ps_3_0` and `vs_3_0` token streams and lifts them into iridia's shader IR
-//! ([`iridia_ir::Program`]).
+//! Reads raw Direct3D 9 token streams of every shader model (vertex 1.1 to 3.0, pixel 1.1 to 3.0) and lifts them
+//! into iridia's shader IR ([`iridia_ir::Program`]).
 //!
-//! The records are read by `d3d9-reader`; [`read`] takes the subset this crate lifts (straight-line float
-//! arithmetic, texture sampling and discard) and refuses the rest by name and word. [`signature`] states the
-//! interface the declarations and constant table give, and [`lift`] builds the program: one variable per register,
-//! each instruction's operations in order, the outputs stored at the end.
+//! The records are read by `d3d9-reader`; [`read`] checks every register against its version's banks and makes the
+//! inputs and outputs a version implies by register explicit. [`signature`] states the interface the declarations,
+//! registers and constant table give, and [`lift`] builds the program: one variable per register, each instruction's
+//! operations in order, the outputs stored at the end.
 #![deny(missing_docs)]
 #![deny(clippy::disallowed_methods, clippy::disallowed_types)]
 #![cfg_attr(
@@ -17,16 +17,19 @@
 )]
 
 mod lift;
+mod model;
 mod signature;
-mod subset;
 
 pub use d3d9_reader::{Comment, Constant, ConstantTable, Type, TypeMember};
-pub use lift::{LIFTER, LIFTER_VERSION, lift};
-pub use signature::{
-    Bank, PARTIAL_PRECISION, Sampler, Signature, VERTEX_CONSTANTS, lanes_in, outputs, read_input, signature,
-    varying,
+pub use lift::{LIFTER, LIFTER_VERSION, Options, Ps1x, lift, lift_with};
+pub use model::{
+    Comparison, Destination, Index, Input, Instruction, Opcode, Output, Register, Shader, Source, Version,
+    read, usage,
 };
-pub use subset::{Destination, Input, Instruction, Opcode, Output, Register, Shader, Source, read};
+pub use signature::{
+    Bank, PARTIAL_PRECISION, PIXEL_CONSTANTS, Sampler, Signature, VERTEX_CONSTANTS, lanes_in, outputs,
+    read_input, signature, varying,
+};
 
 /// A refusal states the word offset in the raw token stream and the unsupported or malformed feature.
 pub type Error = iridia_ir::Refusal;

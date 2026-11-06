@@ -32,7 +32,7 @@ assert!(iridia_naga::wgsl(&program).unwrap().contains("@fragment"));
 
 // anything outside the subset is refused, with its word offset
 let mut other_model = bytes.clone();
-other_model[..4].copy_from_slice(&0xffff_0200u32.to_le_bytes()); // ps_2_0
+other_model[..4].copy_from_slice(&0xffff_0100u32.to_le_bytes()); // ps_1_0
 assert!(iridia_d3d9_ir::lift(&other_model).is_err());
 ```
 

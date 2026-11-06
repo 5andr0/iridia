@@ -1,5 +1,5 @@
 # lifted fixtures of iridia-d3d9-ir
-# versions lifter=1 ir=1
+# versions lifter=2 ir=1
 ctab	lifted	a7c113a307c66eccd14d419a0539351c945dd07dafce7688ed40eaa4d7a951f4
 normalize	lifted	177ad2cfc2447328392a242eeef56255f8ecdd63907329f09c1c41783244541d
 texture	lifted	7a9ca21b1e38141199023a67aa5bb6a0d0918267c4e80a0ae70fcbd696cc72bb

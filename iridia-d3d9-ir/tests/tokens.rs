@@ -296,7 +296,8 @@ fn constant_table_keeps_names_types_defaults_and_unknown_comments() {
 #[test]
 fn malformed_and_unsupported_programs_are_refused_without_panics() {
     let cases = [
-        (instruction(40, &[0xa0e4_0000]), "opcode 40"),
+        (instruction(40, &[0xa0e4_0000]), "c0 as a condition"),
+        (instruction(97, &[0x800f_0800]), "opcode 97"),
         (instruction(1, &[0x800f_0800, 0x80e4_0000]), "uninitialized"),
         (instruction(1, &[0x800f_0800, 0xa0e4_2000]), "relative"),
         (

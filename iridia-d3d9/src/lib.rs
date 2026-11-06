@@ -75,14 +75,16 @@ struct ReadmeExamples;
 
 mod lower;
 mod sampler;
+mod signature;
+mod subset;
 pub use sampler::sampler_states;
 mod vertex_output;
 
 pub use d3d9_reader::{Comment, Constant, ConstantTable, Type, TypeMember};
-pub use iridia_d3d9_ir::{Destination, Input, Instruction, Opcode, Output, Register, Shader, Source, read};
+pub use subset::{Destination, Input, Instruction, Opcode, Output, Register, Shader, Source, read};
 
 /// A refusal states the word offset in the raw token stream and the unsupported or malformed feature.
-pub type Error = iridia_d3d9_ir::Error;
+pub type Error = iridia::Refusal;
 /// The result of every function in this crate: `Ok` or a refusal that names the word offset.
 pub type Result<T> = std::result::Result<T, Error>;
 pub(crate) fn error(at: usize, detail: impl Into<String>) -> Error {

@@ -5,7 +5,7 @@
 mod inputs;
 
 use inputs::{Game, OracleSet, oracle};
-use iridia_d3d9_ir::{Destination, Opcode, Register, Source, lift, read};
+use iridia_d3d9_ir::{Destination, Index, Opcode, Source, lift, read};
 use primase_testdata::gate::{GateReport, Tolerance};
 
 /// The lift through the IR as WGSL: promoted, simplified, validated, lowered to naga and written.
@@ -16,17 +16,6 @@ fn wgsl(program: &mut iridia_ir::Program) -> Result<String, String> {
     iridia_naga::wgsl(program).map_err(|e| e.to_string())
 }
 
-fn register(r: Register) -> String {
-    match r {
-        Register::Temporary(n) => format!("r{n}"),
-        Register::Input(n) => format!("v{n}"),
-        Register::Constant(n) => format!("c{n}"),
-        Register::Sampler(n) => format!("s{n}"),
-        Register::Target(n) => format!("oC{n}"),
-        Register::Output(n) => format!("o{n}"),
-        Register::Address => "a0".to_owned(),
-    }
-}
 fn mask(mask: u8) -> String {
     if mask == 15 {
         return String::new();
@@ -40,15 +29,19 @@ fn mask(mask: u8) -> String {
     )
 }
 fn destination(d: Destination) -> String {
-    format!("{}{}", register(d.register), mask(d.mask))
+    format!("{}{}", d.register.name(), mask(d.mask))
 }
 fn source(s: Source) -> String {
-    let mut text = register(s.register);
-    if s.absolute {
+    let mut text = s.register.name();
+    if s.absolute() {
         text.push_str("_abs");
     }
-    if let Some(lane) = s.relative {
-        text.push_str(&format!("[a0.{}]", ['x', 'y', 'z', 'w'][usize::from(lane)]));
+    match s.relative {
+        Some(Index::Address(lane)) => {
+            text.push_str(&format!("[a0.{}]", ['x', 'y', 'z', 'w'][usize::from(lane)]));
+        }
+        Some(Index::Loop) => text.push_str("[aL]"),
+        None => {}
     }
     if s.swizzle != [0, 1, 2, 3] {
         text.push('.');
@@ -59,7 +52,7 @@ fn source(s: Source) -> String {
         };
         text.extend(lanes.iter().map(|n| ['x', 'y', 'z', 'w'][*n as usize]));
     }
-    if s.negate {
+    if s.negate() {
         text.insert(0, '-');
     }
     text
@@ -137,7 +130,7 @@ fn check(bytes: &[u8], asm: &str) -> iridia_d3d9_ir::Shader {
     ];
     for i in &shader.inputs {
         let decl = format!(
-            "dcl_{}{}{} v{}{}",
+            "dcl_{}{}{} {}{}",
             SEMANTICS[i.usage as usize],
             if i.index == 0 {
                 String::new()
@@ -145,7 +138,7 @@ fn check(bytes: &[u8], asm: &str) -> iridia_d3d9_ir::Shader {
                 i.index.to_string()
             },
             if i.centroid { "_centroid" } else { "" },
-            i.register,
+            i.register.name(),
             mask(i.mask)
         );
         assert!(asm.lines().any(|s| s.trim() == decl), "missing {decl}");
@@ -153,14 +146,14 @@ fn check(bytes: &[u8], asm: &str) -> iridia_d3d9_ir::Shader {
     }
     for o in &shader.outputs {
         let decl = format!(
-            "dcl_{}{} o{}{}",
+            "dcl_{}{} {}{}",
             SEMANTICS[o.usage as usize],
             if o.index == 0 {
                 String::new()
             } else {
                 o.index.to_string()
             },
-            o.register,
+            o.register.name(),
             mask(o.mask)
         );
         assert!(asm.lines().any(|s| s.trim() == decl), "missing {decl}");

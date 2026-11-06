@@ -125,7 +125,7 @@ fn lower(
             ));
             if tail {
                 let index = l.interface.inputs.len();
-                let mut input = iridia_d3d9_ir::varying("DERIVED_RGB", 0, 7, 31, None);
+                let mut input = crate::signature::varying("DERIVED_RGB", 0, 7, 31, None);
                 input.used = true;
                 l.interface.inputs.push(input);
                 let arg = Val {
@@ -214,7 +214,7 @@ impl Lower<'_> {
         })
     }
     fn prepare(&mut self) -> Result<()> {
-        let signature = iridia_d3d9_ir::signature(self.source)?;
+        let signature = crate::signature::signature(self.source)?;
         self.interface = signature.interface;
         self.notes.extend(signature.notes);
         for i in &self.source.inputs {
@@ -688,7 +688,7 @@ impl Lower<'_> {
     fn finish(mut self, bytes: &[u8]) -> Result<Program> {
         let mut outputs = Vec::new();
         let written: BTreeMap<Register, u8> = self.locals.iter().map(|(&r, &(_, mask))| (r, mask)).collect();
-        for (r, v) in iridia_d3d9_ir::outputs(self.source, &written, self.at)? {
+        for (r, v) in crate::signature::outputs(self.source, &written, self.at)? {
             let mask = v.provenance.d3d.as_ref().map_or(0, |d| d.mask);
             let &(local, _) = self
                 .locals
