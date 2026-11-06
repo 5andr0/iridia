@@ -63,6 +63,7 @@
   (a read the fold cannot follow, or a value it cannot evaluate), naming the words, instead of returning it.
   `feature_words` no longer selects a word for a select whose arms are the same value.
 - Tests: `iridia/tests/specialise.rs` specialises `fixtures/specialise.hlsl`'s entry points as fxc and dxc compile them.
+- The tests depend on `primase-testdata` 0.1.8 from crates.io instead of a git revision.
 
 ## 0.4.1 (2026-10-29)
 
