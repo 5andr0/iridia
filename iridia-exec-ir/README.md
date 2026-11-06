@@ -65,7 +65,13 @@ iridia_ir::validate(&program).unwrap();
 
 let mut sampler = |_| Err::<[f32; 4], String>("no textures".into());
 let inputs = [[0f32, 2.0, 0.0, 0.0].map(f32::to_bits)];
-let mut bound = iridia_exec_ir::Bound { inputs: &inputs, buffers: &[], state: &[], sampler: &mut sampler };
+let mut bound = iridia_exec_ir::Bound {
+    inputs: &inputs,
+    buffers: &[],
+    state: &[],
+    sampler: &mut sampler,
+    denormals: iridia_ir::Denormals::Any,
+};
 let run = iridia_exec_ir::run(&program, &mut bound).unwrap();
 // zero wins: 0 * inf is +0, not NaN; the lanes past the output's width are zero
 assert_eq!(run.outputs[0], Some([0, 6f32.to_bits(), 0, 0]));
@@ -75,6 +81,7 @@ assert!(!run.killed);
 ## Guarantees and limits
 
 - This subset runs 32-bit scalars and vectors, constant buffer reads, pipeline state, samples and kill; anything else (memory other than variables and constant buffers, derivatives, other widths) is refused by name, not approximated.
+- A program whose float environment leaves denormals open runs by `Bound::denormals`; one that states a rule runs by it.
 - One invocation: an implicit level of detail is `Lod::Auto`, for the caller's sampler to decide, since a single invocation has no derivatives.
 
 ## Tests

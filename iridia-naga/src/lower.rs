@@ -457,7 +457,8 @@ impl Lower<'_> {
             _ => Err(err(format!("resource {} is not a constant buffer", id.0))),
         }
     }
-    /// A constant buffer read: rows of `vec4<u32>`, the result's bits from the row (and lane) the address names.
+    /// A constant buffer read: rows of `vec4<u32>`, the result's bits from the row (and lane) the address names. A read
+    /// at a fixed address may name any 32-bit word (a bank of 32-bit booleans, four to a row); an indexed one whole rows.
     fn load_buffer(
         &mut self,
         resource: ResourceId,
@@ -467,7 +468,8 @@ impl Lower<'_> {
         oob: OutOfBounds,
         t: Type,
     ) -> Result<Handle<E>, Error> {
-        if t.scalar.bits() != 32 || !stride.is_multiple_of(16) || !offset.is_multiple_of(4) {
+        let rows_apart = stride.is_multiple_of(16) || index.is_none();
+        if t.scalar.bits() != 32 || !offset.is_multiple_of(4) || !rows_apart {
             return Err(err(format!(
                 "a buffer read of {t} at stride {stride}, offset {offset} is not lowered yet"
             )));
@@ -662,7 +664,8 @@ impl Lower<'_> {
                         let zero = self.f32s(at, 0.0)?;
                         let x_zero = self.binary(Bo::Equal, x, zero);
                         let y_zero = self.binary(Bo::Equal, y, zero);
-                        let either = self.binary(Bo::LogicalOr, x_zero, y_zero);
+                        // `|`, which takes bool vectors as well as scalars (`||` takes scalars only)
+                        let either = self.binary(Bo::InclusiveOr, x_zero, y_zero);
                         self.select(either, zero, product)
                     }
                     Binary::FDiv => self.binary(Bo::Divide, x, y),

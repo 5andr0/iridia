@@ -78,6 +78,7 @@ fn run(p: &Program, inputs: &[[u32; 4]]) -> iridia_exec_ir::Run {
         buffers: &[],
         state: &[],
         sampler: &mut sampler,
+        denormals: iridia_ir::Denormals::Any,
     };
     iridia_exec_ir::run(p, &mut bound).unwrap()
 }

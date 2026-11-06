@@ -3,7 +3,9 @@
 //!
 //! The arithmetic is the reference `iridia-exec` uses: IEEE 754 `f32` for the basic operations, the transcendental
 //! functions (`exp2`, `log2`, `sin`, `cos`, `sqrt`, `inverseSqrt`, `pow`) in `f64` rounded once, a dot product summed
-//! left to right with each step rounded. Denormals are kept. This subset runs 32-bit scalars and vectors, both
+//! left to right with each step rounded. Denormals are kept, or flushed to zero (sign kept) on the inputs and result
+//! of each float operation but the sign operations and the moves, by the program's float environment or, where it
+//! leaves them open, by the run's [`Bound::denormals`]. This subset runs 32-bit scalars and vectors, both
 //! control phases (every construct of a `Regions` body, the blocks of a `Cfg` one), constant buffer reads, pipeline
 //! state, samples (answered by the caller) and kill; it refuses the rest by name.
 #![deny(missing_docs)]
@@ -18,8 +20,9 @@
 )]
 
 use iridia_ir::{
-    Binary, Block, Body, Cmp, End, FloatToInt, Function, LabelId, Level, MinMaxNan, MulZero, Node, OnZero,
-    Op, OutOfBounds, Program, Region, Rounding, SaturateNan, Scalar, Terminator, Type, Unary, ValueId,
+    Binary, Block, Body, Cmp, Denormals, End, FloatToInt, Function, LabelId, Level, MinMaxNan, MulZero, Node,
+    OnZero, Op, OutOfBounds, Program, Region, Rounding, SaturateNan, Scalar, Terminator, Type, Unary,
+    ValueId,
     interface::{ResourceId, ResourceKind},
 };
 
@@ -75,6 +78,9 @@ pub struct Bound<'a> {
     pub state: &'a [(ResourceId, Lanes)],
     /// Answers each sample with the texel's four lanes.
     pub sampler: &'a mut dyn FnMut(Sample) -> Result<[f32; 4], String>,
+    /// The `f32` denormal rule of a program whose float environment leaves it open ([`Denormals::Any`]): kept for
+    /// `Any` and `Preserve`, flushed for `Flush`. A program that states a rule runs by it.
+    pub denormals: Denormals,
 }
 
 /// The most loop iterations a run takes before it is refused.
@@ -97,6 +103,13 @@ struct Machine<'a, 'b> {
     bound: &'a mut Bound<'b>,
     outputs: Vec<Option<Lanes>>,
     steps: u64,
+    /// Whether `f32` denormals are flushed.
+    flush: bool,
+}
+
+/// An `f32` lane with a denormal made a zero of its sign.
+fn flushed(w: u32) -> u32 {
+    if w & 0x7f80_0000 == 0 { w & 0x8000_0000 } else { w }
 }
 
 /// The lanes a mask names, in ascending order.
@@ -204,13 +217,36 @@ impl Machine<'_, '_> {
         if t.scalar.bits() > 32 || (t.scalar.bits() < 32 && t.scalar != Scalar::Bool) {
             return Err(format!("{t} values are not run yet"));
         }
+        // the float operations whose inputs and result a flushing run flushes: not the sign operations and moves
+        let arithmetic = match &def.op {
+            Op::Unary(u, _) => !matches!(u, Unary::FNeg | Unary::FAbs),
+            Op::Binary(..) | Op::Dot(..) | Op::Convert(..) => true,
+            _ => false,
+        };
+        let out = self.compute(v, &def.op, t)?;
+        Ok(if self.flush && arithmetic && t.scalar == Scalar::F32 {
+            out.map(flushed)
+        } else {
+            out
+        })
+    }
+    /// An operand of an arithmetic operation: its lanes, flushed where the run flushes and it is a float.
+    fn arg(&self, v: ValueId) -> Result<Lanes, String> {
+        let x = self.get(v)?;
+        Ok(if self.flush && self.ty(v)?.scalar == Scalar::F32 {
+            x.map(flushed)
+        } else {
+            x
+        })
+    }
+    fn compute(&mut self, v: ValueId, op: &Op, t: Type) -> Result<Lanes, String> {
         let n = t.lanes;
-        Ok(match &def.op {
+        Ok(match op {
             Op::Literal(bits) => bits.map(|b| u32::try_from(b & 0xffff_ffff).unwrap_or(0)),
             Op::Undef => [0; 4],
             Op::Param => return Err(format!("parameter %{} has no value here", v.0)),
             Op::Unary(u, a) => {
-                let x = self.get(*a)?;
+                let x = self.arg(*a)?;
                 let at = self.ty(*a)?;
                 let m = at.lanes;
                 match u {
@@ -271,7 +307,7 @@ impl Machine<'_, '_> {
                 }
             }
             Op::Binary(b, l, r) => {
-                let (x, y) = (self.get(*l)?, self.get(*r)?);
+                let (x, y) = (self.arg(*l)?, self.arg(*r)?);
                 let at = self.ty(*l)?;
                 let m = at.lanes;
                 let signed = at.scalar.is_signed();
@@ -372,17 +408,19 @@ impl Machine<'_, '_> {
                 out
             }
             Op::Dot(a, b) => {
-                let (x, y) = (self.get(*a)?, self.get(*b)?);
+                let (x, y) = (self.arg(*a)?, self.arg(*b)?);
                 let m = self.ty(*a)?.lanes;
+                // each step is rounded, and flushed where the run flushes
+                let step = |f: f32| if self.flush { fb(flushed(f.to_bits())) } else { f };
                 let mut acc = 0.0f32;
                 for (i, (p, q)) in x.iter().zip(&y).take(usize::from(m)).enumerate() {
-                    let prod = fb(*p) * fb(*q);
-                    acc = if i == 0 { prod } else { acc + prod };
+                    let prod = step(fb(*p) * fb(*q));
+                    acc = if i == 0 { prod } else { step(acc + prod) };
                 }
                 [acc.to_bits(), 0, 0, 0]
             }
             Op::Convert(a, rule) => {
-                let x = self.get(*a)?;
+                let x = self.arg(*a)?;
                 let from = self.ty(*a)?;
                 match (from.scalar, t.scalar) {
                     // Rust's `as` truncates toward zero, saturates and gives 0 for NaN: D3D's ftoi and ftou
@@ -661,6 +699,11 @@ impl Machine<'_, '_> {
 /// Run a program's entry function once, in either control phase.
 pub fn run(program: &Program, bound: &mut Bound<'_>) -> Result<Run, String> {
     let f = &program.entry;
+    let flush = match program.float.f32 {
+        Denormals::Flush => true,
+        Denormals::Preserve => false,
+        Denormals::Any => bound.denormals == Denormals::Flush,
+    };
     let mut m = Machine {
         program,
         f,
@@ -669,6 +712,7 @@ pub fn run(program: &Program, bound: &mut Bound<'_>) -> Result<Run, String> {
         bound,
         outputs: vec![None; program.interface.outputs.len()],
         steps: 0,
+        flush,
     };
     let killed = match &f.body {
         Body::Regions(body) => match m.region(body)? {

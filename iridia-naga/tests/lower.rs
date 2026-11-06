@@ -101,6 +101,33 @@ fn main {
 }
 
 #[test]
+fn a_zero_wins_multiplication_of_vectors_validates() {
+    let p = program(
+        "iridia-ir 1
+fn main {
+  %0: vec4<f32> = input 0.xyzw
+  %1: vec4<f32> = input 1.xyzw
+  %2: vec4<f32> = fmul.zerowins %0, %1
+  output 0.xyzw = %2
+  %3: f32 = input 0.x
+  %4: f32 = fmul.zerowins %3, %3
+  output 1.x = %4
+  return
+}
+",
+        &[F4, F4],
+        &[F4, (ScalarType::Float, 1)],
+        Vec::new(),
+    );
+    // each lane: zero where either operand is zero, the product otherwise; `|` joins the bool vectors
+    let wgsl = iridia_naga::wgsl(&p, &iridia_naga::Profile::NAGA).unwrap();
+    assert!(
+        wgsl.contains("select((TEXCOORD0_ * TEXCOORD1_), _e4, ((TEXCOORD0_ == _e4) | (TEXCOORD1_ == _e4)))"),
+        "{wgsl}"
+    );
+}
+
+#[test]
 fn unspecialised_pipeline_state_is_refused_by_name() {
     let state = Resource {
         id: ResourceId(0),
