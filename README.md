@@ -3,8 +3,8 @@
 [![crates.io](https://img.shields.io/crates/v/iridia)](https://crates.io/crates/iridia) [![docs.rs](https://img.shields.io/docsrs/iridia)](https://docs.rs/iridia) [![CI](https://img.shields.io/github/actions/workflow/status/Kalmarv/iridia/ci.yml?branch=main&label=CI)](https://github.com/Kalmarv/iridia/actions/workflows/ci.yml)
 
 A set of Rust libraries that translate compiled Direct3D shaders into programs that can be validated, run on the CPU
-and written out as WGSL or SPIR-V. The released crates produce [naga](https://github.com/gfx-rs/wgpu/tree/trunk/naga)
-modules; iridia's own shader IR, which will replace naga as the internal representation, is being built beside them.
+and written out as WGSL or SPIR-V. The lifters for DXBC, DXIL, Direct3D 9 and MojoShader GLSL produce
+[naga](https://github.com/gfx-rs/wgpu/tree/trunk/naga) modules; iridia's own shader IR, which will replace naga as the internal representation, is being built beside them.
 
 ## Features
 
@@ -55,7 +55,8 @@ cargo add iridia iridia-dxbc
 cargo add iridia-ir iridia-d3d9-ir iridia-passes iridia-naga
 ```
 
-The released crates build their modules with [primase-naga](https://github.com/Kalmarv/primase-naga), a fork of naga
+The naga-based crates (`iridia`, `iridia-dxbc`, `iridia-dxil`, `iridia-d3d9`, `iridia-mojo` and `iridia-exec`) build
+their modules with [primase-naga](https://github.com/Kalmarv/primase-naga), a fork of naga
 30.0.1; code that uses `Program::module` directly must depend on the same fork, for example with
 `cargo add primase-naga --rename naga`. `iridia-naga` uses naga 30.0.1 as published.
 
