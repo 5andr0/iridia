@@ -201,11 +201,11 @@ fn sample<T: Clone>(items: &[T], limit: usize) -> Vec<T> {
 }
 
 fn compare(game: Game) {
-    let (Some(dxbc), Some(compiler), Some((name, paths))) = (
-        program(Tool::Vkd3dDxbc),
-        program(Tool::Vkd3dCompiler),
-        common::corpus(game),
-    ) else {
+    // the tools first: listing a corpus reads every file of it, which a machine without the tools need not do
+    let (Some(dxbc), Some(compiler)) = (program(Tool::Vkd3dDxbc), program(Tool::Vkd3dCompiler)) else {
+        return;
+    };
+    let Some((name, paths)) = common::corpus(game) else {
         return;
     };
     let limit = match debug("vkd3d.limit").as_deref() {
