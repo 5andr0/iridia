@@ -46,10 +46,16 @@ The bodies differ; the declarations do not. Each program's old and new body were
 they compute (calls and operators, after removing declarations, `var` and `let`, loads, stores, swizzles and type
 syntax), and every difference in that multiset was assigned to a class. None is left unassigned.
 
+This classification is a description of the differences, not evidence that the programs compute the same thing. The
+lane bookkeeping class is a catch-all: before the multisets are compared, every difference in the count of vector
+constructors (`vecN(`) and of the result structure (`Out(`) is dropped, so any change that only adds, removes or
+rearranges constructors, including one that puts the wrong lane in a constructor, lands there. 6,889 programs do. What
+shows the programs agree is the three-way execution above, which compares output bits.
+
 | Class | Programs | What differs |
 | --- | --- | --- |
 | Storage form only | 63 | The old lowering keeps a `var` per register and stores each instruction's lanes; the new one is SSA, so values are `let`s or written in place. The operations are the same. |
-| Lane bookkeeping | 6,889 | The above, and vector constructors: a destination mask was a store of some lanes to a `var`, and is now a `vecN(...)` of the lanes kept and the lanes computed. Identity swizzles are folded, and a lane never written is zero. |
+| Lane bookkeeping | 6,889 | The above, and any difference in the number of vector constructors (not checked further here; see above): a destination mask was a store of some lanes to a `var`, and is now a `vecN(...)` of the lanes kept and the lanes computed. Identity swizzles are folded, and a lane never written is zero. |
 | Lane bookkeeping and `mova` rounding | 356 | The above, and `mova`'s rounding (ties away from zero): ecb915c writes `sign(x) * floor(abs(x) + 0.5)`, the IR's `fround.nearestaway` lowers to a truncation and a select of the truncation or the step away from zero. Exactly one `floor` and one `*` fewer, and one `trunc`, `-`, `>=` and `select` more, per `mova`. The two agree except where `abs(x) + 0.5` rounds up in f32 (the largest float below 0.5 gives 1 the old way, 0 the new and documented way); no run met such a value. |
 
 Within these classes, two more differences change the text but not the operations: a relative constant read that
