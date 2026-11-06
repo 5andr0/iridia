@@ -156,6 +156,6 @@ fn main {
         // and the unspecialised program agrees, given the state
         let (out, _) = run(&p, &[f(5.0)], &[(ResourceId(0), [u32::from(known), 0, 0, 0])]).unwrap();
         assert_eq!(out[0].unwrap()[0], want.to_bits());
-        iridia_naga::wgsl(&q).unwrap();
+        iridia_naga::wgsl(&q, &iridia_naga::Profile::NAGA).unwrap();
     }
 }

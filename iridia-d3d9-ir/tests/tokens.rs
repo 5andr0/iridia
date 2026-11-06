@@ -34,7 +34,7 @@ fn lifted(bytes: &[u8]) -> Program {
     iridia_passes::promote(&mut p.entry).unwrap();
     iridia_passes::simplify(&mut p.entry);
     iridia_ir::validate(&p).unwrap_or_else(|e| panic!("{e:?}\n{}", iridia_ir::text::print(&p.entry)));
-    iridia_naga::wgsl(&p).unwrap();
+    iridia_naga::wgsl(&p, &iridia_naga::Profile::BROWSER).unwrap();
     p
 }
 

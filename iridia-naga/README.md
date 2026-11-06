@@ -9,7 +9,7 @@ Part of [iridia](https://github.com/Kalmarv/iridia), which turns compiled shader
 - `module(program, plan)` builds the module: the entry point `main` with an argument per interface input and a member of the result structure `Out` per output (`entry_io` states them), and each resource a global where the `BindingPlan` binds it. `BindingPlan::d3d` puts Direct3D's register classes in bind groups 0 to 3 (`cbN`, `tN`, `sN`, `uN`), each register its binding.
 - Operations naga has whole map to one expression; the others expand in the lowering, each in one function: a zero-wins multiply, `min` and `max` with their NaN rule, `saturate` of NaN, a float-to-integer conversion that saturates, rounding with ties away from zero, a constant buffer row read outside the buffer.
 - A masked input load is a swizzle of the argument; a masked output store is composed with what the output held (zero before the first store).
-- `validate` runs naga's validator with every capability; `wgsl(program)` (the `wgsl` feature, on by default) lowers with the D3D plan, validates and writes the WGSL.
+- `validate(module, profile)` runs naga's validator with the profile's capabilities; `wgsl(program, profile)` (the `wgsl` feature, on by default) preflights the program, lowers it with the D3D plan, validates and writes the WGSL.
 
 ## Example
 
@@ -63,7 +63,7 @@ let program = Program {
     notes: Vec::new(),
 };
 iridia_ir::validate(&program).unwrap();
-let wgsl = iridia_naga::wgsl(&program).unwrap();
+let wgsl = iridia_naga::wgsl(&program, &iridia_naga::Profile::NAGA).unwrap();
 assert!(wgsl.contains("@fragment"));
 // WGSL leaves what a clamp makes of NaN to the implementation: the NaN-to-zero rule is spelled out
 assert!(wgsl.contains("select("), "{wgsl}");
@@ -71,7 +71,8 @@ assert!(wgsl.contains("select("), "{wgsl}");
 
 ## Guarantees and limits
 
-- A program it lowers passes naga's validator, or it is refused with the reason; it lowers what the Direct3D 9 shader model 3 reader makes, and refuses the rest by name.
+- A program is lowered for a target `Profile` (`Profile::BROWSER` for WebGPU's core WGSL, `Profile::NAGA` for naga's own dialect, either widened with `Profile::with`): `preflight` refuses a program that needs a capability the profile lacks, naming the value, varying or resource that needs it, and naga's validator runs with the profile's capabilities alone. A module naga rejects after the preflight accepted is reported as a lowering bug.
+- It lowers what the Direct3D 9 reader makes, and refuses the rest by name.
 - naga's `break` and `continue` reach only the innermost construct: run `iridia_passes::break_flags` first. A `Cfg` body must be structured first (`iridia_passes::structurize`).
 - Pipeline state is not lowered: `iridia_passes::specialise` it first.
 - WGSL text cannot say a varying has no interpolation, and naga's namer adds a `_` to some names; a reader of the WGSL sees those, not the IR's.

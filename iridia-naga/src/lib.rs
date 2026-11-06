@@ -2,8 +2,9 @@
 //!
 //! A program reaches here after its passes: promoted, simplified, structured. [`module`] builds the module, with each
 //! resource where a [`BindingPlan`] binds it and the interface carried by the entry point `main` (an argument per
-//! input, a member of the result structure `Out` per output); [`validate`] runs naga's validator on it; [`wgsl`]
-//! writes it as WGSL.
+//! input, a member of the result structure `Out` per output); [`validate`] runs naga's validator on it with a target
+//! [`Profile`]'s capabilities; [`wgsl`] writes it as WGSL. [`preflight`] refuses, before lowering, a program that needs
+//! a capability the profile does not allow, so naga rejecting a module the preflight accepted is a lowering bug.
 #![no_std]
 #![deny(missing_docs)]
 #![deny(clippy::disallowed_methods, clippy::disallowed_types)]
@@ -20,6 +21,7 @@ extern crate alloc;
 
 mod io;
 mod lower;
+mod profile;
 
 use alloc::{format, string::String, vec::Vec};
 use core::fmt;
@@ -28,6 +30,7 @@ use iridia_ir::interface::{D3dClass, Interface, ResourceId, ResourceKind};
 
 pub use io::{EntryIo, Item, entry_io};
 pub use lower::module;
+pub use profile::{Profile, Requirement, preflight, requirements};
 
 /// Why a program could not be lowered, validated or written.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -102,22 +105,26 @@ impl BindingPlan {
     }
 }
 
-/// Run naga's validator on a module, with every capability the module may use.
-pub fn validate(module: &naga::Module) -> Result<naga::valid::ModuleInfo, Error> {
-    naga::valid::Validator::new(
-        naga::valid::ValidationFlags::all(),
-        naga::valid::Capabilities::all(),
-    )
-    .validate(module)
-    .map_err(|e| Error(format!("naga validation: {}", e.as_inner())))
+/// Run naga's validator on a module, with the capabilities `profile` allows and no others.
+pub fn validate(module: &naga::Module, profile: &Profile) -> Result<naga::valid::ModuleInfo, Error> {
+    naga::valid::Validator::new(naga::valid::ValidationFlags::all(), profile.capabilities)
+        .validate(module)
+        .map_err(|e| Error(format!("naga validation: {}", e.as_inner())))
 }
 
-/// The WGSL of a program, with the D3D binding plan.
+/// The WGSL of a program for `profile`, with the D3D binding plan: preflighted, lowered, validated and written. A
+/// module naga rejects after the preflight accepted the program is reported as a lowering bug.
 #[cfg(feature = "wgsl")]
-pub fn wgsl(program: &iridia_ir::Program) -> Result<String, Error> {
+pub fn wgsl(program: &iridia_ir::Program, profile: &Profile) -> Result<String, Error> {
+    preflight(program, profile)?;
     let plan = BindingPlan::d3d(&program.interface)?;
     let module = module(program, &plan)?;
-    let info = validate(&module)?;
+    let info = validate(&module, profile).map_err(|e| {
+        Error(format!(
+            "lowering bug: the preflight accepted the program and {}",
+            e.0
+        ))
+    })?;
     naga::back::wgsl::write_string(&module, &info, naga::back::wgsl::WriterFlags::empty())
         .map_err(|e| Error(format!("naga's WGSL writer: {e}")))
 }

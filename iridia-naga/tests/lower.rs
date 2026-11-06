@@ -91,7 +91,7 @@ fn main {
         Vec::new(),
     );
     // the input (a, b, c, d): (b, 0, d, 0), then (b, 0, d, a), then (a, 0, d, a); a lane never stored is zero
-    let wgsl = iridia_naga::wgsl(&p).unwrap();
+    let wgsl = iridia_naga::wgsl(&p, &iridia_naga::Profile::NAGA).unwrap();
     let body = "    let _e1 = TEXCOORD0_.yw;
     let _e7 = vec4<f32>(_e1.x, vec4<f32>().y, _e1.y, vec4<f32>().w);
     let _e13 = vec4<f32>(_e7.x, _e7.y, _e7.z, TEXCOORD0_.x);
@@ -130,7 +130,7 @@ fn main {
         &[(ScalarType::Float, 1)],
         vec![state],
     );
-    let e = iridia_naga::wgsl(&p).unwrap_err();
+    let e = iridia_naga::wgsl(&p, &iridia_naga::Profile::NAGA).unwrap_err();
     assert!(e.0.contains("specialise"), "{e}");
 }
 
@@ -153,7 +153,42 @@ fn main {
         &[(ScalarType::Float, 2)],
         Vec::new(),
     );
-    let wgsl = iridia_naga::wgsl(&p).unwrap();
+    let wgsl = iridia_naga::wgsl(&p, &iridia_naga::Profile::NAGA).unwrap();
     assert_eq!(wgsl.matches(" + ").count(), 1, "{wgsl}");
     assert!(wgsl.contains("let v2_ = (TEXCOORD0_ + TEXCOORD0_).x;"), "{wgsl}");
+}
+
+#[test]
+fn a_capability_the_profile_lacks_is_refused_before_lowering() {
+    let p = program(
+        "iridia-ir 1
+fn main {
+  %0: f32 = input 0.x
+  %1: f64 = convert.undef %0
+  %2: f64 = fadd %1, %1
+  %3: f32 = convert.undef %2
+  output 0.x = %3
+  return
+}
+",
+        &[(ScalarType::Float, 1)],
+        &[(ScalarType::Float, 1)],
+        Vec::new(),
+    );
+    let needs = iridia_naga::requirements(&p);
+    assert_eq!(needs.len(), 1, "{needs:?}");
+    assert_eq!(needs[0].capability, naga::valid::Capabilities::FLOAT64);
+    // browser WGSL has no f64: the preflight names the value, before any naga module is built
+    let e = iridia_naga::wgsl(&p, &iridia_naga::Profile::BROWSER).unwrap_err();
+    assert!(
+        e.0.starts_with("browser WGSL cannot carry this program: value %1 is f64"),
+        "{e}"
+    );
+    // naga's dialect has it, and naga's validator, run with the profile's capabilities alone, agrees
+    let wgsl = iridia_naga::wgsl(&p, &iridia_naga::Profile::NAGA).unwrap();
+    assert!(wgsl.contains("f64"), "{wgsl}");
+    // a module that needs more than its profile allows is rejected by naga's validator itself
+    let plan = iridia_naga::BindingPlan::d3d(&p.interface).unwrap();
+    let module = iridia_naga::module(&p, &plan).unwrap();
+    assert!(iridia_naga::validate(&module, &iridia_naga::Profile::BROWSER).is_err());
 }

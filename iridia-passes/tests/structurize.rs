@@ -183,7 +183,7 @@ fn the_counterexample_structures_once_specialised_and_keeps_its_values() {
     let mut flagged = structured.clone();
     assert_eq!(iridia_passes::break_flags(&mut flagged.entry).unwrap(), 0);
     assert_eq!(flagged, structured);
-    let wgsl = iridia_naga::wgsl(&structured)
+    let wgsl = iridia_naga::wgsl(&structured, &iridia_naga::Profile::NAGA)
         .unwrap_or_else(|e| panic!("{e}\n{}", iridia_ir::text::print(&structured.entry)));
     assert!(wgsl.contains("loop {"), "{wgsl}");
 }
@@ -230,7 +230,7 @@ fn nested_loops() -> Program {
 fn a_break_across_a_loop_is_routed_and_keeps_its_value() {
     let p = nested_loops();
     iridia_ir::validate(&p).unwrap_or_else(|e| panic!("{e:?}\n{}", iridia_ir::text::print(&p.entry)));
-    let e = iridia_naga::wgsl(&p).unwrap_err();
+    let e = iridia_naga::wgsl(&p, &iridia_naga::Profile::NAGA).unwrap_err();
     assert!(e.0.contains("break_flags"), "{e}");
     let mut flagged = p.clone();
     assert_eq!(iridia_passes::break_flags(&mut flagged.entry).unwrap(), 1);
@@ -242,7 +242,8 @@ fn a_break_across_a_loop_is_routed_and_keeps_its_value() {
             assert_eq!(run(q, t, &[]).unwrap(), (want, false), "t {t}");
         }
     }
-    iridia_naga::wgsl(&flagged).unwrap_or_else(|e| panic!("{e}\n{}", iridia_ir::text::print(&flagged.entry)));
+    iridia_naga::wgsl(&flagged, &iridia_naga::Profile::NAGA)
+        .unwrap_or_else(|e| panic!("{e}\n{}", iridia_ir::text::print(&flagged.entry)));
 }
 
 #[test]
@@ -418,7 +419,8 @@ fn random_graphs_keep_their_values_when_structured() {
                 iridia_ir::text::print(&b.entry)
             );
         }
-        iridia_naga::wgsl(&b).unwrap_or_else(|e| panic!("{e}\n{}", iridia_ir::text::print(&b.entry)));
+        iridia_naga::wgsl(&b, &iridia_naga::Profile::NAGA)
+            .unwrap_or_else(|e| panic!("{e}\n{}", iridia_ir::text::print(&b.entry)));
     }
     assert!(
         structured > 500 && refused > 0 && routed > 500,

@@ -28,7 +28,7 @@ assert_eq!(program.stage, iridia_ir::interface::Stage::Pixel);
 iridia_passes::promote(&mut program.entry).unwrap();
 iridia_passes::simplify(&mut program.entry);
 iridia_ir::validate(&program).unwrap();
-assert!(iridia_naga::wgsl(&program).unwrap().contains("@fragment"));
+assert!(iridia_naga::wgsl(&program, &iridia_naga::Profile::BROWSER).unwrap().contains("@fragment"));
 
 // anything outside the subset is refused, with its word offset
 let mut other_model = bytes.clone();

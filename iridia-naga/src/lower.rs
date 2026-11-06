@@ -1435,7 +1435,8 @@ fn name_shared(
     };
     let mut probe = module.clone();
     probe.entry_points.push(ep);
-    let info = crate::validate(&probe)?;
+    // an analysis, not the target's check: with every capability lowering can need
+    let info = crate::validate(&probe, &crate::Profile::NAGA)?;
     let fi = info.get_entry_point(0);
     let refs: Vec<usize> = f.expressions.iter().map(|(h, _)| fi[h].ref_count).collect();
     let mut value_of = alloc::collections::BTreeMap::new();

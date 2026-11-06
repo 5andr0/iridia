@@ -16,7 +16,7 @@ fn wgsl(program: &mut iridia_ir::Program) -> Result<String, String> {
     iridia_passes::promote(&mut program.entry)?;
     iridia_passes::simplify(&mut program.entry);
     iridia_ir::validate(program).map_err(|e| format!("{e:?}"))?;
-    iridia_naga::wgsl(program).map_err(|e| e.to_string())
+    iridia_naga::wgsl(program, &iridia_naga::Profile::BROWSER).map_err(|e| e.to_string())
 }
 
 fn lanes(mask: u8) -> String {
