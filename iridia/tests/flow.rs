@@ -482,3 +482,49 @@ fn comparisons_of_the_same_bits_in_three_kinds_are_three_nodes() {
         );
     }
 }
+
+/// The words of the fixture's `Material` buffer that reach `reach`, by word, with the via.
+fn words(program: &Program, reach: &iridia::flow::Reach) -> BTreeMap<u32, Via> {
+    let material = program
+        .interface
+        .resources
+        .iter()
+        .find(|r| r.provenance.name == "Material")
+        .expect("the Material buffer")
+        .id;
+    reach
+        .words
+        .iter()
+        .filter(|(w, _)| w.resource == material)
+        .map(|(w, v)| (w.word, *v))
+        .collect()
+}
+
+#[test]
+fn a_constant_reaches_by_the_way_it_is_used() {
+    // Material packs into one register: threshold is word 0, tiling words 1 and 2, strength word 3
+    for (bytecode, program) in lifted("control") {
+        let flow = Flow::of_program(&program).unwrap();
+        // the threshold decides the discard, and nothing else
+        assert_eq!(
+            words(&program, flow.discard_reach()),
+            BTreeMap::from([(0, Via::Control)]),
+            "{bytecode}"
+        );
+        for lane in 0..4 {
+            let reach = flow.reach_of(&program.interface, &target(), lane).unwrap();
+            assert!(words(&program, reach).is_empty(), "{bytecode} lane {lane}");
+        }
+    }
+    for (bytecode, program) in lifted("blend") {
+        let flow = Flow::of_program(&program).unwrap();
+        for lane in 0..4 {
+            let reach = flow.reach_of(&program.interface, &target(), lane).unwrap();
+            assert_eq!(
+                words(&program, reach),
+                BTreeMap::from([(1, Via::Coordinate), (2, Via::Coordinate), (3, Via::Value)]),
+                "{bytecode} lane {lane}"
+            );
+        }
+    }
+}

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `iridia::flow`: `Reach` gains `words`, the constant-buffer words (`GlobalWord`: stage, resource, word) that may
+  reach an output lane or the discard, each with its `Via`, as inputs and texels have it. A constant that only decides
+  a branch or a discard is `Control`, one that scales a texture coordinate `Coordinate`; `WordsRead` says which words
+  are read and nothing of how. `link` carries the vertex program's words through, as its texels.
 - `iridia-naga`: `wgsl_for(program, profile, &Pipeline { plan, feeds })` writes a program for one pipeline: each
   resource where the pipeline's `BindingPlan` binds it, and a vertex program's outputs at the locations, interpolation
   and types of the pixel program it feeds (matched by semantic, as Direct3D links stages; padded, narrowed or bitcast

@@ -432,6 +432,18 @@ pub struct TexelLane {
     pub lane: u8,
 }
 
+/// A word of a bound global (a constant buffer's) the program of `stage` reads at a place it states (after [`link`],
+/// the pixel or the vertex program's). Row `r`, lane `l` of a constant buffer is word `4r + l`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct GlobalWord {
+    /// The stage whose program reads the word.
+    pub stage: Stage,
+    /// The global's interface resource in that program.
+    pub resource: ResourceId,
+    /// The word's place in the global.
+    pub word: u32,
+}
+
 /// What may reach one output lane or the discard, each source with the strongest [`Via`] of its paths.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Reach {
@@ -439,6 +451,9 @@ pub struct Reach {
     pub inputs: BTreeMap<Lane, Via>,
     /// The texel lanes that may reach it, each with the strongest way.
     pub texels: BTreeMap<TexelLane, Via>,
+    /// The words of bound globals that may reach it, each with the strongest way. A global read at an index computed at
+    /// run time is not among them: its index is, as what decides the word.
+    pub words: BTreeMap<GlobalWord, Via>,
     /// After [`link`]: lanes of the pixel program's inputs no vertex output feeds (a front-face flag, a sample
     /// index), by the pixel interface.
     pub unlinked: BTreeMap<Lane, Via>,
@@ -512,7 +527,7 @@ impl Flow {
 /// A pixel program's flow in terms of the vertex program's inputs: each pixel input lane taken back through the
 /// vertex output of the same label (D3D links the stages by semantic name and index; a lane is the same lane of the
 /// element on both sides), with the weaker of the two paths' [`Via`]. A pixel input no vertex output carries stays
-/// as an `unlinked` pixel lane; texels keep the stage they are read in.
+/// as an `unlinked` pixel lane; texels and global words keep the stage they are read in.
 pub fn link(vertex: (&Interface, &Flow), pixel: (&Interface, &Flow)) -> Result<Flow, String> {
     let (vertex_interface, vertex_flow) = vertex;
     let (pixel_interface, pixel_flow) = pixel;
@@ -525,6 +540,7 @@ pub fn link(vertex: (&Interface, &Flow), pixel: (&Interface, &Flow)) -> Result<F
     let through = |reach: &Reach| -> Result<Reach, String> {
         let mut out = Reach {
             texels: reach.texels.clone(),
+            words: reach.words.clone(),
             ..Reach::default()
         };
         for (lane, via) in &reach.inputs {
@@ -541,6 +557,9 @@ pub fn link(vertex: (&Interface, &Flow), pixel: (&Interface, &Flow)) -> Result<F
                     }
                     for (t, v) in &vertex_reach.texels {
                         strongest(&mut out.texels, *t, (*v).min(*via));
+                    }
+                    for (w, v) in &vertex_reach.words {
+                        strongest(&mut out.words, *w, (*v).min(*via));
                     }
                 }
                 None => strongest(&mut out.unlinked, *lane, *via),
@@ -597,13 +616,26 @@ fn reach(values: &Values, roots: &[(NodeId, Via)]) -> Reach {
                 },
                 via,
             ),
-            Node::Global { at, .. } => {
-                if let At::Indexed { index, .. } = at {
+            Node::Global { resource, at } => match at {
+                At::Component(word) => {
+                    if let Some(resource) = resource {
+                        strongest(
+                            &mut out.words,
+                            GlobalWord {
+                                stage: values.stage,
+                                resource: *resource,
+                                word: *word,
+                            },
+                            via,
+                        );
+                    }
+                }
+                At::Indexed { index, .. } => {
                     for &i in index {
                         push(&mut best, &mut work, i, via);
                     }
                 }
-            }
+            },
             Node::Texel {
                 resource,
                 lane,
