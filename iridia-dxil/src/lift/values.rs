@@ -121,7 +121,7 @@ impl Lift<'_> {
                 }
                 other => return self.refuse(format!("a null or undefined value of type {other:?}")),
             },
-            Constant::Gep { base, indices } => {
+            Constant::Gep { base, indices, .. } => {
                 let (base, indices) = (*base, indices.clone());
                 self.constant_gep(base, &indices)?
             }
@@ -129,7 +129,7 @@ impl Lift<'_> {
             Constant::Cast { op, value } if self.is_wide(*value) || self.is_wide_type(ty) => {
                 self.cast_wide(*op, *value, ty)?
             }
-            Constant::Binary { op, lhs, rhs } if self.is_wide(*lhs) => {
+            Constant::Binary { op, lhs, rhs, .. } if self.is_wide(*lhs) => {
                 let (a, b) = (self.wide(*lhs)?, self.wide(*rhs)?);
                 let r = self.binary_wide(*op, a, b)?;
                 self.pair(r)
@@ -148,7 +148,7 @@ impl Lift<'_> {
                     Lv::Scalar(self.cast(*op, v, ty)?)
                 }
             }
-            Constant::Binary { op, lhs, rhs } => {
+            Constant::Binary { op, lhs, rhs, .. } => {
                 let (a, b) = (self.scalar(*lhs)?, self.scalar(*rhs)?);
                 let r = match self.narrow_width(*lhs) {
                     Some(w) => self.binary_narrow(*op, a, b, w)?,
@@ -569,18 +569,21 @@ impl Lift<'_> {
                 }
                 self.define_result(result, agg)
             }
-            Op::Call { function, args } => self.call(inst, *function, args),
+            Op::Call { function, args, .. } => self.call(inst, *function, args),
             Op::Alloca { .. } | Op::Load { .. } | Op::Store { .. } | Op::Gep { .. } => {
                 self.memory_instruction(inst)
             }
-            Op::AtomicRmw { pointer, value, op } => self.atomic_rmw(inst, *pointer, *value, *op),
+            Op::AtomicRmw {
+                pointer, value, op, ..
+            } => self.atomic_rmw(inst, *pointer, *value, *op),
             Op::CmpXchg {
                 pointer,
                 compare,
                 value,
+                ..
             } => self.cmp_xchg(inst, *pointer, *compare, *value),
             // invocations run in step, so there is no ordering to enforce
-            Op::Fence => Ok(()),
+            Op::Fence(_) => Ok(()),
             // flow is the structurizer's, phis the edges'
             Op::Phi { .. }
             | Op::Branch { .. }

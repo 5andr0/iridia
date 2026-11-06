@@ -1,5 +1,7 @@
 # iridia
 
+[![crates.io: iridia](https://img.shields.io/crates/v/iridia?label=iridia)](https://crates.io/crates/iridia) [![crates.io: iridia-ir](https://img.shields.io/crates/v/iridia-ir?label=iridia-ir)](https://crates.io/crates/iridia-ir) [![crates.io: iridia-dxbc](https://img.shields.io/crates/v/iridia-dxbc?label=iridia-dxbc)](https://crates.io/crates/iridia-dxbc) [![docs.rs](https://img.shields.io/docsrs/iridia)](https://docs.rs/iridia) [![CI](https://img.shields.io/github/actions/workflow/status/Kalmarv/iridia/ci.yml?branch=main&label=CI)](https://github.com/Kalmarv/iridia/actions/workflows/ci.yml)
+
 A set of Rust libraries that translate compiled Direct3D shaders into programs that can be validated, run on the CPU
 and written out as WGSL or SPIR-V. The released crates produce [naga](https://github.com/gfx-rs/wgpu/tree/trunk/naga)
 modules; iridia's own shader IR, which will replace naga as the internal representation, is being built beside them.
@@ -46,17 +48,11 @@ Rust 1.99 or newer (edition 2024).
 | [`iridia-exec-ir`](iridia-exec-ir) | Runs an IR program on the CPU by the IR's own definitions |
 | [`iridia-d3d9-ir`](iridia-d3d9-ir) | Lifts Direct3D 9 token streams of every model from `vs_1_1` and `ps_1_1` to `vs_3_0` and `ps_3_0` into the IR |
 
-The first seven crates are published on crates.io at version 0.4.1:
+All twelve are published on crates.io at version 0.5.0:
 
 ```sh
 cargo add iridia iridia-dxbc
-```
-
-The IR crates, Shader Model 5.1 lifting and the other changes listed under "Unreleased" in
-[CHANGELOG.md](CHANGELOG.md) are only available from the repository:
-
-```sh
-cargo add --git https://github.com/Kalmarv/iridia iridia-ir iridia-d3d9-ir iridia-passes iridia-naga
+cargo add iridia-ir iridia-d3d9-ir iridia-passes iridia-naga
 ```
 
 The released crates build their modules with [primase-naga](https://github.com/Kalmarv/primase-naga), a fork of naga

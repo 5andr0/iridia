@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 (2026-11-06)
 
 - `iridia-d3d9-ir` lifts every Direct3D 9 model from `vs_1_1` and `ps_1_1` to `vs_3_0` and `ps_3_0`: the pixel 1.x
   texture operations, co-issue, modifiers and shifts under `Options::ps1x` (modern drivers' policy by default), integer
@@ -89,6 +89,9 @@
   `feature_words` no longer selects a word for a select whose arms are the same value.
 - Tests: `iridia/tests/specialise.rs` specialises `fixtures/specialise.hlsl`'s entry points as fxc and dxc compile them.
 - The tests depend on `primase-testdata` 0.1.8 from crates.io instead of a git revision.
+- Depends on dx 0.5.0 (`d3d9-reader`, `dxbc-reader`, `dxcontainer`, `dxil-reader`) and primase-naga 30.0.1 from crates.io
+  instead of git revisions (the same sources).
+- First releases of `iridia-ir`, `iridia-passes`, `iridia-naga`, `iridia-exec-ir` and `iridia-d3d9-ir`.
 
 ## 0.4.1 (2026-10-29)
 

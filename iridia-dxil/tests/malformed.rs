@@ -37,8 +37,14 @@ fn a_value_the_function_does_not_have_is_refused() {
 
 #[test]
 fn an_instruction_after_the_last_terminator_is_refused() {
+    // dx 0.4.0 named this byte's damage as an instruction after the last terminator; 0.5.0 checks a load's operand as
+    // it reads the record, before the blocks, and names that
     let bytes = changed("buffer_arrays.66.dxil", 4184, 0x00, 0x01);
-    assert!(refusal(&bytes).contains("an instruction after the last terminator"));
+    assert!(
+        refusal(&bytes).contains("a load from a value that is not a pointer"),
+        "{}",
+        refusal(&bytes)
+    );
 }
 
 #[test]

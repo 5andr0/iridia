@@ -75,7 +75,7 @@ pub(super) fn variable_loaded(m: &Module, f: &Function, v: ValueId) -> Option<Va
         .instructions
         .iter()
         .find(|i| i.result.is_some_and(|(r, _)| r == v))?;
-    let Op::Load { pointer } = &load.op else {
+    let Op::Load { pointer, .. } = &load.op else {
         return None;
     };
     let mut at = *pointer;
@@ -172,7 +172,7 @@ impl Setup {
         let mut matrix_rows: BTreeSet<(SystemValue, u32)> = BTreeSet::new();
         for entry in functions.iter().copied() {
             for inst in &entry.instructions {
-                let Op::Call { function, args } = &inst.op else {
+                let Op::Call { function, args, .. } = &inst.op else {
                     continue;
                 };
                 let Some(code) = dx_opcode(m, entry, *function, args) else {
@@ -547,7 +547,7 @@ fn heap_resources(
     let mut handles = BTreeMap::new();
     for f in functions.iter().copied() {
         for inst in &f.instructions {
-            let (Op::Call { function, args }, Some((handle, _))) = (&inst.op, inst.result) else {
+            let (Op::Call { function, args, .. }, Some((handle, _))) = (&inst.op, inst.result) else {
                 continue;
             };
             if dx_opcode(m, f, *function, args) != Some(218) {
@@ -557,7 +557,7 @@ fn heap_resources(
             // the annotation that says what the descriptor is: its properties, two constant words
             let properties = functions.iter().copied().find_map(|g| {
                 g.instructions.iter().find_map(|i| {
-                    let Op::Call { function, args } = &i.op else {
+                    let Op::Call { function, args, .. } = &i.op else {
                         return None;
                     };
                     if dx_opcode(m, g, *function, args) != Some(216) || args.get(1) != Some(&handle) {

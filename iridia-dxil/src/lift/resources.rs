@@ -112,7 +112,7 @@ impl Lift<'_> {
                 .instructions
                 .iter()
                 .find(|i| i.result.is_some_and(|(r, _)| r == v))?;
-            let Op::Call { function, args } = &inst.op else {
+            let Op::Call { function, args, .. } = &inst.op else {
                 return None;
             };
             return match dx_opcode(self.m, self.f, *function, args)? {
@@ -154,7 +154,7 @@ impl Lift<'_> {
         for f in self.functions.clone() {
             self.f = f;
             for inst in &f.instructions {
-                let Op::Call { function, args } = &inst.op else {
+                let Op::Call { function, args, .. } = &inst.op else {
                     continue;
                 };
                 let Some(code) = dx_opcode(self.m, self.f, *function, args) else {

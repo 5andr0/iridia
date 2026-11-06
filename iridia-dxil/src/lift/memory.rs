@@ -474,7 +474,7 @@ impl Lift<'_> {
     pub(super) fn memory_instruction(&mut self, inst: &Instruction) -> Result<()> {
         let result = inst.result;
         match &inst.op {
-            Op::Alloca { ty } => {
+            Op::Alloca { ty, .. } => {
                 let (t, _) = self.naga_type(*ty)?;
                 let local = self.b.local("array", t);
                 if let Some(kind) = self.uniform_kind(*ty) {
@@ -488,7 +488,7 @@ impl Lift<'_> {
                     }),
                 )
             }
-            Op::Gep { base, indices } => {
+            Op::Gep { base, indices, .. } => {
                 let Lv::Pointer(mut p) = self.get(*base)? else {
                     return self.refuse("a getelementptr of something that is not a pointer");
                 };
@@ -506,7 +506,7 @@ impl Lift<'_> {
                 }
                 self.define_result(result, Lv::Pointer(p))
             }
-            Op::Load { pointer } => {
+            Op::Load { pointer, .. } => {
                 // a library names its resources by globals; the value a load of one gives is the resource
                 if let Some(resource) = self
                     .root_global(*pointer)
@@ -545,7 +545,7 @@ impl Lift<'_> {
                 let v = self.b.bitcast_to(loaded, kind);
                 self.define_result(result, Lv::Scalar(v))
             }
-            Op::Store { pointer, value } => {
+            Op::Store { pointer, value, .. } => {
                 let Lv::Pointer(p) = self.get(*pointer)? else {
                     return self.refuse("a store through something that is not a pointer");
                 };
