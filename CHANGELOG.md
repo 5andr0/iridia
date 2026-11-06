@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- `iridia-naga`: `wgsl_for(program, profile, &Pipeline { plan, feeds })` writes a program for one pipeline: each
+  resource where the pipeline's `BindingPlan` binds it, and a vertex program's outputs at the locations, interpolation
+  and types of the pixel program it feeds (matched by semantic, as Direct3D links stages; padded, narrowed or bitcast
+  where the two differ, each noted). An input no output carries is refused by name.
+
 ## 0.5.0 (2026-11-06)
 
 - `iridia-d3d9-ir` lifts every Direct3D 9 model from `vs_1_1` and `ps_1_1` to `vs_3_0` and `ps_3_0`: the pixel 1.x

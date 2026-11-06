@@ -10,6 +10,7 @@ Part of [iridia](https://github.com/Kalmarv/iridia), which turns compiled shader
 - Operations naga has whole map to one expression; the others expand in the lowering, each in one function: a zero-wins multiply, `min` and `max` with their NaN rule, `saturate` of NaN, a float-to-integer conversion that saturates, rounding with ties away from zero, a constant buffer row read outside the buffer.
 - A masked input load is a swizzle of the argument; a masked output store is composed with what the output held (zero before the first store).
 - `validate(module, profile)` runs naga's validator with the profile's capabilities; `wgsl(program, profile)` (the `wgsl` feature, on by default) preflights the program, lowers it with the D3D plan, validates and writes the WGSL.
+- `wgsl_for(program, profile, &Pipeline { plan, feeds })` writes it for one pipeline: the resources where `plan` binds them (two programs of a pipeline share its bind groups), and a vertex program's outputs where the pixel program it `feeds` reads them, matched by semantic as Direct3D links stages. An output read with more lanes is padded with zeros, with fewer its first lanes, as another 32-bit scalar the same bits; each is noted in `Written::notes`, and an input no output carries is refused by name.
 
 ## Example
 

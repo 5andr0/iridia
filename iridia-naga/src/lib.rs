@@ -3,8 +3,10 @@
 //! A program reaches here after its passes: promoted, simplified, structured. [`module`] builds the module, with each
 //! resource where a [`BindingPlan`] binds it and the interface carried by the entry point `main` (an argument per
 //! input, a member of the result structure `Out` per output); [`validate`] runs naga's validator on it with a target
-//! [`Profile`]'s capabilities; [`wgsl`] writes it as WGSL. [`preflight`] refuses, before lowering, a program that needs
-//! a capability the profile does not allow, so naga rejecting a module the preflight accepted is a lowering bug.
+//! [`Profile`]'s capabilities; [`wgsl`] writes it as WGSL, and [`wgsl_for`] writes it for one pipeline (its bindings,
+//! and a vertex program's outputs linked to the pixel program they feed). [`preflight`] refuses, before lowering, a
+//! program that needs a capability the profile does not allow, so naga rejecting a module the preflight accepted is a
+//! lowering bug.
 #![no_std]
 #![deny(missing_docs)]
 #![deny(clippy::disallowed_methods, clippy::disallowed_types)]
@@ -21,6 +23,8 @@ extern crate alloc;
 
 mod io;
 mod lower;
+#[cfg(feature = "wgsl")]
+mod pipeline;
 mod profile;
 
 use alloc::{format, string::String, vec::Vec};
@@ -30,6 +34,8 @@ use iridia_ir::interface::{D3dClass, Interface, ResourceId, ResourceKind};
 
 pub use io::{EntryIo, Item, entry_io};
 pub use lower::module;
+#[cfg(feature = "wgsl")]
+pub use pipeline::{Pipeline, Written, wgsl_for};
 pub use profile::{Profile, Requirement, preflight, requirements};
 
 /// Why a program could not be lowered, validated or written.

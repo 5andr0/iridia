@@ -21,5 +21,9 @@ iridia-ir.workspace = true
 # stock naga, pinned: every naga node this crate builds is in `lower.rs`
 naga = { version = "=30.0.1", default-features = false }
 
+[dev-dependencies]
+# the tests read written WGSL back, to check what a pipeline links
+naga = { version = "=30.0.1", default-features = false, features = ["wgsl-in"] }
+
 [lints]
 workspace = true
