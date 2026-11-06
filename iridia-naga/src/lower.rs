@@ -198,6 +198,12 @@ impl Lower<'_> {
     /// A literal of `scalar` with these bits, `lanes` times (a splat for a vector).
     fn literal_bits(&mut self, scalar: Scalar, bits: u64) -> Result<Handle<E>, Error> {
         let low = |b: u64| u32::try_from(b & 0xffff_ffff).unwrap_or(0);
+        // The largest finite f32 is written as a decimal (3.4028235e38) a little above its value, which WGSL rounds back
+        // to it, but which Tint (Chrome's WGSL compiler) refuses as out of range: its bits, bitcast, are read exactly
+        if scalar == Scalar::F32 && f32::from_bits(low(bits)).abs() == f32::MAX {
+            let word = self.expr(E::Literal(Literal::U32(low(bits))));
+            return Ok(self.bitcast(word, ScalarKind::Float));
+        }
         let l = match scalar {
             Scalar::Bool => Literal::Bool(bits != 0),
             Scalar::F32 => Literal::F32(f32::from_bits(low(bits))),

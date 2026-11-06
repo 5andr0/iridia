@@ -6,6 +6,10 @@
   resource where the pipeline's `BindingPlan` binds it, and a vertex program's outputs at the locations, interpolation
   and types of the pixel program it feeds (matched by semantic, as Direct3D links stages; padded, narrowed or bitcast
   where the two differ, each noted). An input no output carries is refused by name.
+- `iridia-naga`: the largest finite `f32`, either sign, is written as its bits bitcast (`bitcast<f32>(2139095039u)`):
+  its shortest decimal, 3.4028235e38, lies a little above it, and Tint (Chrome's WGSL compiler) refused the module as
+  out of range. Direct3D 9's `rsq` and `nrm` of zero give it, so a vertex program that normalises a vector failed to
+  compile in Chrome.
 - Oracle scripts run on Linux under Wine (primase-oracles `tools/wine`), each checked there byte for byte against what it
   made on Windows: `iridia-d3d9/tests/oracles/disassemble.py` takes the path of `d3dcompiler_47.dll` and refuses a bare
   name, which under Wine loaded Wine's own D3DCompiler and wrote a listing that is not Microsoft's (it now writes all 3

@@ -219,3 +219,38 @@ fn main {
     let module = iridia_naga::module(&p, &plan).unwrap();
     assert!(iridia_naga::validate(&module, &iridia_naga::Profile::BROWSER).is_err());
 }
+
+#[test]
+fn the_largest_float_is_written_as_its_bits() {
+    let p = program(
+        "iridia-ir 1
+fn main {
+  %0: f32 = f32(0x7f7fffff)
+  output 0.x = %0
+  %1: vec2<f32> = vec2<f32>(0xff7fffff, 0x7f7ffffe)
+  output 0.yz = %1
+  return
+}
+",
+        &[],
+        &[F4],
+        Vec::new(),
+    );
+    let wgsl = iridia_naga::wgsl(&p, &iridia_naga::Profile::BROWSER).unwrap();
+    // its shortest decimal, 3.4028235e38, lies above it: Tint refuses it as out of range (WGSL rounds it back)
+    assert!(!wgsl.contains("34028235"), "{wgsl}");
+    assert!(wgsl.contains("bitcast<f32>(2139095039u)"), "{wgsl}");
+    assert!(wgsl.contains("bitcast<f32>(4286578687u)"), "{wgsl}");
+    // the float below it has a shortest decimal below it, written as ever
+    assert!(
+        wgsl.contains("340282330000000000000000000000000000000f"),
+        "{wgsl}"
+    );
+    let module = naga::front::wgsl::parse_str(&wgsl).unwrap_or_else(|e| panic!("{e}\n{wgsl}"));
+    naga::valid::Validator::new(
+        naga::valid::ValidationFlags::all(),
+        naga::valid::Capabilities::empty(),
+    )
+    .validate(&module)
+    .unwrap_or_else(|e| panic!("{e:?}\n{wgsl}"));
+}
