@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- `iridia-d3d9-ir` lifts every Direct3D 9 model from `vs_1_1` and `ps_1_1` to `vs_3_0` and `ps_3_0`: the pixel 1.x
+  texture operations, co-issue, modifiers and shifts under `Options::ps1x` (modern drivers' policy by default), integer
+  and boolean constants, flow control and predication, `aL`-relative inputs and 3.0 outputs, derivatives and explicit
+  level and gradient sampling. Its CTAB reading lays out structs, arrays and matrices of every register set as the
+  compiler allocates them. A multiply is zero-wins by default (`Options::multiply`, IEEE by choice). Projection leaves
+  a cube coordinate as it is, and `texdepth` takes r5.g as 1 past 1, as wined3d. `LIFTER_VERSION` is 3.
+- `iridia-d3d9-ir`'s tests: 103 one-feature programs assembled by Microsoft's `D3DAssemble`
+  (`tests/assembled`, rebuilt by `tests/oracles/assemble.py`) run as their comments state, and vkd3d's Direct3D 9
+  shader tests (`tests/vkd3d`) run and probe; each in the IR, its control flow graph, that graph structured again and
+  WGSL. `tests/versions.tsv` gates the lifter version on all of them, 1,207 programs.
+- `iridia-passes`: `flatten` turns structured regions into a control flow graph, the inverse of `structurize`, which no
+  longer drops a body that is already structured; `specialise` takes away the textures only a folded branch sampled.
+- `iridia-naga` reads a constant at a fixed address at any 32-bit word, and a zero-wins multiply of vectors validates.
+- `iridia-dxbc` reads the typed declarations of `dx` at `9b29341` (`dcl_index_range`, `dcl_stream`); the four `dx`
+  crates are pinned at `9b29341`.
+- `iridia-exec-ir`: `Bound::denormals` is the denormal rule a program that leaves it open runs by (flushed or kept).
+- `iridia_ir::gate::check` names at most a dozen fixtures of each kind and counts the rest.
 - `iridia-d3d9` reads its tokens through `dx`'s new `d3d9-reader` (pinned by git rev), which reads every Direct3D 9
   version as stored; the crate's own token reader and CTAB reader are gone, and `ConstantTable`, `Constant`, `Type`,
   `TypeMember` and `Comment` are `d3d9-reader`'s, re-exported (`Constant` gains `word`). `read` and `lift` take the
