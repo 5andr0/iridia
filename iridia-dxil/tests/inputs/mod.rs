@@ -68,3 +68,10 @@ primase_testdata::inputs! {
         "dxil.fuzz_runs" => "how many mutated fixtures the DXIL fuzz test runs (default 3000)",
     }
 }
+
+/// How long one run of a configured tool may take: past it the tool is killed and the test that started it fails naming
+/// it, so a tool that hangs fails the test instead of hanging it. One WARP oracle batch, one fxc or dxc compile.
+#[allow(dead_code)]
+pub const WARP_LIMIT: std::time::Duration = std::time::Duration::from_secs(600);
+#[allow(dead_code)]
+pub const COMPILE_LIMIT: std::time::Duration = std::time::Duration::from_secs(120);

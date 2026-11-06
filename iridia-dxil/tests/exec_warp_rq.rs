@@ -9,7 +9,7 @@
 //! scenes and rays are made from fixed seeds.
 mod inputs;
 
-use inputs::{Tool, own_scratch, tool};
+use inputs::{Tool, own_scratch, program};
 use iridia::D3dClass;
 use iridia_dxil::lift;
 use iridia_exec::{
@@ -197,7 +197,7 @@ fn procedural_primitives_agree_with_warp() {
 }
 
 fn gate(fixture_name: &str, procedural: bool) {
-    let Some(warp) = tool(Tool::Warp) else {
+    let Some(warp) = program(Tool::Warp) else {
         return;
     };
     let scratch = own_scratch("warp");
@@ -330,11 +330,12 @@ fn gate(fixture_name: &str, procedural: bool) {
     let out_file = scratch.join(format!("{fixture_name}.warp.jsonl"));
     std::fs::write(&cases_file, text).unwrap();
     let _oracle = inputs::warp_exclusive();
-    let run = std::process::Command::new(&warp)
-        .arg(&cases_file)
-        .arg(&out_file)
-        .output()
-        .unwrap();
+    let run = warp
+        .command()
+        .path_arg(&cases_file)
+        .path_arg(&out_file)
+        .output_within(inputs::WARP_LIMIT)
+        .unwrap_or_else(|e| panic!("{e}"));
     assert!(
         run.status.success(),
         "warp: {}",

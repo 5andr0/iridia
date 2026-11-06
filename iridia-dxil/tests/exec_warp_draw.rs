@@ -8,7 +8,7 @@
 //! `oracles/warp-draw`) and the scratch folder. Without them the test does nothing.
 mod inputs;
 
-use inputs::{Tool, own_scratch, tool};
+use inputs::{Tool, own_scratch, program};
 use iridia_exec::draw::{Compare, Cull, DepthState, DrawShader, Rasterizer, Surface, Viewport};
 use iridia_exec::{PixelShader, ProgramShader, Sample};
 use std::path::Path;
@@ -328,7 +328,7 @@ fn close(a: u32, b: u32) -> bool {
 
 #[test]
 fn draws_agree_with_warp() {
-    let (Some(warp), Some(_)) = (tool(Tool::Warp), Some(())) else {
+    let Some(warp) = program(Tool::Warp) else {
         return;
     };
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
@@ -340,12 +340,17 @@ fn draws_agree_with_warp() {
     let (input, output) = (work.join("cases.txt"), work.join("results.jsonl"));
     std::fs::write(&input, text).unwrap();
     let _oracle = inputs::warp_exclusive();
-    let status = std::process::Command::new(&warp)
-        .arg(&input)
-        .arg(&output)
-        .status()
-        .unwrap();
-    assert!(status.success(), "the oracle failed");
+    let run = warp
+        .command()
+        .path_arg(&input)
+        .path_arg(&output)
+        .output_within(inputs::WARP_LIMIT)
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert!(
+        run.status.success(),
+        "the oracle failed: {}",
+        String::from_utf8_lossy(&run.stderr)
+    );
     let results: Vec<serde_json::Value> = std::fs::read_to_string(&output)
         .unwrap()
         .lines()

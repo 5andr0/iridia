@@ -11,38 +11,31 @@
 //! - the instructions: vkd3d's mnemonic sequence, with its modifier suffixes removed, equals `decode`'s opcode names.
 //!
 //! Needs the corpus oracle set's `sekiro/shaders`, `riders/shaders` or `sledding/shaders` and the two tools, each a
-//! program with vkd3d's command line (`tools.vkd3d_dxbc`, `tools.vkd3d_compiler`; built from vkd3d's source, run here
-//! through a wrapper that starts the Linux program). A tool that is not configured skips the test. The debug key
+//! program with vkd3d's command line (`tools.vkd3d_dxbc`, `tools.vkd3d_compiler`; built from vkd3d's source: the Linux
+//! programs, or the Windows ones built with MinGW). A tool that is not configured skips the test; a run that does not
+//! finish within a minute fails it, naming the tool. The debug key
 //! `vkd3d.limit` sets how many containers of a corpus are compared (200 spread evenly by default; `all` for every one).
 mod inputs;
 
 use std::collections::BTreeMap;
-use std::io::Write as _;
-use std::path::Path;
-use std::process::{Command, Stdio};
+use std::time::Duration;
 
 use dxbc_reader::{decode, opcode_name, signature};
-use inputs::{Game, Tool, debug, tool};
+use inputs::{Game, Program, Tool, debug, program};
 
 mod common;
 
-/// Runs `program` with `args`, the container on its standard input; its exit status and standard output.
-fn run(program: &Path, args: &[&str], stdin: &[u8]) -> (bool, String) {
-    let mut child = Command::new(program)
+/// How long one run of a vkd3d tool over one container may take.
+const LIMIT: Duration = Duration::from_secs(60);
+
+/// Runs `tool` with `args`, the container on its standard input; its exit status and standard output and error.
+fn run(tool: &Program, args: &[&str], stdin: &[u8]) -> (bool, String) {
+    let out = tool
+        .command()
         .args(args)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    let mut input = child.stdin.take().unwrap();
-    let data = stdin.to_vec();
-    let writer = std::thread::spawn(move || {
-        // the tool may exit before it reads everything (it refuses the container): that is not an error here
-        let _ = input.write_all(&data);
-    });
-    let out = child.wait_with_output().unwrap();
-    writer.join().unwrap();
+        .stdin_bytes(stdin)
+        .output_within(LIMIT)
+        .unwrap_or_else(|e| panic!("{e}"));
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),
@@ -209,8 +202,8 @@ fn sample<T: Clone>(items: &[T], limit: usize) -> Vec<T> {
 
 fn compare(game: Game) {
     let (Some(dxbc), Some(compiler), Some((name, paths))) = (
-        tool(Tool::Vkd3dDxbc),
-        tool(Tool::Vkd3dCompiler),
+        program(Tool::Vkd3dDxbc),
+        program(Tool::Vkd3dCompiler),
         common::corpus(game),
     ) else {
         return;

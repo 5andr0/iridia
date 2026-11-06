@@ -11,7 +11,7 @@
 //! `cbuffer Case : register(b0, space1) { uint4 r[32]; }`, row by register.
 mod inputs;
 
-use inputs::{OwnScratch, Tool, own_scratch, tool};
+use inputs::{OwnScratch, Tool, own_scratch, program};
 use iridia::{D3dClass, Interface, InterpMode, InterpSampling, Program, ResourceId, ScalarType, SystemValue};
 use iridia_exec::{
     Backend, Element, Executable, ImageLoad, ImageQuery, ImageSample, ProgramShader, QueryKind, Resources,
@@ -197,8 +197,8 @@ fn plain(program: &Program, c: &Case) -> Ours {
 fn compare(
     container: &Path,
     cases: &[Case],
-    dxc: &Path,
-    warp: &Path,
+    dxc: &inputs::Program,
+    warp: &inputs::Program,
     scratch: &Path,
     ours: &dyn Fn(&Program, &Case) -> Ours,
     tolerance: f64,
@@ -228,12 +228,13 @@ fn compare(
     let hlsl = scratch.join(format!("{stem}.lifted.vs.hlsl"));
     let vs = scratch.join(format!("{stem}.lifted.vs.dxil"));
     std::fs::write(&hlsl, vertex_hlsl(&iridia_dxil::interface(&bytes).unwrap())).unwrap();
-    let out = std::process::Command::new(dxc)
+    let out = dxc
+        .command()
         .args(["-T", "vs_6_0", "-E", "main", "-Fo"])
-        .arg(&vs)
-        .arg(&hlsl)
-        .output()
-        .unwrap();
+        .path_arg(&vs)
+        .path_arg(&hlsl)
+        .output_within(inputs::COMPILE_LIMIT)
+        .unwrap_or_else(|e| panic!("{e}"));
     assert!(
         out.status.success(),
         "dxc: {}",
@@ -271,11 +272,12 @@ fn compare(
     let results = scratch.join(format!("{stem}.lifted.warp.jsonl"));
     std::fs::write(&cases_file, text).unwrap();
     let _oracle = inputs::warp_exclusive();
-    let run = std::process::Command::new(warp)
-        .arg(&cases_file)
-        .arg(&results)
-        .output()
-        .unwrap();
+    let run = warp
+        .command()
+        .path_arg(&cases_file)
+        .path_arg(&results)
+        .output_within(inputs::WARP_LIMIT)
+        .unwrap_or_else(|e| panic!("{e}"));
     assert!(
         run.status.success(),
         "warp: {}",
@@ -333,8 +335,8 @@ fn compare(
 
 /// `tools.dxc` and `tools.warp`, and the WARP comparison's folder under the scratch folder; `None` unless both tools
 /// are configured.
-fn tools() -> Option<(std::path::PathBuf, std::path::PathBuf, OwnScratch)> {
-    let (dxc, warp) = (tool(Tool::Dxc)?, tool(Tool::Warp)?);
+fn tools() -> Option<(inputs::Program, inputs::Program, OwnScratch)> {
+    let (dxc, warp) = (program(Tool::Dxc)?, program(Tool::Warp)?);
     let scratch = own_scratch("warp");
     Some((dxc, warp, scratch))
 }

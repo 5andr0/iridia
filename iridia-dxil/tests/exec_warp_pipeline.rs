@@ -8,7 +8,7 @@
 //! Needs the WARP oracle program with the `d3d12rtp` case form (the configured `Tool::Warp`) and the scratch folder.
 mod inputs;
 
-use inputs::{Tool, own_scratch, tool};
+use inputs::{Tool, own_scratch, program};
 use iridia::{HitGroup, HitGroupKind};
 use iridia_dxil::lift;
 use iridia_exec::{Geometry, Instance, InstanceFlags, Pipeline, PipelineResources, Scene, ShaderTable};
@@ -290,7 +290,7 @@ fn scenes() -> Vec<(String, [u32; 3], Scene)> {
 
 #[test]
 fn pipelines_agree_with_warp() {
-    let Some(warp) = tool(Tool::Warp) else {
+    let Some(warp) = program(Tool::Warp) else {
         return;
     };
     let scratch = own_scratch("warp");
@@ -316,11 +316,12 @@ fn pipelines_agree_with_warp() {
         let out = scratch.join(format!("pipeline{}.warp.jsonl", variant.replace('.', "_")));
         std::fs::write(&cases, text).unwrap();
         let _oracle = inputs::warp_exclusive();
-        let run = std::process::Command::new(&warp)
-            .arg(&cases)
-            .arg(&out)
-            .output()
-            .unwrap();
+        let run = warp
+            .command()
+            .path_arg(&cases)
+            .path_arg(&out)
+            .output_within(inputs::WARP_LIMIT)
+            .unwrap_or_else(|e| panic!("{e}"));
         assert!(
             run.status.success(),
             "warp: {}",
