@@ -1,5 +1,6 @@
-//! Known pipeline state folded into the program: each read of a known [`StateParam`] becomes a literal, each branch on
-//! a literal condition takes its one way, and code no longer reached is removed. The state resources folded leave the
+//! Known pipeline state folded into the program: each read of a known [`StateParam`] becomes a literal, what is
+//! computed from literals is folded ([`crate::fold`]: a comparison of a texture's dimension, a select on it), each
+//! branch on a literal condition takes its one way, and code no longer reached is removed. The state resources folded leave the
 //! interface: the program no longer depends on them.
 //!
 //! [`StateParam`]: iridia_ir::interface::StateParam
@@ -225,6 +226,7 @@ pub fn specialise(p: &mut Program, known_state: &[(ResourceId, [u64; 4])]) -> Re
             d.op = Op::Literal(*bits);
         }
     }
+    crate::fold(f);
     f.body = match core::mem::replace(&mut f.body, Body::Cfg(Vec::new())) {
         Body::Cfg(blocks) => Body::Cfg(fold_graph(f, blocks)),
         Body::Regions(r) => {

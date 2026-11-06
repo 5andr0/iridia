@@ -2,9 +2,10 @@
 //! closer to what an output needs.
 //!
 //! - [`break_flags`]: exits innermost-only `break` and `continue` cannot take, routed through a jump variable.
+//! - [`fold`]: values computed from literals, where every target computes them alike, made literals.
 //! - [`promote`]: variables to values, carried out of constructs as results and loop parameters.
 //! - [`simplify`]: lane bookkeeping (swizzles of swizzles, composes of lanes) folded, unused values removed.
-//! - [`specialise`]: known pipeline state folded in, with the branches it decides.
+//! - [`specialise`]: known pipeline state folded in, with what it computes and the branches it decides.
 //! - [`structurize`]: a `Cfg` body made `Regions`.
 //! - [`structure`]: Ramsey's structuring of a reducible control flow graph, by node and edge.
 #![no_std]
@@ -22,6 +23,7 @@
 extern crate alloc;
 
 mod break_flags;
+mod fold;
 mod promote;
 mod simplify;
 mod specialise;
@@ -29,6 +31,7 @@ pub mod structure;
 mod structurize;
 
 pub use break_flags::break_flags;
+pub use fold::fold;
 pub use promote::promote;
 pub use simplify::simplify;
 pub use specialise::specialise;

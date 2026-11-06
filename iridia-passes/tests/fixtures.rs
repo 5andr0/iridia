@@ -159,3 +159,104 @@ fn main {
         iridia_naga::wgsl(&q, &iridia_naga::Profile::NAGA).unwrap();
     }
 }
+
+#[test]
+fn fold_computes_integer_and_bool_operations_on_literals() {
+    let text = "iridia-ir 1
+fn main {
+  %0: u32 = u32(4294967295)
+  %1: u32 = u32(2)
+  %2: u32 = iadd %0, %1
+  %3: i32 = i32(-3)
+  %4: i32 = i32(2)
+  %5: bool = scmp.lt %3, %4
+  %6: bool = ucmp.lt %3, %4
+  %7: u32 = u32(0)
+  %8: u32 = udiv.allones %1, %7
+  %9: u32 = urem.dividend %1, %7
+  %10: u32 = udiv.undef %1, %7
+  %11: i32 = smin %3, %4
+  %12: bool = and %5, %6
+  %13: bool = not %12
+  %14: u32 = select %13, %2, %8
+  %15: vec2<u32> = compose %14, %9
+  %16: vec2<u32> = %15.yx
+  %17: f32 = f32(1.5)
+  %18: f32 = fneg %17
+  %19: f32 = fadd %17, %17
+  %20: f32 = input 0.x
+  return
+}
+";
+    let mut entry = iridia_ir::text::parse(text).unwrap();
+    let folded = iridia_passes::fold(&mut entry);
+    let lit = |v: usize| match entry.values[v].op {
+        iridia_ir::Op::Literal(bits) => Some(bits),
+        _ => None,
+    };
+    // wrapping in the type's width; a signed comparison of the bits as signed, an unsigned one as unsigned
+    assert_eq!(lit(2), Some([1, 0, 0, 0]));
+    assert_eq!(lit(5), Some([1, 0, 0, 0]));
+    assert_eq!(lit(6), Some([0, 0, 0, 0]));
+    // a division by zero by its rule; one whose rule is undefined is the target's
+    assert_eq!(lit(8), Some([u64::from(u32::MAX), 0, 0, 0]));
+    assert_eq!(lit(9), Some([2, 0, 0, 0]));
+    assert_eq!(lit(10), None);
+    assert_eq!(lit(11), Some([u64::from((-3i32).cast_unsigned()), 0, 0, 0]));
+    assert_eq!(lit(13), Some([1, 0, 0, 0]));
+    assert_eq!(lit(14), Some([1, 0, 0, 0]));
+    assert_eq!(lit(16), Some([2, 1, 0, 0]));
+    // a sign flip is exact everywhere; float arithmetic depends on the target's denormals and precision
+    assert_eq!(lit(18), Some([u64::from((-1.5f32).to_bits()), 0, 0, 0]));
+    assert_eq!(lit(19), None);
+    assert_eq!(lit(20), None);
+    assert_eq!(folded, 12);
+    assert_eq!(iridia_passes::fold(&mut entry), 0);
+}
+
+#[test]
+fn specialise_folds_a_texture_dimension_behind_a_comparison() {
+    // the ps_1_x shape: a sampler of unknown dimension reads its dimension as state and picks the sample by it
+    let text = "iridia-ir 1
+fn main {
+  %0: u32 = state r0
+  %1: u32 = u32(4)
+  %2: bool = ucmp.eq %0, %1
+  %3: f32 = input 0.x
+  if %2 {
+    %4: f32 = fneg %3
+    yield %4
+  } else {
+    yield %3
+  } -> %5: f32
+  output 0.x = %5
+  return
+}
+";
+    let state = Resource {
+        id: ResourceId(0),
+        kind: ResourceKind::PipelineState(StateParam::TextureDim(0)),
+        count: 1,
+        provenance: ResourceProvenance {
+            name: "dim0".into(),
+            ..ResourceProvenance::default()
+        },
+    };
+    let p = from_text(text, &[F1], &[F1], vec![state]);
+    for (dim, want) in [(4u32, -5.0f32), (2, 5.0)] {
+        let mut q = p.clone();
+        iridia_passes::specialise(&mut q, &[(ResourceId(0), [u64::from(dim), 0, 0, 0])]).unwrap();
+        iridia_passes::simplify(&mut q.entry);
+        iridia_ir::validate(&q).unwrap();
+        let printed = iridia_ir::text::print(&q.entry);
+        assert!(
+            !printed.contains("if ") && !printed.contains("state"),
+            "{printed}"
+        );
+        let (out, _) = run(&q, &[f(5.0)], &[]).unwrap();
+        assert_eq!(out[0].unwrap()[0], want.to_bits());
+        let (out, _) = run(&p, &[f(5.0)], &[(ResourceId(0), [dim, 0, 0, 0])]).unwrap();
+        assert_eq!(out[0].unwrap()[0], want.to_bits());
+        iridia_naga::wgsl(&q, &iridia_naga::Profile::BROWSER).unwrap();
+    }
+}
