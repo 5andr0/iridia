@@ -121,7 +121,7 @@ dependencies = [
 [[package]]
 name = "d3d9-reader"
 version = "0.4.0"
-source = "git+https://github.com/Kalmarv/dx?rev=5b58dd383e54b9ad118edb78d0ca0f57e51db068#5b58dd383e54b9ad118edb78d0ca0f57e51db068"
+source = "git+https://github.com/Kalmarv/dx?rev=9b2934174aef4215ea8fff05d0c792dc8f7d0aeb#9b2934174aef4215ea8fff05d0c792dc8f7d0aeb"
 dependencies = [
  "thiserror",
 ]
@@ -139,8 +139,9 @@ dependencies = [
 [[package]]
 name = "dxbc-reader"
 version = "0.4.0"
-source = "git+https://github.com/Kalmarv/dx?rev=5b58dd383e54b9ad118edb78d0ca0f57e51db068#5b58dd383e54b9ad118edb78d0ca0f57e51db068"
+source = "git+https://github.com/Kalmarv/dx?rev=9b2934174aef4215ea8fff05d0c792dc8f7d0aeb#9b2934174aef4215ea8fff05d0c792dc8f7d0aeb"
 dependencies = [
+ "d3d9-reader",
  "dxcontainer",
  "thiserror",
 ]
@@ -148,7 +149,7 @@ dependencies = [
 [[package]]
 name = "dxcontainer"
 version = "0.4.0"
-source = "git+https://github.com/Kalmarv/dx?rev=5b58dd383e54b9ad118edb78d0ca0f57e51db068#5b58dd383e54b9ad118edb78d0ca0f57e51db068"
+source = "git+https://github.com/Kalmarv/dx?rev=9b2934174aef4215ea8fff05d0c792dc8f7d0aeb#9b2934174aef4215ea8fff05d0c792dc8f7d0aeb"
 dependencies = [
  "primase-foundations",
  "thiserror",
@@ -157,7 +158,7 @@ dependencies = [
 [[package]]
 name = "dxil-reader"
 version = "0.4.0"
-source = "git+https://github.com/Kalmarv/dx?rev=5b58dd383e54b9ad118edb78d0ca0f57e51db068#5b58dd383e54b9ad118edb78d0ca0f57e51db068"
+source = "git+https://github.com/Kalmarv/dx?rev=9b2934174aef4215ea8fff05d0c792dc8f7d0aeb#9b2934174aef4215ea8fff05d0c792dc8f7d0aeb"
 dependencies = [
  "dxcontainer",
  "primase-foundations",
@@ -264,6 +265,7 @@ dependencies = [
  "iridia-passes",
  "primase-naga",
  "primase-testdata",
+ "serde_json",
 ]
 
 [[package]]

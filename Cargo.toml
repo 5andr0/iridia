@@ -11,10 +11,10 @@ repository = "https://github.com/Kalmarv/iridia"
 publish = true
 
 [workspace.dependencies]
-d3d9-reader = { version = "0.4.0", git = "https://github.com/Kalmarv/dx", rev = "5b58dd383e54b9ad118edb78d0ca0f57e51db068" }
-dxbc-reader = { version = "0.4.0", git = "https://github.com/Kalmarv/dx", rev = "5b58dd383e54b9ad118edb78d0ca0f57e51db068" }
-dxcontainer = { version = "0.4.0", git = "https://github.com/Kalmarv/dx", rev = "5b58dd383e54b9ad118edb78d0ca0f57e51db068" }
-dxil-reader = { version = "0.4.0", git = "https://github.com/Kalmarv/dx", rev = "5b58dd383e54b9ad118edb78d0ca0f57e51db068" }
+d3d9-reader = { version = "0.4.0", git = "https://github.com/Kalmarv/dx", rev = "9b2934174aef4215ea8fff05d0c792dc8f7d0aeb" }
+dxbc-reader = { version = "0.4.0", git = "https://github.com/Kalmarv/dx", rev = "9b2934174aef4215ea8fff05d0c792dc8f7d0aeb" }
+dxcontainer = { version = "0.4.0", git = "https://github.com/Kalmarv/dx", rev = "9b2934174aef4215ea8fff05d0c792dc8f7d0aeb" }
+dxil-reader = { version = "0.4.0", git = "https://github.com/Kalmarv/dx", rev = "9b2934174aef4215ea8fff05d0c792dc8f7d0aeb" }
 half = { version = "=2.7.1", default-features = false }
 iridia = { version = "0.4.1", path = "iridia" }
 iridia-d3d9 = { path = "iridia-d3d9" }

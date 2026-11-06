@@ -608,25 +608,25 @@ impl Setup {
                     opcode: 113..=116 | 153 | 154,
                     ..
                 } => {}
-                // dcl_index_range: registers the program addresses by a computed index, [operand, first, count]
-                Declared::Other {
-                    opcode: 91, words, ..
-                } => {
-                    let [token, first, count] = words[..] else {
-                        return Err(at(format!(
-                            "dcl_index_range of {} words, where it has 3",
-                            words.len()
-                        )));
-                    };
-                    let output = match (token >> 12) & 255 {
-                        1 => false,
-                        2 => true,
+                // dcl_index_range: registers the program addresses by a computed index
+                Declared::IndexRange { operand, count } => {
+                    let output = match operand.register {
+                        Register::Input => false,
+                        Register::Output => true,
                         other => {
                             return Err(at(format!(
-                                "dcl_index_range of operand register type {other}: only inputs and outputs are lifted"
+                                "dcl_index_range of operand register type {other:?}: only inputs and outputs are \
+                                 lifted"
                             )));
                         }
                     };
+                    let [index] = &operand.indices[..] else {
+                        return Err(at(format!(
+                            "dcl_index_range of an operand of {} indices, where it has 1",
+                            operand.indices.len()
+                        )));
+                    };
+                    let (first, count) = (index.base, *count);
                     if count == 0 || first.checked_add(count).is_none_or(|end| end > MAX_INDEX_RANGE) {
                         return Err(at(format!(
                             "dcl_index_range of {count} registers from {first}: D3D has registers up to \
@@ -671,17 +671,17 @@ impl Setup {
                     gs_instances = count;
                 }
                 // dcl_stream: only stream 0 is rasterized; the others are stream output
-                Declared::Other {
-                    opcode: 143, words, ..
-                } => {
-                    let [_, stream] = words[..] else {
-                        return Err(at(format!("dcl_stream of {} words, where it has 2", words.len())));
-                    };
-                    if stream != 0 {
+                Declared::Stream(operand) => {
+                    if operand.indices.first().is_none_or(|i| i.base != 0) {
                         return Err(at(
                             "a geometry program's output to a stream other than 0 is not lifted".into(),
                         ));
                     }
+                }
+                Declared::FunctionBody(_) | Declared::FunctionTable { .. } | Declared::Interface { .. } => {
+                    return Err(at(
+                        "class linkage (function bodies, tables and interfaces) is not lifted".into(),
+                    ));
                 }
                 Declared::Other {
                     opcode: 147, control, ..

@@ -162,7 +162,7 @@ fn dcl_index_range_past_the_limit_or_of_another_register_is_refused() {
         let at = declaration(w, |_, opcode| opcode == 91);
         w[at + 1] &= !(255 << 12);
     });
-    assert!(refusal(&bytes).contains("dcl_index_range of operand register type 0"));
+    assert!(refusal(&bytes).contains("dcl_index_range of operand register type Temp"));
 }
 
 #[test]
