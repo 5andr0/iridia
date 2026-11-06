@@ -6,6 +6,47 @@
   time limit (`output_within`): a tool that hangs is killed and the test fails naming it, instead of hanging. A minute
   per vkd3d call, two per dxc compile, ten per WARP batch. vkd3d's tools are its Linux programs, so the vkd3d
   comparison runs on Linux and skips on Windows (no wrapper that starts them through WSL).
+- `iridia-dxbc`: `iridia_dxbc::ir::lift` (and `lift_with`) lifts a Shader Model 4 or 5 vertex, pixel or compute program
+  onto the IR (`iridia-ir`), with the interface `lift` reads: registers as variables of raw lanes, Direct3D's own rules
+  as the IR's operations, flow as its constructs. Memory is the IR's: raw, structured and typed loads and stores of
+  buffers and views, texel loads and stores of texture views, every atomic and its immediate form (compare-exchange
+  takes the comparand first), `imm_atomic_alloc` and `imm_atomic_consume` as counters, thread-group memory as a workgroup
+  variable, `sync` as a barrier; Shader Model 5.1 resource ranges as an element of an array resource (`nonuniform`
+  kept). A hull, domain or geometry program is still refused by name.
+- `iridia-dxbc/tests/ir_gate.rs`, the gate of the cut-over: every program of the Sekiro, Riders Republic and Unity
+  corpora and every fixture lifts both ways and runs in `iridia-exec`, the older lift (A), the IR lift (B) and the IR lift
+  after `promote`, `simplify` and `break_flags` (P), on seeded inputs, constants and textures; a pixel program with a
+  derivative or an implicit-level sample runs as a 2 x 2 quad, a compute program as two thread groups whose read-write
+  buffers, texels and counters are compared after. Every written lane must agree bit for bit (a NaN with any NaN); any
+  other refusal of the IR lift fails it. Planted bugs (an addition made a subtraction in a pixel and a compute program,
+  a derivative's axis swapped) are caught. No difference anywhere: Sekiro, 432 programs, A runs all 432 and B and P
+  agree on all; Riders Republic, 2,443 programs (26 refused by name: those made of functions), A runs 2,417 (736
+  compute) and B and P agree on 2,304, the other 113 A cannot evaluate on the seeded data (a loop past the executor's
+  budget, a request its backend does not answer); Unity, 4,854 programs, B and P agree on 4,802, the other 52 A cannot
+  evaluate (a quad whose lanes diverge at a derivative or an implicit-level sample, a store it is not given).
+- `iridia-ir`: the vocabulary the DXBC and DXIL lifts need: buffers (`Res`, `Address`), texel loads, gathers and
+  resource queries, stores to buffers and images, atomics on buffers, images (a typed storage buffer's element too) and
+  workgroup variables (`Memory`), counters, barriers, switches, arrays and workgroup variables, patch constants,
+  `Emit` and `Cut`, ternary and bit-field operations; `Program::workgroup`. `FRem` is C's `fmod`, exact. A cube's size
+  query has two lanes, its faces' width and height. A barrier outside a compute or mesh program may order storage
+  only; a barrier of nothing is refused.
+- `iridia-exec`: `Executable::from_ir` and `ProgramShader::from_ir` run an IR program in the flat executor. Buffer
+  atomics (`Backend::atomic_buffer`, `BufferAtomic`) and counters (`Backend::counter`) reach the backend where the run
+  does not hold the memory; image atomics gain compare-exchange (`ImageAtomic::compare`). A discarded or helper
+  invocation's atomics and an atomic outside the memory change nothing and give 0. The naga path gains WGSL integer
+  division (by zero, the lowest `i32` by -1), `firstLeadingBit`, `extractBits` and `insertBits`.
+- `resinfo`, in both DXBC lifters, as the Direct3D 11.3 specification states it (22.4.14): `_rcpFloat` takes the
+  reciprocals of the size's lanes only, not of the array size, the level count or a lane a smaller texture fills with
+  zero; at a level the texture does not have, every lane but the level count is zero (the array size was given); the
+  older lift's cube size is two lanes. The IR lift takes `resinfo` of a texture view (one level). No compiler writes
+  `_rcpFloat` and none of the corpora asks past a texture's levels. `tests/exec_warp.rs` checks all three return types
+  against WARP (`resinfo_agrees_with_warp`, the `_rcpFloat` program made by changing the float one's instructions) and
+  runs the IR lift beside the older one on every program it renders.
+- `iridia-d3d9-ir`'s gate runs a fourth column, D, the IR in `iridia-exec`, and takes a NaN as any NaN (IEEE 754 leaves
+  a result's NaN sign and payload open; debug and release builds differ in them).
+- `iridia-naga`: `tests/ops.rs` checks each operation's WGSL against its IR definition; `FRem`, `f32tof16` and
+  `f16tof32` are lowered in integers (exact, without the f16 capability); a naga validation error keeps its causes.
+- `iridia-passes`' tests run the flat form and the WGSL in the `break_flags` form; a remainder by zero is 0.
 - `iridia::flow`: `Reach` gains `words`, the constant-buffer words (`GlobalWord`: stage, resource, word) that may
   reach an output lane or the discard, each with its `Via`, as inputs and texels have it. A constant that only decides
   a branch or a discard is `Control`, one that scales a texture coordinate `Coordinate`; `WordsRead` says which words
@@ -26,6 +67,8 @@
   fxc 10.0.26100.4654 and the Windows SDK's dxc.exe; the Linux dxc 1.7.2308 release writes other containers);
   `assemble.py` (all 105 assembled fixtures) and `vkd3d_cases.py compile` (`vkd3d/cases.json` as committed) say which
   DLL and how to run them under Wine.
+- `iridia-dxil` refuses a volatile or atomic load or store by name, which it lowered as a plain one before; none
+  of the real corpora's programs has one.
 
 ## 0.5.0 (2026-11-06)
 

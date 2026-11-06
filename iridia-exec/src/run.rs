@@ -2,12 +2,13 @@ use std::collections::BTreeMap;
 
 use super::flat::{
     AtomOp, BinOp, CvtOp, Executable, GlobalKind, LevelOp, Loc, MathOp, Member, Op, Pick, Ptr, Reg, Res, St,
-    UnOp, WaveGather, WaveKind, WaveOp, WaveScan,
+    UnOp, WaveGather, WaveKind, WaveOp, WaveScan, WordAt,
 };
 use super::mask::{Mask, Wide};
 use super::rayquery::{Built, Query, Reported, Scenes};
 use super::request::{
-    Backend, Element, ImageAtomic, ImageLoad, ImageLod, ImageQuery, ImageSample, ImageStore,
+    Backend, BufferAtomic, Element, ImageAtomic, ImageAtomicOp, ImageLoad, ImageLod, ImageQuery, ImageSample,
+    ImageStore,
 };
 use iridia::ResourceId;
 
@@ -401,6 +402,14 @@ fn comp(r: &Reg, i: usize) -> u32 {
     r.get(i).copied().unwrap_or(0)
 }
 
+/// A WGSL bit field: the offset and count each at most 32, the count cut where their sum passes 32; with the field's
+/// mask at bit 0.
+fn bit_field(offset: u32, count: u32) -> (u32, u32, u32) {
+    let o = offset.min(32);
+    let c = count.min(32u32.saturating_sub(o));
+    (o, c, u32::MAX.checked_shr(32u32.saturating_sub(c)).unwrap_or(0))
+}
+
 /// HLSL's float to signed integer: saturating, a NaN 0, as the bits of the integer.
 #[inline(always)]
 #[allow(clippy::cast_possible_truncation)] // the saturating conversion is the operation
@@ -417,6 +426,37 @@ fn float_to_uint(x: f32) -> u32 {
 
 /// The register index of the first lane of slot `slot`: the slots outermost and the lanes innermost, as in `Scratch`.
 #[inline(always)]
+/// Where the words of buffer global `g` (its element `pick` for an array of them) start.
+fn buffer_loc(g: u32, pick: Pick) -> Loc {
+    match pick {
+        Pick::One => Loc::Global(g, 0),
+        pick => Loc::Elem(g, 0, pick),
+    }
+}
+
+/// One lane of the registers, as the operands of an IR operation.
+struct IrLane<'r> {
+    regs: &'r [Reg],
+    types: &'r [iridia_ir::Type],
+    lane: usize,
+    n: usize,
+}
+impl iridia_exec_ir::Operands for IrLane<'_> {
+    fn get(&self, v: iridia_ir::ValueId) -> Result<iridia_exec_ir::Lanes, String> {
+        let index = (v.0 as usize).saturating_mul(self.n).saturating_add(self.lane);
+        self.regs
+            .get(index)
+            .copied()
+            .ok_or_else(|| no_register(index, self.regs.len()))
+    }
+    fn ty(&self, v: iridia_ir::ValueId) -> Result<iridia_ir::Type, String> {
+        self.types
+            .get(v.0 as usize)
+            .copied()
+            .ok_or_else(|| format!("internal error: register {} has no type", v.0))
+    }
+}
+
 fn slot_at<const N: usize>(slot: u32) -> usize {
     (slot as usize).saturating_mul(N)
 }
@@ -701,6 +741,64 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
             }
         }
     }
+    /// An atomic operation on word `w` (inside it) of buffer global `g`, element `pick`: in place where the run holds
+    /// the buffer's words, else the backend's; the word as it was before.
+    #[allow(clippy::too_many_arguments)]
+    fn atomic_buffer_word(
+        &mut self,
+        g: u32,
+        pick: Pick,
+        lane: usize,
+        w: u32,
+        fun: AtomOp,
+        signed: bool,
+        value: u32,
+        expected: u32,
+    ) -> Result<u32, String> {
+        let loc = buffer_loc(g, pick);
+        let held = match pick {
+            Pick::One => matches!(self.store.get(g as usize), Some(Some(_))),
+            _ => {
+                let e = self.element_index(g, pick, lane)?;
+                self.elem_store
+                    .get(g as usize)
+                    .is_some_and(|v| v.contains_key(&e))
+            }
+        };
+        if held {
+            let old = self.mem_get(loc, lane, w, 1)?[0];
+            let (new, _) = atomic(fun, signed, old, value, expected);
+            self.mem_put(loc, lane, w, 1, [new, 0, 0, 0])?;
+            return Ok(old);
+        }
+        let view = match self.c.globals.at(g as usize)?.kind {
+            GlobalKind::Storage(view) | GlobalKind::StorageArray(view, _) => view,
+            _ => return Err("an atomic operation on a read-only global".into()),
+        };
+        let index = match pick {
+            Pick::One => 0,
+            _ => self.element_index(g, pick, lane)?,
+        };
+        let op = match fun {
+            AtomOp::Add => ImageAtomicOp::Add,
+            AtomOp::Sub => ImageAtomicOp::Sub,
+            AtomOp::And => ImageAtomicOp::And,
+            AtomOp::Or => ImageAtomicOp::Or,
+            AtomOp::Xor => ImageAtomicOp::Xor,
+            AtomOp::Min => ImageAtomicOp::Min,
+            AtomOp::Max => ImageAtomicOp::Max,
+            AtomOp::Exchange => ImageAtomicOp::Exchange,
+            AtomOp::CompareExchange => ImageAtomicOp::CompareExchange,
+        };
+        self.sampler.atomic_buffer(BufferAtomic {
+            view: Element { id: view, index },
+            word: w,
+            op,
+            signed,
+            value,
+            compare: expected,
+        })
+    }
     /// The element of an array of buffers a location names in `lane`.
     fn element_index(&self, g: u32, pick: Pick, lane: usize) -> Result<u32, String> {
         let index = match pick {
@@ -728,6 +826,36 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                 .copied()
                 .ok_or_else(|| format!("no words given for element {e} of an array of buffers")),
             _ => Err("a global that is not an array of buffers".into()),
+        }
+    }
+    /// How many words the buffer global `g` (its element `pick` for an array of them) has in `lane`.
+    fn buffer_words(&mut self, g: u32, pick: Pick, lane: usize) -> Result<u32, String> {
+        let count = |n: usize| u32::try_from(n).map_err(|_| "a buffer over 4294967295 words".to_owned());
+        if let Pick::Fixed(_) | Pick::Slot(_) = pick {
+            let e = self.element_index(g, pick, lane)?;
+            if let Words::ConstantElements(values) = self.b.data.at(g as usize)? {
+                let rows = values
+                    .get(&e)
+                    .ok_or_else(|| format!("no constant buffer given for descriptor {e}"))?;
+                return Ok(count(rows.len())?.saturating_mul(4));
+            }
+            return count(self.element_words(g, e)?.len());
+        }
+        if let Some(Some(d)) = self.store.get(g as usize) {
+            return count(d.len());
+        }
+        let bound = self.b;
+        match bound.data.at(g as usize)? {
+            Words::Elements(_) | Words::ConstantElements(_) => {
+                Err("an array of buffers read without an element".into())
+            }
+            Words::Owned(d) => count(d.len()),
+            Words::Slice(d) => count(d.len()),
+            Words::Rows(d) => Ok(count(d.len())?.saturating_mul(4)),
+            Words::Backend => match self.c.globals.at(g as usize)?.kind {
+                GlobalKind::Storage(view) => self.sampler.buffer_words(view),
+                _ => Err("a global that is neither bound nor a buffer".into()),
+            },
         }
     }
     fn dyn_extra(&self, p: &Ptr, lane: usize) -> Result<u32, String> {
@@ -883,9 +1011,9 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                         };
                     }
                     bin!(
-                        AddF, SubF, MulF, DivF, ModF, AddU, SubU, MulU, DivU, ModU, And, Or, Xor, Shl, ShrU,
-                        ShrI, EqW, NeW, EqF, NeF, LtF, LeF, GtF, GeF, LtU, LeU, GtU, GeU, LtI, LeI, GtI, GeI,
-                        LAnd, LOr
+                        AddF, SubF, MulF, DivF, ModF, AddU, SubU, MulU, DivU, ModU, DivI, ModI, And, Or, Xor,
+                        Shl, ShrU, ShrI, EqW, NeW, EqF, NeF, LtF, LeF, GtF, GeF, LtU, LeU, GtU, GeU, LtI,
+                        LeI, GtI, GeI, LAnd, LOr
                     )
                 }
                 Op::Select { c: cs, a, b, n, c1 } => {
@@ -932,21 +1060,20 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                 }
                 Op::Math {
                     f: mf,
-                    a,
-                    b,
-                    c: cc,
+                    args,
                     n,
-                    c1,
+                    scalars,
                 } => {
-                    let (a, b, cc) = (slot_at::<N>(*a), slot_at::<N>(*b), slot_at::<N>(*cc));
+                    let slots = args.map(slot_at::<N>);
                     each!(active, l, {
-                        let x = self.rd(a, l)?;
-                        let y = self.rd(b, l)?;
-                        let mut z = self.rd(cc, l)?;
-                        if *c1 {
-                            z = [z[0]; 4];
+                        let mut regs = [[0; 4]; 4];
+                        for (k, (reg, &s)) in regs.iter_mut().zip(&slots).enumerate() {
+                            *reg = self.rd(s, l)?;
+                            if scalars >> k & 1 != 0 {
+                                *reg = [reg[0]; 4];
+                            }
                         }
-                        self.wr(dst, l, math(*mf, x, y, z, *n, ftz))?;
+                        self.wr(dst, l, math(*mf, regs, *n, ftz))?;
                     })
                 }
                 Op::CopyWords { src, dst, words } => {
@@ -1048,6 +1175,59 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                     for l in 0..N {
                         self.wr(dst, l, [len; 4])?;
                     }
+                }
+                Op::Ir(op) => {
+                    let t = *c
+                        .ir_types
+                        .get(dst.checked_div(N).unwrap_or(usize::MAX))
+                        .ok_or("internal error: an IR operation's register has no type")?;
+                    each!(active, l, {
+                        let view = IrLane {
+                            regs: &self.regs,
+                            types: &c.ir_types,
+                            lane: l,
+                            n: N,
+                        };
+                        let value = iridia_exec_ir::eval(op, t, &view, ftz)?
+                            .ok_or_else(|| format!("internal error: {op:?} is not an operation on values"))?;
+                        self.wr(dst, l, value)?;
+                    })
+                }
+                Op::Element {
+                    loc,
+                    index,
+                    stride,
+                    len,
+                    n,
+                } => {
+                    let index = slot_at::<N>(*index);
+                    each!(active, l, {
+                        let i = self.rd(index, l)?[0];
+                        let value = if i < *len {
+                            let extra = i
+                                .checked_mul(*stride)
+                                .ok_or("an element past the words of memory")?;
+                            self.mem_get(*loc, l, extra, *n)?
+                        } else {
+                            [0; 4]
+                        };
+                        self.wr(dst, l, value)?;
+                    })
+                }
+                Op::Words { g, pick, word, n } => {
+                    let word = slot_at::<N>(*word);
+                    each!(active, l, {
+                        let first = self.rd(word, l)?[0];
+                        let len = self.buffer_words(*g, *pick, l)?;
+                        let mut value = [0u32; 4];
+                        for (w, k) in value.iter_mut().zip(0u32..).take(*n as usize) {
+                            let at = first.wrapping_add(k);
+                            if at < len {
+                                *w = self.mem_get(buffer_loc(*g, *pick), l, at, 1)?[0];
+                            }
+                        }
+                        self.wr(dst, l, value)?;
+                    })
                 }
                 Op::Deriv {
                     src,
@@ -1336,6 +1516,48 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                         }
                     }
                 }
+                St::StoreElement {
+                    loc,
+                    index,
+                    stride,
+                    len,
+                    src,
+                    n,
+                } => {
+                    for l in 0..N {
+                        if active.has(l) {
+                            let i = self.rd(slot_at::<N>(*index), l)?[0];
+                            if i < *len {
+                                let extra = i
+                                    .checked_mul(*stride)
+                                    .ok_or("an element past the words of memory")?;
+                                let v = self.rd(slot_at::<N>(*src), l)?;
+                                self.mem_put(*loc, l, extra, *n, v)?;
+                            }
+                        }
+                    }
+                }
+                St::StoreWords {
+                    g,
+                    pick,
+                    word,
+                    src,
+                    n,
+                } => {
+                    for l in 0..N {
+                        if active.has(l) {
+                            let first = self.rd(slot_at::<N>(*word), l)?[0];
+                            let len = self.buffer_words(*g, *pick, l)?;
+                            let v = self.rd(slot_at::<N>(*src), l)?;
+                            for (&w, k) in v.iter().zip(0u32..).take(*n as usize) {
+                                let at = first.wrapping_add(k);
+                                if at < len {
+                                    self.mem_put(buffer_loc(*g, *pick), l, at, 1, [w, 0, 0, 0])?;
+                                }
+                            }
+                        }
+                    }
+                }
                 St::StoreDyn { ptr, src, n } => {
                     for l in 0..N {
                         if active.has(l) {
@@ -1381,10 +1603,18 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                     op,
                     signed,
                     value,
+                    compare,
                     result,
                 } => {
                     for l in 0..N {
                         if active.has(l) {
+                            if self.killed.has(l) {
+                                // a killed invocation changes no memory; its result is undefined
+                                if let Some(r) = result {
+                                    self.wr(slot_at::<N>(*r), l, [0; 4])?;
+                                }
+                                continue;
+                            }
                             let cd = self.rd(slot_at::<N>(*coord), l)?;
                             let element = self.element(tex, l)?;
                             let old = self.sampler.atomic_image(ImageAtomic {
@@ -1398,6 +1628,10 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                                 op: *op,
                                 signed: *signed,
                                 value: self.rd(slot_at::<N>(*value), l)?[0],
+                                compare: match compare {
+                                    Some(c) => self.rd(slot_at::<N>(*c), l)?[0],
+                                    None => 0,
+                                },
                             })?;
                             if let Some(r) = result {
                                 self.wr(slot_at::<N>(*r), l, [old, 0, 0, 0])?;
@@ -1467,6 +1701,70 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                                 self.wr(slot_at::<N>(*x), l, [u32::from(swapped); 4])?;
                             }
                         }
+                    }
+                }
+                St::AtomicWord {
+                    at,
+                    fun,
+                    signed,
+                    value,
+                    compare,
+                    result,
+                } => {
+                    for l in 0..N {
+                        if !active.has(l) {
+                            continue;
+                        }
+                        let v = self.rd(slot_at::<N>(*value), l)?[0];
+                        let expected = match compare {
+                            Some(c) => self.rd(slot_at::<N>(*c), l)?[0],
+                            None => 0,
+                        };
+                        // a killed invocation changes no memory, and nothing outside the memory changes; both give 0
+                        let old = if self.killed.has(l) {
+                            0
+                        } else {
+                            match *at {
+                                WordAt::Buffer { g, pick, word } => {
+                                    let w = self.rd(slot_at::<N>(word), l)?[0];
+                                    if w >= self.buffer_words(g, pick, l)? {
+                                        0
+                                    } else {
+                                        self.atomic_buffer_word(g, pick, l, w, *fun, *signed, v, expected)?
+                                    }
+                                }
+                                WordAt::Element { loc, index, len } => {
+                                    let i = self.rd(slot_at::<N>(index), l)?[0];
+                                    if i >= len {
+                                        0
+                                    } else {
+                                        let old = self.mem_get(loc, l, i, 1)?[0];
+                                        let (new, _) = atomic(*fun, *signed, old, v, expected);
+                                        self.mem_put(loc, l, i, 1, [new, 0, 0, 0])?;
+                                        old
+                                    }
+                                }
+                            }
+                        };
+                        self.wr(slot_at::<N>(*result), l, [old, 0, 0, 0])?;
+                    }
+                }
+                St::Counter {
+                    tex,
+                    decrement,
+                    result,
+                } => {
+                    for l in 0..N {
+                        if !active.has(l) {
+                            continue;
+                        }
+                        let count = if self.killed.has(l) {
+                            0
+                        } else {
+                            let element = self.element(tex, l)?;
+                            self.sampler.counter(element, *decrement)?
+                        };
+                        self.wr(slot_at::<N>(*result), l, [count, 0, 0, 0])?;
                     }
                 }
                 St::WaveBallot { predicate, result } => {
@@ -2134,8 +2432,11 @@ pub(super) fn bin(op: BinOp, x: u32, y: u32, ftz: bool) -> Result<u32, String> {
         AddU => x.wrapping_add(y),
         SubU => x.wrapping_sub(y),
         MulU => x.wrapping_mul(y),
-        DivU => x.checked_div(y).ok_or("integer divide by zero in the program")?,
-        ModU => x.checked_rem(y).ok_or("integer modulo by zero in the program")?,
+        // WGSL's integer division: by zero the dividend, the lowest i32 by -1 itself; a remainder of either 0
+        DivU => x.checked_div(y).unwrap_or(x),
+        ModU => x.checked_rem(y).unwrap_or(0),
+        DivI => (x as i32).checked_div(y as i32).map_or(x, |q| q as u32),
+        ModI => (x as i32).checked_rem(y as i32).map_or(0, |r| r as u32),
         And => x & y,
         Or => x | y,
         Xor => x ^ y,
@@ -2164,7 +2465,7 @@ pub(super) fn bin(op: BinOp, x: u32, y: u32, ftz: bool) -> Result<u32, String> {
 }
 
 /// Math operation `mf` on the first `n` lanes of `a`, `b` and `c`, subnormal floats flushed to zero where `z`.
-pub(super) fn math(mf: MathOp, a: Reg, b: Reg, c: Reg, n: u8, z: bool) -> Reg {
+pub(super) fn math(mf: MathOp, [a, b, c, d]: [Reg; 4], n: u8, z: bool) -> Reg {
     let mut r = [0u32; 4];
     if mf == MathOp::Dot {
         let mut acc = 0.0f32;
@@ -2216,7 +2517,7 @@ pub(super) fn math(mf: MathOp, a: Reg, b: Reg, c: Reg, n: u8, z: bool) -> Reg {
         return r;
     }
     for i in 0..n as usize {
-        let (x, y, w) = (comp(&a, i), comp(&b, i), comp(&c, i));
+        let (x, y, w, v) = (comp(&a, i), comp(&b, i), comp(&c, i), comp(&d, i));
         let g = |v: f32| fl(v, z);
         let one = |h: &dyn Fn(f32) -> f32| g(h(g(f(x)))).to_bits();
         let out = match mf {
@@ -2255,6 +2556,28 @@ pub(super) fn math(mf: MathOp, a: Reg, b: Reg, c: Reg, n: u8, z: bool) -> Reg {
             MathOp::Popcnt => x.count_ones(),
             MathOp::RevBits => x.reverse_bits(),
             MathOp::Clz => x.leading_zeros(),
+            // WGSL's firstLeadingBit: the highest bit set (of a signed value, the highest that differs from the sign),
+            // all ones where there is none
+            MathOp::FirstLeadingU => 31u32.checked_sub(x.leading_zeros()).unwrap_or(u32::MAX),
+            MathOp::FirstLeadingI => {
+                let m = if (x as i32) < 0 { !x } else { x };
+                31u32.checked_sub(m.leading_zeros()).unwrap_or(u32::MAX)
+            }
+            // WGSL's extractBits and insertBits: the offset and count each at most 32, their sum cut at 32
+            MathOp::ExtractU | MathOp::ExtractI => {
+                let (o, c, low) = bit_field(y, w);
+                let field = x.checked_shr(o).unwrap_or(0) & low;
+                if mf == MathOp::ExtractI && c > 0 && field >> c.saturating_sub(1) & 1 != 0 {
+                    field | !low
+                } else {
+                    field
+                }
+            }
+            MathOp::Insert => {
+                let (o, _, low) = bit_field(w, v);
+                let mask = low.checked_shl(o).unwrap_or(0);
+                (x & !mask) | (y.checked_shl(o).unwrap_or(0) & mask)
+            }
             MathOp::Ctz => {
                 if x == 0 {
                     u32::MAX

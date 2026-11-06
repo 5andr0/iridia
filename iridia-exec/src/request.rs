@@ -154,6 +154,8 @@ pub enum ImageAtomicOp {
     Max,
     /// Store the program's value.
     Exchange,
+    /// Store the program's value where the word equals [`ImageAtomic::compare`].
+    CompareExchange,
 }
 
 /// An atomic operation on one texel of a single-channel 32-bit unordered-access texture. Its result is the word as it was
@@ -176,6 +178,46 @@ pub struct ImageAtomic<R> {
     pub signed: bool,
     /// The program's operand.
     pub value: u32,
+    /// The comparand of a [`ImageAtomicOp::CompareExchange`] (0 for the other operations).
+    pub compare: u32,
+}
+
+/// An atomic operation on one 32-bit word of a buffer the caller holds ([`Backend::atomic_buffer`]). Its result is the
+/// word as it was before.
+#[derive(Clone, Copy, Debug)]
+pub struct BufferAtomic {
+    /// The buffer.
+    pub view: Element,
+    /// The word's index.
+    pub word: u32,
+    /// The operation.
+    pub op: ImageAtomicOp,
+    /// Whether `Min` and `Max` compare the words as signed integers.
+    pub signed: bool,
+    /// The program's operand.
+    pub value: u32,
+    /// The comparand of a [`ImageAtomicOp::CompareExchange`] (0 for the other operations).
+    pub compare: u32,
+}
+
+impl ImageAtomicOp {
+    /// The word an operation leaves where it held `old`: `signed` says how `Min` and `Max` compare.
+    pub fn apply(self, old: u32, value: u32, compare: u32, signed: bool) -> u32 {
+        match self {
+            ImageAtomicOp::Add => old.wrapping_add(value),
+            ImageAtomicOp::Sub => old.wrapping_sub(value),
+            ImageAtomicOp::And => old & value,
+            ImageAtomicOp::Or => old | value,
+            ImageAtomicOp::Xor => old ^ value,
+            ImageAtomicOp::Min if signed => old.cast_signed().min(value.cast_signed()).cast_unsigned(),
+            ImageAtomicOp::Max if signed => old.cast_signed().max(value.cast_signed()).cast_unsigned(),
+            ImageAtomicOp::Min => old.min(value),
+            ImageAtomicOp::Max => old.max(value),
+            ImageAtomicOp::Exchange => value,
+            ImageAtomicOp::CompareExchange if old == compare => value,
+            ImageAtomicOp::CompareExchange => old,
+        }
+    }
 }
 
 /// `TraceRay`: a ray shot into an acceleration structure. The payload is the words of the program's payload structure,
@@ -284,5 +326,21 @@ pub trait Backend {
     fn atomic_add(&mut self, view: ResourceId, word: u32, value: u32) -> Result<u32, String> {
         let _ = (word, value);
         Err(format!("resource {}: no atomics given", view.0))
+    }
+    /// An atomic operation on a word of a buffer the caller holds; its result the word as it was before. By default
+    /// an add of a buffer that is not in an array is [`Backend::atomic_add`], and the rest are refused.
+    fn atomic_buffer(&mut self, request: BufferAtomic) -> Result<u32, String> {
+        match request.op {
+            ImageAtomicOp::Add if request.view.index == 0 => {
+                self.atomic_add(request.view.id, request.word, request.value)
+            }
+            op => Err(format!("resource {}: no atomic {op:?} given", request.view.id.0)),
+        }
+    }
+    /// The hidden counter of a structured buffer (D3D's append and consume buffers): its count before it is
+    /// incremented, or after it is decremented (`decrement`), wrapping.
+    fn counter(&mut self, view: Element, decrement: bool) -> Result<u32, String> {
+        let _ = decrement;
+        Err(format!("resource {}: no counter given", view.id.0))
     }
 }

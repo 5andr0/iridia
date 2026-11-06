@@ -314,6 +314,8 @@ impl Sampler for Uniform {
     fn query_image(&mut self, r: ImageQuery<u32>) -> Result<[u32; 4], String> {
         let (_, layers) = self.shapes[&r.texture];
         Ok(match r.kind {
+            // the oracle's textures are 4 texels a side with one level: a level past it has no size
+            QueryKind::Size if r.level.unwrap_or(0) > 0 => [0; 4],
             QueryKind::Size => [4, 4, 4, 0],
             QueryKind::Levels => [1, 0, 0, 0],
             QueryKind::Layers => [layers, 0, 0, 0],
@@ -388,6 +390,29 @@ struct Tally {
     by_program: BTreeMap<String, Class>,
     /// Compared programs by the shape of each of their textures (a program counts once per shape).
     shapes: BTreeMap<&'static str, usize>,
+    /// The IR lift's runs that agree with the older lift's bit for bit, and the programs it does not lift (by why).
+    ir_agree: usize,
+    ir_refused: BTreeMap<String, usize>,
+    /// The runs where the IR lift's outputs are not the older lift's.
+    ir_differ: Vec<String>,
+}
+
+/// What a run of a pixel program leaves: each written output lane (a NaN as one pattern), or that it discarded.
+fn observed(e: &iridia_exec::Execution) -> Option<Vec<[u32; 4]>> {
+    let canonical = |w: u32| {
+        if f32::from_bits(w).is_nan() {
+            0x7fc0_0000
+        } else {
+            w
+        }
+    };
+    (!e.discarded).then(|| {
+        e.outputs
+            .iter()
+            .zip(&e.output_masks)
+            .map(|(o, &m)| std::array::from_fn(|k| if m >> k & 1 != 0 { canonical(o[k]) } else { 0 }))
+            .collect()
+    })
 }
 
 fn run_program(
@@ -430,6 +455,17 @@ fn run_program(
     let Ok(shader) = ProgramShader::new(program) else {
         *t.errors.entry("ProgramShader::new".into()).or_default() += 1;
         return;
+    };
+    // the IR lift of the same program, run on the same cases beside it
+    let ir = match iridia_dxbc::ir::lift(bytes)
+        .map_err(|e| e.to_string())
+        .and_then(|p| ProgramShader::from_ir(p).map_err(|e| e.to_string()))
+    {
+        Ok(s) => Some(s),
+        Err(e) => {
+            *t.ir_refused.entry(e).or_default() += 1;
+            None
+        }
     };
     let tag = Path::new(name)
         .file_stem()
@@ -531,7 +567,19 @@ fn run_program(
         };
         let zero = vec![[[0u32; 4]; 2]; case.inputs.len()];
         let refs = common::refs(&case, &shader);
-        ours.push(shader.execute_with_derivatives(&case.inputs, &zero, &refs, &mut sampler));
+        let a = shader.execute_with_derivatives(&case.inputs, &zero, &refs, &mut sampler);
+        if let (Some(b), Ok(a)) = (&ir, &a) {
+            sampler.samples = 0;
+            match b.execute_with_derivatives(&case.inputs, &zero, &refs, &mut sampler) {
+                Ok(b) if observed(&b) == observed(a) => t.ir_agree += 1,
+                b => t.ir_differ.push(format!(
+                    "{name} case {c}: older lift {:x?}, IR lift {:x?}",
+                    observed(a),
+                    b.map(|b| observed(&b))
+                )),
+            }
+        }
+        ours.push(a);
     }
     let cases_path = scratch.join(format!("{tag}.cases.txt"));
     let results_path = scratch.join(format!("{tag}.warp.jsonl"));
@@ -638,6 +686,13 @@ fn report(title: &str, t: &Tally) {
     for w in &t.worst {
         println!("  BEYOND {w}");
     }
+    println!("  the IR lift: {} runs agree with the older lift's", t.ir_agree);
+    for (why, n) in &t.ir_refused {
+        println!("  IR refuses {n:5}  {why}");
+    }
+    for d in t.ir_differ.iter().take(20) {
+        println!("  IR DIFFERS {d}");
+    }
 }
 
 fn corpus(game: Game) {
@@ -664,6 +719,11 @@ fn corpus(game: Game) {
         t.worst.len()
     );
     assert!(t.errors.is_empty(), "{} programs errored", t.errors.len());
+    assert!(
+        t.ir_differ.is_empty(),
+        "{} runs of the IR lift differ from the older lift's",
+        t.ir_differ.len()
+    );
 }
 
 #[test]
@@ -677,4 +737,145 @@ fn riders_republic_programs_agree_with_warp() {
 #[test]
 fn unity_programs_agree_with_warp() {
     corpus(Game::Sledding);
+}
+
+/// A pixel program asking `resinfo` of a texture of each shape the oracle binds but a 1D array (which the lifters do not take), at the level its input chooses (0, or
+/// 1: past the oracle's one level, where the size is zero); `UINT` asks for integers.
+const RESINFO_HLSL: &str = r#"
+Texture1D<float4> t0 : register(t0);
+Texture2D<float4> t2 : register(t2);
+Texture2DArray<float4> t3 : register(t3);
+Texture3D<float4> t4 : register(t4);
+TextureCube<float4> t5 : register(t5);
+#ifdef UINT
+#define T uint
+#define V uint4
+#else
+#define T float
+#define V float4
+#endif
+struct Out {
+    V a : SV_Target0; V c : SV_Target1; V d : SV_Target2; V e : SV_Target3; V f : SV_Target4;
+};
+Out main(float4 p : SV_Position, float4 lv : LEVEL) {
+    uint l = lv.x > 0.75 ? 1 : 0;
+    Out o;
+    T w, h, d, n;
+    t0.GetDimensions(l, w, n); o.a = V(w, 0, 0, n);
+    t2.GetDimensions(l, w, h, n); o.c = V(w, h, 0, n);
+    t3.GetDimensions(l, w, h, d, n); o.d = V(w, h, d, n);
+    t4.GetDimensions(l, w, h, d, n); o.e = V(w, h, d, n);
+    t5.GetDimensions(l, w, h, n); o.f = V(w, h, 0, n);
+    return o;
+}
+"#;
+
+/// `bytes` with every `resinfo` instruction's return type (its opcode token's bits 11 and 12) made `ret`, and the
+/// container's digest repaired; how many it changed.
+fn with_resinfo_return(bytes: &[u8], ret: u32) -> (Vec<u8>, usize) {
+    let parts = dxcontainer::chunks(bytes).unwrap();
+    let code = parts
+        .iter()
+        .find(|c| matches!(&c.kind, b"SHDR" | b"SHEX"))
+        .unwrap();
+    let mut words: Vec<u32> = code
+        .data
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|b| u32::from_le_bytes(*b))
+        .collect();
+    let decoded = dxbc_reader::decode::decode(&words).unwrap();
+    let mut changed = 0;
+    for ins in decoded.instructions.iter().filter(|i| i.name() == "resinfo") {
+        words[ins.word] = (words[ins.word] & !(3 << 11)) | ret << 11;
+        changed += 1;
+    }
+    let data: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+    let mut out = dxcontainer::replace_part(bytes, code.kind, &data).unwrap();
+    dxcontainer::repair_digest(&mut out).unwrap();
+    (out, changed)
+}
+
+/// `resinfo` against WARP, in each of its three return types: float and uint as `fxc` writes them, and `_rcpFloat`,
+/// which no compiler writes (the float program with its instructions' return type changed): the reciprocals of the
+/// size's lanes, the layers and the level count as they are. Each program runs through both lifts.
+#[test]
+fn resinfo_agrees_with_warp() {
+    let (Some(fxc), Some(warp)) = (tool(Tool::Fxc), tool(Tool::Warp)) else {
+        return;
+    };
+    let scratch = inputs::own_scratch("warp-resinfo");
+    let source = scratch.join("resinfo.hlsl");
+    std::fs::write(&source, RESINFO_HLSL).unwrap();
+    let compile = |name: &str, defines: &[&str]| -> Vec<u8> {
+        let out = scratch.join(format!("{name}.dxbc"));
+        let mut command = std::process::Command::new(&fxc);
+        command.args(["/nologo", "/T", "ps_5_0", "/E", "main"]);
+        for d in defines {
+            command.args(["/D", d]);
+        }
+        let compiled = command.arg("/Fo").arg(&out).arg(&source).output().unwrap();
+        assert!(
+            compiled.status.success(),
+            "fxc: {}",
+            String::from_utf8_lossy(&compiled.stderr)
+        );
+        std::fs::read(&out).unwrap()
+    };
+    let float = compile("resinfo_float", &[]);
+    let uint = compile("resinfo_uint", &["UINT=1"]);
+    let (rcp, changed) = with_resinfo_return(&float, 1);
+    assert_eq!(changed, 5, "the float program's resinfo instructions");
+    let returns = |bytes: &[u8]| -> Vec<u32> {
+        let parts = dxcontainer::chunks(bytes).unwrap();
+        let code = parts
+            .iter()
+            .find(|c| matches!(&c.kind, b"SHDR" | b"SHEX"))
+            .unwrap();
+        let words: Vec<u32> = code
+            .data
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|b| u32::from_le_bytes(*b))
+            .collect();
+        dxbc_reader::decode::decode(&words)
+            .unwrap()
+            .instructions
+            .iter()
+            .filter(|i| i.name() == "resinfo")
+            .map(|i| i.control & 3)
+            .collect()
+    };
+    assert_eq!(returns(&float), [0; 5], "fxc's float resinfo");
+    assert_eq!(returns(&uint), [2; 5], "fxc's uint resinfo");
+    assert_eq!(returns(&rcp), [1; 5], "the patched resinfo");
+    let tools = (fxc, warp, scratch);
+    let mut t = Tally::default();
+    for (name, bytes) in [
+        ("resinfo_float.dxbc", &float),
+        ("resinfo_uint.dxbc", &uint),
+        ("resinfo_rcp.dxbc", &rcp),
+    ] {
+        if let Err(e) = iridia_dxbc::lift(bytes) {
+            panic!("{name}: {e}");
+        }
+        run_program(name, bytes, 4, true, &tools, &mut t);
+    }
+    report("resinfo", &t);
+    assert_eq!(t.selected, 3, "every program binds");
+    assert!(t.compared >= 6, "{} runs compared", t.compared);
+    assert!(t.errors.is_empty(), "{} programs errored", t.errors.len());
+    assert!(
+        t.worst.is_empty(),
+        "{} lanes are further than 1e-3 from WARP",
+        t.worst.len()
+    );
+    assert!(t.ir_refused.is_empty(), "the IR lift refuses");
+    assert!(
+        t.ir_differ.is_empty(),
+        "{} runs of the IR lift differ from the older lift's",
+        t.ir_differ.len()
+    );
 }

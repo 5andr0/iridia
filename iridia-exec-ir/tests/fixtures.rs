@@ -44,6 +44,8 @@ fn program_with(
     let mut p = Program {
         stage: Stage::Pixel,
         entry,
+        patch: None,
+        workgroup: None,
         interface: Interface {
             stage: Stage::Pixel,
             inputs: inputs
@@ -262,6 +264,40 @@ fn main {
     let r = run(&p, &[[2.0f32.to_bits(), 0, 0, 0]]);
     assert!(!r.killed);
     assert_eq!(r.outputs[0].unwrap()[0], (-2.0f32).to_bits());
+}
+
+#[test]
+fn a_demoted_invocation_goes_on_but_keeps_what_it_stored_before() {
+    let p = program(
+        "iridia-ir 1
+fn main {
+  %0: f32 = input 0.x
+  output 0.x = %0
+  %1: f32 = f32(0.0)
+  %2: bool = fcmp.lt %0, %1
+  if %2 {
+    demote
+    yield
+  } else {
+    yield
+  }
+  %3: f32 = fneg %0
+  output 0.x = %3
+  output 1.x = %3
+  return
+}
+",
+        &[(ScalarType::Float, 1)],
+        &[(ScalarType::Float, 1), (ScalarType::Float, 1)],
+    );
+    let r = run(&p, &[[(-2.0f32).to_bits(), 0, 0, 0]]);
+    assert!(r.killed);
+    assert_eq!(r.outputs[0].unwrap()[0], (-2.0f32).to_bits());
+    assert_eq!(r.outputs[1], None);
+    let r = run(&p, &[[2.0f32.to_bits(), 0, 0, 0]]);
+    assert!(!r.killed);
+    assert_eq!(r.outputs[0].unwrap()[0], (-2.0f32).to_bits());
+    assert_eq!(r.outputs[1].unwrap()[0], (-2.0f32).to_bits());
 }
 
 #[test]

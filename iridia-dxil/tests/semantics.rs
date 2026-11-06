@@ -993,18 +993,7 @@ mod image_atomics {
             self.requests += 1;
             let word = self.words.entry((r.view, r.texel)).or_insert(0);
             let old = *word;
-            *word = match (r.op, r.signed) {
-                (ImageAtomicOp::Add, _) => word.wrapping_add(r.value),
-                (ImageAtomicOp::Sub, _) => word.wrapping_sub(r.value),
-                (ImageAtomicOp::And, _) => *word & r.value,
-                (ImageAtomicOp::Or, _) => *word | r.value,
-                (ImageAtomicOp::Xor, _) => *word ^ r.value,
-                (ImageAtomicOp::Min, true) => (*word as i32).min(r.value as i32) as u32,
-                (ImageAtomicOp::Max, true) => (*word as i32).max(r.value as i32) as u32,
-                (ImageAtomicOp::Min, false) => (*word).min(r.value),
-                (ImageAtomicOp::Max, false) => (*word).max(r.value),
-                (ImageAtomicOp::Exchange, _) => r.value,
-            };
+            *word = r.op.apply(old, r.value, r.compare, r.signed);
             Ok(old)
         }
     }

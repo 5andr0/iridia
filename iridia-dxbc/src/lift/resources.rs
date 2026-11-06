@@ -727,8 +727,8 @@ impl Lift<'_> {
         let g = self.resource_pointer(image, ins.operand(2)?)?;
         let dims = match t.dim {
             naga::ImageDimension::D1 => Width::One,
-            naga::ImageDimension::D2 => Width::Two,
-            _ => Width::Three,
+            naga::ImageDimension::D2 | naga::ImageDimension::Cube => Width::Two,
+            naga::ImageDimension::D3 => Width::Three,
         };
         let size = Val {
             expr: self.b.app(E::ImageQuery {
@@ -770,6 +770,12 @@ impl Lift<'_> {
             parts.push(zero);
         }
         parts.truncate(3);
+        // at a level the resource does not have, all but the level count are zero, as for one not bound
+        let inside = self.b.binary(Bo::Less, mip, levels);
+        let mut parts: Vec<Val> = parts
+            .into_iter()
+            .map(|p| self.b.select(inside, p, zero))
+            .collect();
         parts.push(levels);
         let all = self.b.compose(&parts);
         // the return type: float (0), reciprocal float (1) or uint (2)
@@ -777,9 +783,19 @@ impl Lift<'_> {
             2 => all,
             0 => self.b.convert(all, Kind::F),
             _ => {
+                // the reciprocals of the size's lanes; the layers, the level count and a zero lane stay as they are
                 let f = self.b.convert(all, Kind::F);
                 let one = self.b.lit_f(1.0);
-                self.b.binary(Bo::Divide, one, f)
+                let reciprocal = self.b.binary(Bo::Divide, one, f);
+                let sized = size.width.lanes().count();
+                let lanes: Vec<Val> = Width::Four
+                    .lanes()
+                    .map(|k| {
+                        let from = if usize::from(k) < sized { reciprocal } else { f };
+                        self.b.lane(from, k)
+                    })
+                    .collect();
+                self.b.compose(&lanes)
             }
         };
         let picked = self.pick(result, ins.operand(2)?, mask);

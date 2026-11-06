@@ -92,7 +92,11 @@ impl Backend for Host<'_> {
 }
 
 fn execute(program: &Program, input: &Value) -> Value {
-    let exe = Executable::new(program).unwrap();
+    execute_with(&Executable::new(program).unwrap(), program, input)
+}
+
+/// The runs of `input` on `exe`, a compile of a program with `program`'s interface.
+fn execute_with(exe: &Executable, program: &Program, input: &Value) -> Value {
     let mut all = Vec::new();
     for invocation in input["runs"].as_array().unwrap() {
         let mut bound_data = Resources::default();
@@ -173,7 +177,7 @@ fn execute(program: &Program, input: &Value) -> Value {
             json!({"buffers":buffers,"images":host.stores})
         } else {
             let args = rows(&invocation["arguments"]);
-            let mut runner = iridia_exec::Runner::<1>::new(&exe, &bound, &mut host, None);
+            let mut runner = iridia_exec::Runner::<1>::new(exe, &bound, &mut host, None);
             let [out] = runner.run([&args]).unwrap();
             json!({"values":out.values})
         };
@@ -196,7 +200,7 @@ fn sm51_matches_dxil_and_sm50_bit_for_bit() {
         let input: Value =
             serde_json::from_slice(&std::fs::read(root().join(format!("{name}.inputs.json"))).unwrap())
                 .unwrap();
-        let mut baseline = None;
+        let mut baseline: Option<Value> = None;
         for (model, ext) in [(51, "dxbc"), (60, "dxil"), (50, "dxbc")] {
             let path = root().join(format!("{name}.{model}.{ext}"));
             if !path.exists() {
@@ -213,6 +217,17 @@ fn sm51_matches_dxil_and_sm50_bit_for_bit() {
             p.validate().unwrap_or_else(|e| panic!("{name}.{model}: {e:?}"));
             println!("running {name}.{model}");
             let output = execute(&p, &input);
+            if ext == "dxbc" {
+                // the IR lift of the same container, compiled from the IR, gives the same words
+                let ir = iridia_dxbc::ir::lift(&bytes).unwrap_or_else(|e| panic!("{name}.{model} IR: {e}"));
+                let exe = Executable::from_ir(&ir).unwrap_or_else(|e| panic!("{name}.{model} IR: {e}"));
+                assert_eq!(
+                    execute_with(&exe, &p, &input),
+                    output,
+                    "{name}.{model}: the IR lift"
+                );
+                println!("{name}.{model}: the IR lift, {} lanes identical", lanes(&output));
+            }
             if let Some(expected) = &baseline {
                 assert_eq!(&output, expected, "{name}.{model}");
                 println!("{name}: 5.1 vs {model}, {} lanes identical", lanes(&output));
