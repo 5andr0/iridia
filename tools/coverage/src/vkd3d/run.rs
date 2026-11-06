@@ -113,10 +113,48 @@ pub struct RunResult {
 }
 
 impl RunResult {
-    /// The probe the run's class comes from: the first that does not hold, failures first; `None` where every probe
-    /// holds.
+    /// Whether vkd3d's runner runs any of the run's probes (a section of the file it runs at this model): where it
+    /// does, the run's class is that of those probes, and the others are the extended ones, the same expectations at
+    /// a model vkd3d's own runs leave out, which need not hold on any device (a compiler that places registers or
+    /// folds constants otherwise at that model).
+    pub fn selected(&self) -> bool {
+        self.probes.iter().any(|p| p.selected)
+    }
+
+    /// The probe the run's class comes from: the first that does not hold, failures first, among the probes vkd3d's
+    /// runner runs or, where it runs none of the run's, among all; `None` where every one holds.
     pub fn deciding(&self) -> Option<&Probe> {
-        let rank = |o: &Outcome| match o {
+        self.deciding_among(!self.selected())
+    }
+
+    /// The class of the extended probes of a run vkd3d's runner runs (`None` where it has none, or runs none of the
+    /// run's).
+    pub fn extended_class(&self) -> Option<&'static str> {
+        if !self.selected() || self.probes.iter().all(|p| p.selected) {
+            return None;
+        }
+        Some(
+            self.probes
+                .iter()
+                .filter(|p| !p.selected)
+                .filter(|p| p.outcome.class() != "pass")
+                .min_by_key(|p| Self::rank(&p.outcome))
+                .map_or("pass", |p| p.outcome.class()),
+        )
+    }
+
+    /// The deciding probe among the selected probes, or among all where `all`.
+    fn deciding_among(&self, all: bool) -> Option<&Probe> {
+        self.probes
+            .iter()
+            .filter(|p| all || p.selected)
+            .filter(|p| Self::rank(&p.outcome) < 6)
+            .min_by_key(|p| Self::rank(&p.outcome))
+    }
+
+    /// How an outcome ranks in deciding a class: failures first, passes last.
+    fn rank(o: &Outcome) -> u8 {
+        match o {
             Outcome::Fail(_) => 0,
             Outcome::Failed(..) => 1,
             Outcome::Error(..) => 2,
@@ -124,11 +162,7 @@ impl RunResult {
             Outcome::NotModelled(_) => 4,
             Outcome::CompilerRefused(_) => 5,
             Outcome::Pass | Outcome::PassFlushed => 6,
-        };
-        self.probes
-            .iter()
-            .filter(|p| rank(&p.outcome) < 6)
-            .min_by_key(|p| rank(&p.outcome))
+        }
     }
 
     /// The run's class: `pass` where every probe holds, otherwise the [`deciding`](Self::deciding) probe's.
@@ -1275,7 +1309,7 @@ pub fn run_all(file: &File, threads: usize) -> (Vec<RunResult>, Lifts) {
 mod tests {
     use super::*;
 
-    fn probes(outcomes: &[Outcome]) -> Vec<Probe> {
+    fn probes_of(outcomes: &[Outcome]) -> Vec<Probe> {
         outcomes
             .iter()
             .zip(1..)
@@ -1288,22 +1322,51 @@ mod tests {
     }
 
     #[test]
+    fn a_run_is_classed_by_the_probes_vkd3d_runs() {
+        let fail = || Outcome::Fail("differs".into());
+        let run = |probes: Vec<Probe>| RunResult {
+            file: "t.shader_test".into(),
+            runner: "d3d12".into(),
+            model: "5.1".into(),
+            probes,
+            programs: BTreeMap::new(),
+        };
+        // a selected probe holds and an extended one does not: the run passes, its extended probes fail
+        let mut probes = probes_of(&[Outcome::Pass, fail()]);
+        probes[1].selected = false;
+        let r = run(probes);
+        assert!(r.selected());
+        assert_eq!((r.class(), r.extended_class()), ("pass", Some("fail")));
+        // a selected probe fails: the run fails, whatever the extended ones
+        let mut probes = probes_of(&[fail(), Outcome::Pass]);
+        probes[1].selected = false;
+        let r = run(probes);
+        assert_eq!((r.class(), r.extended_class()), ("fail", Some("pass")));
+        // vkd3d runs none of the run's probes: classed by all of them, none apart
+        let mut probes = probes_of(&[Outcome::Pass, fail()]);
+        probes.iter_mut().for_each(|p| p.selected = false);
+        let r = run(probes);
+        assert!(!r.selected());
+        assert_eq!((r.class(), r.extended_class()), ("fail", None));
+    }
+
+    #[test]
     fn a_flushed_run_is_taken_only_where_it_breaks_nothing() {
         let fail = || Outcome::Fail("differs".into());
         // it mends a probe and breaks none: taken, the mended probe saying so
-        let mut kept = probes(&[Outcome::Pass, fail(), fail()]);
+        let mut kept = probes_of(&[Outcome::Pass, fail(), fail()]);
         assert!(adopt_flushed(
             &mut kept,
-            probes(&[Outcome::Pass, Outcome::Pass, fail()])
+            probes_of(&[Outcome::Pass, Outcome::Pass, fail()])
         ));
         let got: Vec<_> = kept.iter().map(|p| p.outcome.clone()).collect();
         assert_eq!(got, [Outcome::Pass, Outcome::PassFlushed, fail()]);
         // it mends one and breaks one: one rule for the run, so not taken
-        let mut kept = probes(&[Outcome::Pass, fail()]);
-        assert!(!adopt_flushed(&mut kept, probes(&[fail(), Outcome::Pass])));
+        let mut kept = probes_of(&[Outcome::Pass, fail()]);
+        assert!(!adopt_flushed(&mut kept, probes_of(&[fail(), Outcome::Pass])));
         assert_eq!(kept[1].outcome, fail());
         // it mends none
-        let mut kept = probes(&[Outcome::Pass, fail()]);
-        assert!(!adopt_flushed(&mut kept, probes(&[Outcome::Pass, fail()])));
+        let mut kept = probes_of(&[Outcome::Pass, fail()]);
+        assert!(!adopt_flushed(&mut kept, probes_of(&[Outcome::Pass, fail()])));
     }
 }

@@ -29,7 +29,7 @@ For each vkd3d run (a test file at a shader model on one of vkd3d's Windows runn
 | `compiler-refused` | Microsoft's compiler made no program of the shader |
 | `unsupported`, `xfail`, `xpass` | offload: lit's own outcomes from the test's `REQUIRES`, `UNSUPPORTED` and `XFAIL` |
 
-A run's status is its most severe probe's: `fail`, then `error`, `refused`, `not-modelled`, `compiler-refused`. `probe_totals` counts the probes by status across every run, so a run that fails on one probe of forty shows as one failing probe and thirty-nine others.
+A run's status is its most severe probe's: `fail`, then `error`, `refused`, `not-modelled`, `compiler-refused`, among the probes of the sections vkd3d's runner runs at that model (`selected`). The case files also hold the runs at the models in a test file's range that vkd3d's own runs leave out, and the sections it leaves out of the runs it makes: these are extended, the same expectations at a model where they need not hold on any device (fxc places registers and folds constants differently at shader model 5.1, say). A run vkd3d runs none of is `selected: false`, its status that of all its probes; the probes left out of the others give their `extended_status`. `totals` and `probe_totals` count the selected runs and probes by status, `extended_totals` and `extended_probe_totals` the others, so a run that fails on one probe of forty shows as one failing probe and thirty-nine others.
 
 A probe after a step that failed is judged only when it reads nothing that step would have written: a resource a failed draw or dispatch would have written is unknown, and so is anything a later draw or dispatch makes reading it.
 

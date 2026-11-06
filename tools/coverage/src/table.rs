@@ -193,8 +193,12 @@ pub fn make(inputs: &Inputs<'_>) -> Result<(Value, String), String> {
 
     // vkd3d
     let mut rows = Vec::new();
+    // the runs vkd3d's runner runs and their selected probes; and apart, the runs it runs none of and the extended
+    // probes of the others
     let mut totals: BTreeMap<String, usize> = BTreeMap::new();
     let mut probe_totals: BTreeMap<String, usize> = BTreeMap::new();
+    let mut extended_totals: BTreeMap<String, usize> = BTreeMap::new();
+    let mut extended_probe_totals: BTreeMap<String, usize> = BTreeMap::new();
     let mut source = String::new();
     for path in &inputs.vkd3d {
         let file = vkd3d::cases::read(&read_text(path)?)?;
@@ -211,9 +215,20 @@ pub fn make(inputs: &Inputs<'_>) -> Result<(Value, String), String> {
         }
         for r in &results {
             let class = vkd3d_status(r.class());
-            *totals.entry(class.to_string()).or_default() += 1;
+            let selected = r.selected();
+            let runs = if selected {
+                &mut totals
+            } else {
+                &mut extended_totals
+            };
+            *runs.entry(class.to_string()).or_default() += 1;
             for p in &r.probes {
-                *probe_totals
+                let probes = if p.selected {
+                    &mut probe_totals
+                } else {
+                    &mut extended_probe_totals
+                };
+                *probes
                     .entry(vkd3d_status(p.outcome.class()).to_string())
                     .or_default() += 1;
             }
@@ -243,6 +258,9 @@ pub fn make(inputs: &Inputs<'_>) -> Result<(Value, String), String> {
                 "status": class,
                 "detail": detail,
                 "probes": r.probes.len(),
+                "selected": selected,
+                "selected_probes": r.probes.iter().filter(|p| p.selected).count(),
+                "extended_status": r.extended_class().map(vkd3d_status),
             }));
             for (name, ran) in &r.programs {
                 let Some(f) = fates.get_mut(name) else { continue };
@@ -265,14 +283,30 @@ pub fn make(inputs: &Inputs<'_>) -> Result<(Value, String), String> {
         "## vkd3d HLSL shader tests\n\n{}\n",
         source.trim_end_matches("; ")
     );
-    let _ = writeln!(summary, "| Status | Runs | Probes |\n|---|---:|---:|");
-    let statuses: BTreeSet<&String> = totals.keys().chain(probe_totals.keys()).collect();
+    let _ = writeln!(
+        summary,
+        "Runs vkd3d's runner runs, by their selected probes; and apart, the extended ones: the runs it runs none of, \
+         and the probes of the others it leaves out (the same expectations at a model vkd3d's own runs leave out).\n"
+    );
+    let _ = writeln!(
+        summary,
+        "| Status | Runs | Probes | Extended runs | Extended probes |\n|---|---:|---:|---:|---:|"
+    );
+    let statuses: BTreeSet<&String> = totals
+        .keys()
+        .chain(probe_totals.keys())
+        .chain(extended_totals.keys())
+        .chain(extended_probe_totals.keys())
+        .collect();
+    let n = |m: &BTreeMap<String, usize>, s: &String| m.get(s).copied().unwrap_or(0);
     for s in &statuses {
         let _ = writeln!(
             summary,
-            "| {s} | {} | {} |",
-            totals.get(*s).copied().unwrap_or(0),
-            probe_totals.get(*s).copied().unwrap_or(0)
+            "| {s} | {} | {} | {} | {} |",
+            n(&totals, s),
+            n(&probe_totals, s),
+            n(&extended_totals, s),
+            n(&extended_probe_totals, s)
         );
     }
     suites.push(json!({
@@ -283,9 +317,14 @@ pub fn make(inputs: &Inputs<'_>) -> Result<(Value, String), String> {
         "licence": "LGPL-2.1-or-later",
         "description": "Each test file run at each shader model on each of vkd3d's Windows runners (d3d9, d3d11, d3d12 \
             with fxc, d3d12 with dxc), every step in order, every probe compared as vkd3d compares it. A row is one run: \
-            pass when every probe holds.",
+            pass when every probe holds that vkd3d's runner runs at that model (selected); a run it runs none of is \
+            extended (selected false), its status that of all its probes, and the probes vkd3d leaves out of the \
+            others are their extended_status: the same expectations at a model vkd3d's own runs leave out, which need \
+            not hold on any device.",
         "totals": totals,
         "probe_totals": probe_totals,
+        "extended_totals": extended_totals,
+        "extended_probe_totals": extended_probe_totals,
         "rows": rows,
     }));
 

@@ -14,12 +14,20 @@ fn main() -> Result<(), String> {
             let mut probes: BTreeMap<String, usize> = BTreeMap::new();
             let mut why: BTreeMap<String, (usize, String)> = BTreeMap::new();
             for r in &results {
-                *runs.entry(format!("{} {}", r.runner, r.class())).or_default() += 1;
+                let extended = if r.selected() { "" } else { " (extended)" };
+                *runs.entry(format!("{} {}{extended}", r.runner, r.class())).or_default() += 1;
                 for p in &r.probes {
-                    *probes.entry(p.outcome.class().to_string()).or_default() += 1;
+                    let extended = if p.selected { "" } else { " (extended)" };
+                    *probes.entry(format!("{}{extended}", p.outcome.class())).or_default() += 1;
                 }
                 if let Some(p) = r.deciding() {
-                    let key = format!("{} {} {}", r.runner, p.outcome.class(), class_of(&p.outcome.reason(&r.file)));
+                    let extended = if r.selected() { "" } else { " (extended)" };
+                    let key = format!(
+                        "{} {}{extended} {}",
+                        r.runner,
+                        p.outcome.class(),
+                        class_of(&p.outcome.reason(&r.file))
+                    );
                     let e = why.entry(key).or_insert((0, format!("{}:{}: {}", r.file, p.line, p.outcome.detail())));
                     e.0 += 1;
                 }

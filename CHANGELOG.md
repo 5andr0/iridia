@@ -58,7 +58,8 @@
   shader tests (d3d9, d3d11, d3d12 and d3d12-dxc, shader models 2.0 to 6.6) and LLVM's offload-test-suite (lit's
   DirectX configuration with DXC, its FileCheck and imgdiff checks and the golden images) on a device that holds
   Direct3D's resources and pipeline state and draws and dispatches with `iridia-exec`; each run that does not pass
-  says why; a Direct3D 9 run, whose programs leave denormals open, that does not hold as run is run again with them
+  says why, its status that of the probes vkd3d's runner runs at that model (the extended ones, at models and in
+  sections vkd3d's own runs leave out, counted apart); a Direct3D 9 run, whose programs leave denormals open, that does not hold as run is run again with them
   flushed, and passes when that holds and breaks nothing that held. CI makes the table again (`docs/coverage`) and
   fails when it differs from the one committed.
 - `iridia-exec`: `draw` draws points and lines as well as triangles (every list and strip topology), each primitive
