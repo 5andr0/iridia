@@ -107,6 +107,27 @@ pub fn derived_type(op: &Op, ty: impl Fn(ValueId) -> Option<Type>) -> Result<Opt
                     float(t, "isnan")?;
                     t.with(Scalar::Bool)
                 }
+                Unary::ClampRange { lo, hi, nan } => {
+                    let (l, h) = (f32::from_bits(*lo), f32::from_bits(*hi));
+                    if !(l.is_finite() && h.is_finite() && l <= h) {
+                        return Err(format!("a clamp to {l:?}..{h:?}, which is not a finite range"));
+                    }
+                    if *nan == crate::SaturateNan::Zero && !(l <= 0.0 && 0.0 <= h) {
+                        return Err(format!("a clamp to {l:?}..{h:?} that gives 0 for NaN"));
+                    }
+                    float(t, "a clamp")?;
+                    if t.scalar != Scalar::F32 {
+                        return Err(format!("a clamp of {t}, whose bounds are f32"));
+                    }
+                    t
+                }
+                Unary::Quantize { frac_bits, .. } => {
+                    if *frac_bits > 23 {
+                        return Err(format!("a quantize to {frac_bits} fractional bits, more than 23"));
+                    }
+                    float(t, "a quantize")?;
+                    t
+                }
                 _ => {
                     float(t, "a float operation")?;
                     t
@@ -324,8 +345,14 @@ fn stated(op: &Op, t: Type, f: &Function, interface: &Interface) -> Result<(), S
                 Type::vector(Scalar::F32, lanes),
                 "sample coordinate",
             )?;
-            if let Level::Bias(x) | Level::Exact(x) = level {
-                same(get(*x)?, Type::F32, "sample level")?;
+            match level {
+                Level::Bias(x) | Level::Exact(x) => same(get(*x)?, Type::F32, "sample level")?,
+                Level::Grad(x, y) => {
+                    let c = get(*coord)?;
+                    same(get(*x)?, c, "sample gradient along x")?;
+                    same(get(*y)?, c, "sample gradient along y")?;
+                }
+                Level::Auto | Level::Zero => {}
             }
             same(t, Type::F32X4, "sample result")
         }
@@ -422,6 +449,9 @@ impl Checker<'_> {
         ) && self.stage != Stage::Pixel
         {
             self.problem(Some(v), "an implicit-level sample outside a pixel program");
+        }
+        if matches!(def.op, Op::Unary(Unary::Derivative(..), _)) && self.stage != Stage::Pixel {
+            self.problem(Some(v), "a derivative outside a pixel program");
         }
     }
     fn node(&mut self, n: &Node) {

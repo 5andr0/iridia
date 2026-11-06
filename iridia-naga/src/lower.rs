@@ -4,15 +4,15 @@
 use alloc::{format, string::String, vec, vec::Vec};
 
 use iridia_ir::{
-    Binary, Body, Cmp, End, FloatToInt, Function, Level, MinMaxNan, MulZero, Node, OnZero, Op, OutOfBounds,
-    Program, Region, Rounding, SaturateNan, Scalar, Type, Unary, ValueId,
+    Axis, Binary, Body, Cmp, End, Fineness, FloatToInt, Function, Level, MinMaxNan, MulZero, Node, OnZero,
+    Op, OutOfBounds, Program, Region, Rounding, SaturateNan, Scalar, Type, Unary, ValueId,
     interface::{ResourceId, ResourceKind, Stage, TextureDim, Value},
 };
 use naga::{
-    AddressSpace, ArraySize, BinaryOperator as Bo, Block, EntryPoint, Expression as E, GlobalVariable,
-    Handle, ImageClass, ImageDimension, Literal, LocalVariable, MathFunction as Mf, RelationalFunction,
-    ResourceBinding, SampleLevel, ScalarKind, ShaderStage, Span, Statement, StructMember, SwizzleComponent,
-    TypeInner, UnaryOperator, VectorSize,
+    AddressSpace, ArraySize, BinaryOperator as Bo, Block, DerivativeAxis, DerivativeControl, EntryPoint,
+    Expression as E, GlobalVariable, Handle, ImageClass, ImageDimension, Literal, LocalVariable,
+    MathFunction as Mf, RelationalFunction, ResourceBinding, SampleLevel, ScalarKind, ShaderStage, Span,
+    Statement, StructMember, SwizzleComponent, TypeInner, UnaryOperator, VectorSize,
 };
 
 use crate::{BindingPlan, Error, io::entry_io};
@@ -278,6 +278,51 @@ impl Lower<'_> {
                 Ok(self.select(is_nan, zero, clamped))
             }
         }
+    }
+    fn clamp_range(
+        &mut self,
+        x: Handle<E>,
+        t: Type,
+        lo: u32,
+        hi: u32,
+        nan: SaturateNan,
+    ) -> Result<Handle<E>, Error> {
+        let low = self.f32s(t, f32::from_bits(lo))?;
+        let high = self.f32s(t, f32::from_bits(hi))?;
+        let clamped = self.math(Mf::Clamp, x, &[low, high]);
+        match nan {
+            SaturateNan::Any => Ok(clamped),
+            SaturateNan::Zero => {
+                let is_nan = self.is_nan(x, t)?;
+                let zero = self.f32s(t, 0.0)?;
+                Ok(self.select(is_nan, zero, clamped))
+            }
+        }
+    }
+    /// `round(x * 2^f) / 2^f`, and `x` itself from `2^(23 - f)` on, where every float is on the grid already (and the
+    /// scaled value could overflow).
+    fn quantize(
+        &mut self,
+        x: Handle<E>,
+        t: Type,
+        frac_bits: u8,
+        rounding: Rounding,
+    ) -> Result<Handle<E>, Error> {
+        let bits = u32::from(frac_bits);
+        let scale = self.f32s(t, f32::from_bits(127u32.saturating_add(bits) << 23))?;
+        let grid = self.f32s(t, f32::from_bits(150u32.saturating_sub(bits) << 23))?;
+        let scaled = self.binary(Bo::Multiply, x, scale);
+        let rounded = match rounding {
+            Rounding::Floor => self.math(Mf::Floor, scaled, &[]),
+            Rounding::Ceil => self.math(Mf::Ceil, scaled, &[]),
+            Rounding::Trunc => self.math(Mf::Trunc, scaled, &[]),
+            Rounding::NearestEven => self.math(Mf::Round, scaled, &[]),
+            Rounding::NearestAway => self.round_away(scaled, t)?,
+        };
+        let stepped = self.binary(Bo::Divide, rounded, scale);
+        let magnitude = self.math(Mf::Abs, x, &[]);
+        let on_grid = self.binary(Bo::GreaterEqual, magnitude, grid);
+        Ok(self.select(on_grid, x, stepped))
     }
     fn min_max(
         &mut self,
@@ -564,6 +609,20 @@ impl Lower<'_> {
                     Unary::FSin => self.math(Mf::Sin, x, &[]),
                     Unary::FCos => self.math(Mf::Cos, x, &[]),
                     Unary::Saturate(nan) => self.saturate(x, at, nan)?,
+                    Unary::ClampRange { lo, hi, nan } => self.clamp_range(x, at, lo, hi, nan)?,
+                    Unary::Quantize { frac_bits, rounding } => self.quantize(x, at, frac_bits, rounding)?,
+                    Unary::Derivative(axis, fineness) => self.expr(E::Derivative {
+                        axis: match axis {
+                            Axis::X => DerivativeAxis::X,
+                            Axis::Y => DerivativeAxis::Y,
+                        },
+                        ctrl: match fineness {
+                            Fineness::Coarse => DerivativeControl::Coarse,
+                            Fineness::Fine => DerivativeControl::Fine,
+                            Fineness::Any => DerivativeControl::None,
+                        },
+                        expr: x,
+                    }),
                     Unary::Not if at.scalar == Scalar::Bool => self.expr(E::Unary {
                         op: UnaryOperator::LogicalNot,
                         expr: x,
@@ -750,6 +809,10 @@ impl Lower<'_> {
                     Level::Zero => SampleLevel::Zero,
                     Level::Bias(b) => SampleLevel::Bias(self.get(b)?),
                     Level::Exact(l) => SampleLevel::Exact(self.get(l)?),
+                    Level::Grad(x, y) => SampleLevel::Gradient {
+                        x: self.get(x)?,
+                        y: self.get(y)?,
+                    },
                 };
                 self.expr(E::ImageSample {
                     image,

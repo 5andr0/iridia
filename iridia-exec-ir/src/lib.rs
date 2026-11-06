@@ -35,6 +35,8 @@ pub enum Lod {
     Bias(f32),
     /// An explicit level.
     Exact(f32),
+    /// From explicit derivatives of the coordinate along x and y (the coordinate's lanes of each).
+    Grad([f32; 3], [f32; 3]),
 }
 
 /// A sample request.
@@ -229,6 +231,36 @@ impl Machine<'_, '_> {
                     Unary::FCos => float(m, &x, |f| narrow(f64::from(f).cos())),
                     Unary::Saturate(SaturateNan::Zero | SaturateNan::Any) => {
                         float(m, &x, |f| if is_nan(f) { 0.0 } else { f.clamp(0.0, 1.0) })
+                    }
+                    // NaN gives 0 under either rule (`Any` allows it)
+                    Unary::ClampRange { lo, hi, .. } => {
+                        let (lo, hi) = (fb(*lo), fb(*hi));
+                        float(m, &x, |f| if is_nan(f) { 0.0 } else { f.clamp(lo, hi) })
+                    }
+                    Unary::Quantize { frac_bits, rounding } => {
+                        let scale = f32::from_bits(127u32.saturating_add(u32::from(*frac_bits)) << 23);
+                        // from 2^(23 - frac_bits) on every f32 is on the grid already
+                        let grid = f32::from_bits(150u32.saturating_sub(u32::from(*frac_bits)) << 23);
+                        let round = match rounding {
+                            Rounding::Floor => f32::floor,
+                            Rounding::Ceil => f32::ceil,
+                            Rounding::Trunc => f32::trunc,
+                            Rounding::NearestEven => f32::round_ties_even,
+                            Rounding::NearestAway => f32::round,
+                        };
+                        float(m, &x, |f| {
+                            if f.abs() >= grid {
+                                f
+                            } else {
+                                round(f * scale) / scale
+                            }
+                        })
+                    }
+                    Unary::Derivative(..) => {
+                        return Err(
+                            "a derivative needs the invocation's quad, which a single run does not have"
+                                .into(),
+                        );
                     }
                     Unary::Not if at.scalar == Scalar::Bool => each(m, &x, |w| u32::from(w == 0)),
                     Unary::Not => each(m, &x, |w| !w),
@@ -460,6 +492,10 @@ impl Machine<'_, '_> {
                     Level::Zero => Lod::Exact(0.0),
                     Level::Bias(b) => Lod::Bias(fb(self.get(*b)?[0])),
                     Level::Exact(l) => Lod::Exact(fb(self.get(*l)?[0])),
+                    Level::Grad(x, y) => {
+                        let (x, y) = (self.get(*x)?, self.get(*y)?);
+                        Lod::Grad([fb(x[0]), fb(x[1]), fb(x[2])], [fb(y[0]), fb(y[1]), fb(y[2])])
+                    }
                 };
                 let request = Sample {
                     texture: *texture,

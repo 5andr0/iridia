@@ -48,8 +48,8 @@ pub use func::{
     Block, Body, End, Function, Node, Origin, Precision, Region, Target, Terminator, ValueDef, Var,
 };
 pub use op::{
-    Binary, Cmp, FloatToInt, LabelId, Level, MinMaxNan, MulZero, OnZero, Op, OutOfBounds, Rounding,
-    SaturateNan, Unary, ValueId, VarId,
+    Axis, Binary, Cmp, Fineness, FloatToInt, LabelId, Level, MinMaxNan, MulZero, OnZero, Op, OutOfBounds,
+    Rounding, SaturateNan, Unary, ValueId, VarId,
 };
 pub use program::{ClipDepth, Conventions, Corner, Denormals, FloatEnv, Program, Provenance};
 pub use refusal::{Refusal, Unit, source_hash};

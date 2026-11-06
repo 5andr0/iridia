@@ -12,9 +12,9 @@ use core::fmt;
 
 use super::{SCHEMA, binary, unary};
 use crate::{
-    Binary, Block, Body, Cmp, End, FloatToInt, Function, LabelId, Level, MinMaxNan, MulZero, Node, OnZero,
-    Op, OutOfBounds, Precision, Region, Rounding, SaturateNan, Scalar, Target, Terminator, Type, Unary,
-    ValueDef, ValueId, Var, VarId, interface::ResourceId,
+    Axis, Binary, Block, Body, Cmp, End, Fineness, FloatToInt, Function, LabelId, Level, MinMaxNan, MulZero,
+    Node, OnZero, Op, OutOfBounds, Precision, Region, Rounding, SaturateNan, Scalar, Target, Terminator,
+    Type, Unary, ValueDef, ValueId, Var, VarId, interface::ResourceId,
 };
 
 /// Why a text cannot be read: the line (from 1) and what is wrong there.
@@ -68,6 +68,14 @@ fn unaries() -> Vec<Unary> {
         Unary::IsNan,
     ];
     all.extend(ROUNDINGS.map(Unary::FRound));
+    for axis in [Axis::X, Axis::Y] {
+        for fineness in [Fineness::Coarse, Fineness::Fine, Fineness::Any] {
+            all.push(Unary::Derivative(axis, fineness));
+        }
+    }
+    for frac_bits in 0..=23 {
+        all.extend(ROUNDINGS.map(|rounding| Unary::Quantize { frac_bits, rounding }));
+    }
     all
 }
 
@@ -352,6 +360,7 @@ impl<'a> Parser<'a> {
             "state" => Op::LoadState(self.resource(rest)?),
             "buffer" => self.buffer(rest)?,
             "sample" => self.sample(rest)?,
+            name if name.starts_with("clamp.") => Op::Unary(self.clamp(name)?, self.value_id(rest)?),
             name => {
                 if let Some(u) = unaries().into_iter().find(|u| unary(u) == name) {
                     Op::Unary(u, self.value_id(rest)?)
@@ -365,6 +374,30 @@ impl<'a> Parser<'a> {
                 }
             }
         })
+    }
+    /// `clamp.nan(lo,hi)`, the bounds as the printer writes floats.
+    fn clamp(&self, name: &str) -> Result<Unary> {
+        let parsed = name
+            .strip_prefix("clamp.")
+            .and_then(|r| r.strip_suffix(')'))
+            .and_then(|r| r.split_once('('))
+            .and_then(|(nan, bounds)| {
+                let nan = match nan {
+                    "zero" => SaturateNan::Zero,
+                    "any" => SaturateNan::Any,
+                    _ => return None,
+                };
+                let (lo, hi) = bounds.split_once(',')?;
+                Some((nan, lo.parse::<f32>().ok()?, hi.parse::<f32>().ok()?))
+            });
+        match parsed {
+            Some((nan, lo, hi)) => Ok(Unary::ClampRange {
+                lo: lo.to_bits(),
+                hi: hi.to_bits(),
+                nan,
+            }),
+            None => self.fail(format!("not a clamp: {name}")),
+        }
     }
     /// `rN[%i * stride] + offset oob.rule`, the index part optional.
     fn buffer(&self, s: &str) -> Result<Op> {
@@ -403,14 +436,14 @@ impl<'a> Parser<'a> {
             oob,
         })
     }
-    /// `rT, rS, %c` and an optional `level 0`, `bias %x` or `level %x`.
+    /// `rT, rS, %c` and an optional `level 0`, `bias %x`, `level %x` or `grad %x, %y`.
     fn sample(&self, s: &str) -> Result<Op> {
-        let (head, level) = match s.split_once(" level ").map(|(h, l)| (h, Some(("level", l)))) {
+        let (head, level) = match ["level", "bias", "grad"].into_iter().find_map(|word| {
+            s.split_once(&format!(" {word} "))
+                .map(|(h, l)| (h, Some((word, l))))
+        }) {
             Some(x) => x,
-            None => match s.split_once(" bias ") {
-                Some((h, b)) => (h, Some(("bias", b))),
-                None => (s, None),
-            },
+            None => (s, None),
         };
         let parts: Vec<&str> = head.split(", ").collect();
         let [texture, sampler, coord] = parts.as_slice() else {
@@ -420,6 +453,10 @@ impl<'a> Parser<'a> {
             None => Level::Auto,
             Some(("level", "0")) => Level::Zero,
             Some(("level", x)) => Level::Exact(self.value_id(x)?),
+            Some(("grad", x)) => match self.list(x)?.as_slice() {
+                [dx, dy] => Level::Grad(*dx, *dy),
+                _ => return self.fail("a gradient takes two values"),
+            },
             Some((_, x)) => Level::Bias(self.value_id(x)?),
         };
         Ok(Op::Sample {

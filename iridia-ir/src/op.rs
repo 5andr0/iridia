@@ -82,6 +82,26 @@ pub enum Rounding {
     NearestAway,
 }
 
+/// The screen axis a derivative is taken along.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+pub enum Axis {
+    /// Along x (`ddx`, `dsx`, `dpdx`).
+    X,
+    /// Along y.
+    Y,
+}
+
+/// Which neighbours a derivative is taken between.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+pub enum Fineness {
+    /// Once per 2x2 quad: every invocation of the quad gets the same difference.
+    Coarse,
+    /// Per invocation, between it and its neighbour in its row or column of the quad.
+    Fine,
+    /// Either: the source does not say (D3D9's `dsx` and `dsy`, WGSL's `dpdx`).
+    Any,
+}
+
 /// A comparison.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
 pub enum Cmp {
@@ -124,6 +144,27 @@ pub enum Unary {
     FCos,
     /// Clamp to 0..1, with the stated NaN rule.
     Saturate(SaturateNan),
+    /// Clamp to `lo..=hi`, the bounds' f32 bits (finite, `lo <= hi`), with the stated NaN rule; `Zero` needs 0 within
+    /// the range. A source's register range (D3D9 `ps_1_x` constants within -1..1 and colours within 0..1).
+    ClampRange {
+        /// The lower bound's bits.
+        lo: u32,
+        /// The upper bound's bits.
+        hi: u32,
+        /// What NaN gives.
+        nan: SaturateNan,
+    },
+    /// Fixed point of `frac_bits` fractional bits: `round(x * 2^frac_bits) / 2^frac_bits` with the rounding, NaN and
+    /// infinities kept (early D3D9 `ps_1_x` hardware, as a compatibility policy).
+    Quantize {
+        /// The fractional bits kept, 0 to 23.
+        frac_bits: u8,
+        /// How the scaled value rounds.
+        rounding: Rounding,
+    },
+    /// The derivative of a float along a screen axis, between the invocations of a 2x2 quad (pixel programs only).
+    /// Where the quad's invocations diverged it is undefined.
+    Derivative(Axis, Fineness),
     /// Boolean not.
     Not,
     /// Integer negation (wrapping).
@@ -192,6 +233,8 @@ pub enum Level {
     Exact(ValueId),
     /// Level zero.
     Zero,
+    /// From explicit derivatives of the coordinate along x and y, each of the coordinate's type.
+    Grad(ValueId, ValueId),
 }
 
 /// What a buffer read outside the resource's size gives.
@@ -296,8 +339,10 @@ impl Op {
             Op::LoadBuffer { index, .. } => v.extend(index.iter().copied()),
             Op::Sample { coord, level, .. } => {
                 v.push(*coord);
-                if let Level::Bias(x) | Level::Exact(x) = level {
-                    v.push(*x);
+                match level {
+                    Level::Bias(x) | Level::Exact(x) => v.push(*x),
+                    Level::Grad(x, y) => v.extend([*x, *y]),
+                    Level::Auto | Level::Zero => {}
                 }
             }
         }
@@ -307,9 +352,15 @@ impl Op {
     /// Whether the operation reads state other than its operands (inputs, variables, resources); such a value is
     /// placed where its node is and is not moved across stores.
     pub fn reads_state(&self) -> bool {
+        // a derivative reads the quad's other invocations, so it stays where its control flow puts it
         matches!(
             self,
-            Op::LoadInput(..) | Op::LoadVar(_) | Op::LoadState(_) | Op::LoadBuffer { .. } | Op::Sample { .. }
+            Op::LoadInput(..)
+                | Op::LoadVar(_)
+                | Op::LoadState(_)
+                | Op::LoadBuffer { .. }
+                | Op::Sample { .. }
+                | Op::Unary(Unary::Derivative(..), _)
         )
     }
 
@@ -342,8 +393,13 @@ impl Op {
             }
             Op::Sample { coord, level, .. } => {
                 *coord = f(*coord);
-                if let Level::Bias(x) | Level::Exact(x) = level {
-                    *x = f(*x);
+                match level {
+                    Level::Bias(x) | Level::Exact(x) => *x = f(*x),
+                    Level::Grad(x, y) => {
+                        *x = f(*x);
+                        *y = f(*y);
+                    }
+                    Level::Auto | Level::Zero => {}
                 }
             }
         }

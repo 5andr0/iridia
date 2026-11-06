@@ -81,6 +81,15 @@ fn unary(u: &Unary) -> String {
     match u {
         Unary::FRound(r) => alloc::format!("fround.{r:?}"),
         Unary::Saturate(n) => alloc::format!("saturate.{n:?}"),
+        Unary::ClampRange { lo, hi, nan } => {
+            alloc::format!(
+                "clamp.{nan:?}({:?},{:?})",
+                f32::from_bits(*lo),
+                f32::from_bits(*hi)
+            )
+        }
+        Unary::Quantize { frac_bits, rounding } => alloc::format!("quantize.{frac_bits}.{rounding:?}"),
+        Unary::Derivative(axis, fineness) => alloc::format!("deriv.{axis:?}.{fineness:?}"),
         other => alloc::format!("{other:?}"),
     }
     .to_lowercase()
@@ -167,6 +176,7 @@ fn op(out: &mut String, f: &Function, ty: Type, o: &Op) {
                 Level::Zero => write!(out, " level 0"),
                 Level::Bias(x) => write!(out, " bias %{}", x.0),
                 Level::Exact(x) => write!(out, " level %{}", x.0),
+                Level::Grad(x, y) => write!(out, " grad %{}, %{}", x.0, y.0),
             }
         }
     };
