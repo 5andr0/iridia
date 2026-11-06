@@ -61,6 +61,16 @@ pub struct Lifted {
     pub wgsl: Result<(), String>,
 }
 
+impl Lifted {
+    /// Whether the program leaves it open whether 32-bit denormals are flushed or kept, so a run may do either:
+    /// Direct3D 9's (its IR's `Denormals::Any`). DXBC and DXIL programs state theirs ([`iridia::D3dModes`]).
+    pub fn denormals_open(&self) -> bool {
+        self.ir
+            .as_ref()
+            .is_some_and(|p| p.ir.float.f32 == iridia_ir::Denormals::Any)
+    }
+}
+
 /// Why a program did not get as far as running.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Stop {
@@ -120,8 +130,22 @@ pub struct Ready {
     pub lifted: Lifted,
     /// It as `iridia-exec` runs a vertex or pixel program, or why not.
     pub shader: Result<ProgramShader, String>,
+    /// Where the program leaves denormals open ([`Lifted::denormals_open`]): [`Ready::shader`] with 32-bit denormals
+    /// flushed, which `shader` keeps.
+    pub flushed: Option<Result<ProgramShader, String>>,
     /// It as `iridia-exec` runs any program, or why not.
     pub executable: Result<Executable, String>,
+}
+
+impl Ready {
+    /// The vertex or pixel program `iridia-exec` runs, its denormals flushed where `flushed` and the program leaves
+    /// them open.
+    pub fn shader(&self, flushed: bool) -> &Result<ProgramShader, String> {
+        match &self.flushed {
+            Some(f) if flushed => f,
+            _ => &self.shader,
+        }
+    }
 }
 
 /// Each program lifted so far, by name: it, ready to run, or why it stopped.
@@ -164,10 +188,16 @@ impl<'f> Programs<'f> {
         let bytes = (self.bytes)(name).map_err(Stop::Failed)?;
         let done = lift(&bytes).map(|lifted| {
             let shader = ProgramShader::new((*lifted.program).clone()).map_err(|e| e.to_string());
+            let flushed = lifted.denormals_open().then(|| {
+                let mut program = (*lifted.program).clone();
+                program.modes.flush_denormals = true;
+                ProgramShader::new(program).map_err(|e| e.to_string())
+            });
             let executable = Executable::new(&lifted.program).map_err(|e| e.to_string());
             Arc::new(Ready {
                 lifted,
                 shader,
+                flushed,
                 executable,
             })
         });

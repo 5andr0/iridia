@@ -346,8 +346,9 @@ pub struct ResourceProvenance {
     /// The D3D bind point; `None` when the source has no such address.
     pub d3d: Option<D3dBinding>,
     /// The resource this one is the hidden counter of: an unordered-access view's 32-bit counter (D3D's append and
-    /// consume buffers, `IncrementCounter`), a buffer of its own in WebGPU. It has no D3D binding of its own; the
-    /// renderer binds it with the view, starting from the view's initial count.
+    /// consume buffers, `IncrementCounter`), a buffer of its own in WebGPU: one 32-bit word, or one per element of an
+    /// array of views, the element's word at its index. It has no D3D binding of its own; the renderer binds it
+    /// with the view, starting from the view's initial count.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub counter_of: Option<ResourceId>,
     /// The members the source states for a buffer view: a D3D `tbuffer`'s constant-register layout or a structured

@@ -378,8 +378,48 @@ fn d3d9_default_sampler() -> Sampler {
     }
 }
 
-/// Run one run of the file.
+/// Run one run of the file. A run with a probe that does not hold, among whose programs one leaves it open whether
+/// 32-bit denormals are flushed (Direct3D 9's), runs again with them flushed: where that run breaks no probe that
+/// held and makes one hold that did not, its outcomes are the run's, each probe it made hold
+/// [`Outcome::PassFlushed`]. Either rule is the program's, but one for the whole run, as a device has one.
 pub fn run(programs: &Programs<'_>, run: &Run) -> RunResult {
+    let mut kept = run_as(programs, run, false);
+    let open = kept
+        .programs
+        .keys()
+        .any(|name| programs.get(name).is_ok_and(|r| r.lifted.denormals_open()));
+    if !open || !kept.probes.iter().any(|p| p.outcome.class() == "fail") {
+        return kept;
+    }
+    let flushed = run_as(programs, run, true);
+    adopt_flushed(&mut kept.probes, flushed.probes);
+    kept
+}
+
+/// Take a run's probes with denormals flushed (`flushed`) for its probes with them kept (`kept`) where that breaks no
+/// probe that held and makes one hold that did not; each probe it made hold is [`Outcome::PassFlushed`]. Whether it
+/// took them.
+fn adopt_flushed(kept: &mut [Probe], flushed: Vec<Probe>) -> bool {
+    let pairs = || kept.iter().zip(&flushed);
+    let breaks = pairs().any(|(k, f)| k.outcome.class() == "pass" && f.outcome.class() != "pass");
+    let mends = pairs().any(|(k, f)| k.outcome.class() == "fail" && f.outcome.class() == "pass");
+    if breaks || !mends || kept.len() != flushed.len() {
+        return false;
+    }
+    for (k, f) in kept.iter_mut().zip(flushed) {
+        if k.outcome.class() == "fail" {
+            k.outcome = if f.outcome == Outcome::Pass {
+                Outcome::PassFlushed
+            } else {
+                f.outcome
+            };
+        }
+    }
+    true
+}
+
+/// Run one run of the file, with denormals flushed where `flushed` and a program leaves them open.
+fn run_as(programs: &Programs<'_>, run: &Run, flushed: bool) -> RunResult {
     let mut device = Device::default();
     let mut state = State::default();
     let mut probes = Vec::new();
@@ -520,7 +560,7 @@ pub fn run(programs: &Programs<'_>, run: &Run) -> RunResult {
                 for name in draw.values() {
                     used.entry(name.clone()).or_insert(None);
                 }
-                let done = draw_step(programs, &mut device, &mut state, draw, &shape, d3d9);
+                let done = draw_step(programs, &mut device, &mut state, draw, &shape, d3d9, flushed);
                 if let Err(why) = done {
                     for name in draw.values() {
                         if let Some(slot) = used.get_mut(name)
@@ -733,6 +773,7 @@ fn draw_step(
     stages: &BTreeMap<String, String>,
     shape: &Shape,
     d3d9: bool,
+    flushed: bool,
 ) -> Result<(), Outcome> {
     if let Some((name, value)) = state.unmodelled.iter().next() {
         return Err(Outcome::NotModelled(format!("the state {name} {value}")));
@@ -751,14 +792,14 @@ fn draw_step(
     let vs = ready(programs, vs_name)?;
     let ps = ready(programs, ps_name)?;
     let shader = |r: &Ready, name: &str| -> Result<(), Outcome> {
-        r.shader
+        r.shader(flushed)
             .as_ref()
             .map(|_| ())
             .map_err(|e| Outcome::Error(name.to_owned(), e.clone()))
     };
     shader(&vs, vs_name)?;
     shader(&ps, ps_name)?;
-    let (Ok(vsh), Ok(psh)) = (&vs.shader, &ps.shader) else {
+    let (Ok(vsh), Ok(psh)) = (vs.shader(flushed), ps.shader(flushed)) else {
         return Err(Outcome::Error(vs_name.clone(), "no shader".into()));
     };
     // the stages between the vertex and the pixel program, from their lifted programs
@@ -1095,4 +1136,41 @@ pub fn run_all(file: &File, threads: usize) -> (Vec<RunResult>, Lifts) {
     let mut results = results.into_inner().unwrap_or_default();
     results.sort_by_key(|(i, _)| *i);
     (results.into_iter().map(|(_, r)| r).collect(), programs.lifted())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn probes(outcomes: &[Outcome]) -> Vec<Probe> {
+        outcomes
+            .iter()
+            .zip(1..)
+            .map(|(outcome, line)| Probe {
+                line,
+                selected: true,
+                outcome: outcome.clone(),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_flushed_run_is_taken_only_where_it_breaks_nothing() {
+        let fail = || Outcome::Fail("differs".into());
+        // it mends a probe and breaks none: taken, the mended probe saying so
+        let mut kept = probes(&[Outcome::Pass, fail(), fail()]);
+        assert!(adopt_flushed(
+            &mut kept,
+            probes(&[Outcome::Pass, Outcome::Pass, fail()])
+        ));
+        let got: Vec<_> = kept.iter().map(|p| p.outcome.clone()).collect();
+        assert_eq!(got, [Outcome::Pass, Outcome::PassFlushed, fail()]);
+        // it mends one and breaks one: one rule for the run, so not taken
+        let mut kept = probes(&[Outcome::Pass, fail()]);
+        assert!(!adopt_flushed(&mut kept, probes(&[fail(), Outcome::Pass])));
+        assert_eq!(kept[1].outcome, fail());
+        // it mends none
+        let mut kept = probes(&[Outcome::Pass, fail()]);
+        assert!(!adopt_flushed(&mut kept, probes(&[Outcome::Pass, fail()])));
+    }
 }

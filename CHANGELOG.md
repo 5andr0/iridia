@@ -58,7 +58,9 @@
   shader tests (d3d9, d3d11, d3d12 and d3d12-dxc, shader models 2.0 to 6.6) and LLVM's offload-test-suite (lit's
   DirectX configuration with DXC, its FileCheck and imgdiff checks and the golden images) on a device that holds
   Direct3D's resources and pipeline state and draws and dispatches with `iridia-exec`; each run that does not pass
-  says why. CI makes the table again (`docs/coverage`) and fails when it differs from the one committed.
+  says why; a Direct3D 9 run, whose programs leave denormals open, that does not hold as run is run again with them
+  flushed, and passes when that holds and breaks nothing that held. CI makes the table again (`docs/coverage`) and
+  fails when it differs from the one committed.
 - `iridia-exec`: `draw` draws points and lines as well as triangles (every list and strip topology), each primitive
   numbered for `SV_PrimitiveID`; an aliased line by the diamond exit rule (3.4.3), which an NVIDIA RTX 5070 Ti draws
   exactly on every pixel of 10,640 recorded lines and WARP differs from in four classes the tests name and count;
@@ -67,6 +69,13 @@
   `ProgramShader::system_input` gives the register the primitive's number, the coverage and the sample's index are
   read from when the signature gives them none, and a vertex program's clip and cull distances and target and
   viewport indices are in its register view.
+- `iridia-dxil`: a boolean converts to a float as 1 or 0 (`uitofp`) and -1 or 0 (`sitofp`), where it converted its
+  all-ones word; and extended to a 16-bit integer (`zext`, `sext`), it is cut to the 16 bits. An array of read-write views keeps a counter per
+  element, the element's word at its index (`counter_of`, documented in `iridia-ir`). A program compiled with
+  `-denorm preserve` (the entry's `fp32-denorm-mode`) keeps 32-bit denormals (`D3dModes::flush_denormals` false),
+  where every program flushed them.
+- `iridia-dxbc`: `ld` with an immediate texel offset (`ld_aoffimmi`) reads the texel the offset moves to, where it
+  dropped the offset.
 - Tests: the oracle tools (vkd3d's programs, WARP, dxc) run through primase-testdata 0.1.14's `program(Tool::X)` with a
   time limit (`output_within`): a tool that hangs is killed and the test fails naming it, instead of hanging. A minute
   per vkd3d call, two per dxc compile, ten per WARP batch. vkd3d's tools are its Linux programs, so the vkd3d

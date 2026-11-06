@@ -757,6 +757,14 @@ impl Lift<'_> {
 
     /// A cast from a narrow integer (of width `from`) or to one (the type `to`).
     fn cast_narrow(&mut self, op: CastOp, v: Val, from: Option<u32>, to: TypeId) -> Result<Val> {
+        // a boolean extended to a narrow integer: as to 32 bits, cut to the width
+        if v.kind == Kind::B {
+            let r = self.cast(op, v, to)?;
+            return Ok(match self.narrow_width_of_type(to) {
+                Some(t) => self.mask_narrow(r, t),
+                None => r,
+            });
+        }
         let v = if v.kind == Kind::F {
             v
         } else {
@@ -826,6 +834,12 @@ impl Lift<'_> {
             CastOp::FpToSi => {
                 let i = self.b.d3d_float_to_int(v);
                 self.b.bitcast(i, Kind::U)
+            }
+            // an `i1` is the integer 1 (unsigned) or -1 (signed) where true, not the boolean's all-ones word
+            CastOp::UiToFp | CastOp::SiToFp if v.kind == Kind::B => {
+                let on = self.b.lit_f(if op == CastOp::SiToFp { -1.0 } else { 1.0 });
+                let off = self.b.lit_f(0.0);
+                self.b.select(v, on, off)
             }
             CastOp::UiToFp => {
                 let u = self.b.bitcast_to(v, Kind::U);

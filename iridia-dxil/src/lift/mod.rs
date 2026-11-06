@@ -153,13 +153,16 @@ fn lift_program(container: &[u8], bound: &iridia::BoundSizes) -> Result<Program>
         (part.program_version >> 4) & 15,
         part.program_version & 15
     );
+    // the entry's 32-bit denormal mode (dxc's `-denorm`): kept where it says `preserve`; flushed, as D3D's default,
+    // where it says `ftz` or `any` or states none
+    let flush_denormals = reflection::fp32_denorm_mode(&module).map_err(read)?.as_deref() != Some("preserve");
     let mut lift = Lift::new(&module, entry, functions, setup)?;
     if matches!(lift.setup.interface.stage, Stage::Compute | Stage::Mesh) {
         lift.b.workgroup_size = reflection::num_threads(&module)
             .map_err(read)?
             .ok_or_else(|| error(0, "a compute program that states no thread group size"))?;
     }
-    match lift.setup.sigs.clone() {
+    let mut program = match lift.setup.sigs.clone() {
         None => {
             lift.run()?;
             lift.finish(target)
@@ -176,7 +179,9 @@ fn lift_program(container: &[u8], bound: &iridia::BoundSizes) -> Result<Program>
             }
             lift.finish_functions(target)
         }
-    }
+    }?;
+    program.modes.flush_denormals = flush_denormals;
+    Ok(program)
 }
 
 /// A translated LLVM value.

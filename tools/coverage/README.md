@@ -21,7 +21,7 @@ For each vkd3d run (a test file at a shader model on one of vkd3d's Windows runn
 
 | Status | Means |
 |---|---|
-| `pass` | every probe holds (vkd3d), or the test's RUN lines all pass as lit runs them (offload) |
+| `pass` | every probe holds (vkd3d), or the test's RUN lines all pass as lit runs them (offload). A vkd3d run whose programs leave it open whether 32-bit denormals are flushed (Direct3D 9's) and that does not hold as run is run again with them flushed; it passes when that holds and breaks no probe that held |
 | `fail` | a probe reads back something other than the test expects, or the suite's own check of the output fails; or a program iridia lifted was refused by a later stage (its WGSL, the executor) |
 | `error` | a step the test expects to work fails in iridia (a lift, a run), so nothing after it is judged |
 | `refused` | iridia refuses the program by name (a construct it does not lift or run) |

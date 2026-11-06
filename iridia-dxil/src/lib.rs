@@ -6,9 +6,9 @@
 //! [`dxil_reader`]; this crate maps them. A DXIL function is LLVM's: values in single static assignment form over basic
 //! blocks. The lifter turns them into structured control flow (an irreducible graph is refused by name), reads the
 //! `dx.op` intrinsics (inputs and outputs, math, bit operations, constant buffers, textures, derivatives, wave, mesh,
-//! ray query and ray tracing operations) and writes Direct3D's results where they differ from naga's out as
-//! operations ([`iridia::D3dModes`]). The conventions are the same as `iridia-dxbc`'s, so a program lifted from either
-//! has the same shape.
+//! ray query and ray tracing operations) and writes Direct3D's results where they differ from naga's out as operations
+//! ([`iridia::D3dModes`]; 32-bit denormals flushed unless the entry's `fp32-denorm-mode` is `preserve`). The
+//! conventions are the same as `iridia-dxbc`'s, so a program lifted from either has the same shape.
 //!
 //! [`interface`] reads a container's interface alone, without lifting its program, and [`subobjects`] maps the
 //! subobjects of a ray tracing library.

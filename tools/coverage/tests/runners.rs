@@ -33,6 +33,18 @@ fn assert_pass(outcomes: &[(String, String)]) {
     }
 }
 
+/// `IncrementCounter` and `DecrementCounter` update the hidden counter the offloader reads back as `Counter:` (one
+/// buffer) and `Counters:` (an array of them).
+#[test]
+fn the_offload_counter_tests_read_their_counters_back() {
+    assert_pass(&offload_outcomes(&[
+        "Feature/StructuredBuffer/inc_counter.test",
+        "Feature/StructuredBuffer/dec_counter.test",
+        "Feature/StructuredBuffer/inc_counter_array.test",
+        "Feature/StructuredBuffer/inc_counter_array_imm_idx.test",
+    ]));
+}
+
 /// Arrays of views, stated and unbounded, bind element by element at consecutive registers.
 #[test]
 fn the_offload_resource_array_tests_bind_every_element() {
@@ -125,4 +137,75 @@ fn a_draw_that_reads_what_could_not_be_written_is_not_judged() {
             "{cases}: the multisampled runs of texture-load.shader_test"
         );
     }
+}
+
+/// A DXIL `i1` converted to a float or extended is the integer 1 (or -1, signed) where true: vkd3d's tests that turn
+/// comparisons and booleans into numbers.
+#[test]
+fn dxil_booleans_convert_as_integers() {
+    for test in [
+        "all.shader_test",
+        "bool-cast.shader_test",
+        "cast-to-uint.shader_test",
+        "logic-operations.shader_test",
+    ] {
+        assert_selected_pass(&vkd3d_runs("vkd3d/dxil.json.gz", test));
+    }
+}
+
+/// DXBC's `ld` reads the texel its immediate offset (`aoffimmi`) moves it to.
+#[test]
+fn dxbc_loads_take_their_texel_offset() {
+    for test in [
+        "swizzle-constant-prop.shader_test",
+        "texture-load-offset.shader_test",
+    ] {
+        assert_selected_pass(&vkd3d_runs("vkd3d/dxbc.json.gz", test));
+    }
+}
+
+/// A DXIL program compiled with `-denorm preserve` keeps 32-bit denormals and one compiled with `-denorm ftz` flushes
+/// them: arithmetic-float-uniform.shader_test's `denorm` sections at shader model 6.2 and up.
+#[test]
+fn dxil_denormal_modes_are_the_programs() {
+    let runs = vkd3d_runs("vkd3d/dxil.json.gz", "arithmetic-float-uniform.shader_test");
+    let mut checked = 0;
+    for r in &runs {
+        for p in r.probes.iter().filter(|p| [552, 556, 561, 564].contains(&p.line)) {
+            assert_eq!(
+                p.outcome.class(),
+                "pass",
+                "{} {} line {}: {:?}",
+                r.runner,
+                r.model,
+                p.line,
+                p.outcome
+            );
+            checked += 1;
+        }
+    }
+    assert!(checked >= 8, "the denorm probes of two models or more, {checked}");
+}
+
+/// A Direct3D 9 program leaves it open whether 32-bit denormals are flushed, and vkd3d's d3d9 runs expect them flushed
+/// (arithmetic-float-uniform.shader_test's probes after "Denormal behavior"): the run again with them flushed holds
+/// there, and says so.
+#[test]
+fn d3d9_runs_hold_with_denormals_flushed() {
+    let runs = vkd3d_runs("vkd3d/d3d9.json.gz", "arithmetic-float-uniform.shader_test");
+    let mut checked = 0;
+    for r in &runs {
+        for p in r.probes.iter().filter(|p| [500, 503].contains(&p.line)) {
+            assert_eq!(
+                p.outcome,
+                vkd3d::run::Outcome::PassFlushed,
+                "{} {} line {}",
+                r.runner,
+                r.model,
+                p.line
+            );
+            checked += 1;
+        }
+    }
+    assert_eq!(checked, 4, "the denormal probes at shader models 2.0 and 3.0");
 }

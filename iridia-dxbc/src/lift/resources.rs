@@ -629,7 +629,13 @@ impl Lift<'_> {
         let (n, arrayed) = Self::coordinates(&t);
         let all = self.read_lanes(ins.operand(1)?, &[0, 1, 2, 3], Kind::I)?;
         let cl: Vec<u8> = n.lanes().collect();
-        let coordinate = self.b.swizzle(all, &cl);
+        let mut coordinate = self.b.swizzle(all, &cl);
+        // the immediate texel offset (`aoffimmi`) moves the texel read, as it moves a sample
+        if let Some(o) = ins.sample_offset().filter(|o| *o != [0, 0, 0]) {
+            let parts: Vec<Val> = o.iter().take(usize::from(n)).map(|&c| self.b.lit_i(c)).collect();
+            let offset = self.b.compose(&parts);
+            coordinate = self.b.binary(Bo::Add, coordinate, offset);
+        }
         let array_index = arrayed.then(|| self.b.lane(all, n.get()).expr);
         let level = (!t.multi).then(|| self.b.lane(all, 3).expr);
         let sample = if ins.name() == "ld_ms" {

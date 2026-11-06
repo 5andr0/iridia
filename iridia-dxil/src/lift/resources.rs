@@ -471,7 +471,8 @@ impl Lift<'_> {
     }
 
     /// The hidden counter of each unordered-access buffer whose counter the program updates: a resource of its own
-    /// (one raw read-write buffer, `counter_of` the view), a buffer of its own in WebGPU, group 4 at the view's binding.
+    /// (one raw read-write buffer, `counter_of` the view, a word per element of an array of views), a buffer of its
+    /// own in WebGPU, group 4 at the view's binding.
     fn declare_counters(&mut self) -> Result<()> {
         for view in self.resources.counted.clone() {
             let (range, view_resource) = self.resource_parts(view)?;
@@ -527,7 +528,14 @@ impl Lift<'_> {
     /// counter as it was (`IncrementCounter`), a decrement as it is after (`DecrementCounter`), as D3D's append and
     /// consume instructions do.
     pub(super) fn buffer_update_counter(&mut self, inst: &Instruction, args: &[ValueId]) -> Result<()> {
-        let view = self.handle_resource(self.arg(args, 1)?, 1)?;
+        let Lv::Handle {
+            class: 1,
+            resource: view,
+            element,
+        } = self.get(self.arg(args, 1)?)?
+        else {
+            return self.refuse("a handle of class 1 was expected");
+        };
         let Some(&counter) = self.resources.counters.get(&view) else {
             return self.refuse("a counter update of a view the scan did not find");
         };
@@ -542,12 +550,13 @@ impl Lift<'_> {
              with the view and started at its initial count"
                 .into(),
         );
+        // an array of views has a counter per element: its word is the handle's element
         let global = self.b.global_ptr(counter);
-        let zero = self.b.lit_u(0);
-        let slot = self.b.app(E::Access {
-            base: global,
-            index: zero.expr,
-        });
+        let index = match element {
+            Some(index) => index.expr,
+            None => self.b.lit_u(0).expr,
+        };
+        let slot = self.b.app(E::Access { base: global, index });
         let amount = self.b.lit_u(super::low32(step as u64));
         let old = self
             .b
