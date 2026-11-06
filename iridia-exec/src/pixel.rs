@@ -1,7 +1,7 @@
 //! A [`Program`] lifted from D3D bytecode behind [`PixelShader`]: inputs and outputs by signature register, constant
 //! buffers and samplers by bind slot, as a caller that evaluates a shader over many pixels drives it. A vertex program has the same register view
-//! (its inputs the vertex attributes by register, its outputs the varyings by register; the position and clip distances,
-//! which have no output register, are not in it), so a caller can run one per vertex through [`PixelShader::execute`].
+//! (its inputs the vertex attributes by register, its outputs the varyings by register, the position and clip and cull
+//! distances among them where the signature gives them a register), so a caller can run one per vertex through [`PixelShader::execute`].
 
 use std::collections::BTreeMap;
 
@@ -57,9 +57,12 @@ pub struct ProgramShader {
     members: Vec<Member>,
     input_count: usize,
     output_count: usize,
-    /// A vertex program's result member that is its clip-space position (`SV_Position`), which has no place in the
-    /// register view: [`ProgramShader::execute_vertex`] returns it apart.
+    /// A vertex program's result member that is its clip-space position (`SV_Position`), which
+    /// [`ProgramShader::execute_vertex`] returns apart besides its place in the register view.
     position: Option<usize>,
+    /// The inputs the signature gives no register (the primitive's number, the coverage, the sample's index): each
+    /// read from a register past the signature's, lane 0 ([`ProgramShader::system_input`]).
+    system_inputs: Vec<(SystemValue, usize)>,
     /// Each constant buffer: bind slot, resource, rows.
     constants: Vec<(u32, ResourceId, u32)>,
     constant_buffers: Vec<(u32, u32)>,
@@ -156,6 +159,15 @@ impl ProgramShader {
         let mut input_count = 0;
         // the module's arguments: the interface's inputs the entry point carries, in order
         let io = iridia::entry_io(interface).map_err(error)?;
+        // the registers past every one the signature names, for the inputs it names none
+        let mut past = interface
+            .inputs
+            .iter()
+            .filter_map(|v| v.provenance.d3d)
+            .map(|d| d.register as usize + 1)
+            .max()
+            .unwrap_or(0);
+        let mut system_inputs = Vec::new();
         for item in &io.arguments {
             let v = item
                 .varyings
@@ -163,20 +175,23 @@ impl ProgramShader {
                 .and_then(|&i| interface.inputs.get(i))
                 .ok_or_else(|| error("an entry argument names no input varying"))?;
             let name = Program::varying_name(&v.label);
-            // the primitive and coverage inputs have no register in the signature: the register view cannot carry
-            // them, they read as 0
-            if v.provenance.d3d.is_none()
-                && matches!(
-                    v.system,
-                    Some(SystemValue::PrimitiveIndex | SystemValue::Coverage | SystemValue::SampleIndex)
-                )
+            // the primitive, coverage and sample inputs have no register in the signature: the register view carries
+            // each in one past the signature's (lane 0), which reads as 0 where a caller gives none
+            if let (
+                None,
+                Some(
+                    system @ (SystemValue::PrimitiveIndex | SystemValue::Coverage | SystemValue::SampleIndex),
+                ),
+            ) = (v.provenance.d3d, v.system)
             {
+                system_inputs.push((system, past));
                 arguments.push(Argument {
-                    register: usize::MAX,
-                    lanes: Vec::new(),
+                    register: past,
+                    lanes: vec![0],
                     facing: None,
                     used: false,
                 });
+                past = past.saturating_add(1);
                 continue;
             }
             let sig = v
@@ -230,8 +245,14 @@ impl ProgramShader {
             let distances = matches!(item.ty, iridia::IoType::ClipDistances(_));
             for v in varyings {
                 let name = Program::varying_name(&v.label);
-                // depth, coverage, stencil, the position and the clip distances have no output register
-                let member = if matches!(v.system, None | Some(SystemValue::Target(_))) {
+                // depth, coverage and stencil have no output register; a vertex program's system values that have one
+                // (the position, clip and cull distances, the target and viewport index) are in the register view,
+                // where the stage after it reads them
+                let in_view = match v.system {
+                    None | Some(SystemValue::Target(_)) => true,
+                    Some(_) => stage == Stage::Vertex && v.provenance.d3d.is_some(),
+                };
+                let member = if in_view {
                     let sig = v
                         .provenance
                         .d3d
@@ -332,6 +353,7 @@ impl ProgramShader {
             input_count,
             output_count,
             position,
+            system_inputs,
             constants,
             constant_buffers,
             textures,
@@ -342,6 +364,15 @@ impl ProgramShader {
             quad_scratch: Mutex::new(Vec::new()),
             lane_scratch: Mutex::new(Vec::new()),
         })
+    }
+
+    /// The register (lane 0) the register view carries an input of `system` in when the signature gives it none (the
+    /// primitive's number, the coverage, the sample's index); `None` when the program reads no such input. The
+    /// register is past [`PixelShader::input_count`]: a caller that gives it none reads 0.
+    pub fn system_input(&self, system: SystemValue) -> Option<usize> {
+        self.system_inputs
+            .iter()
+            .find_map(|&(s, register)| (s == system).then_some(register))
     }
 
     /// The vertex or pixel program the shader runs, where it came from a naga-based lifter.

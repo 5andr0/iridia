@@ -52,6 +52,14 @@
   by register and the buffers in the order declared, so each binding takes the layout that holds the rows its
   declaration states, and a program whose declarations leave that open (and whose layouts differ) is refused naming
   them. Fixtures: `tests/fixtures/reflection_sm4.hlsl` in three variants.
+- `iridia-exec`: `draw` draws points and lines as well as triangles (every list and strip topology), each primitive
+  numbered for `SV_PrimitiveID`; an aliased line by the diamond exit rule (3.4.3), which an NVIDIA RTX 5070 Ti draws
+  exactly on every pixel of 10,640 recorded lines and WARP differs from in four classes the tests name and count;
+  and `SV_ClipDistance` and `SV_CullDistance`, a primitive culled when every vertex is below 0 on one cull
+  distance, clipped to each clip distance's plane, a point drawn when each of its clip distances is at least 0.
+  `ProgramShader::system_input` gives the register the primitive's number, the coverage and the sample's index are
+  read from when the signature gives them none, and a vertex program's clip and cull distances and target and
+  viewport indices are in its register view.
 - Tests: the oracle tools (vkd3d's programs, WARP, dxc) run through primase-testdata 0.1.14's `program(Tool::X)` with a
   time limit (`output_within`): a tool that hangs is killed and the test fails naming it, instead of hanging. A minute
   per vkd3d call, two per dxc compile, ten per WARP batch. vkd3d's tools are its Linux programs, so the vkd3d
