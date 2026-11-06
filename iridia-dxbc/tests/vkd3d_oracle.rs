@@ -11,9 +11,9 @@
 //! - the instructions: vkd3d's mnemonic sequence, with its modifier suffixes removed, equals `decode`'s opcode names.
 //!
 //! Needs the corpus oracle set's `sekiro/shaders`, `riders/shaders` or `sledding/shaders` and the two tools, each a
-//! program with vkd3d's command line (`tools.vkd3d_dxbc`, `tools.vkd3d_compiler`; built from vkd3d's source: the Linux
-//! programs, or the Windows ones built with MinGW). A tool that is not configured skips the test; a run that does not
-//! finish within a minute fails it, naming the tool. The debug key
+//! program with vkd3d's command line (`tools.vkd3d_dxbc`, `tools.vkd3d_compiler`: vkd3d's Linux programs, built from its
+//! source, so the test runs on Linux; primase-oracles' tools/vkd3d builds them). A tool that is not configured skips the
+//! test; a run that does not finish within a minute fails it, naming the tool. The debug key
 //! `vkd3d.limit` sets how many containers of a corpus are compared (200 spread evenly by default; `all` for every one).
 mod inputs;
 

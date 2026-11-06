@@ -4,8 +4,8 @@
 
 - Tests: the oracle tools (vkd3d's programs, WARP, dxc) run through primase-testdata 0.1.14's `program(Tool::X)` with a
   time limit (`output_within`): a tool that hangs is killed and the test fails naming it, instead of hanging. A minute
-  per vkd3d call, two per dxc compile, ten per WARP batch. vkd3d's tools may be its Windows programs (MinGW builds)
-  instead of a wrapper that starts the Linux ones.
+  per vkd3d call, two per dxc compile, ten per WARP batch. vkd3d's tools are its Linux programs, so the vkd3d
+  comparison runs on Linux and skips on Windows (no wrapper that starts them through WSL).
 - `iridia::flow`: `Reach` gains `words`, the constant-buffer words (`GlobalWord`: stage, resource, word) that may
   reach an output lane or the discard, each with its `Via`, as inputs and texels have it. A constant that only decides
   a branch or a discard is `Control`, one that scales a texture coordinate `Coordinate`; `WordsRead` says which words
