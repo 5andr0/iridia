@@ -13,10 +13,9 @@ publish.workspace = true
 
 [dependencies]
 serde = { version = "1", default-features = false, features = ["alloc", "derive"] }
+# the version gate's JSON of a program; alloc only, so the crate stays no_std
+serde_json = { version = "=1.0.154", default-features = false, features = ["alloc"] }
 sha2.workspace = true
-
-[dev-dependencies]
-serde_json.workspace = true
 
 [lints]
 workspace = true

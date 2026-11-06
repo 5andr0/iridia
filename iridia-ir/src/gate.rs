@@ -1,17 +1,59 @@
 //! The version gate of a lifter on the IR. A lifter's `LIFTER_VERSION` and the IR's [`crate::VERSION`] are what a cache
 //! keyed by a bytecode's hash trusts to know that a program it holds is stale, so a change to what a lifter makes of a
 //! bytecode must come with a bump. The gate makes that checkable: a lifter's tests lift its committed fixtures, [`table`]
-//! hashes each outcome (the entry function's [`crate::text`] form, or the refusal) under the versions the lifter has, the
-//! table is committed, and [`check`] fails when the outcomes changed and the versions did not (bump the one that names
-//! the change), or the versions changed and the committed table is not that version's.
+//! hashes each outcome (the whole program as [`lifted`] writes it, or the refusal) under the versions the lifter has,
+//! the table is committed, and [`check`] fails when the outcomes changed and the versions did not (bump the one that
+//! names the change), or the versions changed and the committed table is not that version's.
 
 use alloc::{borrow::ToOwned, format, string::String, vec::Vec};
 use core::fmt::Write;
 
 use sha2::{Digest, Sha256};
 
-/// One fixture's outcome: the text form of the program lifted, or the refusal's reason.
+use crate::interface::{Interface, Stage};
+use crate::{Conventions, FloatEnv, Program, Provenance};
+
+/// One fixture's outcome: the program lifted as [`lifted`] writes it, or the refusal's reason.
 pub type Outcome = Result<String, String>;
+
+/// A lifted program as the gate hashes it: the entry function's [`crate::text`] form, then every other part of the
+/// program (its stage, interface, conventions, float controls, provenance and notes) as JSON, so a change a lifter makes
+/// to its bindings, layouts or policies alone is a changed outcome too. The lifter's version is left out of the
+/// provenance: the table's header carries it.
+pub fn lifted(program: &Program) -> String {
+    // destructured whole, so a part added to programs is a part the gate hashes or a compile error here
+    let Program {
+        stage,
+        entry,
+        interface,
+        conventions,
+        float,
+        provenance,
+        notes,
+    } = program;
+    #[derive(serde::Serialize)]
+    struct Rest<'a> {
+        stage: &'a Stage,
+        interface: &'a Interface,
+        conventions: &'a Conventions,
+        float: &'a FloatEnv,
+        provenance: Provenance,
+        notes: &'a [String],
+    }
+    let rest = Rest {
+        stage,
+        interface,
+        conventions,
+        float,
+        provenance: Provenance {
+            lifter_version: 0,
+            ..provenance.clone()
+        },
+        notes,
+    };
+    let json = serde_json::to_string(&rest).unwrap_or_else(|e| format!("not serialised: {e}"));
+    format!("{}\n{json}\n", crate::text::print(entry))
+}
 
 /// The table of `outcomes` (fixture name, outcome) for `lifter` at these versions: a header of the versions, then a line
 /// per fixture in the order given.

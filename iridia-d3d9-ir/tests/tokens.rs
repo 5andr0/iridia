@@ -374,7 +374,7 @@ fn lifted_fixture_changes_require_a_version_bump() {
         .map(|(name, body)| {
             let outcome = lift(&program(&body))
                 .map_err(|e| e.to_string())
-                .map(|p| iridia_ir::text::print(&p.entry));
+                .map(|p| iridia_ir::gate::lifted(&p));
             (name.to_owned(), outcome)
         })
         .collect::<Vec<_>>();

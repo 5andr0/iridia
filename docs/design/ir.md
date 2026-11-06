@@ -266,7 +266,7 @@ clamp the back ends implement or legalize.
 
 ```
 iridia-ir          types, operations, module, both control phases, the interface vocabulary, builder, validator,
-                   text printer and parser; no_std + alloc; serde its only dependency
+                   text printer and parser; no_std + alloc; serde, and for the version gate serde_json (alloc) and sha2
 iridia-interface   re-exports the interface vocabulary
 iridia-passes      structurize, promote (Var to SSA), dce, cse, fold, specialise, target legalization passes,
                    scalarize, break_flags; no_std + alloc
@@ -299,7 +299,7 @@ iridia-cli, iridia-web (the browser page, wasm32)
   - Analyses keep their shape; `flow` re-exports iridia's operation enums instead of naga's.
 - Versions: `iridia_ir::VERSION` replaces `PROGRAM_VERSION` (bumped when meaning or the text form changes); each
   frontend's `LIFTER_VERSION` and each target's `EMIT_VERSION` stay; caches key on all three plus the policies. The
-  `gate` tables hash the IR text. The text form has a schema version line and is not a promised storage format.
+  `gate` tables hash the whole program: the IR text and the rest of the program as JSON. The text form has a schema version line and is not a promised storage format.
   All crates move from 0.4 to 0.5 at the first cut-over and are versioned together until 1.0.
 - Consumers move at migration step 6, from logical ids and the interface rather than naga handles:
   - primase: `core/src/shader` (binding, blend through `iridia::flow` and `iridia_exec::value`, `input_fallback`
