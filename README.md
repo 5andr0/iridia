@@ -1,6 +1,6 @@
 # iridia
 
-[![crates.io: iridia](https://img.shields.io/crates/v/iridia?label=iridia)](https://crates.io/crates/iridia) [![crates.io: iridia-ir](https://img.shields.io/crates/v/iridia-ir?label=iridia-ir)](https://crates.io/crates/iridia-ir) [![crates.io: iridia-dxbc](https://img.shields.io/crates/v/iridia-dxbc?label=iridia-dxbc)](https://crates.io/crates/iridia-dxbc) [![docs.rs](https://img.shields.io/docsrs/iridia)](https://docs.rs/iridia) [![CI](https://img.shields.io/github/actions/workflow/status/Kalmarv/iridia/ci.yml?branch=main&label=CI)](https://github.com/Kalmarv/iridia/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/iridia)](https://crates.io/crates/iridia) [![docs.rs](https://img.shields.io/docsrs/iridia)](https://docs.rs/iridia) [![CI](https://img.shields.io/github/actions/workflow/status/Kalmarv/iridia/ci.yml?branch=main&label=CI)](https://github.com/Kalmarv/iridia/actions/workflows/ci.yml)
 
 A set of Rust libraries that translate compiled Direct3D shaders into programs that can be validated, run on the CPU
 and written out as WGSL or SPIR-V. The released crates produce [naga](https://github.com/gfx-rs/wgpu/tree/trunk/naga)
@@ -48,7 +48,7 @@ Rust 1.99 or newer (edition 2024).
 | [`iridia-exec-ir`](iridia-exec-ir) | Runs an IR program on the CPU by the IR's own definitions |
 | [`iridia-d3d9-ir`](iridia-d3d9-ir) | Lifts Direct3D 9 token streams of every model from `vs_1_1` and `ps_1_1` to `vs_3_0` and `ps_3_0` into the IR |
 
-All twelve are published on crates.io at version 0.5.0:
+Add the crates you need from crates.io:
 
 ```sh
 cargo add iridia iridia-dxbc
