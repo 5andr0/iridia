@@ -64,8 +64,10 @@ fn vkd3d_runs(cases: &str, test: &str) -> Vec<vkd3d::run::RunResult> {
     vkd3d::run::run_all(&file, 4).0
 }
 
-/// That every probe of the runs that vkd3d's runner selects holds.
+/// That every probe of the runs that vkd3d's runner selects holds, and that there is one.
 fn assert_selected_pass(runs: &[vkd3d::run::RunResult]) {
+    let selected = runs.iter().flat_map(|r| &r.probes).filter(|p| p.selected).count();
+    assert!(selected > 0, "no probe of {} runs is selected", runs.len());
     for r in runs {
         for p in r.probes.iter().filter(|p| p.selected) {
             assert_eq!(
@@ -208,4 +210,41 @@ fn d3d9_runs_hold_with_denormals_flushed() {
         }
     }
     assert_eq!(checked, 4, "the denormal probes at shader models 2.0 and 3.0");
+}
+
+/// Direct3D 9's alpha test writes a pixel only where its first target's alpha passes the comparison with the
+/// reference, each of the eight comparisons.
+#[test]
+fn d3d9_alpha_test_compares_the_alpha() {
+    assert_selected_pass(&vkd3d_runs("vkd3d/d3d9.json.gz", "alpha-test.shader_test"));
+}
+
+/// Direct3D 9's user clip planes clip in clip space, enabled and disabled by index.
+#[test]
+fn d3d9_clip_planes_clip() {
+    assert_selected_pass(&vkd3d_runs("vkd3d/d3d9.json.gz", "clip-planes.shader_test"));
+}
+
+/// Direct3D 9's point size draws a point as the square of its size, from the state or the vertex program's `PSIZE`,
+/// held to the state's range; a point sprite's texture coordinates are each pixel's place on it.
+#[test]
+fn d3d9_points_take_their_size_and_sprite_coordinates() {
+    for test in [
+        "ffp-point-size.shader_test",
+        "shader-point-size.shader_test",
+        "point-sprite.shader_test",
+    ] {
+        assert_selected_pass(&vkd3d_runs("vkd3d/d3d9.json.gz", test));
+    }
+}
+
+/// A primitive's leading vertex picks the target slice (`SV_RenderTargetArrayIndex`) and the viewport
+/// (`SV_ViewportArrayIndex`) it draws to, and the pixel program reads the index as written.
+#[test]
+fn target_and_viewport_indices_pick_the_slice_and_viewport() {
+    for cases in ["vkd3d/dxbc.json.gz", "vkd3d/dxil.json.gz"] {
+        for test in ["rt-array-index.shader_test", "vp-array-index.shader_test"] {
+            assert_selected_pass(&vkd3d_runs(cases, test));
+        }
+    }
 }

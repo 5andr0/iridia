@@ -963,6 +963,7 @@ fn raster(
     let mut surface = Surface {
         width,
         height,
+        layers: 1,
         targets: vec![Some(texels)],
         depth: Some(vec![1.0; (width * height) as usize]),
     };
@@ -974,20 +975,25 @@ fn raster(
             [v.x, v.y, v.width, v.height, v.min_depth, v.max_depth]
         });
     let rasterizer = Rasterizer {
-        viewport: DrawViewport {
+        viewports: vec![DrawViewport {
             x: vx,
             y: vy,
             width: vw,
             height: vh,
             min_depth: z0,
             max_depth: z1,
-        },
+        }],
+        sample_mask: u32::MAX,
         cull: Cull::None,
         front_counter_clockwise: true,
         depth: Some(DepthState {
             compare: DepthCompare::Less,
             write: true,
         }),
+        alpha_test: None,
+        clip_planes: [None; 6],
+        point_size: None,
+        point_sprite: false,
     };
     let l = layout(p, rs)?;
     let (mut device, constants) = device_of(p, &l)?;

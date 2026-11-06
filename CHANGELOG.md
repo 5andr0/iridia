@@ -69,6 +69,13 @@
   `ProgramShader::system_input` gives the register the primitive's number, the coverage and the sample's index are
   read from when the signature gives them none, and a vertex program's clip and cull distances and target and
   viewport indices are in its register view.
+- `iridia-exec`: `draw` takes Direct3D 9's fixed-function state: the alpha test (`Rasterizer::alpha_test`), user
+  clip planes (`clip_planes`), the point size from the state or the vertex program's `PSIZE` (`point_size`), and
+  point sprites (`point_sprite`). A primitive's leading vertex picks its viewport from `Rasterizer::viewports`
+  (which replaces `viewport`; an index of 16 or more is 0) and its target slice (`Surface::layers`; one past them is
+  0); a pixel program's `SV_RenderTargetArrayIndex` and `SV_ViewportArrayIndex` are the values written, its
+  `SV_SampleIndex` 0 and its `SV_Coverage` the pixel's one bit ANDed with `Rasterizer::sample_mask`, which also
+  leaves out the write (`DrawStats::masked`).
 - `iridia-dxil`: a boolean converts to a float as 1 or 0 (`uitofp`) and -1 or 0 (`sitofp`), where it converted its
   all-ones word; and extended to a 16-bit integer (`zext`, `sext`), it is cut to the 16 bits. An array of read-write views keeps a counter per
   element, the element's word at its index (`counter_of`, documented in `iridia-ir`). A program compiled with

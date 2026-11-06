@@ -13,8 +13,11 @@
 //!   strip restart is refused, as [`crate::geometry::GeometryShader::draw_indexed`] refuses it.
 //! - **Linking.** A pixel program input reads the vertex program output of the same semantic and index (names compared
 //!   without case), component by component; `SV_Position` is the pixel's position, `SV_IsFrontFace` the triangle's
-//!   facing (a point and a line face the front), `SV_PrimitiveID` the stage before's output of it where that stage
-//!   writes one (a geometry program), else the primitive's number. An input no output carries is an error.
+//!   facing (a point and a line face the front). `SV_PrimitiveID`, `SV_RenderTargetArrayIndex` and
+//!   `SV_ViewportArrayIndex` are the stage before's output of each where it writes one (the value as written, 15.8.1
+//!   and 15.15), else the primitive's number and 0. A draw has one sample a pixel: `SV_SampleIndex` is 0 and
+//!   `SV_Coverage` the pixel's one bit ANDed with the sample mask, 0 on a helper (16.3.2). An input no output carries
+//!   is an error.
 //! - **Clipping.** A triangle is clipped to `0 <= z <= w` (depth clipping) and to `-w <= x <= w`, `-w <= y <= w`: the
 //!   viewport, section 15.4 of the D3D11.3 specification's clip volume. 15.4 allows a guard band ("or arbitrarily wider
 //!   range if implementation uses a guard band"); WARP uses none for a triangle (one cut 16.25 pixels past the viewport
@@ -37,15 +40,24 @@
 //!   clip distance is one more plane a primitive is clipped to, keeping where it is at least 0 (15.4: the distances
 //!   are interpolated across the primitive; the distance at a point clipping makes is its weights' blend of the
 //!   vertices', as its outputs are). A point is drawn when every clip distance of its vertex is at least 0.
+//!   Direct3D 9's user clip planes ([`Rasterizer::clip_planes`], in clip space as a programmable vertex stage has them)
+//!   are clip distances too: a vertex's distance from a plane is the plane's dot product with its clip position.
 //! - **Viewport.** `x = X + (x/w + 1) / 2 * W`, `y = Y + (1 - y/w) / 2 * H` (y down), `z = MinDepth + z/w * (MaxDepth -
-//!   MinDepth)`.
+//!   MinDepth)`, by the viewport the primitive's leading vertex picks (`SV_ViewportArrayIndex`; an index of 16 or
+//!   more is 0, 15.8.1; one the state sets no viewport for draws nothing, as an unset viewport has no area). It
+//!   writes the target slice the leading vertex picks (`SV_RenderTargetArrayIndex`; one past the surface's slices
+//!   is 0, 15.15).
 //! - **Rasterization.** Positions are snapped to 1/256 of a pixel (16.8 fixed point), as D3D's 8 bits of sub-pixel
 //!   precision (15.16), to the nearest with a tie to even and saturating at the format's range (3.2.4.1).
 //!   - A triangle draws a pixel when its centre is inside it, or on an edge that is a top or a left edge. The facing is
 //!     the sign of the snapped area: with y down a clockwise triangle is front facing unless the state says
 //!     counter-clockwise; culling drops the facing it names; a zero-area triangle draws nothing.
 //!   - A point is the 1 x 1 square about its position, two triangles under the top-left rule: it draws the pixel whose
-//!     centre is in `[x - 1/2, x + 1/2) x [y - 1/2, y + 1/2)`.
+//!     centre is in `[x - 1/2, x + 1/2) x [y - 1/2, y + 1/2)`. Direct3D 9's point size ([`Rasterizer::point_size`])
+//!     makes it the `s x s` square, `[x - s/2, x + s/2) x [y - s/2, y + s/2)`, `s` the vertex program's `PSIZE`
+//!     output where it writes one, else the state's size, held to the state's range; with point sprites on, each
+//!     texture coordinate a pixel reads (`TEXCOORD`) is its centre's place on the square, (0, 0) at the top left to
+//!     (1, 1) at the bottom right, in its first two lanes.
 //!   - An aliased line draws by the diamond exit rule (3.4.3's figure): "a line covers a pixel if the line exits the
 //!     pixel's diamond test area, when traveling along the line from the start towards the end". The test area is
 //!     `|dx| + |dy| < 1/2` about the pixel's centre with its lower-left and lower-right edges and its bottom corner,
@@ -69,9 +81,10 @@
 //!   GPU).
 //! - **Pixels.** In 2 x 2 quads aligned to even pixels, uncovered lanes run as helpers (their inputs extrapolated) so
 //!   derivatives and implicit levels of detail are the quad's; a helper writes nothing. A discarded pixel writes
-//!   nothing. The depth test runs after the pixel program (its result is the same: a pixel that fails writes
-//!   nothing); a pixel that passes writes every target lane the program writes and, when the state writes depth, its
-//!   depth. Primitives are drawn in order, so a later one overwrites an earlier one where both pass.
+//!   nothing, and neither does one that fails Direct3D 9's alpha test ([`Rasterizer::alpha_test`]), which compares
+//!   the alpha of the program's first target with the reference, or one whose sample the sample mask leaves out. The
+//!   depth test runs after the pixel program (its result is the same: a pixel that fails writes nothing); a pixel
+//!   that passes writes every target lane the program writes and, when the state writes depth, its depth. Primitives are drawn in order, so a later one overwrites an earlier one where both pass.
 use crate::geometry::Topology;
 use crate::{Error, Execution, PixelShader, ProgramShader, Sampler};
 use iridia::{InterpMode, SystemValue, Varying};
@@ -112,7 +125,8 @@ pub enum Cull {
     Back,
 }
 
-/// A depth comparison: the pixel's depth (left) against the depth buffer's (right).
+/// A comparison of a pixel's value (left) with another (right): its depth with the depth buffer's, its alpha with the
+/// alpha test's reference.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Compare {
     /// Never passes.
@@ -158,29 +172,76 @@ pub struct DepthState {
 }
 
 /// The fixed-function state of a draw.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Rasterizer {
-    /// Where clip space lands in the targets.
-    pub viewport: Viewport,
+    /// Where clip space lands in the targets: the viewports by index, which a primitive picks
+    /// (`SV_ViewportArrayIndex`), the first by default. At least one.
+    pub viewports: Vec<Viewport>,
+    /// The sample mask: a draw's one sample is written where bit 0 is set, and `SV_Coverage` is ANDed with it.
+    pub sample_mask: u32,
     /// Which facing is dropped.
     pub cull: Cull,
     /// Whether a counter-clockwise triangle (y down) is front facing.
     pub front_counter_clockwise: bool,
     /// The depth test; `None`: no depth buffer.
     pub depth: Option<DepthState>,
+    /// Direct3D 9's alpha test (`D3DRS_ALPHATESTENABLE`); `None`: none.
+    pub alpha_test: Option<AlphaTest>,
+    /// Direct3D 9's user clip planes (`SetClipPlane`, `D3DRS_CLIPPLANEENABLE`), each `None` where not enabled: in clip
+    /// space, a primitive kept where a plane's dot product with the position is at least 0.
+    pub clip_planes: [Option<[f32; 4]>; 6],
+    /// Direct3D 9's point size; `None`: a point is one pixel, as from Direct3D 10 on.
+    pub point_size: Option<PointSize>,
+    /// Direct3D 9's point sprites (`D3DRS_POINTSPRITEENABLE`): a point's texture coordinates are each pixel's place on
+    /// its square.
+    pub point_sprite: bool,
 }
 
-/// What a draw writes to: render targets by output register (`width * height` texels each, row by row, as the pixel
-/// program's output words) and the depth buffer.
+/// Direct3D 9's point size: `D3DRS_POINTSIZE`, which a vertex program's `PSIZE` output replaces, held to
+/// `[D3DRS_POINTSIZE_MIN, D3DRS_POINTSIZE_MAX]`, in pixels.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PointSize {
+    /// The size where the vertex program writes none.
+    pub size: f32,
+    /// The least size.
+    pub min: f32,
+    /// The greatest size.
+    pub max: f32,
+}
+
+impl PointSize {
+    /// The size of a point whose vertex program wrote `written` (`None`: no `PSIZE` output), held to the range (a NaN
+    /// is the least).
+    fn of(&self, written: Option<f32>) -> f32 {
+        written.unwrap_or(self.size).max(self.min).min(self.max)
+    }
+}
+
+/// Direct3D 9's alpha test: a pixel is written only where the alpha of its first target (output register 0, lane 3)
+/// passes the comparison with the reference (`D3DRS_ALPHAFUNC`; the alpha is the left operand). The reference is
+/// `D3DRS_ALPHAREF`'s byte as a fraction of 255.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AlphaTest {
+    /// The comparison.
+    pub compare: Compare,
+    /// The value compared with.
+    pub reference: f32,
+}
+
+/// What a draw writes to: render targets by output register (`width * height * layers` texels each, slice by slice
+/// and row by row, as the pixel program's output words) and the depth buffer.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Surface {
     /// Width of every target in pixels.
     pub width: u32,
     /// Height of every target in pixels.
     pub height: u32,
+    /// Slices of every target (an array target's), which a primitive picks (`SV_RenderTargetArrayIndex`). At least
+    /// one.
+    pub layers: u32,
     /// By output register; `None` for a register the draw does not write.
     pub targets: Vec<Option<Vec<[u32; 4]>>>,
-    /// `width * height` depths, when the state tests depth.
+    /// `width * height * layers` depths, when the state tests depth.
     pub depth: Option<Vec<f32>>,
 }
 
@@ -199,8 +260,12 @@ pub struct DrawStats {
     pub shaded: usize,
     /// Pixels the pixel program discarded.
     pub discarded: usize,
+    /// Pixels that failed the alpha test.
+    pub alpha_failed: usize,
     /// Pixels that failed the depth test.
     pub depth_failed: usize,
+    /// Pixels the sample mask left out.
+    pub masked: usize,
     /// Pixels written to the targets.
     pub written: usize,
 }
@@ -284,13 +349,15 @@ impl Primitive {
 /// Where a pixel program input comes from.
 #[derive(Clone, Debug)]
 enum Source {
-    /// A vertex program output: its register and lanes, the pixel input's register and lanes, the interpolation.
+    /// A vertex program output: its register and lanes, the pixel input's register and lanes, the interpolation, and
+    /// whether it is a texture coordinate (`TEXCOORD`), which a point sprite replaces.
     Varying {
         from_register: usize,
         from_lanes: Vec<u8>,
         to_register: usize,
         to_lanes: Vec<u8>,
         mode: InterpMode,
+        texcoord: bool,
     },
     Position {
         register: usize,
@@ -302,6 +369,17 @@ enum Source {
     },
     /// The primitive's number.
     Primitive {
+        register: usize,
+        lane: u8,
+    },
+    /// A word every pixel reads alike (`SV_SampleIndex`'s 0, a target or viewport index no stage writes).
+    Word {
+        register: usize,
+        lane: u8,
+        word: u32,
+    },
+    /// The pixel's coverage (`SV_Coverage`).
+    Coverage {
         register: usize,
         lane: u8,
     },
@@ -320,8 +398,8 @@ fn same_label(a: &Varying, b: &Varying) -> bool {
 pub struct DrawShader<'a> {
     vertex: &'a ProgramShader,
     raster: Raster<'a>,
-    /// Where the vertex program's clip and cull distances are in its output registers.
-    distances: Distances,
+    /// Where the vertex program's clip and cull distances and point size are in its output registers.
+    values: RasterValues,
 }
 
 /// A pixel program linked to the outputs of the last stage before it, by varying (a geometry, domain or mesh
@@ -332,30 +410,49 @@ pub struct ShadedDraw<'a> {
     raster: Raster<'a>,
     /// The output varying that is the clip-space position.
     position: usize,
-    /// Where the clip and cull distances are in a vertex's registers.
-    distances: Distances,
+    /// Where the clip and cull distances and point size are in a vertex's registers.
+    values: RasterValues,
 }
 
-/// Where a stage's clip and cull distances are in the registers of a vertex it makes: a register and a lane each, in
-/// the order of the stage's outputs.
+/// Where the rasterizer's values of a vertex a stage makes, other than its position, are in its registers: its clip
+/// and cull distances (in the order of the stage's outputs), its target slice and viewport indices, and Direct3D 9's
+/// point size (the `PSIZE` output), a register and a lane each.
 #[derive(Clone, Debug, Default)]
-struct Distances {
+struct RasterValues {
     clip: Vec<(usize, u8)>,
     cull: Vec<(usize, u8)>,
+    point_size: Option<(usize, u8)>,
+    target_index: Option<(usize, u8)>,
+    viewport_index: Option<(usize, u8)>,
 }
 
-impl Distances {
-    /// The distances of `outputs`, an output varying's lanes in the registers `from` gives.
+impl RasterValues {
+    /// The values of `outputs`, an output varying's lanes in the registers `from` gives.
     fn of(
         outputs: &[Varying],
         from: impl Fn(usize, &Varying) -> Result<(usize, Vec<u8>), Error>,
     ) -> Result<Self, Error> {
-        let mut d = Distances::default();
+        let mut d = RasterValues::default();
         for (at, out) in outputs.iter().enumerate() {
-            let into = match out.system {
-                Some(SystemValue::ClipDistance) => &mut d.clip,
-                Some(SystemValue::CullDistance) => &mut d.cull,
+            let one = match out.system {
+                Some(SystemValue::ClipDistance) => None,
+                Some(SystemValue::CullDistance) => None,
+                Some(SystemValue::RenderTargetArrayIndex) => Some(&mut d.target_index),
+                Some(SystemValue::ViewportArrayIndex) => Some(&mut d.viewport_index),
+                None if out.label.name.eq_ignore_ascii_case("PSIZE") && out.label.index == 0 => {
+                    Some(&mut d.point_size)
+                }
                 _ => continue,
+            };
+            if let Some(one) = one {
+                let (register, lanes) = from(at, out)?;
+                *one = lanes.first().map(|&lane| (register, lane));
+                continue;
+            }
+            let into = if out.system == Some(SystemValue::ClipDistance) {
+                &mut d.clip
+            } else {
+                &mut d.cull
             };
             let (register, lanes) = from(at, out)?;
             into.extend(lanes.into_iter().map(|lane| (register, lane)));
@@ -363,18 +460,26 @@ impl Distances {
         Ok(d)
     }
 
-    /// The clip and cull distances of a vertex whose output registers are `outputs` (0 for a lane they do not hold).
-    fn read(&self, outputs: &[[u32; 4]]) -> (Vec<f32>, Vec<f32>) {
-        let word = |&(register, lane): &(usize, u8)| {
+    /// A vertex whose clip-space position is `position` and whose output registers are `outputs`, with its values
+    /// (0 for a lane the registers do not hold).
+    fn shaded(&self, position: [f32; 4], outputs: Vec<[u32; 4]>) -> Shaded {
+        let bits = |&(register, lane): &(usize, u8)| {
             outputs
                 .get(register)
                 .and_then(|r| r.get(usize::from(lane)))
-                .map_or(0., |w| f32::from_bits(*w))
+                .copied()
+                .unwrap_or(0)
         };
-        (
-            self.clip.iter().map(word).collect(),
-            self.cull.iter().map(word).collect(),
-        )
+        let word = |at: &(usize, u8)| f32::from_bits(bits(at));
+        Shaded {
+            position,
+            clip: self.clip.iter().map(word).collect(),
+            cull: self.cull.iter().map(word).collect(),
+            point_size: self.point_size.as_ref().map(word),
+            target_index: self.target_index.as_ref().map_or(0, bits),
+            viewport_index: self.viewport_index.as_ref().map_or(0, bits),
+            outputs,
+        }
     }
 }
 
@@ -387,14 +492,17 @@ struct Raster<'a> {
     inputs: usize,
 }
 
-/// A vertex after the vertex program: its clip-space position, its output registers, and its clip and cull
-/// distances.
+/// A vertex after the vertex program: its clip-space position, its output registers, its clip and cull distances,
+/// the point size it writes, and the target slice and viewport it picks (0 where it writes none).
 #[derive(Clone, Debug)]
 struct Shaded {
     position: [f32; 4],
     outputs: Vec<[u32; 4]>,
     clip: Vec<f32>,
     cull: Vec<f32>,
+    point_size: Option<f32>,
+    target_index: u32,
+    viewport_index: u32,
 }
 
 /// A vertex in the rasterizer: its clip-space position and its weights on the drawn primitive's vertices in clip space
@@ -427,14 +535,19 @@ struct Fragment {
     linear: [f64; 3],
     /// The interpolated w (the fourth lane of `SV_Position`).
     w: f32,
+    /// On a point sprite, the pixel's place on the point's square, which its texture coordinates read.
+    sprite: Option<[f32; 2]>,
 }
 
-/// What a primitive's pixels share: its vertices (the first the provoking one), its facing and its number.
+/// What a primitive's pixels share: its vertices (the first the provoking one), its facing, its number, its viewport
+/// and the target slice it writes.
 #[derive(Clone, Copy, Debug)]
 struct Drawn<'v> {
     original: &'v [&'v Shaded],
     front: bool,
     id: u32,
+    viewport: Viewport,
+    layer: u32,
 }
 
 impl<'a> Raster<'a> {
@@ -449,15 +562,24 @@ impl<'a> Raster<'a> {
         let mut inputs = pixel.input_count();
         for v in pixel.interface().inputs.iter().filter(|v| v.used) {
             let name = || format!("{}{}", v.label.name, v.label.index);
-            // the primitive's number: the stage before's output of it (a geometry program writes one), else the draw's
-            if v.system == Some(SystemValue::PrimitiveIndex) {
+            // the inputs a draw supplies: the stage before's output of each where it writes one (a geometry program's
+            // primitive number, a target or viewport index), else the draw's own: the primitive's number, index 0,
+            // the one sample (0) and its coverage
+            if let Some(
+                system @ (SystemValue::PrimitiveIndex
+                | SystemValue::RenderTargetArrayIndex
+                | SystemValue::ViewportArrayIndex
+                | SystemValue::SampleIndex
+                | SystemValue::Coverage),
+            ) = v.system
+            {
                 let (register, lane) = match v.provenance.d3d {
                     Some(sig) => (
                         sig.register as usize,
                         lanes_of(sig.mask).first().copied().unwrap_or(0),
                     ),
                     None => (
-                        pixel.system_input(SystemValue::PrimitiveIndex).ok_or_else(|| {
+                        pixel.system_input(system).ok_or_else(|| {
                             error(format!(
                                 "pixel input {} has no register in the program's view",
                                 name()
@@ -467,10 +589,11 @@ impl<'a> Raster<'a> {
                     ),
                 };
                 inputs = inputs.max(register.saturating_add(1));
+                let written = !matches!(system, SystemValue::SampleIndex | SystemValue::Coverage);
                 match outputs
                     .iter()
                     .enumerate()
-                    .find(|(_, o)| o.system == Some(SystemValue::PrimitiveIndex))
+                    .find(|(_, o)| written && o.system == Some(system))
                 {
                     Some((at, out)) => {
                         let (from_register, from_lanes) = from(at, out)?;
@@ -480,9 +603,18 @@ impl<'a> Raster<'a> {
                             to_register: register,
                             to_lanes: vec![lane],
                             mode: InterpMode::Flat,
+                            texcoord: false,
                         });
                     }
-                    None => sources.push(Source::Primitive { register, lane }),
+                    None => sources.push(match system {
+                        SystemValue::PrimitiveIndex => Source::Primitive { register, lane },
+                        SystemValue::Coverage => Source::Coverage { register, lane },
+                        _ => Source::Word {
+                            register,
+                            lane,
+                            word: 0,
+                        },
+                    }),
                 }
                 continue;
             }
@@ -543,6 +675,7 @@ impl<'a> Raster<'a> {
                 to_register,
                 to_lanes,
                 mode,
+                texcoord: v.label.name.eq_ignore_ascii_case("TEXCOORD"),
             });
         }
         Ok(Self {
@@ -554,11 +687,21 @@ impl<'a> Raster<'a> {
 
     /// Check `surface` against `state` before a draw.
     fn check(state: &Rasterizer, surface: &Surface) -> Result<(), Error> {
-        let n = (surface.width as usize).saturating_mul(surface.height as usize);
+        let n = (surface.width as usize)
+            .saturating_mul(surface.height as usize)
+            .saturating_mul(surface.layers as usize);
+        if surface.layers == 0 {
+            return Err(error("a surface of no slices"));
+        }
         if surface.targets.iter().flatten().any(|t| t.len() != n)
             || surface.depth.as_ref().is_some_and(|d| d.len() != n)
         {
-            return Err(error("a target or the depth buffer is not width x height"));
+            return Err(error(
+                "a target or the depth buffer is not width x height x layers",
+            ));
+        }
+        if state.viewports.is_empty() {
+            return Err(error("a state of no viewports"));
         }
         if state.depth.is_some() && surface.depth.is_none() {
             return Err(error("the state tests depth and the surface has no depth buffer"));
@@ -579,6 +722,17 @@ impl<'a> Raster<'a> {
         stats: &mut DrawStats,
     ) -> Result<(), Error> {
         stats.primitives = stats.primitives.saturating_add(1);
+        // the leading vertex picks the viewport (an index of 16 or more is 0, 15.8.1; an unset one has no area) and
+        // the target slice (one past the surface's is 0, 15.15)
+        let lead = original.first();
+        let index = lead.map_or(0, |v| v.viewport_index);
+        let index = if index < 16 { index } else { 0 };
+        let Some(&vp) = state.viewports.get(index as usize) else {
+            stats.clipped_away = stats.clipped_away.saturating_add(1);
+            return Ok(());
+        };
+        let layer = lead.map_or(0, |v| v.target_index);
+        let layer = if layer < surface.layers { layer } else { 0 };
         // a cull distance below 0 at every vertex culls the primitive
         let culls = original.iter().map(|v| v.cull.len()).max().unwrap_or(0);
         if (0..culls).any(|k| original.iter().all(|v| v.cull.get(k).is_some_and(|d| *d < 0.))) {
@@ -596,6 +750,17 @@ impl<'a> Raster<'a> {
                         .map_or(0., |d| f64::from(*d))
                 })
             })
+            .chain(state.clip_planes.iter().flatten().map(|plane| {
+                [0, 1, 2].map(|i| {
+                    original.get(i).map_or(0., |v| {
+                        plane
+                            .iter()
+                            .zip(&v.position)
+                            .map(|(&p, &x)| f64::from(p) * f64::from(x))
+                            .sum()
+                    })
+                })
+            }))
             .collect();
         let corners = original
             .iter()
@@ -615,6 +780,8 @@ impl<'a> Raster<'a> {
             original,
             front: true,
             id,
+            viewport: vp,
+            layer,
         };
         let mut run = |cover: &Cover<'_>, drawn: Drawn<'_>, stats: &mut DrawStats| {
             self.quads(cover, drawn, buffers, sampler, state, surface, stats)
@@ -633,7 +800,7 @@ impl<'a> Raster<'a> {
                 if let Some((fan, rest)) = polygon.split_first() {
                     for pair in rest.windows(2) {
                         if let [second, third] = pair {
-                            let Some(setup) = Setup::new([fan, second, third], &state.viewport) else {
+                            let Some(setup) = Setup::new([fan, second, third], &vp) else {
                                 continue;
                             };
                             drawn.front = setup.clockwise != state.front_counter_clockwise;
@@ -655,7 +822,7 @@ impl<'a> Raster<'a> {
                 Ok(())
             }
             2 => {
-                let Some(ends) = clip_line(corners, &state.viewport, &user) else {
+                let Some(ends) = clip_line(corners, &vp, &user) else {
                     stats.clipped_away = stats.clipped_away.saturating_add(1);
                     return Ok(());
                 };
@@ -663,7 +830,7 @@ impl<'a> Raster<'a> {
                     stats.not_a_number = stats.not_a_number.saturating_add(1);
                     return Ok(());
                 }
-                let Some(line) = Line::new(&ends, &state.viewport) else {
+                let Some(line) = Line::new(&ends, &vp) else {
                     return Ok(());
                 };
                 run(&Cover::Line(&line, &ends, original.map_w()), drawn, stats)
@@ -676,7 +843,10 @@ impl<'a> Raster<'a> {
                     stats.not_a_number = stats.not_a_number.saturating_add(1);
                     return Ok(());
                 }
-                let Some(point) = Point::new(&vertex, &state.viewport) else {
+                let size = state
+                    .point_size
+                    .map_or(1., |s| s.of(original.first().and_then(|v| v.point_size)));
+                let Some(point) = Point::new(&vertex, &vp, size, state.point_sprite) else {
                     stats.clipped_away = stats.clipped_away.saturating_add(1);
                     return Ok(());
                 };
@@ -702,8 +872,9 @@ impl<'a> Raster<'a> {
         surface: &mut Surface,
         stats: &mut DrawStats,
     ) -> Result<(), Error> {
-        let vp = state.viewport;
+        let vp = drawn.viewport;
         let (w, h) = (i64::from(surface.width), i64::from(surface.height));
+        let slice = i64::from(drawn.layer).saturating_mul(w).saturating_mul(h);
         let Some(([min_x, max_x], [min_y, max_y])) = cover.bounds(w, h) else {
             return Ok(());
         };
@@ -727,7 +898,8 @@ impl<'a> Raster<'a> {
                     let f = cover.fragment(px, py);
                     *covered = f.covered && px < w && py < h;
                     *depth = f.depth.clamp(depth_range.0, depth_range.1);
-                    self.inputs_at(drawn, &f, [px as f32 + 0.5, py as f32 + 0.5], lane_input);
+                    let centre = [px as f32 + 0.5, py as f32 + 0.5];
+                    self.inputs_at(drawn, &f, centre, *covered, state.sample_mask, lane_input);
                 }
                 if !covered.iter().any(|c| *c) {
                     continue;
@@ -750,8 +922,19 @@ impl<'a> Raster<'a> {
                         stats.discarded = stats.discarded.saturating_add(1);
                         continue;
                     }
+                    if let Some(test) = state.alpha_test {
+                        let alpha = e.outputs.first().map_or(0., |o| f32::from_bits(o[3]));
+                        if !test.compare.passes(alpha, test.reference) {
+                            stats.alpha_failed = stats.alpha_failed.saturating_add(1);
+                            continue;
+                        }
+                    }
+                    if state.sample_mask & 1 == 0 {
+                        stats.masked = stats.masked.saturating_add(1);
+                        continue;
+                    }
                     // the pixel is inside the surface: the bounds are clamped to its width and height
-                    let at = usize::try_from(py.saturating_mul(w).saturating_add(px))
+                    let at = usize::try_from(slice.saturating_add(py.saturating_mul(w)).saturating_add(px))
                         .map_err(|_| error(format!("pixel ({px}, {py}) is outside the surface")))?;
                     if let (Some(test), Some(buffer)) = (state.depth, surface.depth.as_mut()) {
                         let stored = buffer.get_mut(at).ok_or_else(|| {
@@ -785,8 +968,17 @@ impl<'a> Raster<'a> {
         Ok(())
     }
 
-    /// The pixel program's input registers at a pixel `f` of the primitive `drawn`, whose centre is `centre`.
-    fn inputs_at(&self, drawn: Drawn<'_>, f: &Fragment, centre: [f32; 2], into: &mut Vec<[u32; 4]>) {
+    /// The pixel program's input registers at a pixel `f` of the primitive `drawn`, whose centre is `centre`, which
+    /// it covers where `covered` (not a helper), drawn with the sample mask `sample_mask`.
+    fn inputs_at(
+        &self,
+        drawn: Drawn<'_>,
+        f: &Fragment,
+        centre: [f32; 2],
+        covered: bool,
+        sample_mask: u32,
+        into: &mut Vec<[u32; 4]>,
+    ) {
         into.clear();
         into.resize(self.inputs, [0; 4]);
         for s in &self.sources {
@@ -807,14 +999,26 @@ impl<'a> Raster<'a> {
                     );
                 }
                 Source::Primitive { register, lane } => put(into, *register, *lane as usize, drawn.id),
+                Source::Word { register, lane, word } => put(into, *register, *lane as usize, *word),
+                Source::Coverage { register, lane } => {
+                    put(into, *register, *lane as usize, u32::from(covered) & sample_mask);
+                }
                 Source::Varying {
                     from_register,
                     from_lanes,
                     to_register,
                     to_lanes,
                     mode,
+                    texcoord,
                 } => {
                     for (k, to) in to_lanes.iter().enumerate() {
+                        // a point sprite's texture coordinate: the pixel's place on its square
+                        if let Some(place) = f.sprite.filter(|_| *texcoord)
+                            && let Some(&lane) = place.get(k)
+                        {
+                            put(into, *to_register, *to as usize, lane.to_bits());
+                            continue;
+                        }
                         let Some(from) = from_lanes.get(k) else { continue };
                         let word = |v: &Shaded| {
                             v.outputs
@@ -873,11 +1077,11 @@ impl<'a> DrawShader<'a> {
         };
         let outputs = &vertex.interface().outputs;
         let raster = Raster::new(outputs, pixel, from)?;
-        let distances = Distances::of(outputs, from)?;
+        let values = RasterValues::of(outputs, from)?;
         Ok(Self {
             vertex,
             raster,
-            distances,
+            values,
         })
     }
 
@@ -911,13 +1115,7 @@ impl<'a> DrawShader<'a> {
                     .ok_or_else(|| error(format!("vertex {i} has no room for its shading")))?;
                 if entry.is_none() {
                     let (e, position) = self.vertex.execute_vertex(input, vertex_buffers, sampler)?;
-                    let (clip, cull) = self.distances.read(&e.outputs);
-                    *entry = Some(Shaded {
-                        position: position.map(f32::from_bits),
-                        outputs: e.outputs,
-                        clip,
-                        cull,
-                    });
+                    *entry = Some(self.values.shaded(position.map(f32::from_bits), e.outputs));
                 }
             }
             let original = p
@@ -951,11 +1149,11 @@ impl<'a> ShadedDraw<'a> {
             .ok_or_else(|| error("the stage before the pixel program writes no position"))?;
         let from = |at, out: &Varying| Ok((at, (0..out.value.width.min(4)).collect()));
         let raster = Raster::new(outputs, pixel, from)?;
-        let distances = Distances::of(outputs, from)?;
+        let values = RasterValues::of(outputs, from)?;
         Ok(Self {
             raster,
             position,
-            distances,
+            values,
         })
     }
 
@@ -974,17 +1172,12 @@ impl<'a> ShadedDraw<'a> {
         let shaded: Vec<Shaded> = vertices
             .iter()
             .map(|v| {
-                let (clip, cull) = self.distances.read(v);
-                Shaded {
-                    position: v
-                        .get(self.position)
-                        .copied()
-                        .unwrap_or([0; 4])
-                        .map(f32::from_bits),
-                    outputs: v.clone(),
-                    clip,
-                    cull,
-                }
+                let position = v
+                    .get(self.position)
+                    .copied()
+                    .unwrap_or([0; 4])
+                    .map(f32::from_bits);
+                self.values.shaded(position, v.clone())
             })
             .collect();
         let mut stats = DrawStats::default();
@@ -1031,11 +1224,11 @@ impl Cover<'_> {
             Cover::Line(line, ..) => &line.fixed,
             Cover::Point(point) => std::slice::from_ref(&point.fixed),
         };
-        // a line's and a point's pixels reach half a pixel past its positions
-        let reach = if matches!(self, Cover::Triangle(..)) {
-            0
-        } else {
-            128
+        // a line's pixels reach half a pixel past its positions, and a point's half its side
+        let reach = match self {
+            Cover::Triangle(..) => 0,
+            Cover::Line(..) => 128,
+            Cover::Point(point) => point.half,
         };
         bounds_of(fixed, reach, w, h)
     }
@@ -1071,6 +1264,7 @@ impl Cover<'_> {
                 perspective: [1., 0., 0.],
                 linear: [1., 0., 0.],
                 w: point.w,
+                sprite: point.sprite.then(|| point.place(px, py)),
             },
         }
     }
@@ -1110,6 +1304,7 @@ fn on_primitive(
         perspective,
         linear,
         w: crate::narrow(1. / sum),
+        sprite: None,
     }
 }
 
@@ -1366,25 +1561,33 @@ fn meets(u0: [i128; 2], d: [i128; 2], y_major: bool) -> bool {
 #[derive(Debug)]
 struct Point {
     fixed: [i64; 2],
+    /// Half the square's side, in 1/256 of a pixel.
+    half: i64,
     depth: f32,
     w: f32,
+    /// Whether it is a point sprite.
+    sprite: bool,
 }
 
 impl Point {
-    /// `None` for a point outside the clip volume, which draws nothing.
-    fn new(v: &ClipVertex, vp: &Viewport) -> Option<Self> {
+    /// A point whose square's side is `size` pixels, a point sprite where `sprite`; `None` for a point outside the
+    /// clip volume, which draws nothing.
+    fn new(v: &ClipVertex, vp: &Viewport, size: f32, sprite: bool) -> Option<Self> {
         if (0..6).any(|k| plane(k, &v.clip) < 0.) || v.clip[3] == 0. {
             return None;
         }
-        let (screen, _, fixed) = to_screen(v.clip, vp);
+        let (screen, _, at) = to_screen(v.clip, vp);
         Some(Self {
-            fixed,
+            fixed: at,
+            // half the side in 16.8 fixed point, as a position is
+            half: fixed(f64::from(size) / 2.).max(0),
             depth: crate::narrow(screen[2]),
             w: v.clip[3],
+            sprite,
         })
     }
 
-    /// Whether the point's square, `[x - 1/2, x + 1/2) x [y - 1/2, y + 1/2)` about its snapped position, holds the
+    /// Whether the point's square, `[x - s/2, x + s/2) x [y - s/2, y + s/2)` about its snapped position, holds the
     /// centre of pixel `(px, py)`.
     #[allow(clippy::arithmetic_side_effects)] // pixel values in the 16.8 range
     fn covers(&self, px: i64, py: i64) -> bool {
@@ -1394,7 +1597,22 @@ impl Point {
                 c.get(k).copied().unwrap_or(0),
                 self.fixed.get(k).copied().unwrap_or(0),
             );
-            p - 128 <= at && at < p + 128
+            p - self.half <= at && at < p + self.half
+        })
+    }
+
+    /// The centre of pixel `(px, py)`'s place on the point's square: (0, 0) at its top left, (1, 1) at its bottom
+    /// right.
+    #[allow(clippy::arithmetic_side_effects)] // pixel values in the 16.8 range
+    fn place(&self, px: i64, py: i64) -> [f32; 2] {
+        let side = (2 * self.half).max(1) as f64;
+        let c = [px * 256 + 128, py * 256 + 128];
+        [0, 1].map(|k| {
+            let (at, p) = (
+                c.get(k).copied().unwrap_or(0),
+                self.fixed.get(k).copied().unwrap_or(0),
+            );
+            crate::narrow((at - (p - self.half)) as f64 / side)
         })
     }
 }

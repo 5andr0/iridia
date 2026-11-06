@@ -423,6 +423,7 @@ fn surface_of(c: &DrawCase) -> Surface {
     Surface {
         width: SIZE,
         height: SIZE,
+        layers: 1,
         targets: (0..highest)
             .map(|r| {
                 c.targets
@@ -436,17 +437,22 @@ fn surface_of(c: &DrawCase) -> Surface {
 
 fn state_of(c: &DrawCase) -> Rasterizer {
     Rasterizer {
-        viewport: Viewport {
+        viewports: vec![Viewport {
             x: 0.0,
             y: 0.0,
             width: SIZE as f32,
             height: SIZE as f32,
             min_depth: 0.0,
             max_depth: 1.0,
-        },
+        }],
+        sample_mask: u32::MAX,
         cull: c.cull,
         front_counter_clockwise: c.ccw,
         depth: c.depth.map(|(compare, write, _)| DepthState { compare, write }),
+        alpha_test: None,
+        clip_planes: [None; 6],
+        point_size: None,
+        point_sprite: false,
     }
 }
 

@@ -11,7 +11,8 @@ use std::sync::Arc;
 
 use iridia::{Interface, Program, ResourceKind, SystemValue};
 use iridia_exec::draw::{
-    Compare as DepthCompare, Cull, DepthState, DrawShader, Primitive, Rasterizer, Surface, Viewport,
+    AlphaTest, Compare as DrawCompare, Cull, DepthState, DrawShader, PointSize, Primitive, Rasterizer,
+    Surface, Viewport,
 };
 use iridia_exec::geometry::{GeometryShader, Topology};
 use iridia_exec::tessellation::TessellationShader;
@@ -141,12 +142,93 @@ impl RunResult {
 struct State {
     input_layout: Vec<InputElement>,
     depth: Option<Compare>,
+    /// Direct3D 9's alpha test.
+    alpha_test: Option<AlphaTest>,
+    /// Direct3D 9's user clip planes, by index.
+    clip_planes: [Option<[f32; 4]>; 6],
+    /// Direct3D 9's point size.
+    point_size: Option<PointSize>,
+    /// Direct3D 9's point sprites.
+    point_sprite: bool,
     viewports: BTreeMap<u32, [f32; 4]>,
     sample_mask: Option<u32>,
     /// The fixed-function state set that this runner does not model, by name.
     unmodelled: BTreeMap<String, String>,
     /// Resources whose contents are not known, and why.
     taint: BTreeMap<(Kind, u32), Outcome>,
+}
+
+/// A comparison as the draw takes it.
+fn draw_compare(c: Compare) -> DrawCompare {
+    match c {
+        Compare::Never => DrawCompare::Never,
+        Compare::Less => DrawCompare::Less,
+        Compare::Equal => DrawCompare::Equal,
+        Compare::LessEqual => DrawCompare::LessEqual,
+        Compare::Greater => DrawCompare::Greater,
+        Compare::NotEqual => DrawCompare::NotEqual,
+        Compare::GreaterEqual => DrawCompare::GreaterEqual,
+        Compare::Always => DrawCompare::Always,
+    }
+}
+
+/// A float the case file holds as its bits.
+fn float_bits(v: &serde_json::Value) -> Option<f32> {
+    v.as_u64().and_then(|b| u32::try_from(b).ok()).map(f32::from_bits)
+}
+
+/// vkd3d's `alpha test <func> <ref>` (`[func, ref]`, the reference absent for `always` and `never`): the d3d9 runner
+/// sets `D3DRS_ALPHAREF` to `ref * 255` as an integer (truncated), which the test compares with as a fraction of 255.
+fn alpha_test_of(value: &serde_json::Value) -> Result<AlphaTest, String> {
+    let shown = || format!("the alpha test {value}");
+    let func = value
+        .get(0)
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(shown)?;
+    let compare = draw_compare(Compare::named(func)?);
+    let reference = match value.get(1) {
+        None | Some(serde_json::Value::Null) => 0.0,
+        Some(r) => {
+            let r = float_bits(r).ok_or_else(shown)?;
+            ((r * 255.0) as u8) as f32 / 255.0
+        }
+    };
+    Ok(AlphaTest { compare, reference })
+}
+
+/// vkd3d's `point-size <size> <min> <max>` (`[size, min, max]`).
+fn point_size_of(value: &serde_json::Value) -> Result<PointSize, String> {
+    let shown = || format!("the point size {value}");
+    let lane = |i: usize| value.get(i).and_then(float_bits).ok_or_else(shown);
+    Ok(PointSize {
+        size: lane(0)?,
+        min: lane(1)?,
+        max: lane(2)?,
+    })
+}
+
+/// vkd3d's `clip-plane <index> <plane>` or `clip-plane <index> disable` (`[index, plane or null]`).
+fn clip_plane_of(value: &serde_json::Value) -> Result<(usize, Option<[f32; 4]>), String> {
+    let shown = || format!("the clip plane {value}");
+    let index = value
+        .get(0)
+        .and_then(serde_json::Value::as_u64)
+        .and_then(|i| usize::try_from(i).ok())
+        .filter(|&i| i < 6)
+        .ok_or_else(shown)?;
+    let plane = match value.get(1) {
+        None | Some(serde_json::Value::Null) => None,
+        Some(serde_json::Value::Array(p)) => {
+            let lanes: Vec<f32> = p
+                .iter()
+                .map(float_bits)
+                .collect::<Option<_>>()
+                .ok_or_else(shown)?;
+            Some(<[f32; 4]>::try_from(lanes).map_err(|_| shown())?)
+        }
+        Some(_) => return Err(shown()),
+    };
+    Ok((index, plane))
 }
 
 fn kind_slot(target: &str) -> Result<(Kind, u32), String> {
@@ -422,10 +504,18 @@ fn adopt_flushed(kept: &mut [Probe], flushed: Vec<Probe>) -> bool {
 fn run_as(programs: &Programs<'_>, run: &Run, flushed: bool) -> RunResult {
     let mut device = Device::default();
     let mut state = State::default();
+    let d3d9 = run.runner == "d3d9";
+    // Direct3D 9's point size as vkd3d's runner starts it: 1 pixel, at least 1, at most `FLT_MAX`
+    if d3d9 {
+        state.point_size = Some(PointSize {
+            size: 1.0,
+            min: 1.0,
+            max: f32::MAX,
+        });
+    }
     let mut probes = Vec::new();
     let mut used: BTreeMap<String, Option<Outcome>> = BTreeMap::new();
     let mut selected = false;
-    let d3d9 = run.runner == "d3d9";
     for step in &run.steps {
         match &step.what {
             What::Section { section } => selected = section.as_deref() == Some("selected"),
@@ -481,6 +571,26 @@ fn run_as(programs: &Programs<'_>, run: &Run, flushed: bool) -> RunResult {
                                 state.viewports.insert(index, [x, y, w, h]);
                             }
                         }
+                        "alpha_test" => match alpha_test_of(value) {
+                            Ok(t) => {
+                                state.alpha_test = (t.compare != DrawCompare::Always).then_some(t);
+                                state.unmodelled.remove(name);
+                            }
+                            Err(e) => {
+                                state.unmodelled.insert(name.clone(), e);
+                            }
+                        },
+                        "clip_plane" => match clip_plane_of(value) {
+                            Ok((index, plane)) => {
+                                if let Some(slot) = state.clip_planes.get_mut(index) {
+                                    *slot = plane;
+                                }
+                                state.unmodelled.remove(name);
+                            }
+                            Err(e) => {
+                                state.unmodelled.insert(name.clone(), e);
+                            }
+                        },
                         "sample_mask" => {
                             let m = value.as_u64().unwrap_or(u64::from(u32::MAX)) as u32;
                             state.sample_mask = (m != 0).then_some(m);
@@ -489,9 +599,24 @@ fn run_as(programs: &Programs<'_>, run: &Run, flushed: bool) -> RunResult {
                         "flat" if value == &serde_json::Value::Bool(false) => {
                             state.unmodelled.remove(name);
                         }
-                        "point_sprite" if value == &serde_json::Value::Bool(false) => {
-                            state.unmodelled.remove(name);
-                        }
+                        "point_sprite" => match value.as_bool() {
+                            Some(on) => {
+                                state.point_sprite = on;
+                                state.unmodelled.remove(name);
+                            }
+                            None => {
+                                state.unmodelled.insert(name.clone(), value.to_string());
+                            }
+                        },
+                        "point_size" => match point_size_of(value) {
+                            Ok(size) => {
+                                state.point_size = Some(size);
+                                state.unmodelled.remove(name);
+                            }
+                            Err(e) => {
+                                state.unmodelled.insert(name.clone(), e);
+                            }
+                        },
                         "fog" if value.get("mode").and_then(|m| m.as_str()) == Some("disable") => {
                             state.unmodelled.remove(name);
                         }
@@ -923,13 +1048,23 @@ fn draw_step(
             return Err(Outcome::NotModelled("render targets of different sizes".into()));
         }
     }
-    if state.sample_mask.is_some_and(|m| m & 1 == 0) {
-        // the one sample is masked out: the draw writes nothing
-        return Ok(());
+    // the slices of the targets and the depth buffer, alike (the first level of each, which come first in a
+    // resource's data)
+    let layers = device
+        .resources
+        .iter()
+        .filter(|(k, _)| k.0 == Kind::Rtv || k.0 == Kind::Dsv)
+        .map(|(_, r)| r.layers)
+        .collect::<std::collections::BTreeSet<u32>>();
+    if layers.len() > 1 {
+        return Err(Outcome::NotModelled("targets of different array sizes".into()));
     }
+    let layers = layers.first().copied().unwrap_or(1).max(1);
+    let texel_count = (width as usize) * (height as usize) * (layers as usize);
     let mut surface = Surface {
         width,
         height,
+        layers,
         targets: Vec::new(),
         depth: None,
     };
@@ -937,25 +1072,24 @@ fn draw_step(
     surface.targets = vec![None; rt_count];
     for (slot, _) in &targets {
         let r = &device.resources[&(Kind::Rtv, *slot)];
-        if r.layers > 1 || r.samples > 1 {
-            return Err(Outcome::NotModelled(
-                "a render target array or a multisampled target".into(),
-            ));
+        if r.samples > 1 {
+            return Err(Outcome::NotModelled("a multisampled target".into()));
         }
         let size = r.format.size as usize;
-        let texels = r
+        let read = r
             .data
             .chunks(size)
-            .take((width * height) as usize)
+            .take(texel_count)
             .map(|t| r.format.read(t))
             .collect();
-        surface.targets[*slot as usize] = Some(texels);
+        surface.targets[*slot as usize] = Some(read);
     }
     let depth = match device.resources.get(&(Kind::Dsv, 0)) {
         Some(r) => {
             surface.depth = Some(
                 r.data
                     .chunks(r.format.size as usize)
+                    .take(texel_count)
                     .map(|t| r.format.depth(t))
                     .collect(),
             );
@@ -963,42 +1097,41 @@ fn draw_step(
                 .depth
                 .ok_or_else(|| Outcome::NotModelled("a depth buffer with no depth function".into()))?;
             Some(DepthState {
-                compare: match compare {
-                    Compare::Never => DepthCompare::Never,
-                    Compare::Less => DepthCompare::Less,
-                    Compare::Equal => DepthCompare::Equal,
-                    Compare::LessEqual => DepthCompare::LessEqual,
-                    Compare::Greater => DepthCompare::Greater,
-                    Compare::NotEqual => DepthCompare::NotEqual,
-                    Compare::GreaterEqual => DepthCompare::GreaterEqual,
-                    Compare::Always => DepthCompare::Always,
-                },
+                compare: draw_compare(compare),
                 write: true,
             })
         }
         None => None,
     };
-    if state.viewports.len() > 1 {
-        return Err(Outcome::NotModelled("more than one viewport".into()));
-    }
-    let [vx, vy, vw, vh] =
-        state
-            .viewports
-            .get(&0)
-            .copied()
-            .unwrap_or([0.0, 0.0, width as f32, height as f32]);
+    // the viewports by index (one the test does not set has no area, as Direct3D's), the target's whole by default
+    let last = state.viewports.keys().max().map_or(0, |&i| i as usize + 1);
+    let viewports = (0..last.max(1))
+        .map(|i| {
+            let [x, y, width, height] = match state.viewports.get(&(i as u32)) {
+                Some(&rect) => rect,
+                None if state.viewports.is_empty() => [0.0, 0.0, width as f32, height as f32],
+                None => [0.0; 4],
+            };
+            Viewport {
+                x,
+                y,
+                width,
+                height,
+                min_depth: 0.0,
+                max_depth: 1.0,
+            }
+        })
+        .collect();
     let rasterizer = Rasterizer {
-        viewport: Viewport {
-            x: vx,
-            y: vy,
-            width: vw,
-            height: vh,
-            min_depth: 0.0,
-            max_depth: 1.0,
-        },
+        viewports,
+        sample_mask: state.sample_mask.unwrap_or(u32::MAX),
         cull: Cull::None,
         front_counter_clockwise: false,
         depth,
+        alpha_test: state.alpha_test,
+        clip_planes: state.clip_planes,
+        point_size: state.point_size,
+        point_sprite: state.point_sprite,
     };
     let vs_constants = constant_rows(vsh, device);
     let ps_constants = constant_rows(psh, device);
@@ -1077,7 +1210,7 @@ fn draw_step(
         for (t, bytes) in texels.iter().zip(r.data.chunks_mut(size)) {
             format.write(*t, 0xf, bytes);
         }
-        if written >= (width * height) as usize {
+        if written >= texel_count {
             state.taint.remove(&(Kind::Rtv, slot as u32));
         }
     }
