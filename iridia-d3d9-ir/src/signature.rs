@@ -499,14 +499,16 @@ pub fn signature(source: &Shader, texture_dims: &BTreeMap<u32, TextureDim>) -> R
             }
         }
     }
+    // the float bank keeps the name iridia-d3d9 gives it in both stages, so the two lifters' interfaces are equal; the
+    // integer and boolean banks, which that lifter does not have, are named after it
     if rows > 0 {
-        s.bank = Some(bank(&mut s, "float_constants", 0, rows, 16, fields)?);
+        s.bank = Some(bank(&mut s, "ps_float_constants", 0, rows, 16, fields)?);
     }
     if integers > 0 {
-        s.integers = Some(bank(&mut s, "int_constants", 1, integers, 16, integer_fields)?);
+        s.integers = Some(bank(&mut s, "ps_int_constants", 1, integers, 16, integer_fields)?);
     }
     if booleans > 0 {
-        s.booleans = Some(bank(&mut s, "bool_constants", 2, booleans, 4, boolean_fields)?);
+        s.booleans = Some(bank(&mut s, "ps_bool_constants", 2, booleans, 4, boolean_fields)?);
     }
     for (&slot, &declared) in &source.samplers {
         if declared == TextureDim::D1 {
