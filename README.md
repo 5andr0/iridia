@@ -1,4 +1,4 @@
-# <img src="docs/logo.svg" alt="" width="36"> iridia
+# <img src="docs/logo.svg" alt="" height="25"> iridia
 
 [![crates.io](https://img.shields.io/crates/v/iridia)](https://crates.io/crates/iridia) [![docs.rs](https://img.shields.io/docsrs/iridia)](https://docs.rs/iridia) [![CI](https://img.shields.io/github/actions/workflow/status/Kalmarv/iridia/ci.yml?branch=main&label=CI)](https://github.com/Kalmarv/iridia/actions/workflows/ci.yml)
 
