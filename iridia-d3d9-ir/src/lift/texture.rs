@@ -5,7 +5,7 @@
 //! `texdp3`, `texdp3tex`; in 1.4 `texld`, `texcrd` and `texdepth`.
 
 use iridia_ir::{
-    Binary, Cmp as Compare, End, Level, Op, SaturateNan, Type, Unary, ValueId,
+    Binary, Cmp as Compare, End, Level, MinMaxNan, Op, SaturateNan, Type, Unary, ValueId,
     interface::{StateParam, TextureDim},
 };
 
@@ -34,15 +34,19 @@ impl Lift<'_> {
                 let Register::Temporary(stage) = d.register else {
                     return Err(error(self.at, "texld writes a register that is not a temporary"));
                 };
-                let coordinate = self.source(i.source(0)?, 15)?;
-                self.sample_stage(stage, coordinate)?
+                // the coordinate is three lanes at most: `.xyz`, or `.xyw` divided by w for `_dw`
+                let coordinate = self.source(i.source(0)?, 7)?;
+                self.sample_stage(stage, coordinate, None)?
             }
             TexCoord if !early => self.source(i.source(0)?, d.mask)?,
             TexDepth => {
-                // depth = r5.r / r5.g
+                // depth = r5.r / r5.g, r5.g at most 1 (wined3d's hardware tests: -0.25 / -0.5 gives 0.5, and a g past
+                // 1 is taken as 1); the depth is then within 0..1 as every depth output is, by the pipeline
                 let r = self.register(d.register, 3)?;
                 let x = self.lane(r, 0)?;
                 let y = self.lane(r, 1)?;
+                let one = self.b.f32(1.0);
+                let y = self.binary(Binary::FMin(MinMaxNan::MinNum), y, one)?;
                 let depth = self.binary(Binary::FDiv, x, y)?;
                 return self.depth(i, depth).map(|()| true);
             }
@@ -78,6 +82,7 @@ impl Lift<'_> {
             saturate: false,
             partial_precision: false,
             shift: 0,
+            relative: None,
         };
         self.write(i, d, v)
     }
@@ -91,6 +96,11 @@ impl Lift<'_> {
     fn project(&mut self, stage: u32, coordinate: ValueId) -> Result<ValueId> {
         let state = self.signature.state(StateParam::Projected(stage))?;
         let projected = self.b.value(Type::BOOL, Op::LoadState(state));
+        self.divide_by_w(coordinate, projected)
+    }
+
+    /// The coordinate divided by its last lane where `projected` holds.
+    fn divide_by_w(&mut self, coordinate: ValueId, projected: ValueId) -> Result<ValueId> {
         let w = self.lane(coordinate, 3)?;
         let w = self.splat(w, 4)?;
         let divided = self.binary(Binary::FDiv, coordinate, w)?;
@@ -112,8 +122,9 @@ impl Lift<'_> {
         Ok(Some(match i.opcode {
             Tex => {
                 let t = self.coordinate(stage)?;
-                let c = self.project(stage, t)?;
-                self.sample_stage(stage, c)?
+                let state = self.signature.state(StateParam::Projected(stage))?;
+                let projected = self.b.value(Type::BOOL, Op::LoadState(state));
+                self.sample_stage(stage, t, Some(projected))?
             }
             TexCoord => {
                 // the coordinate within 0 to 1, and w 1
@@ -135,7 +146,7 @@ impl Lift<'_> {
                 let z = self.lane(c, 2)?;
                 let w = self.lane(c, 3)?;
                 let coordinate = self.op(Op::Compose(vec![x, y, z, w]))?;
-                let mut v = self.sample_stage(stage, coordinate)?;
+                let mut v = self.sample_stage(stage, coordinate, None)?;
                 if i.opcode == TexBemL {
                     // times the offset's z scaled and offset by the stage's luminance state, within 0 to 1
                     let scale = self.signature.state(StateParam::BumpLScale(stage))?;
@@ -159,7 +170,7 @@ impl Lift<'_> {
                     _ => [0, 1, 2, 2],
                 };
                 let coordinate = self.swizzle(s, &lanes)?;
-                self.sample_stage(stage, coordinate)?
+                self.sample_stage(stage, coordinate, None)?
             }
             TexM3x2Pad | TexM3x3Pad => {
                 let n = self.source(i.source(0)?, 7)?;
@@ -204,7 +215,7 @@ impl Lift<'_> {
                     TexM3x2Tex | TexM3x3Tex => {
                         rows.resize(4, zero);
                         let coordinate = self.op(Op::Compose(rows))?;
-                        self.sample_stage(stage, coordinate)?
+                        self.sample_stage(stage, coordinate, None)?
                     }
                     _ => {
                         // the reflection of the eye vector about the normal: 2 * (N.E / N.N) * N - E
@@ -233,7 +244,7 @@ impl Lift<'_> {
                         let y = self.lane(reflected, 1)?;
                         let z = self.lane(reflected, 2)?;
                         let coordinate = self.op(Op::Compose(vec![x, y, z, zero]))?;
-                        self.sample_stage(stage, coordinate)?
+                        self.sample_stage(stage, coordinate, None)?
                     }
                 }
             }
@@ -244,7 +255,7 @@ impl Lift<'_> {
                     self.splat(d, 4)?
                 } else {
                     let coordinate = self.op(Op::Compose(vec![d, zero, zero, zero]))?;
-                    self.sample_stage(stage, coordinate)?
+                    self.sample_stage(stage, coordinate, None)?
                 }
             }
             _ => {
@@ -257,8 +268,15 @@ impl Lift<'_> {
     }
 
     /// Sample texture stage `stage` at the lanes of a four-lane coordinate its dimension takes: of the one texture its
-    /// dimension is known for, or of the one `StateParam::TextureDim` picks (cube 4, volume 3, else 2D).
-    fn sample_stage(&mut self, stage: u32, coordinate: ValueId) -> Result<ValueId> {
+    /// dimension is known for, or of the one `StateParam::TextureDim` picks (cube 4, volume 3, else 2D). Where
+    /// `projected` is given and holds, a 2D or volume coordinate is divided by its w first; a cube one is not, as
+    /// wined3d (the direction is the same unless w is negative).
+    fn sample_stage(
+        &mut self,
+        stage: u32,
+        coordinate: ValueId,
+        projected: Option<ValueId>,
+    ) -> Result<ValueId> {
         let sampler = self
             .signature
             .samplers
@@ -266,6 +284,10 @@ impl Lift<'_> {
             .cloned()
             .ok_or_else(|| error(self.at, format!("texture stage {stage} is not sampled")))?;
         let sample = |l: &mut Self, dim: TextureDim, texture| -> Result<ValueId> {
+            let coordinate = match projected {
+                Some(p) if dim != TextureDim::Cube => l.divide_by_w(coordinate, p)?,
+                _ => coordinate,
+            };
             let coord = l.swizzle(coordinate, coordinate_lanes(dim))?;
             Ok(l.b.value(
                 Type::F32X4,
@@ -333,8 +355,10 @@ impl Lift<'_> {
             .first()
             .ok_or_else(|| error(self.at, format!("sampler s{slot} has no texture")))?;
         let lanes = coordinate_lanes(dim);
+        // `texldp` divides by w but for a cube texture, as wined3d
+        let projects = i.opcode == Opcode::Tex && i.control == 1 && dim != TextureDim::Cube;
         let mut required = if dim == TextureDim::D2 { 3 } else { 7 };
-        if i.control != 0 || i.opcode == Opcode::TexLdl {
+        if projects || (i.opcode == Opcode::Tex && i.control == 2) || i.opcode == Opcode::TexLdl {
             required |= 8;
         }
         let coordinates = self.source(i.source(0)?, required)?;
@@ -350,6 +374,7 @@ impl Lift<'_> {
                 Level::Grad(dx, dy)
             }
             (_, 0) => Level::Auto,
+            (_, 1) if !projects => Level::Auto,
             (_, 1) => {
                 let w = self.lane(coordinates, 3)?;
                 let w = self.splat(w, width)?;

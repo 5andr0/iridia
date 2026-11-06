@@ -1,7 +1,9 @@
 //! Arithmetic: every instruction that computes from its sources and writes its destination, each by its definition
 //! in Microsoft's instruction reference (or, where a version's reference leaves a case open, as DXVK computes it).
 
-use iridia_ir::{Binary, Cmp as Compare, End, MinMaxNan, Op, Precision, Rounding, Type, Unary, ValueId};
+use iridia_ir::{
+    Binary, Cmp as Compare, End, MinMaxNan, MulZero, Op, Precision, Rounding, Type, Unary, ValueId,
+};
 
 use super::{Lift, splat4};
 use crate::{Instruction, Opcode, PARTIAL_PRECISION, Register, Result, error};
@@ -154,8 +156,7 @@ impl Lift<'_> {
                 self.splat(dot, 4)?
             }
             Nrm => {
-                let xyz = self.swizzle(a, &[0, 1, 2])?;
-                let squared = self.op(Op::Dot(xyz, xyz))?;
+                let squared = self.dot(a, a, &[0, 1, 2])?;
                 let zero = self.b.f32(0.0);
                 let empty = self.binary(Binary::FCmp(Compare::Eq), squared, zero)?;
                 let reciprocal = self.unary(Unary::FInverseSqrt, squared)?;
@@ -242,14 +243,27 @@ impl Lift<'_> {
         self.write(i, d, v)
     }
 
-    /// The dot product of the `lanes` of two values.
+    /// The dot product of the `lanes` of two values. Under the IEEE multiply rule it is the IR's `dot`; under the zero
+    /// wins rule each product is a multiplication of that rule and the sum runs left to right, as `dot` does.
     pub(super) fn dot(&mut self, a: ValueId, b: ValueId, lanes: &[u8]) -> Result<ValueId> {
-        let (x, y) = if lanes.len() == 4 {
-            (a, b)
-        } else {
-            (self.swizzle(a, lanes)?, self.swizzle(b, lanes)?)
-        };
-        self.op(Op::Dot(x, y))
+        if self.options.multiply == MulZero::Ieee {
+            let (x, y) = if lanes.len() == 4 {
+                (a, b)
+            } else {
+                (self.swizzle(a, lanes)?, self.swizzle(b, lanes)?)
+            };
+            return self.op(Op::Dot(x, y));
+        }
+        let mut sum = None;
+        for &n in lanes {
+            let (x, y) = (self.lane(a, n)?, self.lane(b, n)?);
+            let product = self.mul(x, y)?;
+            sum = Some(match sum {
+                Some(s) => self.binary(Binary::FAdd, s, product)?,
+                None => product,
+            });
+        }
+        sum.ok_or_else(|| error(self.at, "a dot product of no lanes"))
     }
 
     /// `m4x4`, `m4x3`, `m3x4`, `m3x3`, `m3x2`: lane k of the result is the dot product of source 0 with the register

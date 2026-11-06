@@ -1,14 +1,17 @@
 # iridia-d3d9-ir
 
-Reads raw Direct3D 9 `ps_3_0` and `vs_3_0` shader token streams and their CTAB constant table, and lifts them into [iridia's shader IR](../iridia-ir).
+Reads raw Direct3D 9 shader token streams of every model from `vs_1_1` and `ps_1_1` to `vs_3_0` and `ps_3_0`, and their CTAB constant table, and lifts them into [iridia's shader IR](../iridia-ir).
 
-Part of [iridia](https://github.com/Kalmarv/iridia), which turns compiled shaders into programs other tools can read and write. This crate is the shader model 3 reader of [`iridia-d3d9`](../iridia-d3d9) moved onto the IR: the subset it reads and the interface it gives are that crate's, and the program is the IR's instead of a naga module. The design is [`docs/design/ir.md`](../docs/design/ir.md). The input is the token stream a Direct3D 9 compiler writes, version token to `END`, with no container. This crate does no I/O.
+Part of [iridia](https://github.com/Kalmarv/iridia), which turns compiled shaders into programs other tools can read and write. It began as the shader model 3 reader of [`iridia-d3d9`](../iridia-d3d9) moved onto the IR, and gives the same interface for every program that crate reads; it now reads shader models 1 and 2 and the control flow of 2.x and 3.0 as well. The design is [`docs/design/ir.md`](../docs/design/ir.md). The input is the token stream a Direct3D 9 compiler writes, version token to `END`, with no container. This crate does no I/O.
 
 ## What it reads
 
-- The tokens are read by [`d3d9-reader`](https://github.com/Kalmarv/dx/tree/main/d3d9-reader); `read(bytes)` takes the `vs_3_0` and `ps_3_0` subset this crate lifts and refuses the rest by name and word: straight-line float arithmetic, `dcl` and `def`; vertex `slt`, `sge`, `mova` and float constants relative to `a0`; pixel `cmp`, `dp2add`, `texld` (plain, projected or biased) and `texkill`, with 2D, cube or volume textures.
-- `signature` states the interface the declarations and the CTAB give: named varyings with their D3D registers and masks (a varying declared on some lanes of a register has those lanes, in order), the float constant bank as one constant buffer at `cb0` with the CTAB's named constants, and sampler `sN` as a texture at `tN` and a sampler at `sN`.
-- `lift(bytes)` builds the program: a variable per register, each instruction's operations in order, the outputs stored at the end. Each operation whose meaning differs between sources states Direct3D 9's rule: `mova` rounds ties away from zero, a relative constant read outside the bank is zero, `texkill` tests all four lanes. A `def` constant is what its register reads as.
+- The tokens are read by [`d3d9-reader`](https://github.com/Kalmarv/dx/tree/main/d3d9-reader); `read(bytes)` checks every register against its version's banks and refuses what it does not lift by name and word (the software versions, `ps_1_0` and `vs_1_0`, which no Direct3D 9 runtime takes, and a relative index other than `a0` into constants or `aL` into inputs and 3.0 outputs).
+- Arithmetic of every model, with `def`, `defi` and `defb`; vertex `mova` and constants relative to `a0`; `rep`, `loop` and `aL`, `if`, `if_comp`, `break`, `break_comp`, `breakp`, `call`, `callnz`, `setp` and predicated writes; `dsx`, `dsy`, `texld` (plain, projected, biased), `texldl`, `texldd` and `texkill`, with 2D, cube or volume textures; `vPos`, `vFace`, several render targets and `oDepth`.
+- Pixel 1.1 to 1.4: the texture operations (`tex`, `texcoord`, `texbem`, `texbeml`, the `texm3x2` and `texm3x3` families, `texdp3`, `texreg2ar`/`gb`/`rgb`, `texdepth`, 1.4's `texld`, `texcrd`, `bem` and `phase`), co-issue, the source modifiers and the result shifts. A stage's texture dimension and projection are pipeline state the program reads, unless the host states the dimension (`Options::texture_dims`); `iridia_passes::specialise` folds the state a host knows.
+- `signature` states the interface the declarations and the CTAB give: named varyings with their D3D registers and masks, the float, integer and boolean constant banks as constant buffers with the CTAB's named constants (structs, arrays and matrices as the compiler laid them out), and each sampler as a texture and a sampler.
+- `lift_with(bytes, options)` builds the program: a variable per register, each instruction's operations in order, the outputs stored at the end. Each operation whose meaning differs between sources states Direct3D 9's rule: a multiply's zero times anything is zero (`Options::multiply`, IEEE by choice), `mova` rounds ties away from zero, a relative constant read outside the bank is zero, `min` and `max` of one NaN give the other operand.
+- The pixel 1.x register policy (`Options::ps1x`) is that of modern drivers by default: constants read within -1 to 1 and colours within 0 to 1, and no clamp or fixed point after a write; a register range and a fixed point rounding are options.
 
 ## Example
 
@@ -38,13 +41,14 @@ assert!(iridia_d3d9_ir::lift(&other_model).is_err());
 
 ## Guarantees and limits
 
-- What `iridia-d3d9` refuses this crate refuses: other models, operations and register banks, loop counters, predication, control flow, integer and boolean constants, sampler arrays, uninitialized temporary lanes and undeclared input lanes.
-- On the 7,308 distinct Shaun White Skateboarding programs it lifts every program the older reader lifts, with the same interface and bindings, and a seeded run of each agrees with the older reader's in that crate's executor.
-- It checks tokens and numbers, not rendered pixels: nothing here is compared against a Direct3D 9 device.
+- On the 7,306 distinct Shaun White Skateboarding programs the older reader lifts it lifts the same programs, with the same interface and bindings, and a seeded run of each agrees with the older reader's in that crate's executor.
+- 103 one-feature programs, assembled by Microsoft's `D3DAssemble`, run as their comments state, worked by hand from the instruction definitions; where those leave a choice the rule followed is wined3d's.
+- The 1,100 programs of vkd3d's Direct3D 9 shader tests lift, and each probe the tests make of a Direct3D 9 device on Windows that a single invocation can draw holds.
+- A derivative is lifted and written as WGSL but not run: the executors run one invocation, not a quad.
 
 ## Tests
 
-`cargo test -p iridia-d3d9-ir` needs no game files: `tests/tokens.rs` runs hand-worked token and arithmetic fixtures through [`iridia-exec-ir`](../iridia-exec-ir) and writes each as WGSL, and `tests/versions.tsv` gates the lifter version on the IR text of its fixtures. With `GAME_DATA` naming a folder of your own extracted programs (see [`tests/inputs/README.md`](tests/inputs/README.md)), `tests/disassembly.rs` and `tests/corpus.rs` compare the decoded instructions against Microsoft's `D3DDisassemble`, then lift, validate and write each program as WGSL.
+`cargo test -p iridia-d3d9-ir` needs no game files: `tests/tokens.rs` runs hand-worked token fixtures, `tests/assembled.rs` the assembled fixtures and `tests/vkd3d.rs` vkd3d's tests, each in the IR, in its control flow graph, in that graph structured again, and as WGSL read back by naga. `tests/versions.tsv` gates the lifter version on what it makes of all of them. With `GAME_DATA` naming a folder of your own extracted programs (see [`tests/inputs/README.md`](tests/inputs/README.md)), `tests/disassembly.rs`, `tests/corpus.rs` and `tests/gate.rs` compare the decoded instructions against Microsoft's `D3DDisassemble`, lift every program and compare it with the older reader's. The assembled fixtures are rebuilt with `tests/oracles/assemble.py` (Windows Python and `d3dcompiler_47.dll`, or Wine).
 
 ## Licence
 

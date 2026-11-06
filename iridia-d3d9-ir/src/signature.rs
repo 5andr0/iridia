@@ -6,9 +6,9 @@ use std::collections::BTreeMap;
 
 use iridia_ir::interface::{
     BufferLayout, Constant as Field, ConstantType, D3dBinding, D3dClass, D3dSignature, Interface, InterpMode,
-    InterpSampling, Interpolation, Label, Majorness, Resource, ResourceId, ResourceKind, ResourceProvenance,
-    SampleType, ScalarType, Stage, StageFacts, StateParam, SystemValue, TextureDim, Value, Varying,
-    VaryingProvenance,
+    InterpSampling, Interpolation, Label, Majorness, Member, Resource, ResourceId, ResourceKind,
+    ResourceProvenance, SampleType, ScalarType, Stage, StageFacts, StateParam, SystemValue, TextureDim,
+    Value, Varying, VaryingProvenance,
 };
 
 use crate::{Constant, Register, Result, Shader, error, model::usage};
@@ -149,141 +149,273 @@ pub fn varying(name: &str, index: u32, mask: u8, register: u32, system: Option<S
     }
 }
 
-/// The registers one element of a CTAB type takes: a row-major matrix's rows, a column-major one's columns, one
-/// otherwise.
-fn lines(t: &crate::Type) -> u16 {
-    match t.class {
-        2 => t.rows,
-        3 => t.columns,
-        _ => 1,
+/// The pipeline's input a misc register reads: `vPos` the pixel's window position, `vFace` its primitive's facing.
+/// Neither has a signature register.
+fn misc_input(r: Register) -> Option<Varying> {
+    let (name, system, value) = match r {
+        Register::PixelPosition => ("VPOS", SystemValue::FragCoord, value(4)),
+        Register::Face => (
+            "VFACE",
+            SystemValue::FrontFacing,
+            Value {
+                scalar: ScalarType::Bool,
+                width: 1,
+            },
+        ),
+        _ => return None,
+    };
+    Some(Varying {
+        label: Label {
+            name: name.into(),
+            index: 0,
+        },
+        system: Some(system),
+        value,
+        interp: None,
+        used: false,
+        provenance: VaryingProvenance { d3d: None },
+    })
+}
+
+/// A CTAB register set's registers: the bytes each takes in its bank, the scalar its lanes hold, and whether a value
+/// takes a register per lane.
+#[derive(Clone, Copy)]
+struct Set {
+    size: u32,
+    scalar: ScalarType,
+    per_lane: bool,
+}
+
+/// The register set `n` (0 boolean, 1 integer, 2 float) of constants.
+fn set(n: u16) -> Option<Set> {
+    let (size, scalar, per_lane) = match n {
+        0 => (4, ScalarType::Bool, true),
+        1 => (16, ScalarType::Sint, true),
+        2 => (16, ScalarType::Float, false),
+        _ => return None,
+    };
+    Some(Set {
+        size,
+        scalar,
+        per_lane,
+    })
+}
+
+/// A CTAB type's layout in a register set, and the registers one value of it takes. Every value starts a register:
+/// in the float set a scalar or vector takes one, a matrix one per line (a row-major matrix's rows, a column-major
+/// one's columns); in the boolean and integer sets each lane takes one, a matrix's lanes counted by rows whatever its
+/// majorness (an `int2` takes `i0.x` and `i1.x`). A structure's members follow each other, an
+/// array's elements likewise. The lanes are the set's scalar whatever the declared type: D3DX converts a bool or int
+/// set in the float registers to floats, and the program reads floats.
+fn layout(name: &str, t: &crate::Type, set: Set) -> Result<(ConstantType, u32)> {
+    let refuse = || {
+        error(
+            0,
+            format!(
+                "CTAB {name}: type {t:?} in a register set of {} lanes",
+                set.scalar_name()
+            ),
+        )
+    };
+    let lanes = |n: u16| {
+        u8::try_from(n)
+            .ok()
+            .filter(|n| (1..=4).contains(n))
+            .ok_or_else(refuse)
+    };
+    let (element, registers) = match (t.class, t.kind) {
+        (5, _) if !t.members.is_empty() => {
+            let (mut members, mut at) = (Vec::new(), 0u32);
+            for m in &t.members {
+                let (ty, registers) = layout(&format!("{name}.{}", m.name), &m.ty, set)?;
+                members.push(Member {
+                    name: m.name.clone(),
+                    offset: at.checked_mul(set.size).ok_or_else(refuse)?,
+                    ty,
+                });
+                at = at.checked_add(registers).ok_or_else(refuse)?;
+            }
+            (ConstantType::Struct { members }, at)
+        }
+        (0..=3, 1..=3) if t.members.is_empty() => {
+            let (rows, columns) = (lanes(t.rows)?, lanes(t.columns)?);
+            let shape = match t.class {
+                0 if rows == 1 && columns == 1 => Shape::Scalar,
+                1 if rows == 1 => Shape::Vector(columns),
+                2 => Shape::Matrix(rows, columns, Majorness::Row),
+                3 => Shape::Matrix(rows, columns, Majorness::Column),
+                _ => return Err(refuse()),
+            };
+            let scalar = ConstantType::Scalar(set.scalar);
+            let run = |element: ConstantType, count: u8, stride: u32| ConstantType::Array {
+                element: Box::new(element),
+                count: count.into(),
+                stride,
+            };
+            match shape {
+                Shape::Scalar => (scalar, 1),
+                // the boolean and integer sets: a register per lane, in its first lane, a matrix's in row order (an
+                // allocation can end inside a row, so the lanes are one run)
+                Shape::Vector(n) if set.per_lane => (run(scalar, n, set.size), n.into()),
+                Shape::Matrix(rows, columns, _) if set.per_lane => {
+                    let n = rows.checked_mul(columns).ok_or_else(refuse)?;
+                    (run(scalar, n, set.size), n.into())
+                }
+                Shape::Vector(n) => (
+                    ConstantType::Vector(Value {
+                        scalar: set.scalar,
+                        width: n,
+                    }),
+                    1,
+                ),
+                Shape::Matrix(rows, columns, major) => (
+                    ConstantType::Matrix {
+                        scalar: set.scalar,
+                        rows,
+                        columns,
+                        major,
+                        stride: set.size,
+                    },
+                    u32::from(match major {
+                        Majorness::Row => rows,
+                        Majorness::Column => columns,
+                    }),
+                ),
+            }
+        }
+        _ => return Err(refuse()),
+    };
+    match t.elements {
+        0 => Err(refuse()),
+        1 => Ok((element, registers)),
+        n => Ok((
+            ConstantType::Array {
+                element: Box::new(element),
+                count: n.into(),
+                stride: registers.checked_mul(set.size).ok_or_else(refuse)?,
+            },
+            registers.checked_mul(n.into()).ok_or_else(refuse)?,
+        )),
     }
 }
 
-/// A float constant's layout. The bank's register layout is exact even for an optimized partial array: CTAB's
-/// unshortened type is retained by `read`, and the interface describes the allocation the program binds.
-fn field(c: &Constant) -> Result<Field> {
-    let t = &c.ty;
-    if c.register_set != 2
-        || t.kind != 3
-        || !t.members.is_empty()
-        || !(1..=4).contains(&t.rows)
-        || !(1..=4).contains(&t.columns)
-        || t.elements == 0
-    {
-        return Err(error(
-            0,
-            format!("CTAB {}: non-float/structured/empty type {:?}", c.name, t),
-        ));
+/// A leaf CTAB type's shape.
+#[derive(Clone, Copy)]
+enum Shape {
+    Scalar,
+    Vector(u8),
+    Matrix(u8, u8, Majorness),
+}
+
+impl Set {
+    fn scalar_name(self) -> &'static str {
+        match self.scalar {
+            ScalarType::Bool => "bool",
+            ScalarType::Sint => "int",
+            _ => "float",
+        }
     }
-    // rows and columns are 1 to 4, checked above
-    let lanes = |n: u16| u8::try_from(n).map_err(|_| error(0, format!("CTAB {}: {n} lanes", c.name)));
-    let element = match t.class {
-        0 if t.rows == 1 && t.columns == 1 => ConstantType::Scalar(ScalarType::Float),
-        1 if t.rows == 1 => ConstantType::Vector(value(lanes(t.columns)?)),
-        2 | 3 => ConstantType::Matrix {
-            scalar: ScalarType::Float,
-            rows: lanes(t.rows)?,
-            columns: lanes(t.columns)?,
-            major: if t.class == 2 {
-                Majorness::Row
-            } else {
-                Majorness::Column
-            },
-            stride: 16,
-        },
-        _ => return Err(error(0, format!("CTAB {}: parameter class {}", c.name, t.class))),
-    };
-    let registers = lines(t);
-    // a single matrix the compiler allocated fewer lines than it has (its last rows or columns are never read) is
-    // described by the lines allocated, as a partial array is
-    let partial_matrix = t.elements == 1 && (1..registers).contains(&c.count);
-    let element = match element {
+}
+
+/// `ty`, which takes `registers` of `size` bytes, cut to its first `keep`: the elements, members and matrix lines an
+/// optimized allocation binds. `None` where the cut falls inside an array element that is not a matrix, which no
+/// single type describes.
+fn cut(ty: &ConstantType, registers: u32, keep: u32, size: u32) -> Option<ConstantType> {
+    if keep >= registers {
+        return Some(ty.clone());
+    }
+    match ty {
         ConstantType::Matrix {
             scalar,
             rows,
             columns,
             major,
             stride,
-        } if partial_matrix => {
-            let kept = lanes(c.count)?;
+        } => {
+            let kept = u8::try_from(keep).ok()?;
             let (rows, columns) = match major {
-                Majorness::Row => (kept, columns),
-                Majorness::Column => (rows, kept),
+                Majorness::Row => (kept, *columns),
+                Majorness::Column => (*rows, kept),
             };
-            ConstantType::Matrix {
-                scalar,
+            Some(ConstantType::Matrix {
+                scalar: *scalar,
                 rows,
                 columns,
-                major,
-                stride,
+                major: *major,
+                stride: *stride,
+            })
+        }
+        ConstantType::Array {
+            element,
+            count,
+            stride,
+        } => {
+            let each = stride.checked_div(size)?;
+            let (whole, part) = (keep.checked_div(each)?, keep.checked_rem(each)?);
+            match (whole, part) {
+                (_, 0) => Some(ConstantType::Array {
+                    element: element.clone(),
+                    count: whole,
+                    stride: *stride,
+                }),
+                // one element, part of it: as the single value it is
+                (0, part) if *count > 0 => cut(element, each, part, size),
+                _ => None,
             }
         }
-        element => element,
-    };
-    let Some(count) = c
-        .count
-        .checked_div(registers)
-        .filter(|&n| partial_matrix || (c.count.is_multiple_of(registers) && n <= t.elements))
-    else {
+        ConstantType::Struct { members } => {
+            let mut kept = Vec::new();
+            for (i, m) in members.iter().enumerate() {
+                let start = m.offset.checked_div(size)?;
+                if start >= keep {
+                    break;
+                }
+                let end = match members.get(i.checked_add(1)?) {
+                    Some(n) => n.offset.checked_div(size)?,
+                    None => registers,
+                };
+                kept.push(Member {
+                    name: m.name.clone(),
+                    offset: m.offset,
+                    ty: cut(&m.ty, end.checked_sub(start)?, keep.checked_sub(start)?, size)?,
+                });
+            }
+            Some(ConstantType::Struct { members: kept })
+        }
+        // a scalar or vector takes one register, which an allocation always binds
+        _ => Some(ty.clone()),
+    }
+}
+
+/// A boolean, integer or float constant's layout: its declared type in its register set, cut to the registers its
+/// allocation binds (an optimized allocation binds those up to the last the program reads), and whether it was cut.
+fn field(c: &Constant) -> Result<(Field, bool)> {
+    let set = set(c.register_set)
+        .ok_or_else(|| error(0, format!("CTAB {}: register set {}", c.name, c.register_set)))?;
+    let (declared, registers) = layout(&c.name, &c.ty, set)?;
+    let keep = u32::from(c.count);
+    if keep > registers {
         return Err(error(
             0,
             format!(
-                "CTAB {}: an allocation of {} registers is not a whole number of the type's elements ({} registers each, at most {})",
-                c.name, c.count, registers, t.elements
+                "CTAB {}: an allocation of {keep} registers, where its type takes {registers}",
+                c.name
             ),
         ));
-    };
-    let ty = if t.elements > 1 {
-        ConstantType::Array {
-            element: Box::new(element),
-            count: count.into(),
-            stride: u32::from(registers).saturating_mul(16),
-        }
-    } else {
-        element
-    };
-    with_default(c, ty, u32::from(c.register).saturating_mul(16))
-}
-
-/// An integer (`register_set` 1, a `vec4<i32>` register each) or boolean (0, four bytes each) constant's layout: its
-/// registers, as scalars or vectors of the declared columns.
-fn integer_field(c: &Constant) -> Result<Field> {
-    let t = &c.ty;
-    let (scalar, size) = match (c.register_set, t.kind) {
-        (0, 1) => (ScalarType::Bool, 4),
-        (1, 2) => (ScalarType::Sint, 16),
-        _ => {
-            return Err(error(
-                0,
-                format!("CTAB {}: register set {} of type {:?}", c.name, c.register_set, t),
-            ));
-        }
-    };
-    if !t.members.is_empty() || t.rows != 1 || !(1..=4).contains(&t.columns) || t.class > 1 {
-        return Err(error(
-            0,
-            format!("CTAB {}: a structured or matrix type {:?}", c.name, t),
-        ));
     }
-    let columns = u8::try_from(t.columns).unwrap_or(4);
-    let element = if columns == 1 || scalar == ScalarType::Bool {
-        ConstantType::Scalar(scalar)
-    } else {
-        ConstantType::Vector(Value {
-            scalar,
-            width: columns,
-        })
-    };
-    let ty = if c.count > 1 {
-        ConstantType::Array {
-            element: Box::new(element),
-            count: c.count.into(),
-            stride: size,
-        }
-    } else {
-        element
-    };
-    with_default(c, ty, u32::from(c.register).saturating_mul(size))
+    let ty = cut(&declared, registers, keep, set.size).ok_or_else(|| {
+        error(
+            0,
+            format!(
+                "CTAB {}: an allocation of {keep} registers ends inside an element of {declared:?}",
+                c.name
+            ),
+        )
+    })?;
+    Ok((
+        with_default(c, ty, u32::from(c.register).saturating_mul(set.size))?,
+        keep < registers,
+    ))
 }
 
 fn with_default(c: &Constant, ty: ConstantType, offset: u32) -> Result<Field> {
@@ -383,6 +515,13 @@ pub fn signature(source: &Shader, texture_dims: &BTreeMap<u32, TextureDim>) -> R
         notes: Vec::new(),
     };
     for i in &source.inputs {
+        if let Some(v) = misc_input(i.register) {
+            let slot = u32::try_from(s.interface.inputs.len())
+                .map_err(|_| error(0, "more than 4294967295 inputs"))?;
+            s.inputs.insert(i.register, (slot, i.mask));
+            s.interface.inputs.push(v);
+            continue;
+        }
         let register = match i.register {
             Register::Input(n) | Register::Texture(n) => n,
             other => return Err(error(0, format!("{} is not an input register", other.name()))),
@@ -449,44 +588,62 @@ pub fn signature(source: &Shader, texture_dims: &BTreeMap<u32, TextureDim>) -> R
         for c in &ctab.constants {
             let end = u32::from(c.register).saturating_add(u32::from(c.count));
             match c.register_set {
-                0 => {
-                    booleans = booleans.max(end);
-                    boolean_fields.push(integer_field(c)?);
-                }
-                1 => {
-                    integers = integers.max(end);
-                    integer_fields.push(integer_field(c)?);
-                }
-                2 => {
-                    rows = rows.max(end);
-                    fields.push(field(c)?);
-                    let t = &c.ty;
-                    if u32::from(c.count) < u32::from(t.elements).saturating_mul(u32::from(lines(t))) {
+                0..=2 => {
+                    let (f, cut) = field(c)?;
+                    let bank = match c.register_set {
+                        0 => (&mut booleans, &mut boolean_fields),
+                        1 => (&mut integers, &mut integer_fields),
+                        _ => (&mut rows, &mut fields),
+                    };
+                    *bank.0 = (*bank.0).max(end);
+                    bank.1.push(f);
+                    if cut {
                         s.notes.push(format!(
-                            "CTAB {} retains its declared type; its optimized allocation binds {} registers",
+                            "CTAB {}: its optimized allocation binds {} registers of its type, which the interface \
+                             describes",
                             c.name, c.count
+                        ));
+                    }
+                    let declared = match c.ty.kind {
+                        1 => "bool",
+                        2 => "int",
+                        _ => "",
+                    };
+                    let held = set(c.register_set).map_or("float", Set::scalar_name);
+                    if c.ty.members.is_empty() && !declared.is_empty() && declared != held {
+                        s.notes.push(format!(
+                            "CTAB {}: a {declared} constant in the {held} registers, which hold its lanes as {held}s",
+                            c.name
                         ));
                     }
                 }
                 3 => {
-                    if c.count != 1 || c.ty.class != 4 || !matches!(c.ty.kind, 10..=14) {
-                        return Err(error(
-                            0,
-                            format!("CTAB {}: sampler array or type {:?}", c.name, c.ty),
-                        ));
+                    // a sampler array takes a register per element, those up to the last the program samples
+                    if c.ty.class != 4
+                        || !matches!(c.ty.kind, 5..=14)
+                        || !(1..=c.ty.elements).contains(&c.count)
+                    {
+                        return Err(error(0, format!("CTAB {}: sampler type {:?}", c.name, c.ty)));
                     }
-                    // pixel 1.x declares no samplers, so its table is all there is to check against
-                    if !source.pixel_1x() {
-                        let expected = match c.ty.kind {
-                            12 => TextureDim::D2,
-                            13 => TextureDim::D3,
-                            14 => TextureDim::Cube,
-                            _ => {
-                                return Err(error(0, format!("CTAB {}: sampler type {}", c.name, c.ty.kind)));
+                    // D3DXPARAMETER_TYPE's textures (5 to 9) and samplers (10 to 14), each untyped, 1D, 2D, 3D and
+                    // cube; pixel 1.x declares no samplers, so its table is all there is to check against
+                    let expected = match c.ty.kind {
+                        6 | 11 => Some(TextureDim::D1),
+                        7 | 12 => Some(TextureDim::D2),
+                        8 | 13 => Some(TextureDim::D3),
+                        9 | 14 => Some(TextureDim::Cube),
+                        _ => None,
+                    };
+                    if let Some(expected) = expected.filter(|_| !source.pixel_1x()) {
+                        let first = u32::from(c.register);
+                        for slot in first..first.saturating_add(c.count.into()) {
+                            // a register of an array the program does not sample is not declared
+                            let declared = source.samplers.get(&slot);
+                            if declared.is_some_and(|&d| d != expected)
+                                || (c.ty.elements == 1 && declared.is_none())
+                            {
+                                return Err(error(0, format!("CTAB {} sampler disagrees with DCL", c.name)));
                             }
-                        };
-                        if source.samplers.get(&u32::from(c.register)) != Some(&expected) {
-                            return Err(error(0, format!("CTAB {} sampler disagrees with DCL", c.name)));
                         }
                     }
                 }
@@ -518,11 +675,19 @@ pub fn signature(source: &Shader, texture_dims: &BTreeMap<u32, TextureDim>) -> R
             .constants
             .as_ref()
             .and_then(|c| {
-                c.constants
-                    .iter()
-                    .find(|c| c.register_set == 3 && u32::from(c.register) == slot)
+                c.constants.iter().find_map(|c| {
+                    let first = u32::from(c.register);
+                    let i = slot.checked_sub(first).filter(|&i| i < u32::from(c.count))?;
+                    (c.register_set == 3).then(|| {
+                        if c.ty.elements > 1 {
+                            format!("{}[{i}]", c.name)
+                        } else {
+                            c.name.clone()
+                        }
+                    })
+                })
             })
-            .map_or_else(|| format!("s{slot}"), |c| c.name.clone());
+            .unwrap_or_else(|| format!("s{slot}"));
         let dims = if !source.pixel_1x() {
             vec![declared]
         } else if let Some(&dim) = texture_dims.get(&slot) {

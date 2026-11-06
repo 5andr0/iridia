@@ -56,6 +56,11 @@ pub enum Register {
     TexCoord(u32),
     /// A label `lN` of a subroutine.
     Label(u32),
+    /// A pixel 3.0 program's `vPos`: the pixel's position in the render target, x and y, whole numbers at the pixel's
+    /// top left corner (Direct3D 9 samples a pixel there; the window position of a later API is half a pixel on).
+    PixelPosition,
+    /// A pixel 3.0 program's `vFace`: positive for a front facing primitive, negative for a back facing one.
+    Face,
 }
 
 impl Register {
@@ -81,6 +86,8 @@ impl Register {
             Register::Color(n) => format!("oD{n}"),
             Register::TexCoord(n) => format!("oT{n}"),
             Register::Label(n) => format!("l{n}"),
+            Register::PixelPosition => "vPos".into(),
+            Register::Face => "vFace".into(),
         }
     }
 }
@@ -155,6 +162,8 @@ pub struct Destination {
     pub partial_precision: bool,
     /// The pixel 1.x result shift: the result is multiplied by 2 to this power (`_x2` 1 to `_d8` -3) before `_sat`.
     pub shift: i8,
+    /// The loop counter a vertex 3.0 output write adds to its register number (`o[aL + n]`).
+    pub relative: Option<Index>,
 }
 
 /// An instruction: everything but declarations, definitions and comments.
@@ -391,6 +400,7 @@ fn limit(kind: RegisterType, v: Version) -> Option<u32> {
         Loop if major >= 2 && (vertex || major >= 3) => 1,
         Label if major >= 2 => 2048,
         Predicate if major >= 3 || major == 2 && minor != 0 => 1,
+        Misc if !vertex && major >= 3 => 2,
         _ => return None,
     };
     Some(n)
@@ -431,6 +441,8 @@ fn register(r: d3d9_reader::Register, at: usize, version: Version) -> Result<Reg
         RegisterType::Loop => Register::Loop,
         RegisterType::Label => Register::Label(n),
         RegisterType::Predicate => Register::Predicate,
+        RegisterType::Misc if n == 0 => Register::PixelPosition,
+        RegisterType::Misc => Register::Face,
         other => {
             return Err(error(
                 at,
@@ -443,13 +455,17 @@ fn register(r: d3d9_reader::Register, at: usize, version: Version) -> Result<Reg
 /// A destination: no relative address, a lane, and only the modifiers `declaration` allows (partial precision and
 /// centroid on a `dcl`, saturate, partial precision and the pixel 1.x shift elsewhere).
 fn destination(d: &d3d9_reader::Destination, version: Version, declaration: bool) -> Result<Destination> {
-    if d.relative.is_some() {
-        return Err(error(
-            d.word,
-            "relative addressing of a destination is not lifted",
-        ));
-    }
     let register = register(d.register, d.word, version)?;
+    let relative = match (d.relative, register) {
+        (None, _) => None,
+        (Some(r), Register::Output(_)) if r.register.kind == RegisterType::Loop => Some(Index::Loop),
+        (Some(_), r) => {
+            return Err(error(
+                d.word,
+                format!("relative addressing of destination {} is not lifted", r.name()),
+            ));
+        }
+    };
     let allowed = if declaration { !d.saturate } else { !d.centroid };
     if d.mask == 0 || !allowed {
         return Err(error(
@@ -469,6 +485,7 @@ fn destination(d: &d3d9_reader::Destination, version: Version, declaration: bool
         saturate: d.saturate,
         partial_precision: d.partial_precision,
         shift: d.shift,
+        relative,
     })
 }
 
@@ -670,6 +687,23 @@ pub fn read(bytes: &[u8]) -> Result<Shader> {
                         }
                         if stage == Stage::Vertex && (d.partial_precision || dcl.destination.centroid) {
                             return Err(error(at, "a vertex input declared _pp or _centroid"));
+                        }
+                        shader.inputs.push(Input {
+                            register: d.register,
+                            usage,
+                            index,
+                            mask: d.mask,
+                            centroid: dcl.destination.centroid,
+                            partial_precision: d.partial_precision,
+                        });
+                    }
+                    (Register::PixelPosition | Register::Face, Declared::Semantic { usage, index }) => {
+                        // the declaration's usage of a misc register carries nothing: the register is the meaning
+                        if shader.inputs.iter().any(|i| i.register == d.register) {
+                            return Err(error(word, format!("{} declared twice", d.register.name())));
+                        }
+                        if d.register == Register::PixelPosition && d.mask & !0b11 != 0 {
+                            return Err(error(at, "vPos declared with lanes past x and y"));
                         }
                         shader.inputs.push(Input {
                             register: d.register,

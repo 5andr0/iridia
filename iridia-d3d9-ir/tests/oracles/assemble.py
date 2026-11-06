@@ -33,6 +33,9 @@ def take(blob):
 
 
 for source in sorted(Path(sys.argv[2]).glob("*.asm")):
+    # what an earlier run wrote of this source is stale
+    for written in (".bin", ".dis", ".err"):
+        source.with_suffix(written).unlink(missing_ok=True)
     text = source.read_bytes()
     shader, messages = ctypes.c_void_p(), ctypes.c_void_p()
     result = compiler.D3DAssemble(text, len(text), source.name.encode(), None, None, 0,

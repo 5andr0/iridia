@@ -9,8 +9,8 @@ use std::collections::BTreeMap;
 
 use d3d9_reader::Modifier;
 use iridia_ir::{
-    Binary, Builder, Cmp, Conventions, End, FloatEnv, FloatToInt, LabelId, Op, OutOfBounds, Precision,
-    Program, Provenance, Rounding, SaturateNan, Scalar, Type, Unary, ValueId, VarId,
+    Binary, Builder, Cmp, Conventions, End, FloatEnv, FloatToInt, LabelId, MulZero, Op, OutOfBounds,
+    Precision, Program, Provenance, Rounding, SaturateNan, Scalar, Type, Unary, ValueId, VarId,
     interface::{ShaderFormat, TextureDim},
     source_hash,
 };
@@ -24,14 +24,10 @@ use crate::{
 pub const LIFTER: &str = "iridia-d3d9-ir";
 
 /// Increment when the same tokens lift differently.
-pub const LIFTER_VERSION: u32 = 2;
+pub const LIFTER_VERSION: u32 = 3;
 
-/// The compatibility policies every program states.
-const POLICIES: [&str; 3] = [
-    "d3d9.mul=ieee",
-    "d3d9.min_max_nan=min_num",
-    "d3d9.saturate_nan=zero",
-];
+/// The compatibility policies every program states, beside its multiply rule.
+const POLICIES: [&str; 2] = ["d3d9.min_max_nan=min_num", "d3d9.saturate_nan=zero"];
 
 /// How a pixel 1.x program's registers keep their range. Microsoft's "ps_1_X Registers" page gives `r#` a range of
 /// ±`PixelShader1xMaxValue` (a device cap), `t#` used as a temporary ±`MaxTextureRepeat`, and says early hardware held
@@ -48,13 +44,28 @@ pub struct Ps1x {
 }
 
 /// What the lift is told beyond the tokens.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Options {
+    /// The rule of every multiplication an instruction makes (`mul`, `mad`, the dot products, the matrix operations,
+    /// `lrp`, and the scaling of the modifiers and texture operations). The default, [`MulZero::ZeroWins`], is what
+    /// Direct3D 9 drivers on Windows do (vkd3d's `float-comparison` test: `0 * rcp(0)` is 0 there), and what DXVK and
+    /// wined3d emulate; [`MulZero::Ieee`] gives `0 * inf` as NaN.
+    pub multiply: MulZero,
     /// The pixel 1.x register policy.
     pub ps1x: Ps1x,
     /// The texture dimension of pixel 1.x texture stages the host knows, by stage. A stage it does not name gets a
     /// texture of each dimension, picked by `StateParam::TextureDim`.
     pub texture_dims: BTreeMap<u32, TextureDim>,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Options {
+            multiply: MulZero::ZeroWins,
+            ps1x: Ps1x::default(),
+            texture_dims: BTreeMap::new(),
+        }
+    }
 }
 
 /// A write waiting for the end of its co-issued pair.
@@ -170,7 +181,7 @@ impl Lift<'_> {
         Ok(self.b.value(Type::vector(ty.scalar, lanes), Op::Splat(v)))
     }
     fn mul(&mut self, a: ValueId, b: ValueId) -> Result<ValueId> {
-        self.binary(Binary::FMul(iridia_ir::MulZero::Ieee), a, b)
+        self.binary(Binary::FMul(self.options.multiply), a, b)
     }
     fn var(&mut self, r: Register) -> VarId {
         match self.registers.get(&r) {
@@ -214,6 +225,37 @@ impl Lift<'_> {
         }
         Ok(())
     }
+    /// The four lanes of `vPos` or `vFace` from the pipeline input at `slot`, the lanes past `mask` zero; `None` for
+    /// another register. `vPos` is the window position half a pixel back, at the pixel's top left corner where
+    /// Direct3D 9 samples it; `vFace` is 1 for a front facing primitive and -1 for a back facing one in every lane.
+    fn misc_input(&mut self, r: Register, slot: u32, mask: u8) -> Result<Option<ValueId>> {
+        let v = match r {
+            Register::PixelPosition => {
+                let position = self.b.value(Type::F32X4, Op::LoadInput(slot, 0b1111));
+                let half = splat4(&mut self.b, 0.5);
+                let corner = self.binary(Binary::FSub, position, half)?;
+                let zero = self.b.f32(0.0);
+                let mut parts = [zero; 4];
+                for (n, p) in (0u8..).zip(parts.iter_mut()) {
+                    if mask & (1 << n) != 0 {
+                        *p = self.lane(corner, n)?;
+                    }
+                }
+                self.op(Op::Compose(parts.to_vec()))?
+            }
+            Register::Face => {
+                let front = self.b.value(Type::scalar(Scalar::Bool), Op::LoadInput(slot, 0b1));
+                let (one, minus) = (splat4(&mut self.b, 1.0), splat4(&mut self.b, -1.0));
+                self.op(Op::Select {
+                    cond: front,
+                    accept: one,
+                    reject: minus,
+                })?
+            }
+            _ => return Ok(None),
+        };
+        Ok(Some(v))
+    }
     fn prepare(&mut self) -> Result<()> {
         for i in &self.source.inputs {
             let &(slot, mask) = self
@@ -227,6 +269,10 @@ impl Lift<'_> {
                 .inputs
                 .get(slot as usize)
                 .map_or(0, |v| v.value.width);
+            if let Some(v) = self.misc_input(i.register, slot, mask)? {
+                self.inputs.insert(i.register, v);
+                continue;
+            }
             let arg = self.b.value(
                 Type::vector(Scalar::F32, width),
                 Op::LoadInput(slot, every(width)),
@@ -290,7 +336,7 @@ impl Lift<'_> {
     /// The four lanes of a register, `required` of them checked as written or declared.
     fn register(&mut self, r: Register, required: u8) -> Result<ValueId> {
         match r {
-            Register::Input(_) => self.input(r, required),
+            Register::Input(_) | Register::PixelPosition | Register::Face => self.input(r, required),
             // a pixel 1.4 or 2.x texture register is the texture coordinate input; before 1.4 a temporary
             Register::Texture(_) if !(self.source.pixel_1x() && self.source.version.minor < 4) => {
                 self.input(r, required)
@@ -344,6 +390,7 @@ impl Lift<'_> {
         let required = s.read_mask(needed);
         let mut v = match (s.relative, s.register) {
             (Some(index), Register::Constant(base)) => self.relative_constant(base, index)?,
+            (Some(index), Register::Input(base)) => self.relative_input(base, index, required)?,
             (Some(_), r) => {
                 return Err(error(
                     self.at,
@@ -423,6 +470,32 @@ impl Lift<'_> {
                 Ok(self.b.value(Type::I32, Op::LoadVar(var)))
             }
         }
+    }
+    /// The input `v[index + base]`: the declared input register the index names whose lanes cover `required`, and zero
+    /// for any other.
+    fn relative_input(&mut self, base: u32, index: Index, required: u8) -> Result<ValueId> {
+        let index = self.index(index)?;
+        let mut declared: BTreeMap<u32, u8> = BTreeMap::new();
+        for input in &self.source.inputs {
+            if let Register::Input(n) = input.register
+                && n >= base
+            {
+                *declared.entry(n).or_default() |= input.mask;
+            }
+        }
+        let mut v = splat4(&mut self.b, 0.0);
+        for (n, mask) in declared {
+            if required & !mask != 0 {
+                continue;
+            }
+            let value = self.input(Register::Input(n), required)?;
+            let offset = self
+                .b
+                .i32(i32::try_from(n.saturating_sub(base)).map_err(|_| error(self.at, "input register"))?);
+            let hit = self.binary(Binary::SCmp(Cmp::Eq), index, offset)?;
+            v = self.select(hit, value, v)?;
+        }
+        Ok(v)
     }
     /// The float constant `c[index + base]`: the row of the bank (or the `def` that sits at that register) at the
     /// index plus `base`, and zero outside the bank.
@@ -525,6 +598,9 @@ impl Lift<'_> {
             Some(p) => Some(self.predicate(p)?),
             None => None,
         };
+        if let Some(index) = d.relative {
+            return self.store_relative(d, index, v, predicate);
+        }
         let pending = Pending {
             register: d.register,
             mask: d.mask,
@@ -537,6 +613,43 @@ impl Lift<'_> {
         } else {
             self.store(pending.register, pending.mask, pending.value, pending.predicate)
         }
+    }
+    /// Store `v` into `o[index + n]`: into each declared output register from `on` on, under the predicate that the
+    /// index names it (and the instruction's own). A write the index takes past the declared registers is lost.
+    fn store_relative(
+        &mut self,
+        d: Destination,
+        index: Index,
+        v: ValueId,
+        predicate: Option<ValueId>,
+    ) -> Result<()> {
+        let Register::Output(base) = d.register else {
+            return Err(error(self.at, format!("relative write of {}", d.register.name())));
+        };
+        let index = self.index(index)?;
+        let mut candidates: Vec<u32> = self
+            .source
+            .outputs
+            .iter()
+            .filter_map(|o| match o.register {
+                Register::Output(n) if n >= base => Some(n),
+                _ => None,
+            })
+            .collect();
+        candidates.sort_unstable();
+        candidates.dedup();
+        for n in candidates {
+            let offset = self
+                .b
+                .i32(i32::try_from(n.saturating_sub(base)).map_err(|_| error(self.at, "output register"))?);
+            let hit = self.binary(Binary::SCmp(Cmp::Eq), index, offset)?;
+            let mut lanes = self.splat(hit, 4)?;
+            if let Some(p) = predicate {
+                lanes = self.binary(Binary::And, lanes, p)?;
+            }
+            self.store(Register::Output(n), d.mask, v, Some(lanes))?;
+        }
+        Ok(())
     }
     /// Round each lane of `v` and convert it to `i32` for the address register.
     fn address(&mut self, v: ValueId, rounding: Rounding) -> Result<ValueId> {
@@ -578,6 +691,14 @@ impl Lift<'_> {
         notes.dedup();
         let source = self.source;
         let mut policies: Vec<String> = POLICIES.iter().map(|p| (*p).into()).collect();
+        policies.insert(
+            0,
+            match self.options.multiply {
+                MulZero::Ieee => "d3d9.mul=ieee",
+                MulZero::ZeroWins => "d3d9.mul=zero_wins",
+            }
+            .into(),
+        );
         if source.pixel_1x() {
             let ps1x = self.options.ps1x;
             let range = |m: Option<f32>| m.map_or_else(|| "none".into(), |m| format!("{m:?}"));

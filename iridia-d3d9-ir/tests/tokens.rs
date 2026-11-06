@@ -2,6 +2,8 @@
 //! Hand-worked SM3 tokens and arithmetic. Expected numbers come from the SDK instruction definitions, not
 //! a second bytecode decoder. The IR's executor only observes the lifted program's answer, and each program is also
 //! written as WGSL.
+mod fixtures;
+
 use iridia_d3d9_ir::{lift, read};
 use iridia_exec_ir::{Bound, Lanes, Lod, Run, Sample};
 use iridia_ir::{
@@ -58,6 +60,7 @@ fn execute(
             buffers: &buffers,
             state: &[],
             sampler,
+            denormals: iridia_ir::Denormals::Any,
         },
     )
     .unwrap()
@@ -369,15 +372,25 @@ fn lifted_fixture_changes_require_a_version_bump() {
         ),
         ("relative", instruction(1, &[0x800f_0800, 0xa0e4_2000])),
     ];
-    let outcomes = fixtures
+    let outcome = |lifted: Result<iridia_ir::Program, iridia_d3d9_ir::Error>| {
+        lifted
+            .map_err(|e| e.to_string())
+            .map(|p| iridia_ir::gate::lifted(&p))
+    };
+    // the programs above, every assembled fixture lifted with its options, and every program of vkd3d's tests
+    let mut outcomes = fixtures
         .into_iter()
-        .map(|(name, body)| {
-            let outcome = lift(&program(&body))
-                .map_err(|e| e.to_string())
-                .map(|p| iridia_ir::gate::lifted(&p));
-            (name.to_owned(), outcome)
-        })
+        .map(|(name, body)| (name.to_owned(), outcome(lift(&program(&body)))))
         .collect::<Vec<_>>();
+    for name in fixtures::assembled() {
+        let (source, bytes) = fixtures::assembled_fixture(&name);
+        let bytes = bytes.unwrap_or_else(|| panic!("{name} is not assembled (run assemble.py)"));
+        let lifted = iridia_d3d9_ir::lift_with(&bytes, &fixtures::lift_options(&source));
+        outcomes.push((format!("assembled/{name}"), outcome(lifted)));
+    }
+    for (name, bytes) in fixtures::vkd3d_programs(&fixtures::vkd3d()) {
+        outcomes.push((format!("vkd3d/{name}"), outcome(lift(&bytes))));
+    }
     let table = iridia_ir::gate::table("iridia-d3d9-ir", iridia_d3d9_ir::LIFTER_VERSION, &outcomes);
     iridia_ir::gate::check(include_str!("versions.tsv"), &table).unwrap_or_else(|e| panic!("{e}\n{table}"));
 }
