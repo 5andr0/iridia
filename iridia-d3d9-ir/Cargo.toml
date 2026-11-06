@@ -16,9 +16,15 @@ d3d9-reader.workspace = true
 iridia-ir.workspace = true
 
 [dev-dependencies]
+# the gate (tests/gate.rs) holds this crate to the naga-based lifter it replaces, run in that lifter's executor; naga
+# here is that lifter's, with its WGSL front end to read the new WGSL back
+iridia.workspace = true
+iridia-d3d9.workspace = true
+iridia-exec.workspace = true
 iridia-exec-ir.workspace = true
 iridia-naga = { workspace = true, features = ["wgsl"] }
 iridia-passes.workspace = true
+naga = { workspace = true, features = ["wgsl-in"] }
 primase-testdata.workspace = true
 
 [lints]

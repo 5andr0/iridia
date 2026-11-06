@@ -14,9 +14,27 @@ written as WGSL, against what `iridia-d3d9` at ecb915c makes of the same bytes.
 | WGSL declarations (structures, bindings, globals, the entry point's signature) against ecb915c | 7,308 identical |
 | Three-way execution, 16 seeded runs each | 7,308 agree: A = B = C |
 | Microsoft `D3DDisassemble` gates (`tests/disassembly.rs`) | 26, 25 and 41 checked, all exact |
-| Corpus listings against `D3DDisassemble` (`tests/corpus.rs`) | 1,099 vertex and 6,207 pixel listings equal, all lifted: every program of the oracle set, which holds 7,306 (one vertex and one pixel program fewer than the gate; why is not established here) |
+| Corpus listings against `D3DDisassemble` (`tests/corpus.rs`) | 1,099 vertex and 6,207 pixel listings equal, all lifted: every program of the oracle set, which holds 7,306 (one vertex and one pixel program fewer than the gate: the init bundle's, see below) |
 | Hand-worked token fixtures (`tests/tokens.rs`) | 6 of 6, on the IR executor |
 | wasm32 builds | `iridia-ir`, `iridia-passes`, `iridia-d3d9-ir`, `iridia-exec-ir`, `iridia-naga` with no features and with `wgsl` |
+
+## The gate in the repository
+
+The checks above first ran as tools outside the repository. They are now one test, `iridia-d3d9-ir/tests/gate.rs`,
+which counts every program by outcome class and fails on any outside "A = B = C": each program lifts, IR-validates,
+prints and parses back to the same text, and writes WGSL for browsers; its interface and WGSL declarations equal
+`iridia-d3d9`'s; it runs three ways, 16 seeded runs each. A second test makes each program's first float addition a
+subtraction in B and requires A and B to disagree on at least three quarters of the programs that have one. Without the
+oracle set `d3d-disassembler/shaun-white/sdb2` (see `tests/inputs/README.md`) both print SKIP and pass.
+
+The oracle set holds 7,306 programs: the gate above read 7,308, the programs of the four compressed bundles
+(`ekshaders*compress.bin`), and the two the set lacks are those of the init bundle (`ekshadersinitpccompress.bin`), which
+the set was not made from. On the oracle set, at the shader model 1-3 lifter: 7,229 programs agree on every run and 77
+kill on every run (86,205 runs compared, 30,691 killed in all three); 5,893 of the 7,287 with a float addition disagree
+once it is a subtraction.
+
+Its first run on the shader model 1-3 lifter failed 7,283 programs: that lifter had renamed the float constant bank,
+which neither the IR text nor the WGSL carries, so the comparison of those two alone had not seen it.
 
 ## Three-way execution
 
