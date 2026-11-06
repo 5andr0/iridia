@@ -14,7 +14,7 @@ modules; iridia's own shader IR, which will replace naga as the internal represe
 - Keeps semantic names, register packing and constant buffer layouts in a typed interface beside the program
 - Writes WGSL for a given pipeline, with chosen resource bindings and vertex outputs matched to the pixel program's inputs
 - Analyses a lifted program without running it: what each output lane is made of, which constant words it reads, and whether a constant buffer holds a matrix by rows or by columns
-- Specialises a program for stated constant values or pipeline state by folding them into a copy
+- Specialises a lifted program for stated constant values or pipeline state by folding them into a copy; on the IR, `iridia-passes` specialises for known pipeline state only
 - Runs lifted programs on the CPU with a reference executor, including geometry, tessellation, mesh and ray tracing stages
 - Has its own shader IR, where each operation states its source's rule for NaN, rounding and multiplication by zero, with a validator, a text form and passes that lower it to stock naga
 - Lifts Direct3D 9 Shader Model 3 into the IR so far; the other readers follow
