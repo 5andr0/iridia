@@ -25,7 +25,7 @@ function state to programs, and the analyses (lane provenance, matrix majorness,
 8. Verification
 9. Migration plan
 10. Prior art, as checked
-11. Decisions for Caleb
+11. Decisions made
 
 ## 0. Summary of decisions
 
@@ -482,8 +482,8 @@ mirror), shadPS4 `98ef621`, RPCS3 `eee3f0f`, wgpu `9e74495` and `v30.0.1`, rspir
 
 ## 11. Decisions made
 
-- Approved by Caleb on 2026-11-05, with stage 2 (the D3D9 SM3 prototype) to start.
-- `ps_1_x` default policy (Caleb, 2026-11-05): like modern drivers and DXVK (`PixelShader1xMaxValue = FLT_MAX`):
+- Approved on 2026-11-05, with stage 2 (the D3D9 SM3 prototype) to start.
+- `ps_1_x` default policy (2026-11-05): like modern drivers and DXVK (`PixelShader1xMaxValue = FLT_MAX`):
   only the documented clamps of `c#` to -1..1 and `v#` to 0..1, no register range clamp and no quantization. The
   early-hardware policy (a finite range and about 8 fractional bits, values from fixtures or caps) stays available
   as an option.
