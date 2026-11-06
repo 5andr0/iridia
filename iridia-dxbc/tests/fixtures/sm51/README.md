@@ -1,7 +1,9 @@
 # SM5.1 execution fixtures
 
 Each HLSL header contains its fxc 10.0.26100.0 and dxc (Windows SDK 10.0.26100.0) commands.
-`.51.asm` is the corresponding `fxc -dumpbin name.51.dxbc` output, with trailing whitespace removed. `spaces` also builds as
+`.51.asm` is the corresponding `fxc -dumpbin name.51.dxbc` output, with trailing whitespace removed.
+`generate.py` runs them all and writes the dumps (Windows Python, on Windows or under Wine; its docstring names the
+tool builds, which write the same bytes under Wine). `spaces` also builds as
 SM5.0 by omitting register spaces; the other sources use dynamic descriptor arrays that SM5.0
 does not express. The HLSL is our own test data, with no game programs.
 

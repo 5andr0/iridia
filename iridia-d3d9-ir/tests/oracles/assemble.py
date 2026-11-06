@@ -1,6 +1,10 @@
 """Independent token oracle: Microsoft's D3DAssemble and D3DDisassemble, with no shader format logic.
 
-Windows: python assemble.py d3dcompiler_47.dll fixtures-folder
+    python assemble.py d3dcompiler_47.dll fixtures-folder
+
+A Windows Python, on Windows or under Wine (primase-oracles' `tools/wine/winpy`, with Wine paths). The DLL is the path
+of Microsoft's d3dcompiler_47.dll: the committed fixtures are those of 10.0.26100.4654
+(modding-archive/tools/fxc-10.0.26100.4654), the same under Wine as on Windows.
 Assembles every <name>.asm in the folder to <name>.bin (the raw token stream) and writes Microsoft's disassembly of
 it to <name>.dis; a source the assembler refuses gets <name>.err with its messages instead.
 """

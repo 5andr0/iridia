@@ -1,9 +1,14 @@
 """vkd3d's HLSL shader tests as Direct3D 9 cases: the shaders Microsoft's compiler makes of them, and what vkd3d's tests
 expect a Direct3D 9 device on Windows to draw.
 
-    python3 vkd3d_cases.py extract <vkd3d>/tests/hlsl <work>     (Linux) the runs and the shaders to compile
-    python vkd3d_cases.py compile <d3dcompiler_47.dll> <work>     (Windows) D3DCompile and D3DDisassemble each shader
-    python3 vkd3d_cases.py merge <work> <cases.json> <vkd3d commit>  (Linux) the committed cases
+    python3 vkd3d_cases.py extract <vkd3d>/tests/hlsl <work>     the runs and the shaders to compile
+    python vkd3d_cases.py compile <d3dcompiler_47.dll> <work>     (Windows Python) D3DCompile and D3DDisassemble each shader
+    python3 vkd3d_cases.py merge <work> <cases.json> <vkd3d commit>  the committed cases
+
+`compile` needs a Windows Python, on Windows or under Wine (primase-oracles' `tools/wine/winpy`, with Wine paths), and
+the path of Microsoft's d3dcompiler_47.dll: the committed cases are those of 10.0.26100.4654
+(modding-archive/tools/fxc-10.0.26100.4654), the same under Wine as on Windows. The commit is given as `source` names
+it (`1e329f3`).
 
 The test files are read as vkd3d's shader runner reads them for its Direct3D 9 runner on Windows (tests/shader_runner.c
 and tests/shader_runner_d3d9.c): models 2.0 and 3.0, the tags `windows` and `d3d9`, the capabilities `clip-planes`,

@@ -6,6 +6,14 @@
   resource where the pipeline's `BindingPlan` binds it, and a vertex program's outputs at the locations, interpolation
   and types of the pixel program it feeds (matched by semantic, as Direct3D links stages; padded, narrowed or bitcast
   where the two differ, each noted). An input no output carries is refused by name.
+- Oracle scripts run on Linux under Wine (primase-oracles `tools/wine`), each checked there byte for byte against what it
+  made on Windows: `iridia-d3d9/tests/oracles/disassemble.py` takes the path of `d3dcompiler_47.dll` and refuses a bare
+  name, which under Wine loaded Wine's own D3DCompiler and wrote a listing that is not Microsoft's (it now writes all 3
+  `general/sm3` and all 7,306 `shaun-white/sdb2` listings of the oracle home as stored); `iridia-dxbc/tests/fixtures/sm51/generate.py`
+  builds the SM5.1 fixtures from their headers' commands and writes the `.51.asm` dumps (all 31 files as committed, with
+  fxc 10.0.26100.4654 and the Windows SDK's dxc.exe; the Linux dxc 1.7.2308 release writes other containers);
+  `assemble.py` (all 105 assembled fixtures) and `vkd3d_cases.py compile` (`vkd3d/cases.json` as committed) say which
+  DLL and how to run them under Wine.
 
 ## 0.5.0 (2026-11-06)
 
