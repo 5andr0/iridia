@@ -1,7 +1,8 @@
 # iridia
 
-A set of Rust libraries that translate compiled Direct3D shaders into [naga](https://github.com/gfx-rs/wgpu/tree/trunk/naga)
-modules. The modules can be validated, inspected and written out as WGSL, SPIR-V or any other format naga supports.
+A set of Rust libraries that translate compiled Direct3D shaders into programs that can be validated, run on the CPU
+and written out as WGSL or SPIR-V. The released crates produce [naga](https://github.com/gfx-rs/wgpu/tree/trunk/naga)
+modules; iridia's own shader IR, which will replace naga as the internal representation, is being built beside them.
 
 ## Features
 
@@ -10,13 +11,14 @@ modules. The modules can be validated, inspected and written out as WGSL, SPIR-V
 - Lifts Direct3D 9 `vs_3_0` and `ps_3_0` token streams with their `CTAB` constant table
 - Lifts the GLSL that MojoShader writes for Shader Model 2 and 3 programs
 - Reads a container's reflection and signatures without lifting its program
-- Keeps semantic names, register packing and constant buffer layouts in a typed interface beside the module
-- Writes out Direct3D's numeric behaviour where it differs from WGSL, such as integer division by zero
+- Keeps semantic names, register packing and constant buffer layouts in a typed interface beside the program
 - Writes WGSL for a given pipeline, with chosen resource bindings and vertex outputs matched to the pixel program's inputs
 - Analyses a lifted program without running it: what each output lane is made of, which constant words it reads, and whether a constant buffer holds a matrix by rows or by columns
-- Specialises a program for stated constant values by folding them into a copy
+- Specialises a program for stated constant values or pipeline state by folding them into a copy
 - Runs lifted programs on the CPU with a reference executor, including geometry, tessellation, mesh and ray tracing stages
-- Validates every lifted program with naga's validator and checks its interface against the entry point
+- Has its own shader IR, where each operation states its source's rule for NaN, rounding and multiplication by zero, with a validator, a text form and passes that lower it to stock naga
+- Lifts Direct3D 9 Shader Model 3 into the IR so far; the other readers follow
+- Validates every lifted program and checks its interface against the entry point
 - Refuses unsupported constructs by name, with the word, bit or line where they occur, and records approximations as notes on the program
 - Records each program's source hash and lifter version, so caches can tell when a lift is out of date
 - Contains no `unsafe` code and does no I/O in the library crates
@@ -38,22 +40,28 @@ Rust 1.99 or newer (edition 2024).
 | [`iridia-mojo`](iridia-mojo) | Lifts MojoShader's GLSL |
 | [`iridia-interface`](iridia-interface) | Serializable interface and fixed-function state data, without naga |
 | [`iridia-exec`](iridia-exec) | CPU reference executor for lifted programs |
+| [`iridia-ir`](iridia-ir) | iridia's shader IR: values, operations, interface, validator and text form |
+| [`iridia-passes`](iridia-passes) | Passes over the IR: promotion, simplification, specialisation, structurization |
+| [`iridia-naga`](iridia-naga) | Lowers the IR to a stock naga module and writes WGSL |
+| [`iridia-exec-ir`](iridia-exec-ir) | Runs an IR program on the CPU by the IR's own definitions |
+| [`iridia-d3d9-ir`](iridia-d3d9-ir) | Lifts Direct3D 9 `vs_3_0` and `ps_3_0` token streams into the IR |
 
-All seven crates are published on crates.io at version 0.4.1:
+The first seven crates are published on crates.io at version 0.4.1:
 
 ```sh
 cargo add iridia iridia-dxbc
 ```
 
-The `main` branch is ahead of that release. Shader Model 5.1 lifting and the other changes listed under "Unreleased"
-in [CHANGELOG.md](CHANGELOG.md) are only available from the repository:
+The IR crates, Shader Model 5.1 lifting and the other changes listed under "Unreleased" in
+[CHANGELOG.md](CHANGELOG.md) are only available from the repository:
 
 ```sh
-cargo add --git https://github.com/Kalmarv/iridia iridia iridia-dxbc
+cargo add --git https://github.com/Kalmarv/iridia iridia-ir iridia-d3d9-ir iridia-passes iridia-naga
 ```
 
-The modules are built with [primase-naga](https://github.com/Kalmarv/primase-naga), a fork of naga 30.0.1. Code that
-uses `Program::module` directly must depend on the same fork, for example with `cargo add primase-naga --rename naga`.
+The released crates build their modules with [primase-naga](https://github.com/Kalmarv/primase-naga), a fork of naga
+30.0.1; code that uses `Program::module` directly must depend on the same fork, for example with
+`cargo add primase-naga --rename naga`. `iridia-naga` uses naga 30.0.1 as published.
 
 ### Usage
 
@@ -88,6 +96,9 @@ Other examples, which take either a DXBC or a DXIL container:
 cargo run -p iridia --example to_wgsl -- shader.dxbc
 cargo run -p iridia --example to_spirv -- shader.dxil out.spv
 ```
+
+The [`iridia-d3d9-ir` README](iridia-d3d9-ir/README.md) shows the IR path: lift, promote, simplify, validate and write
+WGSL. The IR's design is [docs/design/ir.md](docs/design/ir.md).
 
 Run the tests with `cargo test --workspace`. Tests that need game files, Microsoft's compilers or the WARP rasterizer
 skip unless `GAME_DATA` points at a [primase-testdata](https://github.com/Kalmarv/primase-testdata) configuration; each
