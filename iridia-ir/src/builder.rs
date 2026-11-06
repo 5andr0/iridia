@@ -148,6 +148,11 @@ impl Builder {
         self.current.nodes.push(Node::StoreVar(var, value));
     }
 
+    /// Demote the invocation: a helper from here, its later output stores without effect ([`Node::Demote`]).
+    pub fn demote(&mut self) {
+        self.current.nodes.push(Node::Demote);
+    }
+
     /// Lanes `mask` of the interface output `slot` take the value.
     pub fn store_output(&mut self, slot: u32, mask: u8, value: ValueId) {
         self.current.nodes.push(Node::StoreOutput(slot, mask, value));

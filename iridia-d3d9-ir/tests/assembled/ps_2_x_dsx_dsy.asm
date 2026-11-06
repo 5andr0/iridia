@@ -1,5 +1,5 @@
-; ps_2_x dsx and dsy: the coordinate's derivatives along x and y
-; unrun: a derivative needs the invocation's quad, which a single run does not have
+; ps_2_x dsx and dsy: the coordinate's derivatives along x and y, coarse: lane 1 less lane 0, lane 2 less lane 0
+; quad: TEXCOORD0=1,2,3,4 -> SV_Target0=5,1,4,0 | TEXCOORD0=2,4,7,0 -> SV_Target0=5,1,4,0 | TEXCOORD0=5,1,3,8 -> SV_Target0=5,1,4,0 | TEXCOORD0=0,0,0,0 -> SV_Target0=5,1,4,0
 ps_2_x
 dcl t0
 dsx r0, t0

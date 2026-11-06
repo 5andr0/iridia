@@ -163,7 +163,7 @@ fn resolve(subst: &[Option<ValueId>], mut v: ValueId) -> ValueId {
 fn rename_region(r: &mut Region, s: &impl Fn(ValueId) -> ValueId) {
     for n in &mut r.nodes {
         match n {
-            Node::Value(_) => {}
+            Node::Value(_) | Node::Demote => {}
             Node::StoreVar(_, x) | Node::StoreOutput(_, _, x) => *x = s(*x),
             Node::If {
                 cond, accept, reject, ..
@@ -265,7 +265,7 @@ fn read(f: &Function) -> Vec<ResourceId> {
                 region(f, reject, out);
             }
             Node::Block { body, .. } | Node::Loop { body, .. } => region(f, body, out),
-            Node::StoreVar(..) | Node::StoreOutput(..) => {}
+            Node::StoreVar(..) | Node::StoreOutput(..) | Node::Demote => {}
         }
     }
     let mut out = Vec::new();

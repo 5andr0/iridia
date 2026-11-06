@@ -1,5 +1,5 @@
-//! Runs a program of iridia's shader IR ([`iridia_ir::Program`]) once, on the CPU, by the IR's own definition of each
-//! operation: the reference the lowerings are checked against.
+//! Runs a program of iridia's shader IR ([`iridia_ir::Program`]) on the CPU, one invocation or a pixel quad, by the
+//! IR's own definition of each operation: the reference the lowerings are checked against.
 //!
 //! The arithmetic is the reference `iridia-exec` uses: IEEE 754 `f32` for the basic operations, the transcendental
 //! functions (`exp2`, `log2`, `sin`, `cos`, `sqrt`, `inverseSqrt`, `pow`) in `f64` rounded once, a dot product summed
@@ -7,7 +7,11 @@
 //! of each float operation but the sign operations and the moves, by the program's float environment or, where it
 //! leaves them open, by the run's [`Bound::denormals`]. This subset runs 32-bit scalars and vectors, both
 //! control phases (every construct of a `Regions` body, the blocks of a `Cfg` one), constant buffer reads, pipeline
-//! state, samples (answered by the caller) and kill; it refuses the rest by name.
+//! state, samples (answered by the caller), kill and demotion; it refuses the rest by name.
+//!
+//! [`run`] runs one invocation, which has no screen derivatives: it refuses a derivative and leaves an implicit-LOD
+//! sample's level to the sampler. [`run_quad`] runs a pixel program's 2 x 2 quad, whose derivatives are differences
+//! between its lanes.
 #![deny(missing_docs)]
 #![deny(clippy::disallowed_methods, clippy::disallowed_types)]
 #![cfg_attr(
@@ -20,9 +24,9 @@
 )]
 
 use iridia_ir::{
-    Binary, Block, Body, Cmp, Denormals, End, FloatToInt, Function, LabelId, Level, MinMaxNan, MulZero, Node,
-    OnZero, Op, OutOfBounds, Program, Region, Rounding, SaturateNan, Scalar, Terminator, Type, Unary,
-    ValueId,
+    Axis, Binary, Block, Body, Cmp, Denormals, End, Fineness, FloatToInt, Function, LabelId, Level,
+    MinMaxNan, MulZero, Node, OnZero, Op, OutOfBounds, Program, Region, Rounding, SaturateNan, Scalar,
+    Terminator, Type, Unary, ValueId,
     interface::{ResourceId, ResourceKind},
 };
 
@@ -34,12 +38,15 @@ pub type Lanes = [u32; 4];
 pub enum Lod {
     /// From the derivatives, which a single invocation does not have: the sampler decides.
     Auto,
-    /// From the derivatives, plus a bias.
+    /// From the derivatives, which a single invocation does not have, plus a bias.
     Bias(f32),
     /// An explicit level.
     Exact(f32),
-    /// From explicit derivatives of the coordinate along x and y (the coordinate's lanes of each).
+    /// From derivatives of the coordinate along x and y (the coordinate's lanes of each, zero past them): the
+    /// program's own, or for an implicit level in a quad the quad's.
     Grad([f32; 3], [f32; 3]),
+    /// An implicit level in a quad: from the quad's derivatives of the coordinate, as `Grad`, plus a bias.
+    GradBias([f32; 3], [f32; 3], f32),
 }
 
 /// A sample request.
@@ -63,7 +70,7 @@ pub struct Run {
     /// Each output slot's lanes in varying order, each as the program stored it last (zero for a lane it never
     /// stored); `None` for a slot it did not store at all.
     pub outputs: Vec<Option<Lanes>>,
-    /// Whether the invocation was killed (its outputs then are those stored before).
+    /// Whether the invocation was killed or demoted (its outputs then are those stored before).
     pub killed: bool,
 }
 
@@ -86,6 +93,53 @@ pub struct Bound<'a> {
 /// The most loop iterations a run takes before it is refused.
 pub const STEP_LIMIT: u64 = 1 << 24;
 
+/// The most derivatives and implicit-LOD samples a quad's lanes meet before the quad run is refused.
+pub const MEETING_LIMIT: usize = 1 << 12;
+
+/// Why a lane's run stopped before its end.
+enum Stop {
+    /// It failed.
+    Fail(String),
+    /// A lane of a quad reached an operation whose neighbours' operands it does not know yet.
+    Meet,
+}
+
+impl From<String> for Stop {
+    fn from(e: String) -> Self {
+        Stop::Fail(e)
+    }
+}
+
+impl From<&str> for Stop {
+    fn from(e: &str) -> Self {
+        Stop::Fail(e.into())
+    }
+}
+
+type Step<T> = Result<T, Stop>;
+
+/// Where a lane met an operation that reads its quad: the operation, how many loop iterations or block executions the
+/// lane had run, and how many times it had run the operation before. Lanes that meet at different places diverge.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Place {
+    value: ValueId,
+    steps: u64,
+    before: u32,
+}
+
+/// What a lane of a quad knows of the meetings before: each lane's operand at each meeting, the lanes in quad order.
+struct Quad<'q> {
+    /// This lane: 0 and 1 the top row, left to right, 2 and 3 the bottom.
+    lane: usize,
+    known: &'q [[Lanes; 4]],
+    /// How many meetings this run of the lane has passed.
+    met: usize,
+    /// How many times this run has met each value's operation.
+    times: Vec<u32>,
+    /// The meeting the run stopped at, and its operand there.
+    waiting: Option<(Place, Lanes)>,
+}
+
 /// How a region ended.
 enum Exit {
     Yield(Vec<ValueId>),
@@ -105,6 +159,23 @@ struct Machine<'a, 'b> {
     steps: u64,
     /// Whether `f32` denormals are flushed.
     flush: bool,
+    /// The lane's quad, where the run is one.
+    quad: Option<Quad<'a>>,
+    /// Whether the invocation was demoted: a helper from there, whose output stores have no effect.
+    demoted: bool,
+}
+
+/// The two lanes of a quad whose difference is lane `lane`'s derivative: (from, to). A coarse derivative (and
+/// `Any`'s, as `iridia-exec` takes it) is the top row's or the left column's for every lane, a fine one the lane's own
+/// row's or column's.
+fn pair(axis: Axis, fineness: Fineness, lane: usize) -> (usize, usize) {
+    let fine = fineness == Fineness::Fine;
+    match axis {
+        Axis::X if fine && lane >= 2 => (2, 3),
+        Axis::X => (0, 1),
+        Axis::Y if fine && lane % 2 == 1 => (1, 3),
+        Axis::Y => (0, 2),
+    }
 }
 
 /// An `f32` lane with a denormal made a zero of its sign.
@@ -208,14 +279,38 @@ impl Machine<'_, '_> {
             .ok_or_else(|| format!("constant buffer {} is not bound", id.0))?;
         Ok((data, rows))
     }
-    fn op(&mut self, v: ValueId) -> Result<Lanes, String> {
+    /// Meet the quad at value `v`'s operation with this lane's `operand`: every lane's operand in quad order where the
+    /// lanes have all met here before, a stop where they have not, `None` where the run is not a quad's.
+    fn meet(&mut self, v: ValueId, operand: Lanes) -> Step<Option<[Lanes; 4]>> {
+        let steps = self.steps;
+        let Some(q) = self.quad.as_mut() else {
+            return Ok(None);
+        };
+        let times = q.times.get_mut(v.0 as usize).ok_or("a value out of range")?;
+        let before = *times;
+        *times = times.saturating_add(1);
+        if let Some(known) = q.known.get(q.met) {
+            q.met = q.met.saturating_add(1);
+            return Ok(Some(*known));
+        }
+        q.waiting = Some((
+            Place {
+                value: v,
+                steps,
+                before,
+            },
+            operand,
+        ));
+        Err(Stop::Meet)
+    }
+    fn op(&mut self, v: ValueId) -> Step<Lanes> {
         let def = self
             .f
             .value(v)
             .ok_or_else(|| format!("%{} is not a value", v.0))?;
         let t = def.ty;
         if t.scalar.bits() > 32 || (t.scalar.bits() < 32 && t.scalar != Scalar::Bool) {
-            return Err(format!("{t} values are not run yet"));
+            return Err(format!("{t} values are not run yet").into());
         }
         // the float operations whose inputs and result a flushing run flushes: not the sign operations and moves
         let arithmetic = match &def.op {
@@ -239,12 +334,12 @@ impl Machine<'_, '_> {
             x
         })
     }
-    fn compute(&mut self, v: ValueId, op: &Op, t: Type) -> Result<Lanes, String> {
+    fn compute(&mut self, v: ValueId, op: &Op, t: Type) -> Step<Lanes> {
         let n = t.lanes;
         Ok(match op {
             Op::Literal(bits) => bits.map(|b| u32::try_from(b & 0xffff_ffff).unwrap_or(0)),
             Op::Undef => [0; 4],
-            Op::Param => return Err(format!("parameter %{} has no value here", v.0)),
+            Op::Param => return Err(format!("parameter %{} has no value here", v.0).into()),
             Op::Unary(u, a) => {
                 let x = self.arg(*a)?;
                 let at = self.ty(*a)?;
@@ -292,11 +387,13 @@ impl Machine<'_, '_> {
                             }
                         })
                     }
-                    Unary::Derivative(..) => {
-                        return Err(
-                            "a derivative needs the invocation's quad, which a single run does not have"
-                                .into(),
-                        );
+                    Unary::Derivative(axis, fineness) => {
+                        let quad = self.meet(v, x)?.ok_or(
+                            "a derivative needs the invocation's quad, which a single run does not have",
+                        )?;
+                        let (from, to) = pair(*axis, *fineness, self.quad.as_ref().map_or(0, |q| q.lane));
+                        let lane = |l: usize| quad.get(l).copied().unwrap_or_default();
+                        float2(m, &lane(to), &lane(from), |p, q| p - q)
                     }
                     Unary::Not if at.scalar == Scalar::Bool => each(m, &x, |w| u32::from(w == 0)),
                     Unary::Not => each(m, &x, |w| !w),
@@ -452,7 +549,8 @@ impl Machine<'_, '_> {
                             "a conversion of {} to {} ({rule:?}) is not run yet",
                             s.name(),
                             d.name()
-                        ));
+                        )
+                        .into());
                     }
                 }
             }
@@ -525,12 +623,31 @@ impl Machine<'_, '_> {
             } => {
                 let c = self.get(*coord)?;
                 let lanes = self.ty(*coord)?.lanes;
-                let lod = match level {
-                    Level::Auto => Lod::Auto,
-                    Level::Zero => Lod::Exact(0.0),
-                    Level::Bias(b) => Lod::Bias(fb(self.get(*b)?[0])),
-                    Level::Exact(l) => Lod::Exact(fb(self.get(*l)?[0])),
-                    Level::Grad(x, y) => {
+                // a quad's implicit level of detail comes from the coordinate's differences: the right lane's and the
+                // lower lane's less the top left's, as `iridia-exec` takes them
+                let footprint = match level {
+                    Level::Auto | Level::Bias(_) => self.meet(v, c)?.map(|quad| {
+                        let d = |l: usize| {
+                            let mut r = [0.0; 3];
+                            for (k, o) in r.iter_mut().enumerate().take(usize::from(lanes)) {
+                                let lane =
+                                    |l: usize| quad.get(l).and_then(|q| q.get(k)).copied().unwrap_or(0);
+                                *o = fb(lane(l)) - fb(lane(0));
+                            }
+                            r
+                        };
+                        (d(1), d(2))
+                    }),
+                    _ => None,
+                };
+                let lod = match (level, footprint) {
+                    (Level::Auto, Some((dx, dy))) => Lod::Grad(dx, dy),
+                    (Level::Bias(b), Some((dx, dy))) => Lod::GradBias(dx, dy, fb(self.get(*b)?[0])),
+                    (Level::Auto, None) => Lod::Auto,
+                    (Level::Zero, _) => Lod::Exact(0.0),
+                    (Level::Bias(b), None) => Lod::Bias(fb(self.get(*b)?[0])),
+                    (Level::Exact(l), _) => Lod::Exact(fb(self.get(*l)?[0])),
+                    (Level::Grad(x, y), _) => {
                         let (x, y) = (self.get(*x)?, self.get(*y)?);
                         Lod::Grad([fb(x[0]), fb(x[1]), fb(x[2])], [fb(y[0]), fb(y[1]), fb(y[2])])
                     }
@@ -547,7 +664,7 @@ impl Machine<'_, '_> {
         })
     }
     /// A node that is not a construct: a value, a variable store or an output store.
-    fn plain(&mut self, node: &Node) -> Result<(), String> {
+    fn plain(&mut self, node: &Node) -> Step<()> {
         match node {
             Node::Value(v) => {
                 let x = self.op(*v)?;
@@ -560,6 +677,8 @@ impl Machine<'_, '_> {
                     .get_mut(var.0 as usize)
                     .ok_or("a store to no variable")? = Some(x);
             }
+            Node::Demote => self.demoted = true,
+            Node::StoreOutput(..) if self.demoted => {}
             Node::StoreOutput(slot, mask, x) => {
                 let x = self.get(*x)?;
                 let out = self
@@ -580,12 +699,12 @@ impl Machine<'_, '_> {
         Ok(())
     }
     /// A graph body from its entry block until it returns or kills: whether it killed.
-    fn graph(&mut self, blocks: &[Block]) -> Result<bool, String> {
+    fn graph(&mut self, blocks: &[Block]) -> Step<bool> {
         let mut at = 0usize;
         loop {
             self.steps = self.steps.saturating_add(1);
             if self.steps > STEP_LIMIT {
-                return Err(format!("more than {STEP_LIMIT} block executions"));
+                return Err(format!("more than {STEP_LIMIT} block executions").into());
             }
             let block = blocks
                 .get(at)
@@ -604,7 +723,9 @@ impl Machine<'_, '_> {
                 }
                 Terminator::Return => return Ok(false),
                 Terminator::Kill => return Ok(true),
-                Terminator::Unreachable => return Err(format!("reached block {at}'s unreachable end")),
+                Terminator::Unreachable => {
+                    return Err(format!("reached block {at}'s unreachable end").into());
+                }
             };
             let next = blocks
                 .get(target.block as usize)
@@ -621,10 +742,12 @@ impl Machine<'_, '_> {
             at = target.block as usize;
         }
     }
-    fn region(&mut self, r: &Region) -> Result<Exit, String> {
+    fn region(&mut self, r: &Region) -> Step<Exit> {
         for node in &r.nodes {
             match node {
-                Node::Value(_) | Node::StoreVar(..) | Node::StoreOutput(..) => self.plain(node)?,
+                Node::Value(_) | Node::StoreVar(..) | Node::StoreOutput(..) | Node::Demote => {
+                    self.plain(node)?
+                }
                 Node::If {
                     cond,
                     accept,
@@ -654,7 +777,7 @@ impl Machine<'_, '_> {
                     loop {
                         self.steps = self.steps.saturating_add(1);
                         if self.steps > STEP_LIMIT {
-                            return Err(format!("more than {STEP_LIMIT} loop iterations"));
+                            return Err(format!("more than {STEP_LIMIT} loop iterations").into());
                         }
                         for (p, a) in params.iter().zip(&args) {
                             self.set(*p, *a)?;
@@ -696,8 +819,18 @@ impl Machine<'_, '_> {
     }
 }
 
-/// Run a program's entry function once, in either control phase.
-pub fn run(program: &Program, bound: &mut Bound<'_>) -> Result<Run, String> {
+/// How a lane's run ended: its outputs, or the meeting it waits at.
+enum Ended {
+    Ran(Run),
+    Waits(Place, Lanes),
+}
+
+/// Run a program's entry function for one lane, the quad's meetings known so far where it is a quad's.
+fn lane(
+    program: &Program,
+    bound: &mut Bound<'_>,
+    quad: Option<(usize, &[[Lanes; 4]])>,
+) -> Result<Ended, String> {
     let f = &program.entry;
     let flush = match program.float.f32 {
         Denormals::Flush => true,
@@ -713,19 +846,121 @@ pub fn run(program: &Program, bound: &mut Bound<'_>) -> Result<Run, String> {
         outputs: vec![None; program.interface.outputs.len()],
         steps: 0,
         flush,
+        quad: quad.map(|(lane, known)| Quad {
+            lane,
+            known,
+            met: 0,
+            times: vec![0; f.values.len()],
+            waiting: None,
+        }),
+        demoted: false,
     };
-    let killed = match &f.body {
-        Body::Regions(body) => match m.region(body)? {
-            Exit::Kill => true,
-            Exit::Return | Exit::Yield(_) => false,
-            Exit::Br(..) | Exit::Continue(..) => return Err("an exit past the function's body".into()),
+    let ended = match &f.body {
+        Body::Regions(body) => match m.region(body) {
+            Ok(Exit::Kill) => Ok(true),
+            Ok(Exit::Return | Exit::Yield(_)) => Ok(false),
+            Ok(Exit::Br(..) | Exit::Continue(..)) => return Err("an exit past the function's body".into()),
+            Err(e) => Err(e),
         },
-        Body::Cfg(blocks) => m.graph(blocks)?,
+        Body::Cfg(blocks) => m.graph(blocks),
     };
-    Ok(Run {
-        outputs: m.outputs,
-        killed,
+    match ended {
+        Ok(killed) => Ok(Ended::Ran(Run {
+            outputs: m.outputs,
+            killed: killed || m.demoted,
+        })),
+        Err(Stop::Fail(e)) => Err(e),
+        Err(Stop::Meet) => match m.quad.and_then(|q| q.waiting) {
+            Some((place, operand)) => Ok(Ended::Waits(place, operand)),
+            None => Err("a run stopped at a meeting it did not record".into()),
+        },
+    }
+}
+
+/// Run a program's entry function once, in either control phase.
+pub fn run(program: &Program, bound: &mut Bound<'_>) -> Result<Run, String> {
+    match lane(program, bound, None)? {
+        Ended::Ran(run) => Ok(run),
+        Ended::Waits(..) => Err("a single run met its quad".into()),
+    }
+}
+
+/// Whether a program needs the other lanes of its 2 x 2 quad ([`run_quad`]): it takes a screen derivative, or samples
+/// at an implicit level of detail, whose footprint is the quad's. A program that does not runs the same alone as in a
+/// quad.
+pub fn needs_quad(program: &Program) -> bool {
+    program.entry.values.iter().any(|d| {
+        matches!(
+            d.op,
+            Op::Unary(Unary::Derivative(..), _)
+                | Op::Sample {
+                    level: Level::Auto | Level::Bias(_),
+                    ..
+                }
+        )
     })
+}
+
+/// Run a pixel program's entry function for a 2 x 2 quad of invocations, each lane with its own [`Bound`]: lanes 0 and
+/// 1 are the top row, left to right, and 2 and 3 the bottom.
+///
+/// A derivative is a difference between two lanes' operands: along x the right lane's less the left's, along y the
+/// lower's less the upper's, of the top row or left column for a coarse derivative (and for [`Fineness::Any`]), of the
+/// lane's own for a fine one. An implicit-LOD sample (`Level::Auto`, `Level::Bias`) asks the sampler with the quad's
+/// coarse derivatives of its coordinate ([`Lod::Grad`], [`Lod::GradBias`]).
+///
+/// The lanes run as they would in lockstep, with no threads: each runs until it meets a derivative or implicit-LOD
+/// sample whose operands are not all known, and once all four have met it there, they run again knowing them. Each
+/// sampler may thus be asked a request again, and must answer it the same way. Lanes must meet each such operation
+/// together: at the same operation, after as many loop iterations or block executions, as often before; a lane that
+/// ends (returns or kills) while the others go on to one, or that meets one elsewhere, makes the run refused as
+/// divergent. So is a run of more than [`MEETING_LIMIT`] meetings.
+pub fn run_quad(program: &Program, bounds: [&mut Bound<'_>; 4]) -> Result<[Run; 4], String> {
+    let mut bounds = bounds;
+    let mut known: Vec<[Lanes; 4]> = Vec::new();
+    loop {
+        let mut ran = Vec::with_capacity(4);
+        let mut waits = Vec::with_capacity(4);
+        for (l, bound) in bounds.iter_mut().enumerate() {
+            match lane(program, bound, Some((l, &known))).map_err(|e| format!("lane {l}: {e}"))? {
+                Ended::Ran(run) => ran.push(run),
+                Ended::Waits(place, operand) => waits.push((l, place, operand)),
+            }
+        }
+        if waits.is_empty() {
+            return ran
+                .try_into()
+                .map_err(|_| "a quad of other than four lanes".to_string());
+        }
+        let Some(&(_, first, _)) = waits.first() else {
+            return Err("a quad with no lane waiting".into());
+        };
+        if waits.len() < 4 || waits.iter().any(|(_, place, _)| *place != first) {
+            let at: Vec<String> = (0..4)
+                .map(|l| match waits.iter().find(|(w, ..)| *w == l) {
+                    Some((_, p, _)) => format!(
+                        "lane {l} at %{} (after {} steps, met {} times before)",
+                        p.value.0, p.steps, p.before
+                    ),
+                    None => format!("lane {l} ended"),
+                })
+                .collect();
+            return Err(format!(
+                "a quad's lanes diverge at a derivative or an implicit-LOD sample: {}",
+                at.join(", ")
+            ));
+        }
+        if known.len() >= MEETING_LIMIT {
+            return Err(format!("more than {MEETING_LIMIT} quad meetings"));
+        }
+        let mut operands = [[0; 4]; 4];
+        for (l, _, operand) in &waits {
+            if let Some(o) = operands.get_mut(*l) {
+                *o = *operand;
+            }
+        }
+        known.push(operands);
+    }
 }
 
 // Run the examples in the README as doc tests.

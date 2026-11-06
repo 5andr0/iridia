@@ -29,9 +29,19 @@ fn varying(name: &str, index: u32, value: (ScalarType, u8), system: Option<Syste
 
 /// A pixel program of the text's function, with `TEXCOORD` inputs and `SV_Target` outputs of the shapes given.
 fn program(text: &str, inputs: &[(ScalarType, u8)], outputs: &[(ScalarType, u8)]) -> Program {
+    program_with(text, inputs, outputs, |_| {})
+}
+
+/// [`program`] with its interface changed by `with` (its resources added, say).
+fn program_with(
+    text: &str,
+    inputs: &[(ScalarType, u8)],
+    outputs: &[(ScalarType, u8)],
+    with: impl FnOnce(&mut Interface),
+) -> Program {
     let entry = iridia_ir::text::parse(text).unwrap_or_else(|e| panic!("{e}\n{text}"));
     let n = |i: usize| u32::try_from(i).unwrap();
-    let p = Program {
+    let mut p = Program {
         stage: Stage::Pixel,
         entry,
         interface: Interface {
@@ -62,6 +72,7 @@ fn program(text: &str, inputs: &[(ScalarType, u8)], outputs: &[(ScalarType, u8)]
         },
         notes: Vec::new(),
     };
+    with(&mut p.interface);
     iridia_ir::validate(&p).unwrap_or_else(|e| panic!("{e:?}\n{text}"));
     assert_eq!(
         iridia_ir::text::print(&p.entry),
@@ -281,5 +292,215 @@ fn text_that_is_not_the_form_is_refused_with_its_line() {
         let e = iridia_ir::text::parse(text).unwrap_err();
         assert_eq!(e.line, line, "{e}");
         assert!(e.message.contains(words), "{e}");
+    }
+}
+
+/// A 2 x 2 quad's run, each lane with its inputs, every sample answered with its request's first coordinate lane.
+fn run_quad(p: &Program, inputs: [&[[u32; 4]]; 4]) -> Result<[iridia_exec_ir::Run; 4], String> {
+    let mut seen = Vec::new();
+    run_quad_sampling(p, inputs, &mut seen)
+}
+
+type Answer<'a> = dyn FnMut(iridia_exec_ir::Sample) -> Result<[f32; 4], String> + 'a;
+
+fn bound<'a>(inputs: &'a [[u32; 4]], sampler: &'a mut Answer<'a>) -> iridia_exec_ir::Bound<'a> {
+    iridia_exec_ir::Bound {
+        inputs,
+        buffers: &[],
+        state: &[],
+        sampler,
+        denormals: iridia_ir::Denormals::Any,
+    }
+}
+
+fn run_quad_sampling(
+    p: &Program,
+    inputs: [&[[u32; 4]]; 4],
+    seen: &mut Vec<iridia_exec_ir::Sample>,
+) -> Result<[iridia_exec_ir::Run; 4], String> {
+    let seen = core::cell::RefCell::new(seen);
+    let answer = |s: iridia_exec_ir::Sample| {
+        seen.borrow_mut().push(s);
+        Ok::<_, String>([s.coord[0], 0.0, 0.0, 0.0])
+    };
+    let [mut a, mut b, mut c, mut d] = [answer; 4];
+    let [i0, i1, i2, i3] = inputs;
+    let (mut b0, mut b1, mut b2, mut b3) = (
+        bound(i0, &mut a),
+        bound(i1, &mut b),
+        bound(i2, &mut c),
+        bound(i3, &mut d),
+    );
+    iridia_exec_ir::run_quad(p, [&mut b0, &mut b1, &mut b2, &mut b3])
+}
+
+fn x(v: f32) -> [[u32; 4]; 1] {
+    [[v.to_bits(), 0, 0, 0]]
+}
+
+#[test]
+fn a_quads_derivatives_are_differences_of_its_lanes_coarse_or_fine() {
+    let p = program(
+        "iridia-ir 1
+fn main {
+  %0: f32 = input 0.x
+  %1: f32 = deriv.x.coarse %0
+  %2: f32 = deriv.x.fine %0
+  %3: f32 = deriv.y.coarse %0
+  %4: f32 = deriv.y.fine %0
+  %5: f32 = deriv.x.any %0
+  %6: f32 = deriv.y.any %0
+  output 0.x = %1
+  output 1.x = %2
+  output 2.x = %3
+  output 3.x = %4
+  output 4.x = %5
+  output 5.x = %6
+  return
+}
+",
+        &[(ScalarType::Float, 1)],
+        &[(ScalarType::Float, 1); 6],
+    );
+    // the top row 1, 3 and the bottom 7, 15
+    let (a, b, c, d) = (x(1.0), x(3.0), x(7.0), x(15.0));
+    let quad = run_quad(&p, [&a, &b, &c, &d]).unwrap();
+    let got = |l: usize, o: usize| f32::from_bits(quad[l].outputs[o].unwrap()[0]);
+    for l in 0..4 {
+        assert_eq!(got(l, 0), 2.0, "coarse x, lane {l}");
+        assert_eq!(got(l, 1), if l < 2 { 2.0 } else { 8.0 }, "fine x, lane {l}");
+        assert_eq!(got(l, 2), 6.0, "coarse y, lane {l}");
+        assert_eq!(got(l, 3), if l % 2 == 0 { 6.0 } else { 12.0 }, "fine y, lane {l}");
+        assert_eq!(got(l, 4), 2.0, "any x is coarse, lane {l}");
+        assert_eq!(got(l, 5), 6.0, "any y is coarse, lane {l}");
+    }
+    let mut sampler = |_| Err::<[f32; 4], String>("no textures".into());
+    let e = iridia_exec_ir::run(
+        &p,
+        &mut iridia_exec_ir::Bound {
+            inputs: &a,
+            buffers: &[],
+            state: &[],
+            sampler: &mut sampler,
+            denormals: iridia_ir::Denormals::Any,
+        },
+    )
+    .unwrap_err();
+    assert!(e.contains("quad"), "{e}");
+}
+
+#[test]
+fn a_derivative_in_a_loop_meets_its_neighbours_on_each_iteration() {
+    // %4 = %4 + ddx(%4 * x), three times: each iteration's difference is of that iteration's operands
+    let p = program(
+        "iridia-ir 1
+fn main {
+  %0: f32 = input 0.x
+  %1: f32 = f32(0.0)
+  %2: f32 = f32(1.0)
+  %3: f32 = f32(3.0)
+  loop '0 (%4: f32, %5: f32) = (%1, %2) {
+    %6: bool = fcmp.ge %4, %3
+    if %6 {
+      br '0 %5
+    } else {
+      yield
+    }
+    %7: f32 = fmul.ieee %5, %0
+    %8: f32 = deriv.x.coarse %7
+    %9: f32 = fadd %5, %8
+    %10: f32 = fadd %4, %2
+    continue '0 %10, %9
+  } -> %11: f32
+  output 0.x = %11
+  return
+}
+",
+        &[(ScalarType::Float, 1)],
+        &[(ScalarType::Float, 1)],
+    );
+    let (a, b, c, d) = (x(1.0), x(2.0), x(1.0), x(2.0));
+    let quad = run_quad(&p, [&a, &b, &c, &d]).unwrap();
+    // every lane: s = 1; s += s*2 - s*1 three times, so 2, 4, 8
+    for (l, r) in quad.iter().enumerate() {
+        assert_eq!(f32::from_bits(r.outputs[0].unwrap()[0]), 8.0, "lane {l}");
+    }
+}
+
+#[test]
+fn a_quad_whose_lanes_part_before_a_derivative_is_refused() {
+    let p = program(
+        "iridia-ir 1
+fn main {
+  %0: f32 = input 0.x
+  %1: f32 = f32(0.0)
+  %2: bool = fcmp.lt %0, %1
+  if %2 {
+    kill
+  } else {
+    yield
+  }
+  %3: f32 = deriv.x.coarse %0
+  output 0.x = %3
+  return
+}
+",
+        &[(ScalarType::Float, 1)],
+        &[(ScalarType::Float, 1)],
+    );
+    let (a, b, c, d) = (x(1.0), x(-1.0), x(1.0), x(1.0));
+    let e = run_quad(&p, [&a, &b, &c, &d]).unwrap_err();
+    assert!(e.contains("diverge") && e.contains("lane 1 ended"), "{e}");
+    let b = x(2.0);
+    let quad = run_quad(&p, [&a, &b, &c, &d]).unwrap();
+    assert_eq!(f32::from_bits(quad[3].outputs[0].unwrap()[0]), 1.0);
+}
+
+#[test]
+fn an_implicit_level_in_a_quad_is_asked_with_the_quads_coarse_derivatives() {
+    let p = program_with(
+        "iridia-ir 1
+fn main {
+  %0: vec2<f32> = input 0.xy
+  %1: vec4<f32> = sample r0, r1, %0
+  output 0.xyzw = %1
+  return
+}
+",
+        &[(ScalarType::Float, 2)],
+        &[F4],
+        |i| {
+            use iridia_ir::interface::{Resource, ResourceId, ResourceKind, SampleType, TextureDim};
+            let resource = |id, kind| Resource {
+                id: ResourceId(id),
+                kind,
+                count: 1,
+                provenance: Default::default(),
+            };
+            i.resources = vec![
+                resource(
+                    0,
+                    ResourceKind::Texture {
+                        dim: TextureDim::D2,
+                        arrayed: false,
+                        multisampled: false,
+                        sample: SampleType::Float,
+                    },
+                ),
+                resource(1, ResourceKind::Sampler { comparison: false }),
+            ];
+        },
+    );
+    let lane = |u: f32, v: f32| [[u.to_bits(), v.to_bits(), 0, 0]];
+    let (a, b, c, d) = (lane(0.5, 0.25), lane(0.75, 0.25), lane(0.5, 1.25), lane(1.0, 2.0));
+    let mut seen = Vec::new();
+    run_quad_sampling(&p, [&a, &b, &c, &d], &mut seen).unwrap();
+    assert_eq!(seen.len(), 4, "each lane samples once");
+    for s in &seen {
+        assert_eq!(
+            s.lod,
+            iridia_exec_ir::Lod::Grad([0.25, 0.0, 0.0], [0.0, 1.0, 0.0]),
+            "{s:?}"
+        );
     }
 }

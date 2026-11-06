@@ -494,6 +494,9 @@ impl<'a> Parser<'a> {
             )?;
             return Ok(Some(Node::Value(v)));
         }
+        if line == "demote" {
+            return Ok(Some(Node::Demote));
+        }
         if let Some(rest) = line.strip_prefix("output ") {
             let Some((at, v)) = rest.split_once(" = ") else {
                 return self.fail("an output store without a value");

@@ -1045,7 +1045,11 @@ impl Lower<'_> {
                 self.statement(Statement::Continue)?;
             }
             Some(End::Return) => self.ret()?,
-            Some(End::Kill) => self.statement(Statement::Kill)?,
+            // WGSL's `discard` demotes the invocation and goes on: the return ends it
+            Some(End::Kill) => {
+                self.statement(Statement::Kill)?;
+                self.ret()?;
+            }
             Some(End::Unreachable) => {}
         }
         Ok(())
@@ -1072,6 +1076,8 @@ impl Lower<'_> {
                 let h = self.op(*v)?;
                 self.set(*v, h)?;
             }
+            // WGSL's `discard` is a demotion: the invocation goes on as a helper
+            Node::Demote => self.statement(Statement::Kill)?,
             Node::StoreVar(var, x) => {
                 let local = *self
                     .vars

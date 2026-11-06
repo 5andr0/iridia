@@ -42,9 +42,9 @@ assert!(iridia_d3d9_ir::lift(&other_model).is_err());
 ## Guarantees and limits
 
 - On the 7,306 distinct Shaun White Skateboarding programs the older reader lifts it lifts the same programs, with the same interface and bindings, and a seeded run of each agrees with the older reader's in that crate's executor.
-- 103 one-feature programs, assembled by Microsoft's `D3DAssemble`, run as their comments state, worked by hand from the instruction definitions; where those leave a choice the rule followed is wined3d's.
-- The 1,100 programs of vkd3d's Direct3D 9 shader tests lift, and each probe the tests make of a Direct3D 9 device on Windows that a single invocation can draw holds.
-- A derivative is lifted and written as WGSL but not run: the executors run one invocation, not a quad.
+- 105 one-feature programs, assembled by Microsoft's `D3DAssemble`, run as their comments state, worked by hand from the instruction definitions; where those leave a choice the rule followed is wined3d's. A program with a derivative runs as a 2 x 2 quad.
+- The 1,100 programs of vkd3d's Direct3D 9 shader tests lift, and each probe the tests make of a Direct3D 9 device on Windows that the runner can draw holds, derivatives included (a pixel that takes one runs in its quad).
+- `texkill` demotes the pixel (`Node::Demote`): it goes on as a helper whose values its quad's derivatives still read, as on Direct3D 9.
 
 ## Tests
 

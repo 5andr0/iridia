@@ -3,9 +3,9 @@
 //! a naga program in `iridia-exec` in one register view, and a texture model both executors sample alike.
 #![allow(dead_code, reason = "each test uses the part it needs")]
 
-use std::collections::BTreeMap;
+use std::{cell::RefCell, collections::BTreeMap};
 
-use iridia_exec::{Dim, ImageLod, ImageSample, PixelShader, ProgramShader, Sample, Sampler};
+use iridia_exec::{Dim, Execution, ImageLod, ImageSample, PixelShader, ProgramShader, Sample, Sampler};
 use iridia_ir::interface::{D3dSignature, Interface, ResourceId, Stage, SystemValue};
 
 /// The lanes a write mask names, in order.
@@ -205,13 +205,17 @@ pub struct View {
 impl View {
     /// Alike where both runs see them, which `other` is not: the same bits in every lane, or a NaN in both. IEEE 754
     /// states a NaN's sign and payload only for the sign operations, and two executors keep different ones (through
-    /// `fract` of a negated NaN, say).
+    /// `fract` of a negated NaN, say). A killed pixel writes nothing, so two killed runs are alike whatever their
+    /// outputs: `iridia-exec-ir` keeps those stored before the kill, and `iridia-exec` a helper's later stores too.
     pub fn alike(&self, other: &View) -> bool {
         let lanes = |a: &[u32; 4], b: &[u32; 4]| {
             a.iter()
                 .zip(b)
                 .all(|(&x, &y)| x == y || f32::from_bits(x).is_nan() && f32::from_bits(y).is_nan())
         };
+        if self.killed && other.killed && self.position.is_none() && other.position.is_none() {
+            return true;
+        }
         self.killed == other.killed
             && self.outputs.len() == other.outputs.len()
             && self
@@ -253,6 +257,45 @@ pub fn run_ir(p: &iridia_ir::Program, inputs: &[[u32; 4]], bound: &mut Bound<'_>
             denormals: bound.denormals,
         },
     )?;
+    ir_view(interface, run)
+}
+
+/// A quad's runs of the IR in `iridia-exec-ir` (lanes 0 and 1 the top row), each lane's inputs by slot, the lanes
+/// sharing `bound`'s resources and sampler.
+pub fn run_ir_quad(
+    p: &iridia_ir::Program,
+    inputs: [&[[u32; 4]]; 4],
+    bound: &mut Bound<'_>,
+) -> Result<[View; 4], String> {
+    let shared = RefCell::new(&mut *bound.sampler);
+    let answer = |s: iridia_exec_ir::Sample| (shared.borrow_mut())(s);
+    let [mut a, mut b, mut c, mut d] = [answer; 4];
+    let [i0, i1, i2, i3] = inputs;
+    let lane = |inputs, sampler| iridia_exec_ir::Bound {
+        inputs,
+        buffers: bound.buffers,
+        state: bound.state,
+        sampler,
+        denormals: bound.denormals,
+    };
+    let (mut b0, mut b1, mut b2, mut b3) = (
+        lane(i0, &mut a),
+        lane(i1, &mut b),
+        lane(i2, &mut c),
+        lane(i3, &mut d),
+    );
+    let runs = iridia_exec_ir::run_quad(p, [&mut b0, &mut b1, &mut b2, &mut b3])?;
+    let [r0, r1, r2, r3] = runs;
+    Ok([
+        ir_view(&p.interface, r0)?,
+        ir_view(&p.interface, r1)?,
+        ir_view(&p.interface, r2)?,
+        ir_view(&p.interface, r3)?,
+    ])
+}
+
+/// The view of a run of the IR.
+fn ir_view(interface: &Interface, run: iridia_exec_ir::Run) -> Result<View, String> {
     let (mut outputs, mut other, mut position) = (BTreeMap::new(), BTreeMap::new(), None);
     for (slot, v) in interface.outputs.iter().enumerate() {
         let got = run.outputs[slot].unwrap_or([0; 4]);
@@ -301,6 +344,30 @@ pub fn run_naga(
             None,
         )
     };
+    naga_view(interface, e, position)
+}
+
+/// A quad's runs of a naga program in `iridia-exec` (lanes 0 and 1 the top row), as [`run_naga`] runs one.
+pub fn run_naga_quad(
+    shader: &ProgramShader,
+    interface: &Interface,
+    inputs: [&[[u32; 4]]; 4],
+    buffers: &[(u32, &[[u32; 4]])],
+    sampler: &mut dyn Sampler,
+) -> Result<[View; 4], String> {
+    let [e0, e1, e2, e3] = shader
+        .execute_quad(inputs, buffers, sampler)
+        .map_err(|e| e.to_string())?;
+    Ok([
+        naga_view(interface, e0, None)?,
+        naga_view(interface, e1, None)?,
+        naga_view(interface, e2, None)?,
+        naga_view(interface, e3, None)?,
+    ])
+}
+
+/// The view of a run of a naga program, its outputs read from the register view.
+fn naga_view(interface: &Interface, e: Execution, position: Option<[u32; 4]>) -> Result<View, String> {
     let mut outputs = BTreeMap::new();
     for (slot, v) in interface.outputs.iter().enumerate() {
         if !matches!(v.system, None | Some(SystemValue::Target(_))) {
@@ -368,6 +435,44 @@ impl Prepared {
         .map_err(|e| format!("iridia-exec: {e}"))?;
         if !b.alike(&c) {
             return Err(format!("the IR and the WGSL disagree: {b:x?} and {c:x?}"));
+        }
+        Ok(b)
+    }
+
+    /// [`Prepared::run`] for a pixel program's 2 x 2 quad (lanes 0 and 1 the top row), each lane's inputs by slot:
+    /// every form's four lanes must match the IR's as there.
+    pub fn run_quad(
+        &self,
+        slots: [&[[u32; 4]]; 4],
+        bound: &mut Bound<'_>,
+        banks: &[(u32, &[[u32; 4]])],
+        sampler: &mut dyn Sampler,
+    ) -> Result<[View; 4], String> {
+        let b = run_ir_quad(&self.ir, slots, bound)?;
+        for (form, program) in [("graph", &self.graph), ("restructured graph", &self.restructured)] {
+            let got = run_ir_quad(program, slots, bound).map_err(|e| format!("the {form}: {e}"))?;
+            if got != b {
+                return Err(format!("the IR and its {form} disagree: {b:x?} and {got:x?}"));
+            }
+        }
+        if bound.denormals == iridia_ir::Denormals::Flush {
+            return Ok(b);
+        }
+        let registers = slots.map(|s| self.register_view(s));
+        let c = run_naga_quad(
+            &self.wgsl,
+            &self.wgsl_interface,
+            [&registers[0], &registers[1], &registers[2], &registers[3]],
+            banks,
+            sampler,
+        )
+        .map_err(|e| format!("iridia-exec: {e}"))?;
+        for (l, (b, c)) in b.iter().zip(&c).enumerate() {
+            if !b.alike(c) {
+                return Err(format!(
+                    "the IR and the WGSL disagree in lane {l}: {b:x?} and {c:x?}"
+                ));
+            }
         }
         Ok(b)
     }
@@ -465,6 +570,7 @@ pub fn ir_texels(
             iridia_exec_ir::Lod::Bias(b) => ImageLod::Bias(b),
             iridia_exec_ir::Lod::Exact(l) => ImageLod::Level(l),
             iridia_exec_ir::Lod::Grad(dx, dy) => ImageLod::Gradients([dx, dy]),
+            iridia_exec_ir::Lod::GradBias(dx, dy, b) => ImageLod::GradientsBias([dx, dy], b),
         };
         Ok(texel(register, &s.coord[..usize::from(s.lanes)], lod))
     }

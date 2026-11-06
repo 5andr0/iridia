@@ -1,6 +1,6 @@
 [package]
 name = "iridia-exec-ir"
-description = "Run a program of iridia's shader IR once on the CPU, by the IR's own definition of each operation"
+description = "Run a program of iridia's shader IR on the CPU, one invocation or a pixel quad, by the IR's own definition of each operation"
 readme = "README.md"
 keywords = ["shader", "ir", "interpreter", "reference"]
 categories = ["graphics", "compilers"]

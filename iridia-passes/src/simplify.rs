@@ -140,6 +140,7 @@ impl Simplify<'_> {
                     }
                 }
                 Node::StoreVar(_, x) | Node::StoreOutput(_, _, x) => *x = self.sub(*x),
+                Node::Demote => {}
                 Node::If {
                     cond, accept, reject, ..
                 } => {
@@ -176,6 +177,7 @@ fn count(f: &Function, r: &Region, uses: &mut [u32]) {
                 }
             }
             Node::StoreVar(_, x) | Node::StoreOutput(_, _, x) => add(uses, *x),
+            Node::Demote => {}
             Node::If {
                 cond, accept, reject, ..
             } => {

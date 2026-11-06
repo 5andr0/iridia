@@ -412,8 +412,12 @@ impl Lift<'_> {
         };
         let negative = self.binary(Binary::FCmp(Compare::Lt), v, zero)?;
         let any = self.unary(Unary::Any, negative)?;
+        // the pixel is discarded and runs on, a helper its quad's derivatives still read
         self.b.open_if(any);
-        self.b.close(End::Kill, &[]).map_err(|e| error(self.at, e))?;
+        self.b.demote();
+        self.b
+            .close(End::Yield(Vec::new()), &[])
+            .map_err(|e| error(self.at, e))?;
         Ok(())
     }
 }

@@ -33,7 +33,7 @@ fn stored(r: &Region, out: &mut BTreeSet<VarId>) {
                 stored(reject, out);
             }
             Node::Block { body, .. } | Node::Loop { body, .. } => stored(body, out),
-            Node::Value(_) | Node::StoreOutput(..) => {}
+            Node::Value(_) | Node::StoreOutput(..) | Node::Demote => {}
         }
     }
 }
@@ -138,6 +138,7 @@ impl Promote<'_> {
                     self.set(var, x)?;
                 }
                 Node::StoreOutput(slot, mask, x) => out.push(Node::StoreOutput(slot, mask, self.sub(x))),
+                Node::Demote => out.push(Node::Demote),
                 Node::If {
                     cond,
                     accept,

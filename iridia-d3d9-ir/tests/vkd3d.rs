@@ -250,29 +250,41 @@ fn run(l: &Lifted, banks: &Banks, x: u32, y: u32, denormals: iridia_ir::Denormal
             by_id.push((r.id, rows.clone()));
             by_register.push((d.register, rows));
         }
-        let mut slots = Vec::new();
-        for v in &p.ir.interface.inputs {
-            slots.push(match v.system {
-                Some(SystemValue::FragCoord) => [x as f32 + 0.5, y as f32 + 0.5, 0.0, 1.0].map(f32::to_bits),
-                Some(SystemValue::FrontFacing) => [1, 0, 0, 0],
-                _ => return Err("an input the draw does not model".into()),
-            });
-        }
+        let slots = |x: u32, y: u32| -> Result<Vec<[u32; 4]>, String> {
+            p.ir.interface
+                .inputs
+                .iter()
+                .map(|v| match v.system {
+                    Some(SystemValue::FragCoord) => {
+                        Ok([x as f32 + 0.5, y as f32 + 0.5, 0.0, 1.0].map(f32::to_bits))
+                    }
+                    Some(SystemValue::FrontFacing) => Ok([1, 0, 0, 0]),
+                    _ => Err("an input the draw does not model".to_string()),
+                })
+                .collect()
+        };
         let mut no_textures =
             |_: iridia_exec_ir::Sample| -> Result<[f32; 4], String> { Err("a texture sample".into()) };
         let buffers: Vec<_> = by_id.iter().map(|(i, r)| (*i, r.as_slice())).collect();
         let banks: Vec<_> = by_register.iter().map(|(i, r)| (*i, r.as_slice())).collect();
-        let view = p.run(
-            &slots,
-            &mut harness::Bound {
-                buffers: &buffers,
-                state: &[],
-                sampler: &mut no_textures,
-                denormals,
-            },
-            &banks,
-            &mut NoTextures,
-        )?;
+        let mut bound = harness::Bound {
+            buffers: &buffers,
+            state: &[],
+            sampler: &mut no_textures,
+            denormals,
+        };
+        let view = if iridia_exec_ir::needs_quad(&p.ir) {
+            // the pixel's 2 x 2 quad, aligned to even coordinates as a rasterizer's are
+            let (left, top) = (x & !1, y & !1);
+            let quad = [(0, 0), (1, 0), (0, 1), (1, 1)].map(|(dx, dy)| slots(left + dx, top + dy));
+            let [a, b, c, d] = quad;
+            let (a, b, c, d) = (a?, b?, c?, d?);
+            let views = p.run_quad([&a, &b, &c, &d], &mut bound, &banks, &mut NoTextures)?;
+            let lane = (x & 1) + 2 * (y & 1);
+            views[lane as usize].clone()
+        } else {
+            p.run(&slots(x, y)?, &mut bound, &banks, &mut NoTextures)?
+        };
         let colour = (!view.killed).then(|| view.outputs.get(&l.target).copied().unwrap_or([0; 4]));
         Ok((colour, unset))
     };

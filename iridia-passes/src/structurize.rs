@@ -28,7 +28,7 @@ fn reads(f: &Function, b: &Block) -> Vec<ValueId> {
         match n {
             Node::Value(v) => out.extend(f.value(*v).map(|d| d.op.operands()).unwrap_or_default()),
             Node::StoreVar(_, x) | Node::StoreOutput(_, _, x) => out.push(*x),
-            Node::If { .. } | Node::Block { .. } | Node::Loop { .. } => {}
+            Node::Demote | Node::If { .. } | Node::Block { .. } | Node::Loop { .. } => {}
         }
     }
     let target = |t: &Target, out: &mut Vec<ValueId>| out.extend(t.args.iter().copied());
@@ -148,6 +148,7 @@ fn demote(f: &mut Function, blocks: &mut [Block]) -> Result<Vec<Vec<VarId>>, Str
                     }
                 }
                 Node::StoreVar(_, x) | Node::StoreOutput(_, _, x) => *x = sub(*x),
+                Node::Demote => {}
                 Node::If { .. } | Node::Block { .. } | Node::Loop { .. } => {
                     return Err(format!("block {i} holds a construct"));
                 }

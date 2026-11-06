@@ -63,7 +63,7 @@ impl Flat {
     fn region(&mut self, r: Region, join: Option<u32>) -> Result<(), String> {
         for node in r.nodes {
             match node {
-                Node::Value(_) | Node::StoreVar(..) | Node::StoreOutput(..) => {
+                Node::Value(_) | Node::StoreVar(..) | Node::StoreOutput(..) | Node::Demote => {
                     self.current()?.nodes.push(node)
                 }
                 Node::If {

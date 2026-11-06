@@ -41,7 +41,7 @@ mod validate;
 
 /// The version of the IR's meaning and text form: bumped when what a program means or how [`text`] prints it
 /// changes, so a program cached under an older one is stale.
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 
 pub use builder::Builder;
 pub use func::{

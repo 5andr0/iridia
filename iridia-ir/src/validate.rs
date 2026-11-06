@@ -460,6 +460,10 @@ impl Checker<'_> {
                 self.op(*v);
                 self.define(*v, false);
             }
+            Node::Demote if self.stage != Stage::Pixel => {
+                self.problem(None, "a demote outside a pixel program");
+            }
+            Node::Demote => {}
             Node::StoreVar(var, value) => {
                 self.uses(None, *value);
                 match (self.f.vars.get(var.0 as usize), self.ty(*value)) {
@@ -688,7 +692,10 @@ impl Checker<'_> {
                         self.node(node);
                         self.visible = saved;
                     }
-                    _ => self.problem(None, "a construct inside a graph block"),
+                    Node::Demote => self.node(node),
+                    Node::If { .. } | Node::Block { .. } | Node::Loop { .. } => {
+                        self.problem(None, "a construct inside a graph block")
+                    }
                 }
             }
             let targets: Vec<&crate::Target> = match &b.term {

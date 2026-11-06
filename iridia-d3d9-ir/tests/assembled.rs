@@ -27,8 +27,11 @@
 //!   `SV_Depth0`, `POSITION0` the clip position, `COLOR0`, `TEXCOORD0`, `FOG0`, `PSIZE0`). Lanes are floats (`nan`,
 //!   `inf`, `-0` included), `0x` bits, `true`/`false`, or integers for `i<n>`; an output's lanes are its own (those
 //!   of `o1.zw` are two), as many as given, compared bit for bit but for a NaN's sign and payload;
-//! - or `; unrun: <why>` for a program that runs cannot check (a derivative, which needs the invocation's quad that a
-//!   single run does not have): it is lifted and written every way, and not run.
+//! - `; quad: <run> | <run> | <run> | <run>`, a pixel program's 2 x 2 quad run together, each lane's inputs and outputs
+//!   as a `run:` states them (lanes 0 and 1 the top row, left to right; the lanes' constants and state the same): a
+//!   derivative is a difference between lanes, coarse for `dsx` and `dsy` as `iridia-exec` takes D3D's, and an
+//!   implicit-LOD sample is asked with the quad's coarse derivatives of its coordinate (`tex(...;grad:...)`; run
+//!   alone, the level is the sampler's, `tex(...;auto)`). A program that takes a derivative runs as a quad.
 mod fixtures;
 mod harness;
 
@@ -85,30 +88,46 @@ fn lanes(text: &str) -> Vec<u32> {
         .collect()
 }
 
-/// A fixture's statement of a run.
+/// A fixture's statement of a run: one invocation, or a quad's four.
 struct Run {
     line: String,
+    lanes: Vec<Lane>,
+}
+
+/// One invocation of a run.
+struct Lane {
     inputs: Vec<(String, Vec<u32>)>,
-    /// `None` where the run kills.
+    /// `None` where the invocation kills.
     outputs: Option<Vec<(String, Vec<u32>)>>,
+}
+
+impl Run {
+    /// The inputs the lanes share: the first lane's (`outputs` checks they all state the same constants and state).
+    fn shared(&self) -> &Lane {
+        &self.lanes[0]
+    }
 }
 
 /// A fixture's comments: the lift's options and the runs.
 struct Statement {
     options: iridia_d3d9_ir::Options,
     runs: Vec<Run>,
-    /// Why the program is not run, where it is not.
-    unrun: Option<String>,
 }
 
 fn statement(source: &str) -> Statement {
     let options = fixtures::lift_options(source);
     let mut runs = Vec::new();
-    let mut unrun = None;
     for line in source.lines().map(str::trim) {
-        if let Some(why) = line.strip_prefix("; unrun:") {
-            unrun = Some(why.trim().to_owned());
-        } else if let Some(rest) = line.strip_prefix("; run:") {
+        let stated = if let Some(rest) = line.strip_prefix("; run:") {
+            vec![rest]
+        } else if let Some(rest) = line.strip_prefix("; quad:") {
+            let stated: Vec<&str> = rest.split('|').collect();
+            assert_eq!(stated.len(), 4, "a quad of other than four lanes: {line}");
+            stated
+        } else {
+            continue;
+        };
+        let lane = |rest: &str| {
             let (given, expected) = rest.split_once("->").unwrap();
             let pairs = |text: &str| {
                 text.split_whitespace()
@@ -129,14 +148,17 @@ fn statement(source: &str) -> Statement {
                     })
                     .collect::<Vec<_>>()
             };
-            runs.push(Run {
-                line: line.to_owned(),
+            Lane {
                 inputs: pairs(given),
                 outputs: (expected.trim() != "kill").then(|| pairs(expected)),
-            });
-        }
+            }
+        };
+        runs.push(Run {
+            line: line.to_owned(),
+            lanes: stated.into_iter().map(lane).collect(),
+        });
     }
-    Statement { options, runs, unrun }
+    Statement { options, runs }
 }
 
 fn label(v: &iridia_ir::interface::Varying) -> String {
@@ -164,7 +186,7 @@ struct Bindings {
     state: Vec<(ResourceId, [u32; 4])>,
 }
 
-fn bind(interface: &Interface, run: &Run) -> Result<Bindings, String> {
+fn bind(interface: &Interface, run: &Lane) -> Result<Bindings, String> {
     let mut slots = vec![[0u32; 4]; interface.inputs.len()];
     let mut words: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
     let mut state = Vec::new();
@@ -241,70 +263,115 @@ fn packed(interface: &Interface, view: &harness::View) -> BTreeMap<String, [u32;
     out
 }
 
-/// A run of every form of `p`; its outputs by label, or `None` where it kills.
-fn outputs(p: &Prepared, run: &Run) -> Result<Option<BTreeMap<String, [u32; 4]>>, String> {
+/// Each lane's outputs by label, `None` where it kills.
+type Outputs = Vec<Option<BTreeMap<String, [u32; 4]>>>;
+
+/// A run's lanes bound to an interface: each lane's, which must share their constants and state.
+fn bind_all(interface: &Interface, run: &Run) -> Result<Vec<Bindings>, String> {
+    let all: Vec<Bindings> = run
+        .lanes
+        .iter()
+        .map(|l| bind(interface, l))
+        .collect::<Result<_, _>>()?;
+    if all
+        .iter()
+        .any(|b| b.banks != all[0].banks || b.state != all[0].state)
+    {
+        return Err(format!(
+            "{}: the quad's lanes state different constants or state",
+            run.line
+        ));
+    }
+    Ok(all)
+}
+
+/// Each lane's slots, as a quad's four.
+fn quad(all: &[Bindings]) -> Result<[&[[u32; 4]]; 4], String> {
+    let [a, b, c, d] = all else {
+        return Err("a quad of other than four lanes".into());
+    };
+    Ok([&a.slots, &b.slots, &c.slots, &d.slots])
+}
+
+/// Each lane's outputs of a view.
+fn lanes_of(interface: &Interface, views: &[harness::View]) -> Outputs {
+    views
+        .iter()
+        .map(|v| (!v.killed).then(|| packed(interface, v)))
+        .collect()
+}
+
+/// A run of every form of `p`: one invocation, or a quad.
+fn outputs(p: &Prepared, run: &Run) -> Result<Outputs, String> {
     let interface = &p.ir.interface;
-    let b = bind(interface, run)?;
+    let all = bind_all(interface, run)?;
+    let b = &all[0];
     let by_id: Vec<_> = b.banks.iter().map(|(i, _, d)| (*i, d.as_slice())).collect();
     let by_register: Vec<_> = b.banks.iter().map(|(_, r, d)| (*r, d.as_slice())).collect();
     let mut sampler = ir_texels(interface);
-    let view = p.run(
-        &b.slots,
-        &mut Bound {
-            buffers: &by_id,
-            state: &b.state,
-            sampler: &mut sampler,
-            denormals: iridia_ir::Denormals::Any,
-        },
-        &by_register,
-        &mut Texels,
-    )?;
-    if view.killed {
-        return Ok(None);
-    }
-    Ok(Some(packed(interface, &view)))
+    let mut bound = Bound {
+        buffers: &by_id,
+        state: &b.state,
+        sampler: &mut sampler,
+        denormals: iridia_ir::Denormals::Any,
+    };
+    let views = if all.len() == 1 {
+        vec![p.run(&b.slots, &mut bound, &by_register, &mut Texels)?]
+    } else {
+        p.run_quad(quad(&all)?, &mut bound, &by_register, &mut Texels)?
+            .to_vec()
+    };
+    Ok(lanes_of(interface, &views))
 }
 
 /// The IR run alone of a program with pipeline state that has no WGSL form (a texture stage of unknown dimension).
-fn ir_outputs(p: &iridia_ir::Program, run: &Run) -> Result<Option<BTreeMap<String, [u32; 4]>>, String> {
-    let b = bind(&p.interface, run)?;
+fn ir_outputs(p: &iridia_ir::Program, run: &Run) -> Result<Outputs, String> {
+    let all = bind_all(&p.interface, run)?;
+    let b = &all[0];
     let by_id: Vec<_> = b.banks.iter().map(|(i, _, d)| (*i, d.as_slice())).collect();
     let mut sampler = ir_texels(&p.interface);
-    let view = harness::run_ir(
-        p,
-        &b.slots,
-        &mut Bound {
-            buffers: &by_id,
-            state: &b.state,
-            sampler: &mut sampler,
-            denormals: iridia_ir::Denormals::Any,
-        },
-    )?;
-    if view.killed {
-        return Ok(None);
-    }
-    Ok(Some(packed(&p.interface, &view)))
+    let mut bound = Bound {
+        buffers: &by_id,
+        state: &b.state,
+        sampler: &mut sampler,
+        denormals: iridia_ir::Denormals::Any,
+    };
+    let views = if all.len() == 1 {
+        vec![harness::run_ir(p, &b.slots, &mut bound)?]
+    } else {
+        harness::run_ir_quad(p, quad(&all)?, &mut bound)?.to_vec()
+    };
+    Ok(lanes_of(&p.interface, &views))
 }
 
-/// Whether a run's outputs are what it states; what differs if not.
-fn check(run: &Run, got: &Option<BTreeMap<String, [u32; 4]>>) -> Result<(), String> {
-    match (&run.outputs, got) {
+/// Whether a run's outputs are what it states, lane by lane; what differs if not.
+fn check(run: &Run, got: &Outputs) -> Result<(), String> {
+    for (l, (lane, got)) in run.lanes.iter().zip(got).enumerate() {
+        let at = if run.lanes.len() > 1 {
+            format!("{} lane {l}", run.line)
+        } else {
+            run.line.clone()
+        };
+        check_lane(&at, lane, got)?;
+    }
+    Ok(())
+}
+
+fn check_lane(at: &str, lane: &Lane, got: &Option<BTreeMap<String, [u32; 4]>>) -> Result<(), String> {
+    match (&lane.outputs, got) {
         (None, None) => Ok(()),
-        (None, Some(g)) => Err(format!("{}: expected a kill, got {g:x?}", run.line)),
-        (Some(_), None) => Err(format!("{}: killed", run.line)),
+        (None, Some(g)) => Err(format!("{at}: expected a kill, got {g:x?}")),
+        (Some(_), None) => Err(format!("{at}: killed")),
         (Some(want), Some(got)) => {
             for (name, lanes) in want {
-                let have = got
-                    .get(name)
-                    .ok_or_else(|| format!("{}: no output {name}", run.line))?;
+                let have = got.get(name).ok_or_else(|| format!("{at}: no output {name}"))?;
                 // a NaN's sign and payload are not stated by IEEE 754 but for the sign operations
                 let alike = |(&x, &y): (&u32, &u32)| {
                     x == y || f32::from_bits(x).is_nan() && f32::from_bits(y).is_nan()
                 };
                 if !have[..lanes.len()].iter().zip(lanes).all(alike) {
                     return Err(format!(
-                        "{}: {name} is {:?} ({:x?}), expected {:?}",
-                        run.line,
+                        "{at}: {name} is {:?} ({:x?}), expected {:?}",
                         have[..lanes.len()]
                             .iter()
                             .map(|&b| f32::from_bits(b))
@@ -359,11 +426,17 @@ fn fixture(folder: &Path, name: &str) -> Result<(), String> {
     }
     let statement = statement(&source);
     let ir = iridia_d3d9_ir::lift_with(&bytes, &statement.options).map_err(|e| format!("lift: {e}"))?;
-    match (statement.runs.is_empty(), &statement.unrun) {
-        (true, None) => return Err("states no run, and no reason it has none".into()),
-        (false, Some(_)) => return Err("states runs and a reason it has none".into()),
-        (true, Some(_)) => return prepare(ir).map(drop),
-        (false, None) => {}
+    if statement.runs.is_empty() {
+        return Err("states no run".into());
+    }
+    // an implicit-LOD sample runs alone too, its level the sampler's; a derivative has no value but in a quad
+    let derivative = ir
+        .entry
+        .values
+        .iter()
+        .any(|d| matches!(d.op, iridia_ir::Op::Unary(iridia_ir::Unary::Derivative(..), _)));
+    if derivative && statement.runs.iter().any(|r| r.lanes.len() != 4) {
+        return Err("takes a derivative, and states a run that is not a quad".into());
     }
     let reads_state = ir
         .interface
@@ -387,7 +460,7 @@ fn fixture(folder: &Path, name: &str) -> Result<(), String> {
         let specialised = specialise_by(unknown.clone(), run).map_err(|e| format!("specialised: {e}"))?;
         check(run, &outputs(&specialised, run)?).map_err(|e| format!("specialised: {e}"))?;
         let mut stated = statement.options.clone();
-        for (name, value) in &run.inputs {
+        for (name, value) in &run.shared().inputs {
             if let Some(n) = name.strip_prefix("texdim") {
                 let d = [TextureDim::D1, TextureDim::D2, TextureDim::D3, TextureDim::Cube]
                     .into_iter()
@@ -408,7 +481,7 @@ fn fixture(folder: &Path, name: &str) -> Result<(), String> {
 
 /// `p` specialised by the pipeline state `run` gives, prepared to run every way.
 fn specialise_by(mut p: iridia_ir::Program, run: &Run) -> Result<Prepared, String> {
-    let known: Vec<(ResourceId, [u64; 4])> = bind(&p.interface, run)?
+    let known: Vec<(ResourceId, [u64; 4])> = bind(&p.interface, run.shared())?
         .state
         .iter()
         .map(|(id, lanes)| (*id, lanes.map(u64::from)))

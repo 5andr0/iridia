@@ -7,11 +7,19 @@
   and boolean constants, flow control and predication, `aL`-relative inputs and 3.0 outputs, derivatives and explicit
   level and gradient sampling. Its CTAB reading lays out structs, arrays and matrices of every register set as the
   compiler allocates them. A multiply is zero-wins by default (`Options::multiply`, IEEE by choice). Projection leaves
-  a cube coordinate as it is, and `texdepth` takes r5.g as 1 past 1, as wined3d. `LIFTER_VERSION` is 3.
-- `iridia-d3d9-ir`'s tests: 103 one-feature programs assembled by Microsoft's `D3DAssemble`
+  a cube coordinate as it is, and `texdepth` takes r5.g as 1 past 1, as wined3d. `texkill` demotes the pixel, which
+  goes on as a helper its quad's derivatives read. `LIFTER_VERSION` is 4.
+- `iridia-ir`: `Node::Demote` discards a pixel program's invocation without ending it (a helper of its quad from
+  there); `End::Kill` demotes and ends. `iridia_ir::VERSION` is 2. `iridia-naga` writes `Demote` as WGSL's `discard`
+  and `Kill` as `discard` and a return.
+- `iridia-exec-ir` runs a pixel program's 2 x 2 quad (`run_quad`): coarse and fine derivatives, implicit-LOD samples
+  with the quad's derivatives (`Lod::Grad`, `Lod::GradBias`), demoted lanes as helpers, divergent lanes refused;
+  `needs_quad` says whether a program needs it.
+- `iridia-d3d9-ir`'s tests: 105 one-feature programs assembled by Microsoft's `D3DAssemble`
   (`tests/assembled`, rebuilt by `tests/oracles/assemble.py`) run as their comments state, and vkd3d's Direct3D 9
-  shader tests (`tests/vkd3d`) run and probe; each in the IR, its control flow graph, that graph structured again and
-  WGSL. `tests/versions.tsv` gates the lifter version on all of them, 1,207 programs.
+  shader tests (`tests/vkd3d`) run and probe, a program with a derivative as a quad; each in the IR, its control flow
+  graph, that graph structured again and WGSL. `tests/versions.tsv` gates the lifter version on all of them, 1,209
+  programs.
 - `iridia-passes`: `flatten` turns structured regions into a control flow graph, the inverse of `structurize`, which no
   longer drops a body that is already structured; `specialise` takes away the textures only a folded branch sampled.
 - `iridia-naga` reads a constant at a fixed address at any 32-bit word, and a zero-wins multiply of vectors validates.

@@ -270,6 +270,10 @@ impl Printer<'_> {
                 self.indent();
                 let _ = writeln!(self.out, "output {slot}.{} = %{}", lanes(*mask), v.0);
             }
+            Node::Demote => {
+                self.indent();
+                self.out.push_str("demote\n");
+            }
             Node::If {
                 cond,
                 accept,

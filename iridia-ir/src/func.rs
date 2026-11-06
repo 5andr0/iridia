@@ -56,6 +56,10 @@ pub enum Node {
     /// within the varying's width), in ascending order, from the value's lanes in order. The value has the varying's
     /// scalar type and one lane per lane written. A lane never written is zero when the program returns.
     StoreOutput(u32, u8, ValueId),
+    /// Discards the invocation of a pixel program (D3D's `texkill` and `discard`, WGSL's `discard`) without ending
+    /// it: it goes on as a helper invocation, which its quad's derivatives still read, and its later output stores have
+    /// no effect. It ends as killed, with the outputs it stored before.
+    Demote,
     /// Two-way choice. Each arm ends in a yield of the results' values, or an exit that leaves it.
     If {
         /// A scalar bool.
@@ -102,7 +106,7 @@ pub enum End {
     Continue(LabelId, Vec<ValueId>),
     /// Leaves the function.
     Return,
-    /// Discards the invocation (a pixel program's `discard`, which ends it).
+    /// Discards the invocation and ends it: [`Node::Demote`] then `Return`.
     Kill,
     /// Cannot be reached.
     Unreachable,
