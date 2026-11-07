@@ -322,3 +322,10 @@ fn sixteen_bit_lanes_of_a_structured_buffer_are_refused() {
         );
     }
 }
+
+/// `Texture2DMS::GetDimensions` reads the sample count from the fourth lane of DXIL's `getDimensions`, which is the
+/// level count only for a texture that is not multisampled.
+#[test]
+fn a_multisampled_texture_states_its_sample_count() {
+    assert_selected_pass(&vkd3d_runs("vkd3d/dxil.json.gz", "getdimensions.shader_test"));
+}

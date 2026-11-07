@@ -1233,7 +1233,8 @@ impl Lift<'_> {
         )
     }
 
-    /// `GetDimensions(handle, mip)`: width, height, depth or layers, and the number of levels.
+    /// `GetDimensions(handle, mip)`: width, height, depth or layers, and the number of levels, or of samples for a
+    /// multisampled texture (where dxc reads `Texture2DMS::GetDimensions`'s sample count).
     pub(super) fn get_dimensions(&mut self, inst: &Instruction, args: &[ValueId]) -> Result<()> {
         let class = match self.get(self.arg(args, 1)?)? {
             Lv::Handle { class, .. } => class,
@@ -1266,7 +1267,16 @@ impl Lift<'_> {
             kind: Kind::U,
             width: dims,
         };
-        let levels = if multi || class != 0 {
+        let levels = if multi {
+            Val {
+                expr: self.b.app(E::ImageQuery {
+                    image: g,
+                    query: ImageQuery::NumSamples,
+                }),
+                kind: Kind::U,
+                width: Width::One,
+            }
+        } else if class != 0 {
             self.b.lit_u(1)
         } else {
             Val {
