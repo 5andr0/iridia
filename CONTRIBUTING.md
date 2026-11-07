@@ -15,6 +15,21 @@ The examples in the crate READMEs are checked: each crate's README is run as a d
 
 ## Before pushing
 
+Run the full check on the gate configuration, then the slim gate below:
+
+```sh
+GAME_DATA=<the gate configuration> scripts/check.sh
+```
+
+`scripts/check.sh` runs fmt, clippy, every test, the doc tests and the docs, each step timed, and fails when any step
+does. With [cargo-nextest](https://nexte.st) installed (`cargo install cargo-nextest`) it runs the tests as
+`cargo nextest run --workspace --locked --release` (each test its own process, the test binaries in parallel;
+`.config/nextest.toml` names the slow ones) and the doc tests, which nextest does not run, as
+`cargo test --workspace --locked --release --doc`: about 9 minutes warm on the gate configuration, where one
+`cargo test` took 38. Without it, `cargo test --workspace --locked --release`. Tests in parallel processes are safe: each
+takes its own scratch folder (`own_scratch`), and the WARP oracle is held by one test at a time (`warp_exclusive`, a
+machine-wide file lock). Without `GAME_DATA` the tests that read game data skip, as on CI.
+
 Run the slim shader set through every lifter and quote its counts in the push's report:
 
 ```sh

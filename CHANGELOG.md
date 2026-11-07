@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Contributing: `scripts/check.sh` runs the full check (fmt, clippy, every test, the doc tests, the docs), the tests
+  under cargo-nextest where it is installed (`.config/nextest.toml`): about 9 minutes warm on the gate configuration,
+  where one `cargo test` took 38.
 - The dx readers are 0.11.0 (`d3d9-reader`, `dxbc-reader`, `dxil-reader`, `dxcontainer`; before, 0.5.0). The
   `d3d9-reader` types `iridia-d3d9` and `iridia-d3d9-ir` re-export (`Comment`, `Constant`, `ConstantTable`, `Type`,
   `TypeMember`, `Comparison`, `Opcode`, `Version`) are 0.11.0's. A DXIL resource whose lower bound or tag is -1 (an

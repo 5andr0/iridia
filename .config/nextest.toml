@@ -1,0 +1,7 @@
+# cargo-nextest's settings for this workspace (`cargo nextest run`; CONTRIBUTING.md's full check).
+[profile.default]
+# The real-data tests take minutes each: name the slow ones as they run and again at the end.
+slow-timeout = { period = "60s" }
+final-status-level = "slow"
+# Run every test to the end, so one run names every failure.
+fail-fast = false
