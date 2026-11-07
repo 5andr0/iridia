@@ -53,11 +53,6 @@ Of 116,928 runs, 85,846 had their outputs compared and 31,082 were killed in all
 83 programs kill on every run (such as a `texkill` of a negative constant); for those the three agree that they kill,
 and nothing more is compared. The other 7,225 agree in every output lane, bit for bit, on every run.
 
-How sensitive the harness is: with the first placed float addition of each program made a subtraction in B, 5,904
-programs disagree. Of those that do not, 57 kill on every run, 1,327 take the changed value through data flow that does
-not see it on these inputs (an absolute value, a maximum, a comparison into a select; one was traced by hand), and 20
-have no float addition.
-
 ## Every WGSL difference, by class
 
 The bodies differ; the declarations do not. Each program's old and new body were reduced to the multiset of operations

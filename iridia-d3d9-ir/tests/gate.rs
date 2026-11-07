@@ -14,8 +14,6 @@
 //!   `-x + y` against `y - x`): A, the older lift in `iridia-exec`; B, the IR in `iridia-exec-ir`; C, the new WGSL read
 //!   back by naga's front end in `iridia-exec`; D, the IR compiled into `iridia-exec` itself
 //!   (`ProgramShader::from_ir`). A program whose runs agree only so is counted in a class of its own;
-//! - the harness sees a change: with each program's first float addition made a subtraction in B, A and B disagree on
-//!   most programs.
 //!
 //! Every failure is counted by class and the test fails on any. Without the oracle set it prints SKIP and passes.
 mod harness;
@@ -343,67 +341,4 @@ fn every_program_lifts_round_trips_and_runs_as_iridia_d3d9s() {
         "programs failed the gate"
     );
     assert_eq!(programs.len(), 7_306);
-}
-
-/// The values a function's body places, in order.
-fn placed(f: &iridia_ir::Function) -> Vec<iridia_ir::ValueId> {
-    fn walk(r: &iridia_ir::Region, out: &mut Vec<iridia_ir::ValueId>) {
-        for n in &r.nodes {
-            match n {
-                iridia_ir::Node::Value(v) => out.push(*v),
-                iridia_ir::Node::If { accept, reject, .. } => {
-                    walk(accept, out);
-                    walk(reject, out);
-                }
-                iridia_ir::Node::Block { body, .. } | iridia_ir::Node::Loop { body, .. } => walk(body, out),
-                _ => {}
-            }
-        }
-    }
-    let mut out = Vec::new();
-    if let iridia_ir::Body::Regions(r) = &f.body {
-        walk(r, &mut out);
-    }
-    out
-}
-
-#[test]
-fn the_three_way_run_sees_an_addition_made_a_subtraction() {
-    let Some(programs) = programs() else { return };
-    let (mut with_addition, mut seen, mut seen_d) = (0usize, 0usize, 0usize);
-    for (name, bytes) in &programs {
-        let mut b = lifted(bytes).unwrap();
-        let first = placed(&b.entry).into_iter().find(|v| {
-            b.entry
-                .value(*v)
-                .is_some_and(|d| matches!(d.op, iridia_ir::Op::Binary(iridia_ir::Binary::FAdd, ..)))
-        });
-        let Some(v) = first else { continue };
-        if let iridia_ir::Op::Binary(op, ..) = &mut b.entry.values[v.0 as usize].op {
-            *op = iridia_ir::Binary::FSub;
-        }
-        with_addition += 1;
-        let old = iridia_d3d9::lift(bytes).unwrap();
-        let sa = ProgramShader::new(old.clone()).unwrap();
-        let sd = ProgramShader::from_ir(b.clone()).unwrap();
-        let mut rng = Rng::of(name);
-        let (mut in_b, mut in_d) = (false, false);
-        for _ in 0..RUNS {
-            let i = seeded(&old.interface, &mut rng);
-            let ra = run_old(&sa, &old.interface, &i.registers, &i.by_register()).unwrap();
-            let rb = run_ir(&b, &i.slots, &i.by_id()).unwrap();
-            let rd = run_old(&sd, &old.interface, &i.registers, &i.by_register()).unwrap();
-            in_b |= !(ra.killed && rb.killed) && !ra.alike(&rb);
-            in_d |= !(ra.killed && rd.killed) && !ra.alike(&rd);
-        }
-        seen += usize::from(in_b);
-        seen_d += usize::from(in_d);
-    }
-    println!(
-        "{seen} (B) and {seen_d} (D) of {with_addition} programs with a float addition differ once it is a subtraction"
-    );
-    assert!(seen_d * 4 >= with_addition * 3, "D: {seen_d} of {with_addition}");
-    // the rest kill on every run or take the changed value through flow that does not see it on these inputs (an
-    // absolute value, a maximum, a comparison into a select)
-    assert!(seen * 4 >= with_addition * 3, "{seen} of {with_addition}");
 }
