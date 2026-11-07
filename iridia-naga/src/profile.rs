@@ -14,13 +14,24 @@ use naga::valid::Capabilities;
 
 use crate::Error;
 
-/// What a target lets a module use: the naga capabilities its validator runs with.
+/// How a target binds a program's resources (see [`crate::BindingPlan::for_profile`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Bindings {
+    /// Direct3D's registers as they are ([`crate::BindingPlan::d3d`]).
+    D3d,
+    /// Inside WebGPU's default limits ([`crate::BindingPlan::webgpu`]).
+    WebGpu,
+}
+
+/// What a target lets a module use: the naga capabilities its validator runs with, and how it binds resources.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Profile {
     /// The target's name, as refusals spell it.
     pub name: &'static str,
     /// The capabilities a module may use.
     pub capabilities: Capabilities,
+    /// How [`crate::wgsl`] binds the program's resources.
+    pub bindings: Bindings,
 }
 
 impl Profile {
@@ -37,15 +48,18 @@ impl Profile {
             .union(Capabilities::CLIP_DISTANCES)
             .union(Capabilities::SUBGROUP)
             .union(Capabilities::SUBGROUP_VERTEX_STAGE),
+        bindings: Bindings::D3d,
     };
 
     /// WebGPU's core WGSL: per-sample shading (`sample_index`, `@interpolate(..., sample)`) and cube array textures
     /// are core; `f16` (`shader-f16`), `primitive_index` (`primitive-index`) and the subgroup operations
     /// (`subgroups`, `Capabilities::SUBGROUP`) are optional device features a consumer adds with [`Profile::with`]
-    /// when its device has them; WGSL has no 64-bit or 16-bit integers and no `f64`.
+    /// when its device has them; WGSL has no 64-bit or 16-bit integers and no `f64`. Resources bind inside WebGPU's
+    /// default limits.
     pub const BROWSER: Profile = Profile {
         name: "browser WGSL",
         capabilities: Capabilities::MULTISAMPLED_SHADING.union(Capabilities::CUBE_ARRAY_TEXTURES),
+        bindings: Bindings::WebGpu,
     };
 
     /// This profile with `capabilities` allowed too.
@@ -54,6 +68,7 @@ impl Profile {
         Profile {
             name: self.name,
             capabilities: self.capabilities.union(capabilities),
+            bindings: self.bindings,
         }
     }
 }

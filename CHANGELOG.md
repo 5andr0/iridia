@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `iridia-naga`: `BindingPlan::webgpu` binds inside WebGPU's default limits (four bind groups, bindings below 1000):
+  a register of space 0 at its number, the registers of other spaces after the largest binding of their group, and the
+  hidden counters of structured views in group 3 after its views (`BindingPlan::d3d` put them in group 4, and other
+  spaces at `(space << 16) | register`, both past the limits); a binding it would place at 1000 or past is refused by
+  name. `Profile` states how `wgsl` binds (`Profile::bindings`, `Bindings::{D3d, WebGpu}`): `BROWSER` with the WebGPU
+  plan, `NAGA` with the D3D one; `BindingPlan::for_profile` gives a profile's plan.
 - `iridia-ir`: wave and quad operations, `Op::Wave` (`Wave`: a ballot, a read of the first active invocation's
   value, of another invocation's or of another of the quad's, and a reduction or scan of a value over the active
   invocations, `WaveOp` and `WaveScan`), in the text form as `wave.ballot`, `wave.first`, `wave.lane`,
