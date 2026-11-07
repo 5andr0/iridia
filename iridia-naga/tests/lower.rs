@@ -465,6 +465,57 @@ fn a_texel_atomic_naga_s_image_atomic_cannot_carry_is_refused_by_name() {
 }
 
 #[test]
+fn a_sample_position_is_read_from_direct3d_s_standard_table() {
+    let texture = Resource {
+        id: ResourceId(0),
+        kind: ResourceKind::Texture {
+            dim: TextureDim::D2,
+            arrayed: false,
+            multisampled: true,
+            sample: SampleType::Float,
+        },
+        count: 1,
+        provenance: ResourceProvenance {
+            name: "msaa".into(),
+            d3d: Some(D3dBinding {
+                class: D3dClass::ShaderResource,
+                register: 0,
+                space: 0,
+            }),
+            ..ResourceProvenance::default()
+        },
+    };
+    let p = program(
+        "iridia-ir 1
+fn main {
+  %0: vec4<f32> = input 0.xyzw
+  %1: vec4<u32> = bitcast %0
+  %2: u32 = %1.x
+  %3: vec2<f32> = query.sampleposition r0 index %2
+  output 0.xy = %3
+  return
+}
+",
+        &[F4],
+        &[(ScalarType::Float, 2)],
+        vec![texture],
+    );
+    // a table of every standard count's positions, its rows from the texture's sample count; core WGSL
+    let wgsl = iridia_naga::wgsl(&p, &iridia_naga::Profile::BROWSER).unwrap();
+    assert!(
+        wgsl.contains(
+            "var<private> sample_positions: array<vec2<f32>, 31> = array<vec2<f32>, 31>(vec2<f32>(0f, 0f), "
+        ),
+        "{wgsl}"
+    );
+    // the 16-sample pattern's last position, (-7, -8) sixteenths
+    assert!(wgsl.contains("vec2<f32>(-0.4375f, -0.5f))"), "{wgsl}");
+    assert!(wgsl.contains("textureNumSamples(t0_)"), "{wgsl}");
+    let module = naga::front::wgsl::parse_str(&wgsl).unwrap_or_else(|e| panic!("{e}\n{wgsl}"));
+    iridia_naga::validate(&module, &iridia_naga::Profile::BROWSER).unwrap_or_else(|e| panic!("{e}\n{wgsl}"));
+}
+
+#[test]
 fn browser_wgsl_enables_the_subgroups_it_uses() {
     let p = program(
         "iridia-ir 1

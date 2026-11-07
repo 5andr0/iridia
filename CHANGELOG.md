@@ -37,6 +37,13 @@
   text it was). Behaviour: a pixel program's lane index and lane count are carried as `u32` (the built-ins' type) by
   `iridia-naga` too, and `iridia`'s refusal of a used clip or cull distance outside a vertex program's outputs reads
   "a clip or cull distance as a Pixel input has no built-in", as `iridia-naga`'s did.
+- `iridia-naga` lowers the sample position query (`Query::SamplePosition`, HLSL's `GetSamplePosition`): a private
+  table of Direct3D's 31 standard positions (`sample_positions`, from `iridia_ir::standard_sample_position`), read at
+  the texture's sample count's rows; (0, 0) for an index past the texture's samples or a count with no standard
+  pattern. It is core WGSL. It was refused ("query SamplePosition(ValueId(N)) of a D2 image"); a query of something
+  an image does not have is refused in words ("a query of the layers of a D2 texture, which has none"). Run lowered
+  in `iridia-exec` for counts 1, 2, 4, 8 and 16, every index and past it, and counts 0, 3, 6 and 32, each position is
+  the IR's.
 - `iridia-naga` lowers an atomic of a storage image's texel whose old value nothing reads: naga's image atomic
   (`textureAtomicAdd` and the others) on an `r32uint` or `r32sint` image of WGSL's `atomic` access, where the texel
   is inside the image. A subtraction is the addition of the negation; a minimum or maximum is of the texels'

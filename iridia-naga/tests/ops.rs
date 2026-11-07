@@ -4,17 +4,23 @@
 
 #![allow(clippy::unwrap_used, reason = "hand-worked fixtures")]
 
-use iridia_exec::{PixelShader, ProgramShader, Sample, Sampler};
+use iridia_exec::{ImageQuery, PixelShader, ProgramShader, QueryKind, Sample, Sampler};
 use iridia_ir::{
     FloatEnv, Program, Provenance,
     interface::{
-        D3dSignature, Interface, Label, ScalarType, ShaderFormat, Stage, StageFacts, SystemValue, Value,
-        Varying, VaryingProvenance,
+        D3dBinding, D3dClass, D3dSignature, Interface, Label, Resource, ResourceId, ResourceKind,
+        ResourceProvenance, SampleType, ScalarType, ShaderFormat, Stage, StageFacts, SystemValue, TextureDim,
+        Value, Varying, VaryingProvenance,
     },
 };
 
 /// Three `vec4<u32>` inputs in registers 0 to 2, one `vec4<u32>` target.
 fn program(body: &str) -> Program {
+    program_with(body, Vec::new())
+}
+
+/// [`program`] with these resources.
+fn program_with(body: &str, resources: Vec<Resource>) -> Program {
     let text = format!("iridia-ir 1\nfn main {{\n{body}  return\n}}\n");
     let entry = iridia_ir::text::parse(&text).unwrap_or_else(|e| panic!("{e}\n{text}"));
     let varying = |name: &str, register: u32, system: Option<SystemValue>| Varying {
@@ -46,7 +52,7 @@ fn program(body: &str) -> Program {
             stage: Stage::Pixel,
             inputs: (0..3).map(|r| varying("TEXCOORD", r, None)).collect(),
             outputs: vec![varying("SV_Target", 0, Some(SystemValue::Target(0)))],
-            resources: Vec::new(),
+            resources,
             facts: StageFacts::default(),
         },
         conventions: iridia_ir::Conventions::D3D,
@@ -294,4 +300,81 @@ fn ternary_and_bit_insert_lower_to_their_definitions() {
         "  %0: vec4<u32> = input 0.xyzw\n  %1: vec4<u32> = input 1.xyzw\n  %2: vec4<u32> = input 2.xyzw\n  %3: vec4<f32> = bitcast %0\n  %4: vec4<f32> = bitcast %1\n  %5: vec4<f32> = bitcast %2\n  %6: vec4<f32> = fma %3, %4, %5\n  %7: vec4<u32> = bitcast %6\n  output 0.xyzw = %7\n".into(),
     ];
     check(&cases);
+}
+
+/// A multisampled texture of the sample count given, which answers nothing else.
+struct Samples(u32);
+impl Sampler for Samples {
+    fn sample(&mut self, _: Sample) -> Result<[f32; 4], String> {
+        Err("no samples".into())
+    }
+    fn query_image(&mut self, r: ImageQuery<u32>) -> Result<[u32; 4], String> {
+        match r.kind {
+            QueryKind::Samples => Ok([self.0, 0, 0, 0]),
+            other => Err(format!("t{}: no {other:?} given", r.texture)),
+        }
+    }
+}
+
+#[test]
+fn a_sample_position_is_direct3d_s_standard_one_for_every_count() {
+    let texture = Resource {
+        id: ResourceId(0),
+        kind: ResourceKind::Texture {
+            dim: TextureDim::D2,
+            arrayed: false,
+            multisampled: true,
+            sample: SampleType::Float,
+        },
+        count: 1,
+        provenance: ResourceProvenance {
+            name: "msaa".into(),
+            d3d: Some(D3dBinding {
+                class: D3dClass::ShaderResource,
+                register: 0,
+                space: 0,
+            }),
+            ..ResourceProvenance::default()
+        },
+    };
+    let p = program_with(
+        "  %0: vec4<u32> = input 0.xyzw\n  %1: u32 = %0.x\n  %2: vec2<f32> = query.sampleposition r0 index %1\n  %3: vec2<u32> = bitcast %2\n  output 0.xy = %3\n",
+        vec![texture],
+    );
+    let wgsl = iridia_naga::wgsl(&p, &iridia_naga::Profile::NAGA).unwrap();
+    let mut program = from_wgsl(&p, &wgsl);
+    let (t0, _) = program
+        .module
+        .global_variables
+        .iter()
+        .find(|(_, g)| g.name.as_deref() == Some("t0_"))
+        .unwrap_or_else(|| panic!("no t0_\n{wgsl}"));
+    program.bindings = vec![(ResourceId(0), t0)];
+    let shader = ProgramShader::new(program).unwrap_or_else(|e| panic!("{e}\n{wgsl}"));
+    // Direct3D's four-sample pattern, in sixteenths of a pixel, as its documentation gives it
+    let four = [(-2, -6), (6, -2), (-6, 2), (2, 6)]
+        .map(|(x, y): (i8, i8)| [f32::from(x) / 16.0, f32::from(y) / 16.0]);
+    for (index, want) in (0..).zip(four) {
+        assert_eq!(iridia_ir::standard_sample_position(4, index), Some(want));
+    }
+    // every index of every standard count, the indices past each, and counts with no standard pattern: (0, 0)
+    let mut checked = 0;
+    for count in [1, 2, 4, 8, 16, 0, 3, 6, 32] {
+        for index in (0..count + 2).chain([u32::MAX]) {
+            let want = iridia_ir::standard_sample_position(count, index).unwrap_or([0.0, 0.0]);
+            let given = [[index, 0, 0, 0], [0; 4], [0; 4]];
+            let c = shader
+                .execute(&given, &[], &mut Samples(count))
+                .unwrap_or_else(|e| panic!("{e}\n{wgsl}"));
+            let got = c.outputs.first().copied().unwrap_or([0; 4]);
+            assert_eq!(
+                [got[0], got[1]],
+                want.map(f32::to_bits),
+                "sample {index} of {count}\n{wgsl}"
+            );
+            checked += 1;
+        }
+    }
+    // 31 standard positions, 2 past and 1 far past each of the 9 counts' samples, 0 + 3 + 6 + 32 non-standard
+    assert_eq!(checked, 31 + 9 * 3 + 41);
 }

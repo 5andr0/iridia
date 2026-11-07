@@ -12,12 +12,16 @@ use iridia_ir::{
     interface::{ResourceKind, SampleType, StorageTarget, TextureDim},
 };
 use naga::{
-    AtomicFunction, BinaryOperator as Bo, Block, Expression as E, Handle, ImageQuery, MathFunction as Mf,
-    RelationalFunction, SampleLevel, ScalarKind, Statement, SwizzleComponent,
+    AddressSpace, ArraySize, AtomicFunction, BinaryOperator as Bo, Block, Expression as E, GlobalVariable,
+    Handle, ImageQuery, Literal, MathFunction as Mf, RelationalFunction, SampleLevel, ScalarKind, Span,
+    Statement, SwizzleComponent, TypeInner,
 };
 
 use super::{Lower, component, err, size};
 use crate::Error;
+
+/// The rows of Direct3D's standard sample positions, of every standard count (1 + 2 + 4 + 8 + 16).
+const STANDARD_ROWS: u32 = 31;
 
 /// What a program reads from an image resource: its dimensions, whether it is arrayed or multisampled, whether it is
 /// a storage image, and what a read gives.
@@ -585,8 +589,116 @@ impl Lower<'_> {
             iridia_ir::Query::Layers if shape.arrayed => self.query(image, ImageQuery::NumLayers),
             iridia_ir::Query::Levels if shape.levels() => self.query(image, ImageQuery::NumLevels),
             iridia_ir::Query::Samples if shape.multisampled => self.query(image, ImageQuery::NumSamples),
-            other => return Err(err(format!("query {other:?} of a {:?} image", shape.dim))),
+            iridia_ir::Query::SamplePosition(index) if shape.multisampled => {
+                self.sample_position(image, index)?
+            }
+            other => {
+                let what = match other {
+                    iridia_ir::Query::Size(_) => "size",
+                    iridia_ir::Query::Layers => "layers",
+                    iridia_ir::Query::Levels => "mip levels",
+                    iridia_ir::Query::Samples => "samples",
+                    iridia_ir::Query::SamplePosition(_) => "sample position",
+                    iridia_ir::Query::Elements => "elements",
+                };
+                let image = match (shape.storage, shape.multisampled, shape.arrayed) {
+                    (true, ..) => "storage image",
+                    (_, true, true) => "multisampled array texture",
+                    (_, true, false) => "multisampled texture",
+                    (_, false, true) => "array texture",
+                    (_, false, false) => "texture",
+                };
+                return Err(err(format!(
+                    "a query of the {what} of a {:?} {image}, which has none",
+                    shape.dim
+                )));
+            }
         })
+    }
+
+    /// The position of sample `index` of a multisampled texture in Direct3D's standard pattern for its sample count,
+    /// from [`Lower::sample_positions`]; (0, 0) for an index past its samples or a count with no standard pattern (one
+    /// other than 1, 2, 4, 8 or 16).
+    fn sample_position(&mut self, image: Handle<E>, index: ValueId) -> Result<Handle<E>, Error> {
+        let table = self.sample_positions()?;
+        let (index, _) = self.as_u32(index)?;
+        let count = self.query(image, ImageQuery::NumSamples);
+        let one = self.literal_bits(Scalar::U32, 1)?;
+        let zero = self.literal_bits(Scalar::U32, 0)?;
+        let sixteen = self.literal_bits(Scalar::U32, 16)?;
+        // a standard count is a power of two of at most 16 (a count of 0 has no sample an index is below)
+        let last = self.binary(Bo::Subtract, count, one);
+        let low = self.binary(Bo::And, count, last);
+        let power = self.binary(Bo::Equal, low, zero);
+        let small = self.binary(Bo::LessEqual, count, sixteen);
+        let standard = self.binary(Bo::LogicalAnd, power, small);
+        let below = self.binary(Bo::Less, index, count);
+        let inside = self.binary(Bo::LogicalAnd, standard, below);
+        // the count's rows start at row `count - 1`; clamped into the table where it is not inside
+        let row = self.binary(Bo::Add, last, index);
+        let rows = self.literal_bits(Scalar::U32, u64::from(STANDARD_ROWS - 1))?;
+        let row = self.math(Mf::Min, row, &[rows]);
+        let base = self.expr(E::GlobalVariable(table));
+        let pointer = self.expr(E::Access { base, index: row });
+        let position = self.expr(E::Load { pointer });
+        let ty = self.ty_of(Type::vector(Scalar::F32, 2))?;
+        let origin = self.expr(E::ZeroValue(ty));
+        Ok(self.select(inside, position, origin))
+    }
+
+    /// Direct3D's standard sample positions, in pixels from the pixel's centre, of every standard count in turn (1, 2,
+    /// 4, 8 and 16 samples: [`STANDARD_ROWS`] rows, count `n`'s from row `n - 1`): a private table, made once.
+    fn sample_positions(&mut self) -> Result<Handle<GlobalVariable>, Error> {
+        if let Some(g) = self.sample_positions {
+            return Ok(g);
+        }
+        let position = self.ty_of(Type::vector(Scalar::F32, 2))?;
+        let mut rows = Vec::new();
+        for count in [1u32, 2, 4, 8, 16] {
+            for index in 0..count {
+                let [x, y] = iridia_ir::standard_sample_position(count, index)
+                    .ok_or_else(|| err(format!("no standard position of sample {index} of {count}")))?;
+                let lanes = [x, y].map(|l| {
+                    self.module
+                        .global_expressions
+                        .append(E::Literal(Literal::F32(l)), Span::UNDEFINED)
+                });
+                rows.push(self.module.global_expressions.append(
+                    E::Compose {
+                        ty: position,
+                        components: lanes.to_vec(),
+                    },
+                    Span::UNDEFINED,
+                ));
+            }
+        }
+        if rows.len() != STANDARD_ROWS as usize {
+            return Err(err(format!("{} standard sample positions", rows.len())));
+        }
+        let size =
+            core::num::NonZeroU32::new(STANDARD_ROWS).ok_or_else(|| err("no standard sample positions"))?;
+        let ty = self.ty(TypeInner::Array {
+            base: position,
+            size: ArraySize::Constant(size),
+            stride: 8,
+        });
+        let init = self
+            .module
+            .global_expressions
+            .append(E::Compose { ty, components: rows }, Span::UNDEFINED);
+        let g = self.module.global_variables.append(
+            GlobalVariable {
+                name: Some("sample_positions".into()),
+                space: AddressSpace::Private,
+                binding: None,
+                ty,
+                init: Some(init),
+                memory_decorations: Default::default(),
+            },
+            Span::UNDEFINED,
+        );
+        self.sample_positions = Some(g);
+        Ok(g)
     }
 }
 

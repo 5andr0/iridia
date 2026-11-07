@@ -167,6 +167,8 @@ struct Lower<'a> {
     atomics: Atomics,
     /// The hidden counter of each view whose counter the program changes.
     counters: Vec<(ResourceId, Handle<GlobalVariable>)>,
+    /// Direct3D's standard sample positions, once a sample position query needs them.
+    sample_positions: Option<Handle<GlobalVariable>>,
     /// The blocks being filled, innermost last, each with the first expression not yet emitted.
     blocks: Vec<(Block, Option<Handle<E>>)>,
     constructs: Vec<Construct>,
@@ -2255,6 +2257,7 @@ pub fn module(program: &Program, plan: &BindingPlan) -> Result<naga::Module, Err
         vars: Vec::new(),
         atomics: Atomics::of(f)?,
         counters: Vec::new(),
+        sample_positions: None,
         blocks: vec![(Block::new(), None)],
         constructs: Vec::new(),
         outputs: Outputs::Direct(Vec::new()),
