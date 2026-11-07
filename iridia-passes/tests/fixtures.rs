@@ -145,7 +145,7 @@ fn main {
     let p = from_text(text, &[F1], &[F1], vec![state]);
     for (known, want) in [(true, -5.0f32), (false, 5.0)] {
         let mut q = p.clone();
-        iridia_passes::specialise(&mut q, &[(ResourceId(0), [u64::from(known), 0, 0, 0])]).unwrap();
+        iridia_passes::specialise_state(&mut q, &[(ResourceId(0), [u64::from(known), 0, 0, 0])]).unwrap();
         iridia_passes::simplify(&mut q.entry);
         iridia_ir::validate(&q).unwrap();
         assert!(q.interface.resources.is_empty());
@@ -248,7 +248,7 @@ fn main {
     let p = from_text(text, &[F1], &[F1], vec![state]);
     for (dim, want) in [(4u32, -5.0f32), (2, 5.0)] {
         let mut q = p.clone();
-        iridia_passes::specialise(&mut q, &[(ResourceId(0), [u64::from(dim), 0, 0, 0])]).unwrap();
+        iridia_passes::specialise_state(&mut q, &[(ResourceId(0), [u64::from(dim), 0, 0, 0])]).unwrap();
         iridia_passes::simplify(&mut q.entry);
         iridia_ir::validate(&q).unwrap();
         let printed = iridia_ir::text::print(&q.entry);
@@ -478,7 +478,7 @@ fn main {
     );
     for (dim, kept) in [(TextureDim::Cube, 2), (TextureDim::D2, 1)] {
         let mut q = p.clone();
-        iridia_passes::specialise(&mut q, &[(ResourceId(0), [u64::from(dim.state_code()), 0, 0, 0])])
+        iridia_passes::specialise_state(&mut q, &[(ResourceId(0), [u64::from(dim.state_code()), 0, 0, 0])])
             .unwrap();
         iridia_ir::validate(&q).unwrap();
         let ids: Vec<u32> = q.interface.resources.iter().map(|r| r.id.0).collect();
@@ -590,7 +590,7 @@ fn specialise_takes_the_case_a_known_selector_names() {
         (4, 0, 99),
     ] {
         let mut q = p.clone();
-        iridia_passes::specialise(&mut q, &[(ResourceId(0), [u64::from(known), 0, 0, 0])]).unwrap();
+        iridia_passes::specialise_state(&mut q, &[(ResourceId(0), [u64::from(known), 0, 0, 0])]).unwrap();
         iridia_passes::simplify(&mut q.entry);
         iridia_ir::validate(&q).unwrap_or_else(|e| panic!("{e:?}\n{}", iridia_ir::text::print(&q.entry)));
         let printed = iridia_ir::text::print(&q.entry);

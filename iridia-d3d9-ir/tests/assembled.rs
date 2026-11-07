@@ -486,7 +486,7 @@ fn specialise_by(mut p: iridia_ir::Program, run: &Run) -> Result<Prepared, Strin
         .iter()
         .map(|(id, lanes)| (*id, lanes.map(u64::from)))
         .collect();
-    iridia_passes::specialise(&mut p, &known).map_err(|e| format!("specialise: {e}"))?;
+    iridia_passes::specialise_state(&mut p, &known).map_err(|e| format!("specialise: {e}"))?;
     prepare(p)
 }
 

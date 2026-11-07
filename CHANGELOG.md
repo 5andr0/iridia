@@ -108,6 +108,8 @@
   zero, as the naga lift does (it refused "output register oN is not declared": the patch function's registers were
   the control points'). `hull_unwritten.hlsl` (fxc) tessellates on the IR as the HLSL says, as the naga lift does, and
   as WARP does.
+- Breaking: `iridia_passes::specialise` is now material feature specialisation, taking a program and known constant-buffer words and returning `Result<Specialised, SpecialiseError>`. `Specialised` is `#[must_use]`. The previous pipeline-state API is `specialise_state`.
+
 - New crate `iridia-analysis` (`no_std` with `alloc`, no `unsafe`): the `iridia` crate's analyses on the IR.
   - `flow::Values` is the value graph, lane by lane.
   - `flow::Flow` is what may reach each output lane and the discard, and via what (`Via`).

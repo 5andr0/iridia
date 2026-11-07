@@ -8,7 +8,8 @@
 //!   `simplify` and `break_flags`, on each of its functions.
 //! - [`promote`]: variables to values, carried out of constructs as results and loop parameters.
 //! - [`simplify`]: lane bookkeeping (swizzles of swizzles, composes of lanes) folded, unused values removed.
-//! - [`specialise`]: known pipeline state folded in, with what it computes and the branches it decides.
+//! - [`specialise_state`]: known pipeline state folded in.
+//! - [`specialise`]: material feature decisions folded into a copy, preserving ordinary uniforms.
 //! - [`structurize`]: a `Cfg` body made `Regions`.
 //! - [`structure`]: Ramsey's structuring of a reducible control flow graph, by node and edge.
 #![no_std]
@@ -28,6 +29,7 @@ extern crate alloc;
 mod break_flags;
 mod flatten;
 mod fold;
+mod material;
 mod prepare;
 mod promote;
 mod simplify;
@@ -38,10 +40,11 @@ mod structurize;
 pub use break_flags::break_flags;
 pub use flatten::flatten;
 pub use fold::fold;
+pub use material::{SpecialiseError, Specialised, Words, feature_words, specialise};
 pub use prepare::prepare;
 pub use promote::promote;
 pub use simplify::simplify;
-pub use specialise::specialise;
+pub use specialise::specialise_state;
 pub use structurize::structurize;
 
 // Run the examples in the README as doc tests.

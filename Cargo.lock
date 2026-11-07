@@ -286,6 +286,7 @@ dependencies = [
  "iridia-d3d9-ir",
  "iridia-dxbc",
  "iridia-dxil",
+ "iridia-exec",
  "iridia-exec-ir",
  "iridia-ir",
  "iridia-passes",

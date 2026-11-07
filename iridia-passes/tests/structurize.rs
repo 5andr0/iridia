@@ -161,7 +161,7 @@ fn the_counterexample_structures_once_specialised_and_keeps_its_values() {
     assert!(e.contains("irreducible"), "{e}");
     // state = true: the entry goes to A only, and the graph is reducible
     let mut known = p.clone();
-    iridia_passes::specialise(&mut known, &[(ResourceId(0), [1, 0, 0, 0])]).unwrap();
+    iridia_passes::specialise_state(&mut known, &[(ResourceId(0), [1, 0, 0, 0])]).unwrap();
     assert!(known.interface.resources.is_empty());
     iridia_ir::validate(&known).unwrap();
     let mut structured = known.clone();
@@ -250,9 +250,9 @@ fn a_break_across_a_loop_is_routed_and_keeps_its_value() {
 #[test]
 fn specialising_a_resource_that_is_not_state_or_a_value_it_cannot_hold_is_refused() {
     let p = counterexample();
-    let e = iridia_passes::specialise(&mut p.clone(), &[(ResourceId(7), [1, 0, 0, 0])]).unwrap_err();
+    let e = iridia_passes::specialise_state(&mut p.clone(), &[(ResourceId(7), [1, 0, 0, 0])]).unwrap_err();
     assert!(e.contains("not in the interface"), "{e}");
-    let e = iridia_passes::specialise(&mut p.clone(), &[(ResourceId(0), [2, 0, 0, 0])]).unwrap_err();
+    let e = iridia_passes::specialise_state(&mut p.clone(), &[(ResourceId(0), [2, 0, 0, 0])]).unwrap_err();
     assert!(e.contains("cannot hold"), "{e}");
 }
 

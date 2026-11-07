@@ -13,7 +13,7 @@ use iridia_ir::interface::{
 use super::{Lifted, Stop};
 
 /// The pipeline state a draw gives a program: the lanes of each piece (`Op::LoadState`) as
-/// [`iridia_passes::specialise`] folds them.
+/// [`iridia_passes::specialise_state`] folds them.
 pub type StateOf<'s> = &'s dyn Fn(StateParam) -> [u64; 4];
 
 /// Direct3D 9's state where a run sets none (the `D3DTSS_*` defaults): no stage projects its coordinate, the bump
@@ -27,7 +27,7 @@ pub fn default_state(param: StateParam) -> [u64; 4] {
 
 /// A Direct3D 9 program that reads pipeline state (a `ps_1_x` `tex` reads its stage's projection flag and texture
 /// dimension): neither WGSL nor `iridia-exec` reads the state, so the program is made again for the state of each
-/// draw, its IR as lifted specialised by it ([`iridia_passes::specialise`]).
+/// draw, its IR as lifted specialised by it ([`iridia_passes::specialise_state`]).
 #[derive(Debug)]
 pub struct Stateful {
     /// The IR as lifted.
@@ -68,7 +68,8 @@ impl Stateful {
             .zip(values.iter().copied())
             .collect();
         let mut ir = self.ir.clone();
-        iridia_passes::specialise(&mut ir, &known).map_err(|e| Stop::Failed(format!("specialise: {e}")))?;
+        iridia_passes::specialise_state(&mut ir, &known)
+            .map_err(|e| Stop::Failed(format!("specialise: {e}")))?;
         finish(ir)
     }
 }

@@ -218,7 +218,7 @@ fn rename_region(r: &mut Region, s: &impl Fn(ValueId) -> ValueId) {
 /// them (a bool is 0 or 1, lanes past the state's width are zero). A state the program declares but `known_state`
 /// does not name stays as it is. Refused: a value for a resource that is not pipeline state, or that its type cannot
 /// hold.
-pub fn specialise(p: &mut Program, known_state: &[(ResourceId, [u64; 4])]) -> Result<(), String> {
+pub fn specialise_state(p: &mut Program, known_state: &[(ResourceId, [u64; 4])]) -> Result<(), String> {
     for (id, bits) in known_state {
         let param = match p.interface.resources.iter().find(|r| r.id == *id) {
             Some(r) => match r.kind {
@@ -259,19 +259,7 @@ pub fn specialise(p: &mut Program, known_state: &[(ResourceId, [u64; 4])]) -> Re
         }
     }
     crate::fold(f);
-    f.body = match core::mem::replace(&mut f.body, Body::Cfg(Vec::new())) {
-        Body::Cfg(blocks) => Body::Cfg(fold_graph(f, blocks)),
-        Body::Regions(r) => {
-            let mut subst = vec![None; f.values.len()];
-            let mut r = fold_region(f, r, &mut subst);
-            let s = |v| resolve(&subst, v);
-            rename_region(&mut r, &s);
-            for d in &mut f.values {
-                d.op.map_operands(s);
-            }
-            Body::Regions(r)
-        }
-    };
+    fold_control(f);
     let read_after = read(&p.entry);
     p.interface.resources.retain(|r| {
         !known_state.iter().any(|(id, _)| *id == r.id)
@@ -281,7 +269,7 @@ pub fn specialise(p: &mut Program, known_state: &[(ResourceId, [u64; 4])]) -> Re
 }
 
 /// The resources a function's body uses: those its placed values read, and the buffers and images it stores to.
-fn read(f: &Function) -> Vec<ResourceId> {
+pub(super) fn read(f: &Function) -> Vec<ResourceId> {
     fn region(f: &Function, r: &Region, out: &mut Vec<ResourceId>) {
         for n in &r.nodes {
             nodes(f, n, out);
@@ -292,6 +280,7 @@ fn read(f: &Function) -> Vec<ResourceId> {
             Node::Value(v) => out.extend(f.value(*v).map(|d| d.op.resources()).unwrap_or_default()),
             Node::StoreBuffer { resource, .. } => out.push(resource.id),
             Node::StoreTexel { image, .. } => out.push(image.id),
+            Node::TraceRay { scene, .. } => out.push(scene.id),
             _ => n.regions().into_iter().for_each(|r| region(f, r, out)),
         }
     }
@@ -306,4 +295,21 @@ fn read(f: &Function) -> Vec<ResourceId> {
     out.sort_unstable();
     out.dedup();
     out
+}
+
+/// Take literal control decisions, keeping region results substituted.
+pub(super) fn fold_control(f: &mut Function) {
+    f.body = match core::mem::replace(&mut f.body, Body::Cfg(Vec::new())) {
+        Body::Cfg(blocks) => Body::Cfg(fold_graph(f, blocks)),
+        Body::Regions(r) => {
+            let mut subst = vec![None; f.values.len()];
+            let mut r = fold_region(f, r, &mut subst);
+            let s = |v| resolve(&subst, v);
+            rename_region(&mut r, &s);
+            for d in &mut f.values {
+                d.op.map_operands(s);
+            }
+            Body::Regions(r)
+        }
+    };
 }

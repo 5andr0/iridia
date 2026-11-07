@@ -1579,7 +1579,7 @@ fn typed_buffer(kind: &ResourceKind) -> bool {
 /// The name of an operation the compile does not take, for its refusal.
 fn op_name(op: &ir::Op) -> &'static str {
     match op {
-        ir::Op::LoadState(_) => "a pipeline state read (fold it with iridia_passes::specialise)",
+        ir::Op::LoadState(_) => "a pipeline state read (fold it with iridia_passes::specialise_state)",
         _ => "this operation",
     }
 }
