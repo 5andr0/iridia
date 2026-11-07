@@ -2,7 +2,7 @@
 //! each step of a run in order, with the programs Microsoft's compilers made of the tests' shaders.
 use std::collections::BTreeMap;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// The case-file format this reader takes (`format` in the file).
 pub const FORMAT: u32 = 3;
@@ -335,7 +335,7 @@ pub struct Descriptor {
 }
 
 /// A probe vkd3d's test marks `winbug`: one it found a Windows device reads otherwise.
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Winbug {
     /// The qualifier as the test writes it (`amd`, `sm>=6 & !amd`; empty for a plain `winbug`).
     pub qualifier: String,

@@ -537,6 +537,9 @@ pub struct IdRequests<'a> {
     samplers: BTreeMap<iridia::ResourceId, (u32, u32)>,
     /// The hidden counters the program updates (a raw buffer of one word each), by resource: the view they count.
     counters: BTreeMap<iridia::ResourceId, iridia::ResourceId>,
+    /// The hidden counts of the views the program's counter operations change ([`iridia_exec::Backend::counter`]),
+    /// by view and element: held for the dispatch, as the executor holds the buffers, and put back after them.
+    counts: BTreeMap<(iridia::ResourceId, u32), u32>,
 }
 
 impl<'a> IdRequests<'a> {
@@ -599,6 +602,7 @@ impl<'a> IdRequests<'a> {
             bindings,
             samplers,
             counters,
+            counts: BTreeMap::new(),
         })
     }
 
@@ -727,6 +731,14 @@ impl<'a> IdRequests<'a> {
                 if let Some(r) = self.view_mut(&b, k) {
                     r.set_count(*n);
                 }
+            }
+        }
+        for ((view, k), n) in std::mem::take(&mut self.counts) {
+            let Some(b) = self.bindings.get(&view).copied() else {
+                continue;
+            };
+            if let Some(r) = self.view_mut(&b, k) {
+                r.set_count(n);
             }
         }
     }
@@ -914,6 +926,30 @@ impl iridia_exec::Backend for IdRequests<'_> {
         };
         let at = atomic_offset(res, None, [r.word / 4, 0, 0], None);
         Ok(atomic_on(res, at, r.op, r.signed, r.value, r.compare))
+    }
+
+    fn counter(&mut self, view: Element, decrement: bool) -> Result<u32, String> {
+        let b = self.binding(view.id)?;
+        if b.kind != Kind::Uav {
+            return Err(format!(
+                "resource {}: a counter of a view that is not an unordered-access one",
+                view.id.0
+            ));
+        }
+        // 0 for an element nothing is bound to, whose count goes nowhere
+        let key = (view.id, view.index);
+        let count = match self.counts.get(&key) {
+            Some(n) => *n,
+            None => self.view_of(&b, view.index).map_or(0, Resource::count),
+        };
+        let (gives, next) = if decrement {
+            let n = count.wrapping_sub(1);
+            (n, n)
+        } else {
+            (count, count.wrapping_add(1))
+        };
+        self.counts.insert(key, next);
+        Ok(gives)
     }
 }
 

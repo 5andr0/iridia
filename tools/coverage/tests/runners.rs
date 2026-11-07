@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use iridia_coverage::inflate::read_text;
-use iridia_coverage::{offload, vkd3d};
+use iridia_coverage::{front, offload, vkd3d};
 
 fn suite(path: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("suites").join(path)
@@ -19,7 +19,7 @@ fn offload_outcomes(tests: &[&str]) -> Vec<(String, String)> {
         tests.len(),
         "every test named is in the case file"
     );
-    let mut out: Vec<(String, String)> = offload::run::run_all(&file, 4, None)
+    let mut out: Vec<(String, String)> = offload::run::run_all(&file, 4, None, front::Path::Ir)
         .into_iter()
         .map(|r| (r.test, format!("{}: {}", r.outcome.class(), r.outcome.detail())))
         .collect();
@@ -83,12 +83,9 @@ fn the_offload_mesh_and_multisampled_pipelines_draw_to_their_image_comparisons()
 /// (InterlockedAnd, Or, Xor, Min and Max signed and unsigned, Exchange, CompareExchange and CompareStore, of typed and
 /// structured views) held to its expected values, recorded from Direct3D on Windows, on every DXBC and DXIL run, and
 /// the offload suite's `Interlocked*.resources.32` tests (each operation through an array of views) held to theirs.
-/// Refused by name, by the lifters the runners execute (`iridia_dxbc::lift` and `iridia_dxil::lift`, not the IR's):
-/// the section at line 122, a compare-exchange and compare-store of a `RWTexture2D` (neither lifter has an atomic
-/// compare of a texture, only of a buffer), and the section at line 149, which carries on
-/// with the texture it leaves (until line 161 binds a buffer in its place); and on the DXBC runs the section at line
-/// 197, `atomic_umax` and `atomic_umin` of an `RWBuffer<int>`, the DXBC lifter taking an atomic's signedness from its
-/// view (the IR's lowering to WGSL writes such a minimum or maximum as a compare-exchange loop).
+/// Every probe holds on the IR: the compare-exchange and compare-store of a `RWTexture2D` (the section at line 122,
+/// and the one at line 149, which carries on with the texture it leaves) and, on the DXBC runs, `atomic_umax` and
+/// `atomic_umin` of an `RWBuffer<int>` (the section at line 197) among them, which the lifts the IR replaces refused.
 #[test]
 fn every_atomic_operation_of_a_view_reaches_the_device() {
     let mut seen = Vec::new();
@@ -96,13 +93,7 @@ fn every_atomic_operation_of_a_view_reaches_the_device() {
     for format in ["dxbc", "dxil"] {
         for r in vkd3d_runs(&format!("vkd3d/{format}.json.gz"), "uav-atomics.shader_test") {
             for p in &r.probes {
-                let (class, why) = match p.line {
-                    122..161 if format == "dxbc" => ("refused", "on a texture view"),
-                    122..161 => ("refused", "not an unordered-access buffer"),
-                    197..249 if format == "dxbc" => ("refused", "on memory whose atomics are signed"),
-                    _ => ("pass", ""),
-                };
-                if p.outcome.class() != class || !p.outcome.detail().contains(why) {
+                if p.outcome.class() != "pass" {
                     wrong.push(format!(
                         "{} {} line {}: {:?}",
                         r.runner, r.model, p.line, p.outcome
@@ -142,13 +133,18 @@ fn every_atomic_operation_of_a_view_reaches_the_device() {
     }
 }
 
-/// The runs of vkd3d test file `test` in case file `cases`.
+/// The runs of vkd3d test file `test` in case file `cases`, on the IR.
 fn vkd3d_runs(cases: &str, test: &str) -> Vec<vkd3d::run::RunResult> {
+    vkd3d_runs_on(front::Path::Ir, cases, test)
+}
+
+/// [`vkd3d_runs`] through `path`.
+fn vkd3d_runs_on(path: front::Path, cases: &str, test: &str) -> Vec<vkd3d::run::RunResult> {
     let text = read_text(&suite(cases)).expect("the vkd3d case file");
     let mut file = vkd3d::cases::read(&text).expect("the vkd3d case file");
     file.cases.retain(|r| r.file == test);
     assert!(!file.cases.is_empty(), "{test} is in {cases}");
-    vkd3d::run::run_all(&file, 4).0
+    vkd3d::run::run_all(&file, 4, path).0
 }
 
 /// That every probe of the runs that vkd3d's runner selects holds, and that there is one.
@@ -346,9 +342,9 @@ fn d3d9_draws_sample_at_whole_pixels_and_shade_colours_flat() {
     }
 }
 
-/// A Direct3D 9 draw runs again from the IR, which must write what the WGSL's draw writes: the colour (`v#`) and
-/// texture coordinate (`t#`) inputs share register numbers, and `vPos` and `vFace` have none, so the IR's
-/// varyings take the WGSL's register view.
+/// A Direct3D 9 draw runs from the IR in the register view (the colour (`v#`) and texture coordinate (`t#`) inputs
+/// share register numbers, and `vPos` and `vFace` have none, so the IR's varyings each take a register of their own);
+/// on the reference path it runs from the WGSL and again from the IR, which must write what the WGSL's draw writes.
 #[test]
 fn d3d9_draws_from_the_ir_as_from_its_wgsl() {
     for test in [
@@ -356,7 +352,9 @@ fn d3d9_draws_from_the_ir_as_from_its_wgsl() {
         "sm1-interstage-interface.shader_test",
         "is-front-face.shader_test",
     ] {
-        assert_selected_pass(&vkd3d_runs("vkd3d/d3d9.json.gz", test));
+        for path in [front::Path::Ir, front::Path::Reference] {
+            assert_selected_pass(&vkd3d_runs_on(path, "vkd3d/d3d9.json.gz", test));
+        }
     }
 }
 
@@ -386,21 +384,26 @@ fn a_draw_addresses_a_structured_buffer_by_the_programs_stride() {
 #[test]
 fn a_vector_probe_steps_a_vec4() {
     for cases in ["vkd3d/dxbc.json.gz", "vkd3d/dxil.json.gz"] {
-        let mut runs = vkd3d_runs(cases, "uav-rwstructuredbuffer.shader_test");
-        // the 6.2 run's 16-bit structures are refused (the next test)
-        runs.retain(|r| r.model != "6.2");
-        assert_selected_pass(&runs);
+        assert_selected_pass(&vkd3d_runs(cases, "uav-rwstructuredbuffer.shader_test"));
     }
 }
 
-/// iridia-dxil refuses the 16-bit lanes of a raw or structured buffer, which it does not pack two to a word, where it
-/// wrote each as a word of its own (uav-rwstructuredbuffer's `half`/`int16_t` structures at 6.2).
+/// The table grades the IR path: the 16-bit lanes of a structured buffer (uav-rwstructuredbuffer's `half`/`int16_t`
+/// structures at 6.2), two to a word, run on the IR to what vkd3d expects, where the lift the IR replaces refuses them
+/// (it wrote each as a word of its own).
 #[test]
-fn sixteen_bit_lanes_of_a_structured_buffer_are_refused() {
-    let runs = vkd3d_runs("vkd3d/dxil.json.gz", "uav-rwstructuredbuffer.shader_test");
-    let sixteen: Vec<_> = runs.iter().filter(|r| r.model == "6.2" && r.selected()).collect();
-    assert_eq!(sixteen.len(), 1, "the 16-bit structures run at 6.2");
-    for r in sixteen {
+fn sixteen_bit_lanes_of_a_structured_buffer_run_on_the_ir() {
+    let sixteen = |path| {
+        let runs = vkd3d_runs_on(path, "vkd3d/dxil.json.gz", "uav-rwstructuredbuffer.shader_test");
+        let at: Vec<_> = runs
+            .into_iter()
+            .filter(|r| r.model == "6.2" && r.selected())
+            .collect();
+        assert_eq!(at.len(), 1, "the 16-bit structures run at 6.2");
+        at
+    };
+    assert_selected_pass(&sixteen(front::Path::Ir));
+    for r in sixteen(front::Path::Reference) {
         let why = r.deciding().map(|p| p.outcome.detail()).unwrap_or_default();
         assert_eq!(r.class(), "refused", "{} {}: {why}", r.runner, r.model);
         assert!(
@@ -535,10 +538,33 @@ fn direct3d_9_fogs_the_first_target_by_its_mode_and_source() {
 
 /// Direct3D 12's depth bounds pass a pixel only where the depth buffer's value is within them, ends included, and a
 /// program that forces early tests (`[earlydepthstencil]`) runs only where they pass, so its UAV store is not made
-/// where they fail (depth-bounds.shader_test).
+/// where they fail (depth-bounds.shader_test). The IR does not record that a program forces early tests, so on the IR
+/// the program runs where they fail and the probes of its UAV after those draws (lines 41 and 65) read its store; on
+/// the lift the IR replaces every probe holds.
 #[test]
 fn the_depth_bounds_and_early_tests_hold_back_a_pixel_and_its_program() {
-    assert_selected_pass(&vkd3d_runs("vkd3d/dxbc.json.gz", "depth-bounds.shader_test"));
+    let runs = vkd3d_runs("vkd3d/dxbc.json.gz", "depth-bounds.shader_test");
+    let selected: Vec<_> = runs
+        .iter()
+        .flat_map(|r| &r.probes)
+        .filter(|p| p.selected)
+        .collect();
+    assert!(
+        !selected.is_empty(),
+        "a probe of depth-bounds.shader_test is selected"
+    );
+    for p in selected {
+        let expected = match p.line {
+            41 | 65 => "fail",
+            _ => "pass",
+        };
+        assert_eq!(p.outcome.class(), expected, "line {}: {:?}", p.line, p.outcome);
+    }
+    assert_selected_pass(&vkd3d_runs_on(
+        front::Path::Reference,
+        "vkd3d/dxbc.json.gz",
+        "depth-bounds.shader_test",
+    ));
 }
 
 /// A multisampled target is drawn sample by sample at Direct3D's standard positions: a centroid input is read at the
@@ -586,7 +612,7 @@ fn a_mesh_dispatch_draws_the_primitives_its_program_emits() {
     let mut file = vkd3d::cases::read(&text).expect("the vkd3d case file");
     file.cases.retain(|r| r.file == "mesh.shader_test");
     assert!(!file.cases.is_empty(), "mesh.shader_test has runs");
-    let runs = vkd3d::run::run_all(&file, 4).0;
+    let runs = vkd3d::run::run_all(&file, 4, front::Path::Ir).0;
     assert!(
         runs.iter().any(|r| r.selected()),
         "a run of mesh.shader_test is selected"

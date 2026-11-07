@@ -10,7 +10,7 @@ use iridia_ir::interface::{
     D3dSignature, Interface, ResourceId, ResourceKind, Stage, StateParam, SystemValue, TextureDim,
 };
 
-use super::{Lifted, Stop};
+use super::{Code, Lifted, Path, Stop};
 
 /// The pipeline state a draw gives a program: the lanes of each piece (`Op::LoadState`) as
 /// [`iridia_passes::specialise_state`] folds them.
@@ -32,13 +32,15 @@ pub fn default_state(param: StateParam) -> [u64; 4] {
 pub struct Stateful {
     /// The IR as lifted.
     ir: iridia_ir::Program,
+    /// The lift it goes through.
+    path: Path,
     /// The state it reads, by its resource.
     params: Vec<(ResourceId, StateParam)>,
 }
 
 impl Stateful {
     /// `ir`'s state, where it reads any.
-    fn of(ir: &iridia_ir::Program) -> Option<Self> {
+    fn of(ir: &iridia_ir::Program, path: Path) -> Option<Self> {
         let params: Vec<_> = ir
             .interface
             .resources
@@ -50,6 +52,7 @@ impl Stateful {
             .collect();
         (!params.is_empty()).then(|| Stateful {
             ir: ir.clone(),
+            path,
             params,
         })
     }
@@ -70,35 +73,54 @@ impl Stateful {
         let mut ir = self.ir.clone();
         iridia_passes::specialise_state(&mut ir, &known)
             .map_err(|e| Stop::Failed(format!("specialise: {e}")))?;
-        finish(ir)
+        finish(ir, self.path)
     }
 }
 
-/// Lift a Direct3D 9 program and prepare it in every form; one that reads pipeline state at Direct3D 9's defaults
-/// ([`default_state`]), with what makes it again for other state.
-pub fn lift(bytes: &[u8]) -> Result<(Lifted, Option<Stateful>), Stop> {
+/// Lift a Direct3D 9 program and prepare it in every form, for `path`; one that reads pipeline state at Direct3D 9's
+/// defaults ([`default_state`]), with what makes it again for other state.
+pub fn lift(bytes: &[u8], path: Path) -> Result<(Lifted, Option<Stateful>), Stop> {
     let ir = iridia_d3d9_ir::lift(bytes).map_err(|e| Stop::Refused(e.to_string()))?;
-    match Stateful::of(&ir) {
+    match Stateful::of(&ir, path) {
         Some(stateful) => Ok((stateful.lift(&stateful.values(&default_state))?, Some(stateful))),
-        None => Ok((finish(ir)?, None)),
+        None => Ok((finish(ir, path)?, None)),
     }
 }
 
-/// A lifted program prepared in every form.
-fn finish(ir: iridia_ir::Program) -> Result<Lifted, Stop> {
+/// A lifted program prepared in every form: on [`Path::Ir`] its IR is what runs, in the register view
+/// ([`registered`]), and its WGSL information; on [`Path::Reference`] the WGSL read back by naga's front end runs.
+fn finish(ir: iridia_ir::Program, path: Path) -> Result<Lifted, Stop> {
     let prepared = prepare(ir).map_err(Stop::Failed)?;
-    // the WGSL read back by naga's front end is a naga program
-    let program = prepared
-        .wgsl
-        .program()
-        .cloned()
-        .ok_or_else(|| Stop::Failed("the WGSL read back made no naga program".into()))?;
+    let (code, wgsl) = match path {
+        Path::Ir => (
+            Code::Ir(Arc::new(registered(&prepared.ir).map_err(Stop::Failed)?)),
+            prepared.wgsl.as_ref().map(|_| ()).map_err(Clone::clone),
+        ),
+        Path::Reference => {
+            let program = prepared
+                .wgsl
+                .as_ref()
+                .map_err(|e| Stop::Failed(e.clone()))?
+                .program()
+                .cloned()
+                .ok_or_else(|| Stop::Failed("the WGSL read back made no naga program".into()))?;
+            (Code::Naga(Arc::new(program)), Ok(()))
+        }
+    };
     Ok(Lifted {
         bytecode: super::Bytecode::D3d9,
-        program: Arc::new(program),
+        code,
         ir: Some(Arc::new(prepared)),
-        wgsl: Ok(()),
+        wgsl,
     })
+}
+
+/// `ir` with each varying in a register of its own ([`own_registers`]), the register view `iridia-exec` runs a
+/// Direct3D 9 program in.
+pub fn registered(ir: &iridia_ir::Program) -> Result<iridia_ir::Program, String> {
+    let mut ir = ir.clone();
+    own_registers(&mut ir.interface)?;
+    Ok(ir)
 }
 
 /// The lanes a write mask names, in order.
@@ -174,14 +196,15 @@ pub struct Prepared {
     pub graph: iridia_ir::Program,
     /// The graph structured again, by `structurize` (which promotes) and `simplify`.
     pub restructured: iridia_ir::Program,
-    /// The WGSL for browsers, read back by naga's front end, for `iridia-exec`.
-    pub wgsl: ProgramShader,
+    /// The WGSL for browsers, read back by naga's front end, for `iridia-exec`; or why there is none.
+    pub wgsl: Result<ProgramShader, String>,
     /// The interface `wgsl` is run by: the program's, with each varying in a register of its own (see [`from_wgsl`]).
     pub wgsl_interface: Interface,
 }
 
 /// Promote, simplify, validate and print a lifted program, make it a graph and structure it again (each form
-/// validated and printed), and write it as WGSL; an error is the first check it fails.
+/// validated and printed), and write it as WGSL; an error is the first check of the IR it fails, and the WGSL's own
+/// failure is kept in [`Prepared::wgsl`].
 pub fn prepare(mut ir: iridia_ir::Program) -> Result<Prepared, String> {
     iridia_passes::promote(&mut ir.entry).map_err(|e| format!("promote: {e}"))?;
     iridia_passes::simplify(&mut ir.entry);
@@ -203,11 +226,13 @@ pub fn prepare(mut ir: iridia_ir::Program) -> Result<Prepared, String> {
         return Err(format!("IR validation of the restructured graph: {}", e[0]));
     }
     round_trip(&restructured.entry)?;
-    let wgsl = iridia_naga::wgsl(&ir, &iridia_naga::Profile::BROWSER).map_err(|e| format!("WGSL: {e}"))?;
-    let program = from_wgsl(&ir, &wgsl)?;
-    let wgsl_interface = program.interface.clone();
-    let wgsl =
-        ProgramShader::new(program).map_err(|e| format!("WGSL program not compiled for iridia-exec: {e}"))?;
+    let wgsl_interface = registered(&ir)?.interface;
+    let wgsl = iridia_naga::wgsl(&ir, &iridia_naga::Profile::BROWSER)
+        .map_err(|e| format!("WGSL: {e}"))
+        .and_then(|text| from_wgsl(&ir, &text))
+        .and_then(|program| {
+            ProgramShader::new(program).map_err(|e| format!("WGSL program not compiled for iridia-exec: {e}"))
+        });
     Ok(Prepared {
         ir,
         graph,
@@ -540,7 +565,7 @@ impl Prepared {
             return Ok(b);
         }
         let c = run_naga(
-            &self.wgsl,
+            self.wgsl.as_ref()?,
             &self.wgsl_interface,
             &self.register_view(slots),
             banks,
@@ -574,7 +599,7 @@ impl Prepared {
         }
         let registers = slots.map(|s| self.register_view(s));
         let c = run_naga_quad(
-            &self.wgsl,
+            self.wgsl.as_ref()?,
             &self.wgsl_interface,
             [&registers[0], &registers[1], &registers[2], &registers[3]],
             banks,

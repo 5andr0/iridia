@@ -35,21 +35,89 @@ jobs:
       - run: cargo build --locked --target wasm32-unknown-unknown -p iridia-naga --no-default-features
       - run: cargo build --locked --target wasm32-unknown-unknown -p iridia-naga --features wgsl
       - run: cargo build --locked --target wasm32-unknown-unknown -p iridia-wgsl
-  coverage:
-    # the coverage table (docs/coverage) is made from the suites' runs; a change that moves it must commit it
+  coverage-build:
+    # the coverage tool, built once for the jobs below
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: "1.99.0"
+      - run: cargo build --release --locked -p iridia-coverage
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-bin
+          path: target/release/iridia-coverage
+          if-no-files-found: error
+          retention-days: 1
+  coverage-part:
+    # the coverage table's runs: each case file through each path (the IR, which the table grades, and the lift it
+    # replaces, its reference), in shards of the file's cases where a file's runs take long, a job each so they run
+    # side by side; `coverage` makes the table of them
+    needs: coverage-build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {cases: vkd3d/d3d9, path: ir, shard: 0/1}
+          - {cases: vkd3d/d3d9, path: reference, shard: 0/1}
+          - {cases: vkd3d/dxbc, path: ir, shard: 0/3}
+          - {cases: vkd3d/dxbc, path: ir, shard: 1/3}
+          - {cases: vkd3d/dxbc, path: ir, shard: 2/3}
+          - {cases: vkd3d/dxbc, path: reference, shard: 0/1}
+          - {cases: vkd3d/dxil, path: ir, shard: 0/2}
+          - {cases: vkd3d/dxil, path: ir, shard: 1/2}
+          - {cases: vkd3d/dxil, path: reference, shard: 0/1}
+          - {cases: offload/offload, path: ir, shard: 0/1}
+          - {cases: offload/offload, path: reference, shard: 0/1}
+    steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - if: matrix.cases == 'offload/offload'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # the golden images the offload-test-suite's image tests compare with, at the commit its case file names
           repository: llvm/offload-golden-images
           ref: ede89923b6369d9f34b8ad9a6b58b82a30762339
           path: offload-golden-images
-      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          toolchain: "1.99.0"
-      - run: cargo run --release --locked -p iridia-coverage -- table docs/coverage offload-golden-images
+          name: coverage-bin
+          path: bin
+      - env:
+          CASES: ${{ matrix.cases }}
+          LIFT: ${{ matrix.path }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          chmod +x bin/iridia-coverage
+          suite=${CASES%%/*}
+          golden=; [ "$suite" = offload ] && golden=offload-golden-images
+          reference=; [ "$LIFT" = reference ] && reference=--reference
+          mkdir parts
+          bin/iridia-coverage part "$suite" "tools/coverage/suites/$CASES.json.gz" \
+            "parts/${suite}-${CASES##*/}-$LIFT-${SHARD/\//of}.json" $golden $reference --shard "$SHARD"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-part-${{ strategy.job-index }}
+          path: parts/
+          if-no-files-found: error
+          retention-days: 1
+  coverage:
+    # the coverage table (docs/coverage) is made from the suites' runs; a change that moves it must commit it
+    needs: [coverage-build, coverage-part]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: coverage-bin
+          path: bin
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: coverage-part-*
+          merge-multiple: true
+          path: parts
+      - run: chmod +x bin/iridia-coverage && bin/iridia-coverage table docs/coverage --parts parts
       # intent to add, so a table the commit lacks shows as a difference too
       - run: git add --intent-to-add docs/coverage && git diff --exit-code -- docs/coverage
   release:

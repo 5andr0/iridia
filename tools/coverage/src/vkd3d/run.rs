@@ -9,15 +9,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use iridia::{Interface, Program, ResourceKind, SystemValue};
+use iridia::{Interface, ResourceKind, SystemValue};
 use iridia_exec::amplification::AmplificationShader;
 use iridia_exec::draw::{
     AlphaTest, Compare as DrawCompare, Cull, DepthState, DrawShader, Fog, FogFactor, FogSource, Linkage,
     PointSize, Primitive, Rasterizer, Surface, Viewport,
 };
-use iridia_exec::geometry::{GeometryShader, Topology};
+use iridia_exec::geometry::Topology;
 use iridia_exec::mesh::MeshShader;
-use iridia_exec::tessellation::TessellationShader;
 use iridia_exec::{PixelShader, ProgramShader};
 use iridia_ir::interface::{StateParam, TextureDim};
 
@@ -26,14 +25,15 @@ use crate::device::format::{Class, named};
 use crate::device::resource::{Counter, Dim, Kind, Resource};
 use crate::device::sample::{Address, Compare, Reduction, Sampler};
 use crate::device::{Device, Dispatch, SlotRequests};
-use crate::front::{Form, Lifts, Programs, Ready, Stop, d3d9};
+use crate::front::{Code, Form, Lifts, Path, Programs, Ready, Stop, d3d9};
+use crate::shard::Shard;
 use crate::stages::{Assembly, Bank, Stages, Stopped as StageStop, mesh_draw};
 
 /// The wave width compute programs run with: 32 lanes, as most Direct3D 12 hardware reports.
 pub const WAVE: u32 = 32;
 
 /// What a probe found.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub enum Outcome {
     /// It holds.
     Pass,
@@ -90,7 +90,7 @@ impl Outcome {
 }
 
 /// A probe's result.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Probe {
     /// The line of the test file.
     pub line: u64,
@@ -120,7 +120,7 @@ impl Probe {
 }
 
 /// A run's results.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct RunResult {
     /// The test file.
     pub file: String,
@@ -132,6 +132,9 @@ pub struct RunResult {
     pub probes: Vec<Probe>,
     /// The programs its steps ran, and whether each ran (`None`) or why not.
     pub programs: BTreeMap<String, Option<Outcome>>,
+    /// How long it took ([`run_all`] times it): not kept in a part, as it differs from run to run.
+    #[serde(skip)]
+    pub took: std::time::Duration,
 }
 
 impl RunResult {
@@ -951,7 +954,8 @@ fn run_as(programs: &Programs<'_>, run: &Run, flushed: bool) -> RunResult {
                 }
                 // a Direct3D 9 draw again from the IR, on what the device and state were before, which must write
                 // what the WGSL's draw writes
-                let before = d3d9.then(|| (device.clone(), state.clone()));
+                let before =
+                    (d3d9 && programs.path() == Path::Reference).then(|| (device.clone(), state.clone()));
                 let mut done = draw_step(
                     programs,
                     &mut device,
@@ -1065,6 +1069,7 @@ fn run_as(programs: &Programs<'_>, run: &Run, flushed: bool) -> RunResult {
         model: run.model.clone(),
         probes,
         programs: used,
+        took: std::time::Duration::ZERO,
     }
 }
 
@@ -1303,26 +1308,25 @@ fn draw_step(
         between
             .iter()
             .find(|b| b.0 == stage)
-            .map(|b| (b.1, &b.2.lifted.program))
+            .map(|b| (b.1, &b.2.lifted.code))
     };
     let gs = program("gs")
-        .map(|(name, p)| GeometryShader::new(Program::clone(p)).map_err(|e| Outcome::Error(name.clone(), e)))
+        .map(|(name, p)| p.geometry().map_err(|e| Outcome::Error(name.clone(), e)))
         .transpose()?;
     let tessellation = match (program("hs"), program("ds")) {
-        (Some((name, hull)), Some((_, domain))) => Some(
-            TessellationShader::new(Program::clone(hull), Program::clone(domain))
-                .map_err(|e| Outcome::Error(name.clone(), e))?,
-        ),
+        (Some((name, hull)), Some((_, domain))) => {
+            Some(Code::tessellation(hull, domain).map_err(|e| Outcome::Error(name.clone(), e))?)
+        }
         _ => None,
     };
     let mut interfaces = vec![vsh.interface(), psh.interface()];
-    interfaces.extend(between.iter().map(|b| &b.2.lifted.program.interface));
+    interfaces.extend(between.iter().map(|b| b.2.lifted.code.interface()));
     unknown_read(device, state, &interfaces)?;
     for (r, name) in [(&vs, vs_name), (&ps, ps_name)]
         .into_iter()
         .chain(between.iter().map(|b| (&b.2, b.1)))
     {
-        if let Some(why) = unbindable(&r.lifted.program.interface) {
+        if let Some(why) = unbindable(r.lifted.code.interface()) {
             return Err(Outcome::NotModelled(format!("{name}: {why}")));
         }
     }
@@ -1334,7 +1338,7 @@ fn draw_step(
         // colour registers white
         let linkage = if d3d9 {
             Linkage::Direct3D9 {
-                colours_white: shader_model(&vs.lifted.program.provenance.target).is_some_and(|m| m < 3),
+                colours_white: shader_model(vs.lifted.code.target()).is_some_and(|m| m < 3),
             }
         } else {
             Linkage::Strict
@@ -1401,7 +1405,7 @@ fn draw_step(
         }
     }
     // shader models 1 and 2 pass colours through registers of [0, 1] (`oD#`), 3 through general ones
-    let clamp_colours = d3d9 && shader_model(&vs.lifted.program.provenance.target).is_some_and(|m| m < 3);
+    let clamp_colours = d3d9 && shader_model(vs.lifted.code.target()).is_some_and(|m| m < 3);
     let Targets {
         mut surface,
         pixel_count,
@@ -1500,25 +1504,23 @@ fn mesh_step(
         .get("ps")
         .ok_or_else(|| Outcome::NotModelled("a mesh dispatch with no pixel program".into()))?;
     let ps = ready(programs, ps_name)?;
-    // with an amplification program, it and the mesh program run on the IR, which lifts them
-    let lift_ir = |name: &String| -> Result<iridia_ir::Program, Outcome> {
-        let bytes = programs
-            .bytes(name)
-            .map_err(|e| Outcome::Failed(name.clone(), e))?;
-        crate::front::lift_ir(&bytes).map_err(|e| outcome_of(name, e))
-    };
+    // with an amplification program, it and the mesh program run on the IR (Programs::ir)
+    let lift_ir = |name: &String| programs.ir(name).map_err(|e| outcome_of(name, e));
     let (amplification, mesh) = match stages.get("as") {
         Some(as_name) => {
-            let a = AmplificationShader::from_ir(&lift_ir(as_name)?)
+            let a = AmplificationShader::from_ir(lift_ir(as_name)?.as_ref())
                 .map_err(|e| Outcome::Error(as_name.clone(), e.to_string()))?;
-            let m = MeshShader::from_ir(&lift_ir(ms_name)?)
+            let m = MeshShader::from_ir(lift_ir(ms_name)?.as_ref())
                 .map_err(|e| Outcome::Error(ms_name.clone(), e.to_string()))?;
             (Some((as_name, a)), m)
         }
         None => {
             let ms = ready(programs, ms_name)?;
-            let m = MeshShader::new(Program::clone(&ms.lifted.program))
-                .map_err(|e| Outcome::Error(ms_name.clone(), e.to_string()))?;
+            let m = ms
+                .lifted
+                .code
+                .mesh()
+                .map_err(|e| Outcome::Error(ms_name.clone(), e))?;
             (None, m)
         }
     };
@@ -1752,7 +1754,7 @@ fn dispatch_step(
         .executable
         .as_ref()
         .map_err(|e| Outcome::Error(name.to_owned(), e.clone()))?;
-    let interface = &cs.lifted.program.interface;
+    let interface = cs.lifted.code.interface();
     unknown_read(device, state, &[interface])?;
     let resources = crate::device::constant_buffers(interface, |register, space, rows| {
         (space == 0 && device.constants.contains_key(&register)).then(|| device.constant_rows(register, rows))
@@ -1763,18 +1765,27 @@ fn dispatch_step(
     })
 }
 
-/// Run every run of a file, `threads` at a time.
-pub fn run_all(file: &File, threads: usize) -> (Vec<RunResult>, Lifts) {
-    let programs = Programs::new(|name: &str| super::cases::program(file, name));
+/// Run every run of a file, `threads` at a time, its programs through `path`.
+pub fn run_all(file: &File, threads: usize, path: Path) -> (Vec<RunResult>, Lifts) {
+    run_shard(file, threads, path, Shard::WHOLE)
+}
+
+/// [`run_all`] for the cases of one shard of the file.
+pub fn run_shard(file: &File, threads: usize, path: Path, shard: Shard) -> (Vec<RunResult>, Lifts) {
+    let programs = Programs::new(path, |name: &str| super::cases::program(file, name));
+    let mine = shard.cases(file.cases.len());
     let next = std::sync::atomic::AtomicUsize::new(0);
     let results = std::sync::Mutex::new(Vec::new());
     std::thread::scope(|s| {
         for _ in 0..threads.max(1) {
             s.spawn(|| {
                 loop {
-                    let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let k = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let Some(&i) = mine.get(k) else { break };
                     let Some(r) = file.cases.get(i) else { break };
-                    let done = run(&programs, r);
+                    let start = std::time::Instant::now();
+                    let mut done = run(&programs, r);
+                    done.took = start.elapsed();
                     if let Ok(mut all) = results.lock() {
                         all.push((i, done));
                     }
@@ -1813,6 +1824,7 @@ mod tests {
             model: "5.1".into(),
             probes,
             programs: BTreeMap::new(),
+            took: std::time::Duration::ZERO,
         };
         // a selected probe holds and an extended one does not: the run passes, its extended probes fail
         let mut probes = probes_of(&[Outcome::Pass, fail()]);
@@ -1848,6 +1860,7 @@ mod tests {
             model: "6.5".into(),
             probes,
             programs: BTreeMap::new(),
+            took: std::time::Duration::ZERO,
         };
         // a plain winbug that differs, selected or extended: counted as winbug, and the run passes
         let mut probes = probes_of(&[Outcome::Pass, fail(), fail()]);

@@ -13,6 +13,7 @@ pub mod device;
 pub mod front;
 pub mod inflate;
 pub mod offload;
+pub mod shard;
 pub mod stages;
 pub mod table;
 pub mod vkd3d;

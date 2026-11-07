@@ -144,7 +144,27 @@
 - `iridia-ir`: the operation enums are `PartialOrd` and `Ord`, so a graph can key on them: `Unary`, `Binary`,
   `Ternary`, `Cmp`, `AtomicOp`, `WaveOp`, `WaveScan`, `QuadSwap`, `Axis`, `Fineness`, `MinMaxNan`, `SaturateNan`,
   `MulZero`, `OnZero`, `FloatToInt` and `Rounding`.
-
+- `iridia-coverage` grades the IR path: DXBC, DXIL and Direct3D 9 programs go through each bytecode's IR lift,
+  `iridia_passes::prepare` and the IR's validation, and run in `iridia-exec` on the IR (`from_ir`); the WGSL column is `iridia-naga`'s lowering for browsers,
+  read back by naga, and decides no run. It graded the naga-path lift of DXBC and DXIL before, and Direct3D 9's WGSL.
+  Each case file runs again through the lift the IR replaces, each row's `reference_status`, until that lift is
+  removed. The table's schema is version 2: `graded` names what it grades; `statuses` and `groups` name each status
+  and its group (gap, runner-limit, not-applicable, expected, unexpected-pass, pass); each row has its `group`; each
+  suite its `reasons`, what is left by status and class of reason with an example, and its `reference_totals`.
+  offload's `unsupported` is split: `not-applicable` where lit runs the test on no Direct3D 12 device in its DirectX
+  configuration with DXC (a `REQUIRES: Vulkan` or `Clang`, an `UNSUPPORTED: DirectX`), `not-modelled` where a Direct3D
+  12 device can run it and iridia's lacks the feature (acceleration structures, ray tracing pipelines, wave sizes but
+  32...). vkd3d's `failed` (a program iridia took and a pass or the executor stopped on) is `error`, not `fail`. The
+  table is made of parts, a case file through one path each, or one shard of it (`--shard <index>/<count>`):
+  `iridia-coverage part` runs one, `table --parts` makes the table of them, and CI builds the tool once and runs the
+  parts side by side. The `vkd3d` and `offload` commands take `--reference` and name
+  their slowest runs.
+- `iridia-exec-ir`: `Prepared`, an operation prepared once on its operand types (`Prepared::new`), and `Prepared::run`
+  for one lane's operands or `Prepared::run_lanes` for every active lane of a register file in one loop, which
+  `iridia-exec` runs its IR operations by; `eval` is `Prepared::new(..).run(..)`. Results are what they were,
+  and a loop of float arithmetic takes about half the CPU time it did. IEEE 754 leaves the payload and sign of
+  the NaN an operation on NaNs gives open, and which operand's a multiplication keeps depends on how the compiler
+  orders its operands; the crate documents it.
 - `iridia-coverage`: the table names the dx readers' versions as the build takes them (from `Cargo.lock`, where it
   named 0.5.0 after 0.11.0 came in), and every row has a format: a vkd3d run with no program (the compiler refused
   every shader) its runner's, an offload test with no program DXIL's (the suite is read for DirectX with DXC).

@@ -2,25 +2,25 @@
 //! part (`offload`) on the CPU [`Device`] through `iridia-exec`, and what the line pipes its output to (FileCheck,
 //! imgdiff) as those tools would. A test's REQUIRES, UNSUPPORTED and XFAIL lines are taken against [`features`], the
 //! device iridia's executor is.
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
 
-use iridia::{Interface, Program, ResourceKind as IrKind, SystemValue};
+use crate::shard::Shard;
+use iridia::{Interface, ResourceKind as IrKind, SystemValue};
 use iridia_exec::amplification::AmplificationShader;
 use iridia_exec::draw::{
     Compare as DepthCompare, Cull, DepthState, DrawShader, Primitive, Rasterizer, Surface,
     Viewport as DrawViewport,
 };
-use iridia_exec::geometry::{GeometryShader, Topology};
+use iridia_exec::geometry::Topology;
 use iridia_exec::mesh::MeshShader;
-use iridia_exec::tessellation::TessellationShader;
 use iridia_exec::{PixelShader, ProgramShader};
 use serde_json::Value;
 use sha2::Digest as _;
 
 use super::cases::{Case, File};
-use super::features::applies;
+use super::features::{applies, features, not_for_direct3d};
 use super::filecheck::{self, Directive, Kind as CheckKind};
 use super::image;
 use super::pipeline::{
@@ -31,7 +31,7 @@ use crate::device::format::{Format, named};
 use crate::device::resource::{Counter, Dim, Kind, Resource, Swizzle};
 use crate::device::sample::{Address, Compare, Reduction, Sampler};
 use crate::device::{Device, Dispatch, SlotRequests};
-use crate::front::{Programs, Ready, Stop};
+use crate::front::{self, Code, Programs, Ready, Stop};
 use crate::stages::{Assembly, Stages, Stopped as StageStop, mesh_draw};
 use crate::vkd3d::cases::Descriptor;
 
@@ -41,39 +41,8 @@ pub const WAVE: u32 = 32;
 /// The device's description, as `Configuring execution on device:` prints it.
 const DESCRIPTION: &str = "iridia-exec (CPU reference executor)";
 
-/// The features the device has, as lit.cfg.py would set them from api-query for it: the configuration (DirectX, DXC,
-/// Windows), every shader model 6 the lifter reads, what the executor runs (16- and 64-bit types, 64-bit and float
-/// atomics, derivatives in compute, a 32-lane wave), unbounded descriptor tables, and the golden images. Not here,
-/// so the tests needing them are reported unsupported: barycentrics, stencil reference from the pixel
-/// program, shading rate, several viewports, and acceleration structures and ray-tracing pipelines.
-pub fn features() -> BTreeSet<String> {
-    let mut f: BTreeSet<String> = [
-        "DirectX",
-        "DXC",
-        "Windows",
-        "Int16",
-        "Half",
-        "Double",
-        "Int64",
-        "Int64GroupSharedAtomics",
-        "Int64TypedResourceAtomics",
-        "Float32GroupSharedAtomics",
-        "DerivativesInCompute",
-        "ResourceBindingTier3",
-        "WaveSize_32",
-        "goldenimage",
-        "MeshShader",
-    ]
-    .map(String::from)
-    .into();
-    for minor in 0..=9 {
-        f.insert(format!("SM_6_{minor}"));
-    }
-    f
-}
-
 /// What a test came to.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub enum Outcome {
     /// Every RUN line did what the test expects.
     Pass,
@@ -83,11 +52,13 @@ pub enum Outcome {
     Fail(String),
     /// Every line passed where the test expects a failure (XPASS, which lit counts as a failure).
     XPass,
-    /// lit would not run it on this device: a REQUIRES that fails or an UNSUPPORTED that holds.
-    Unsupported(String),
+    /// lit would run it on no Direct3D 12 device in this configuration ([`not_for_direct3d`]): it is for another API
+    /// or another compiler.
+    NotApplicable(String),
     /// iridia's lifter or executor refused one of its programs.
     Refused(String),
-    /// It asks something of the offloader this runner does not model.
+    /// It asks something of the offloader this runner does not model, or a feature a Direct3D 12 device can have and
+    /// iridia's does not (a `REQUIRES` or `UNSUPPORTED` lit decides by [`features`]).
     NotModelled(String),
     /// dxc refused to compile a shader the test expects to compile.
     CompilerRefused(String),
@@ -101,7 +72,7 @@ impl Outcome {
             Outcome::XFail(_) => "xfail",
             Outcome::Fail(_) => "fail",
             Outcome::XPass => "xpass",
-            Outcome::Unsupported(_) => "unsupported",
+            Outcome::NotApplicable(_) => "not-applicable",
             Outcome::Refused(_) => "refused",
             Outcome::NotModelled(_) => "not-modelled",
             Outcome::CompilerRefused(_) => "compiler-refused",
@@ -114,7 +85,7 @@ impl Outcome {
             Outcome::Pass | Outcome::XPass => String::new(),
             Outcome::XFail(m)
             | Outcome::Fail(m)
-            | Outcome::Unsupported(m)
+            | Outcome::NotApplicable(m)
             | Outcome::Refused(m)
             | Outcome::NotModelled(m)
             | Outcome::CompilerRefused(m) => m.lines().next().unwrap_or("").to_string(),
@@ -123,7 +94,7 @@ impl Outcome {
 }
 
 /// A test's result.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct TestResult {
     /// The test's path under test/.
     pub test: String,
@@ -131,6 +102,9 @@ pub struct TestResult {
     pub outcome: Outcome,
     /// The programs it ran, by digest.
     pub programs: Vec<String>,
+    /// How long it took ([`run_all_with`] times it): not kept in a part, as it differs from run to run.
+    #[serde(skip)]
+    pub took: std::time::Duration,
 }
 
 /// Why a RUN line could not be taken as the real tools would take it.
@@ -738,7 +712,7 @@ fn compute(
         .executable
         .as_ref()
         .map_err(|e| Stopped::Refused(format!("{name}: {e}")))?;
-    let interface = &cs.lifted.program.interface;
+    let interface = cs.lifted.code.interface();
     let l = layout(p, rs)?;
     let (mut device, constants) = device_of(p, &l)?;
     let resources = crate::device::constant_buffers(interface, |register, space, rows| {
@@ -894,27 +868,22 @@ fn raster(
         .into_iter()
         .chain(between.iter().map(|(name, r)| (r, name)))
     {
-        if let Some(why) = unbindable(&r.lifted.program.interface) {
+        if let Some(why) = unbindable(r.lifted.code.interface()) {
             return Err(not_modelled(format!("{name}: {why}")));
         }
     }
     let gs = match &geometry {
-        Some((name, r)) => match GeometryShader::new(Program::clone(&r.lifted.program)) {
+        Some((name, r)) => match r.lifted.code.geometry() {
             Ok(g) => Some(g),
             Err(e) => return Ok(Err(format!("{name}: {e}"))),
         },
         None => None,
     };
     let tessellation = match (&hull, &domain) {
-        (Some((name, h)), Some((_, d))) => {
-            match TessellationShader::new(
-                Program::clone(&h.lifted.program),
-                Program::clone(&d.lifted.program),
-            ) {
-                Ok(t) => Some(t),
-                Err(e) => return Ok(Err(format!("{name}: {e}"))),
-            }
-        }
+        (Some((name, h)), Some((_, d))) => match Code::tessellation(&h.lifted.code, &d.lifted.code) {
+            Ok(t) => Some(t),
+            Err(e) => return Ok(Err(format!("{name}: {e}"))),
+        },
         _ => None,
     };
     // a vertex and a pixel program alone link directly; with stages between them, through `Stages`
@@ -950,7 +919,7 @@ fn raster(
     let vs_banks: Vec<(u32, &[[u32; 4]])> = vs_constants.iter().map(|(s, r)| (*s, r.as_slice())).collect();
     let ps_banks: Vec<(u32, &[[u32; 4]])> = ps_constants.iter().map(|(s, r)| (*s, r.as_slice())).collect();
     let mut interfaces = vec![vsh.interface(), psh.interface()];
-    interfaces.extend(between.iter().map(|(_, r)| &r.lifted.program.interface));
+    interfaces.extend(between.iter().map(|(_, r)| r.lifted.code.interface()));
     let mut requests = SlotRequests::new(&mut device, &interfaces).map_err(Stopped::NotModelled)?;
     match &linked {
         Some(linked) => {
@@ -1012,7 +981,7 @@ fn raster(
 /// the mesh program's, the primitives they write drawn with the pixel program, with a depth buffer, viewport and
 /// target as [`raster`]'s but the default rasterizer state (`CD3DX12_RASTERIZER_DESC`: back faces culled, clockwise
 /// triangles front facing), where the traditional pipeline culls none. With an amplification program, it and the mesh
-/// program run on the IR ([`crate::front::lift_ir`]).
+/// program run on the IR ([`Programs::ir`]).
 fn mesh_raster(
     p: &mut Pipeline,
     programs: &Programs<'_>,
@@ -1030,19 +999,18 @@ fn mesh_raster(
         return Err(not_modelled("a mesh pipeline without a mesh and a pixel program"));
     };
     let ps = ready(programs, &ps_name)?;
-    let lift_ir = |name: &String| -> Result<iridia_ir::Program, Stopped> {
-        let bytes = programs.bytes(name).map_err(Stopped::NotModelled)?;
-        crate::front::lift_ir(&bytes).map_err(|e| match e {
+    let lift_ir = |name: &String| {
+        programs.ir(name).map_err(|e| match e {
             Stop::Refused(m) | Stop::Failed(m) => Stopped::Refused(format!("{name}: {m}")),
         })
     };
     let (amplification, mesh) = match stage("Amplification") {
         Some(as_name) => {
-            let a = match AmplificationShader::from_ir(&lift_ir(&as_name)?) {
+            let a = match AmplificationShader::from_ir(lift_ir(&as_name)?.as_ref()) {
                 Ok(a) => a,
                 Err(e) => return Ok(Err(format!("{as_name}: {e}"))),
             };
-            let m = match MeshShader::from_ir(&lift_ir(&ms_name)?) {
+            let m = match MeshShader::from_ir(lift_ir(&ms_name)?.as_ref()) {
                 Ok(m) => m,
                 Err(e) => return Ok(Err(format!("{ms_name}: {e}"))),
             };
@@ -1050,7 +1018,7 @@ fn mesh_raster(
         }
         None => {
             let ms = ready(programs, &ms_name)?;
-            match MeshShader::new(Program::clone(&ms.lifted.program)) {
+            match ms.lifted.code.mesh() {
                 Ok(m) => (None, m),
                 Err(e) => return Ok(Err(format!("{ms_name}: {e}"))),
             }
@@ -1453,10 +1421,17 @@ fn directives(case: &Case, prefixes: &[String]) -> Result<Vec<Directive>, String
 pub fn run(file: &File, programs: &Programs<'_>, case: &Case, golden: Option<&Path>) -> TestResult {
     let features = features();
     let mut used = Vec::new();
-    let outcome = match applies(&case.requires, &case.unsupported, &case.xfail, &features) {
+    let skipped = not_for_direct3d(&case.requires, &case.unsupported).and_then(|none| match none {
+        Some(why) => Ok(Err(Outcome::NotApplicable(why))),
+        None => applies(&case.requires, &case.unsupported, &case.xfail, &features).map(Ok),
+    });
+    let outcome = match skipped {
         Err(e) => Outcome::NotModelled(format!("a lit expression: {e}")),
-        Ok((Some(why), _)) => Outcome::Unsupported(why),
-        Ok((None, xfail)) => {
+        Ok(Err(not_applicable)) => not_applicable,
+        Ok(Ok((Some(why), _))) => {
+            Outcome::NotModelled(format!("{why}: a feature iridia's device does not have"))
+        }
+        Ok(Ok((None, xfail))) => {
             let ran = run_lines(file, programs, case, golden, &mut used);
             match (ran, xfail) {
                 (Ok(()), false) => Outcome::Pass,
@@ -1474,6 +1449,7 @@ pub fn run(file: &File, programs: &Programs<'_>, case: &Case, golden: Option<&Pa
         test: case.test.clone(),
         outcome,
         programs: used,
+        took: std::time::Duration::ZERO,
     }
 }
 
@@ -1593,9 +1569,9 @@ fn run_lines(
     Ok(())
 }
 
-/// Run every test of a file, `threads` at a time.
-pub fn run_all(file: &File, threads: usize, golden: Option<&Path>) -> Vec<TestResult> {
-    let programs = Programs::new(|name: &str| {
+/// Run every test of a file, `threads` at a time, its programs through `path`.
+pub fn run_all(file: &File, threads: usize, golden: Option<&Path>, path: front::Path) -> Vec<TestResult> {
+    let programs = Programs::new(path, |name: &str| {
         let text = file
             .programs
             .get(name)
@@ -1612,15 +1588,30 @@ pub fn run_all_with(
     golden: Option<&Path>,
     programs: &Programs<'_>,
 ) -> Vec<TestResult> {
+    run_shard_with(file, threads, golden, programs, Shard::WHOLE)
+}
+
+/// [`run_all_with`] for the tests of one shard of the file.
+pub fn run_shard_with(
+    file: &File,
+    threads: usize,
+    golden: Option<&Path>,
+    programs: &Programs<'_>,
+    shard: Shard,
+) -> Vec<TestResult> {
+    let mine = shard.cases(file.cases.len());
     let next = std::sync::atomic::AtomicUsize::new(0);
     let results = std::sync::Mutex::new(Vec::new());
     std::thread::scope(|s| {
         for _ in 0..threads.max(1) {
             s.spawn(|| {
                 loop {
-                    let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let k = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let Some(&i) = mine.get(k) else { break };
                     let Some(c) = file.cases.get(i) else { break };
-                    let done = run(file, programs, c, golden);
+                    let start = std::time::Instant::now();
+                    let mut done = run(file, programs, c, golden);
+                    done.took = start.elapsed();
                     if let Ok(mut all) = results.lock() {
                         all.push((i, done));
                     }

@@ -52,8 +52,10 @@ cargo run --release --locked -p iridia-coverage -- table docs/coverage <offload-
 
 It needs no game data: the suites it runs are in `tools/coverage/suites`, programs included, and the golden images are a
 checkout of [llvm/offload-golden-images](https://github.com/llvm/offload-golden-images) at the commit
-`tools/coverage/suites/offload/README.md` names. CI's coverage job makes it the same way and fails where it differs from
-the committed one.
+`tools/coverage/suites/offload/README.md` names. It runs each case file through the IR, which it grades, and through the
+lift the IR replaces, each row's reference. CI builds the tool once, runs those parts side by side, the longer files in
+shards (`iridia-coverage part ... --shard`), makes the table of them (`table --parts`) and fails where it differs from the
+committed one.
 
 ## No I/O in libraries
 
