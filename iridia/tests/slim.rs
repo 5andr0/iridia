@@ -1,5 +1,5 @@
 #![allow(clippy::unwrap_used)]
-//! The pre-push gate over the slim shader set (`oracles.corpus.general/slim`): 8,286 DXBC, DXIL and Direct3D 9
+//! The pre-push gate over the slim shader set (`oracles.corpus.general/slim`): 8,287 DXBC, DXIL and Direct3D 9
 //! programs that together reach every region and branch side of the lifters the full pool of 108,394 reaches. Each
 //! program goes through every lift of its family:
 //!

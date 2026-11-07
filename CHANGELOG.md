@@ -35,7 +35,7 @@
   inside and past their ends, with barriers) to leave the memory the IR leaves (proptest, 1,000 cases). The slim set's
   DXBC programs whose IR lowers and whose WGSL naga reads back: 3,026 of 3,670, from 951.
 - The pre-push gate: `iridia/tests/slim.rs` takes the slim shader set (`oracles.corpus.general/slim`, primase-testdata
-  0.2.1: 8,286 DXBC, DXIL and Direct3D 9 programs that reach every lifter region the full pool of 108,394 reaches)
+  0.2.2: 8,287 DXBC, DXIL and Direct3D 9 programs that reach every lifter region the full pool of 108,394 reaches)
   through every lift of each family: the older lift (validated, WGSL written and read back by naga), the IR lift
   (after the cut-over's passes, validated, its text printed and parsed back) and the IR's WGSL (lowered to stock naga,
   read back). What each program gives is held to `iridia/tests/slim/<family>.tsv`; a panic or a program that goes

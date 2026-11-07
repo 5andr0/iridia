@@ -506,6 +506,9 @@
 60a4722611cad4a7b0704e03831a66bf4f53f9279ed4b7d3fe8262cd2de03866	IR	lift: sample_d_clamp_feedback has N operands, its format is N destinations and N sources
 60a4722611cad4a7b0704e03831a66bf4f53f9279ed4b7d3fe8262cd2de03866	IR WGSL	not reached
 60d4b62e228a379140db9429f552c8048879e765180ccfea248930b39ee9fd7a	IR WGSL	lower: a Geometry program is not lowered yet
+60e54bed7664c58808b173ca2e525db8ede3120b238e4a248d8b973273e90c54	A	lift: reflection: DXBC at word N: N constant buffers named cb: their declarations do not tell which binding takes which layout
+60e54bed7664c58808b173ca2e525db8ede3120b238e4a248d8b973273e90c54	IR	lift: reflection: DXBC at word N: N constant buffers named cb: their declarations do not tell which binding takes which layout
+60e54bed7664c58808b173ca2e525db8ede3120b238e4a248d8b973273e90c54	IR WGSL	not reached
 610720f0e909e58e0634dc91de53db48a54e99922d37638ad105299275a5d3bb	IR WGSL	WGSL read back: error: internal WGSL front end error  = note: Parser recursion limit exceeded  
 61ec450b2d198883c4fae7654eec6c272479205711724e5c62ab5b85203feb94	IR WGSL	lower: an atomic of an element of an array of buffers is not lowered yet
 621e0091b958ebf2a94d293ca7ffd1f5ae99c6589dc76920d3c216e9c9b00760	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point

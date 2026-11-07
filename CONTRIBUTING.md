@@ -22,7 +22,7 @@ GAME_DATA=<the gate configuration> cargo test --release --locked -p iridia --tes
 ```
 
 The gate configuration (`[run] require = 'gate'`) needs `oracles.corpus.general/slim`, so a missing set fails instead of
-skipping. `iridia/tests/slim.rs` takes each of the set's 8,286 DXBC, DXIL and Direct3D 9 programs through the older lift
+skipping. `iridia/tests/slim.rs` takes each of the set's 8,287 DXBC, DXIL and Direct3D 9 programs through the older lift
 and the IR lift of its family, writes WGSL and reads it back with naga, and prints the IR's text and parses it back. It
 fails on a panic, or on a program that goes further or less far than `iridia/tests/slim/<family>.tsv` says. When a lift
 widens, replace that table with the current one (the failure names its path) in the same commit. GitHub CI has no game

@@ -29,7 +29,7 @@ iridia-ir = { version = "0.5.0", path = "iridia-ir" }
 iridia-passes = { version = "0.5.0", path = "iridia-passes" }
 naga = { version = "30.0.1", package = "primase-naga", default-features = false, features = ["wgsl-out"] }
 primase-foundations = "0.3.1"
-primase-testdata = "0.2.1"
+primase-testdata = "0.2.2"
 proptest = { version = "1", default-features = false, features = ["std"] }
 serde = { version = "1", default-features = false, features = ["std", "derive"] }
 serde_json = { version = "=1.0.154", default-features = false, features = ["std", "preserve_order", "float_roundtrip"] }

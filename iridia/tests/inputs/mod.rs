@@ -21,7 +21,7 @@ primase_testdata::inputs! {
         Query::Oracle(OracleSet::Corpus, Game::General, "slim") => {
             status: Live,
             gate: true,
-            about: r#"the slim shader set: 8,286 DXBC, DXIL and Direct3D 9 programs (`programs/<family>/<sha256>.<family>`, Microsoft's listing beside each, `slim.tsv` saying why each is there) that reach every region and branch side of the lifters the full pool of 108,394 reaches; tests/slim.rs, the pre-push gate"#,
+            about: r#"the slim shader set: 8,287 DXBC, DXIL and Direct3D 9 programs (`programs/<family>/<sha256>.<family>`, Microsoft's listing beside each, `slim.tsv` saying why each is there) that reach every region and branch side of the lifters the full pool of 108,394 reaches; tests/slim.rs, the pre-push gate"#,
             source: r#"independent: primase-oracles' `producers/slim-set`, a set cover of the disassembly features of the oracle home's game corpora, its disassembler sets, ten outside projects' test corpora and FidelityFX SDK v1.1.4"#,
         },
     }
