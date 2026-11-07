@@ -26,8 +26,13 @@ iridia-mojo = { path = "../iridia-mojo" }
 # The lifters, to run each fixture of tests/flow.rs through both bytecodes (a dev-dependency cycle cargo allows).
 iridia-dxbc.workspace = true
 iridia-dxil.workspace = true
-# naga's WGSL front end, to read a writer's text back (tests/wgsl_for.rs)
+# naga's WGSL front end, to read a writer's text back (tests/wgsl_for.rs, tests/slim.rs)
 naga = { workspace = true, features = ["wgsl-in", "spv-out"] }
+# tests/slim.rs, the pre-push gate: every lifter of every family over the slim shader set
+iridia-d3d9.workspace = true
+iridia-d3d9-ir.workspace = true
+iridia-naga = { workspace = true, features = ["wgsl"] }
+primase-testdata.workspace = true
 
 [lints]
 workspace = true

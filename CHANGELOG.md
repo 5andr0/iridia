@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- The pre-push gate: `iridia/tests/slim.rs` takes the slim shader set (`oracles.corpus.general/slim`, primase-testdata
+  0.1.17: 8,286 DXBC, DXIL and Direct3D 9 programs that reach every lifter region the full pool of 108,394 reaches)
+  through every lift of each family: the older lift (validated, WGSL written and read back by naga), the IR lift
+  (after the cut-over's passes, validated, its text printed and parsed back) and the IR's WGSL (lowered to stock naga,
+  read back). What each program gives is held to `iridia/tests/slim/<family>.tsv`; a panic or a program that goes
+  further or less far than the table fails. `CONTRIBUTING.md` names the one command to run before pushing. First
+  run: DXBC 3,670 programs, older lift 3,292 ok, IR 3,424, IR WGSL 951; DXIL 4,059, older lift 2,239; Direct3D 9
+  557, older lift 273, IR 428, IR WGSL 423; 17 s on four threads.
 - `iridia-dxbc/tests/ir_gate.rs` checks its programs on every thread the machine runs, with the report a serial run
   gives, and runs A once for both B and P: the Unity corpus took 57 minutes on one thread and takes about four on 32
   (Riders Republic 418 s to 40 s). `IR_GATE_TIMES=1` prints where the time goes.

@@ -260,14 +260,18 @@ dependencies = [
 name = "iridia"
 version = "0.5.0"
 dependencies = [
+ "iridia-d3d9",
+ "iridia-d3d9-ir",
  "iridia-dxbc",
  "iridia-dxil",
  "iridia-exec",
  "iridia-interface",
  "iridia-ir",
  "iridia-mojo",
+ "iridia-naga",
  "iridia-passes",
  "primase-naga",
+ "primase-testdata",
  "sha2",
  "thiserror",
 ]
@@ -526,9 +530,9 @@ dependencies = [
 
 [[package]]
 name = "primase-testdata"
-version = "0.1.14"
+version = "0.1.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d78b98e4ee3b941fb33edf31bf6cc4290da2b3605688b54fdbd3b622d947b57"
+checksum = "3516c6b6b655346fbd71ffdacf5c52bf477507986160525b20347e95f41fb46c"
 dependencies = [
  "blake3",
  "serde_json",

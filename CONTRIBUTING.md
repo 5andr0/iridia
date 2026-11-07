@@ -13,6 +13,21 @@ Rust 1.99 or newer (`rust-toolchain.toml` pins it). The tests need no game files
 
 The examples in the crate READMEs are checked: each crate's README is run as a doc test.
 
+## Before pushing
+
+Run the slim shader set through every lifter and quote its counts in the push's report:
+
+```sh
+GAME_DATA=<the gate configuration> cargo test --release --locked -p iridia --test slim -- --nocapture
+```
+
+The gate configuration (`[run] require = 'gate'`) needs `oracles.corpus.general/slim`, so a missing set fails instead of
+skipping. `iridia/tests/slim.rs` takes each of the set's 8,286 DXBC, DXIL and Direct3D 9 programs through the older lift
+and the IR lift of its family, writes WGSL and reads it back with naga, and prints the IR's text and parses it back. It
+fails on a panic, or on a program that goes further or less far than `iridia/tests/slim/<family>.tsv` says. When a lift
+widens, replace that table with the current one (the failure names its path) in the same commit. GitHub CI has no game
+data and skips it.
+
 ## No I/O in libraries
 
 The library crates read the bytes and text they are given and never touch files, the environment or processes: `clippy.toml` disallows those calls and every `lib.rs` denies the lint. Examples and tests may.
