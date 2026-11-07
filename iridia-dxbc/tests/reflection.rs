@@ -489,7 +489,10 @@ fn every_stage_and_model_reflects_as_fxc_lists_it() {
     let Some(fxc) = inputs::program(inputs::Tool::Fxc) else {
         return;
     };
-    let sekiro = common::corpus_at(inputs::Game::Sekiro, "d3d11-shaders");
+    let sekiro = common::corpus_of(
+        inputs::Query::Oracle(inputs::OracleSet::Corpus, inputs::Game::Sekiro, "d3d11-shaders"),
+        inputs::oracle_tree(inputs::OracleSet::Corpus, inputs::Game::Sekiro, "d3d11-shaders"),
+    );
     let unity = common::corpus(inputs::Game::Sledding);
     let both = sekiro.is_some() && unity.is_some();
     let scratch = inputs::own_scratch("fxc-reflection");

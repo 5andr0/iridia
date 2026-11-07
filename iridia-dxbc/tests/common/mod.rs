@@ -187,14 +187,17 @@ pub fn refs<'a>(c: &'a Case, shader: &dyn PixelShader) -> Vec<(u32, &'a [[u32; 4
 /// A game's shader corpus (`oracles.corpus.<game>/shaders`: a folder, searched recursively, or an archive of
 /// containers as the game ships them); `None` when it is not configured. A configured corpus without a container fails.
 pub fn corpus(game: Game) -> Option<Corpus> {
-    corpus_at(game, "shaders")
+    corpus_of(
+        Query::Oracle(OracleSet::Corpus, game, "shaders"),
+        crate::inputs::oracle_tree(OracleSet::Corpus, game, "shaders"),
+    )
 }
 
-/// The containers of the corpus set `oracles.corpus.<game>/<rel>`, as [`corpus`] reads `shaders`.
-pub fn corpus_at(game: Game, rel: &'static str) -> Option<Corpus> {
-    let query = Query::Oracle(OracleSet::Corpus, game, rel);
-    let tree = crate::inputs::oracle_tree(OracleSet::Corpus, game, rel)?;
-    let corpus = Corpus::of(query.key(), tree);
+/// The containers of an oracle set, given as its query and its tree (`inputs::oracle_tree` of the same set, game and
+/// path, each written literally where they are known, as the real-data check reads them), as [`corpus`] reads a game's
+/// `shaders`.
+pub fn corpus_of(query: Query, tree: Option<Tree>) -> Option<Corpus> {
+    let corpus = Corpus::of(query.key(), tree?);
     expect_found(query, "DXBC containers", corpus.names.len());
     Some(corpus)
 }
