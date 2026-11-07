@@ -17,9 +17,14 @@ Breaking changes, for code that uses 0.5.0 (each is in its entry below):
   `GeometryShader::program`; `DrawShader::draw` (any topology, from `Primitive::assemble`) replaces
   `DrawShader::draw_indexed` (a triangle list); `Rasterizer::viewports` replaces `Rasterizer::viewport`, and
   `Rasterizer` is no longer `Copy`; `DrawStats::primitives` replaces `DrawStats::triangles`; `DepthState` is no longer
-  `Eq` (its `bounds` are floats). `Rasterizer`, `DrawStats`, `DepthState`, `Surface`, `Output`, `Execution` and
-  `ImageAtomic` have new public fields, and `ImageAtomicOp` the variant `CompareExchange`.
-- `iridia-ir`: `Op::LoadBuffer` takes an `address` (`Address`) in place of `index`, `stride` and `offset`;
+  `Eq` (its `bounds` are floats); `ProgramShader::program` gives an `Option` (a program, where a naga-based lifter
+  made it; `None` for one run from the IR); `TessellationShader::hull` and `TessellationShader::domain` give the
+  stage's `Interface`, where they gave its program. `Rasterizer`, `DrawStats`, `DepthState`, `Surface`, `Output`,
+  `Execution` and `ImageAtomic` have new public fields, and `ImageAtomicOp` the variant `CompareExchange`.
+- `iridia-dxbc`: `reflection::resource_reflection` gives the reflected resources (`Vec<Resource>`), where it gave an
+  `Interface`.
+- `iridia-ir`: `Op::LoadBuffer` takes an `address` (`Address`) in place of `index`, `stride` and `offset`, and it and
+  `Op::Sample` name their resources by `Res` (a resource and an array element), where they took a `ResourceId`;
   `OnZero::ByOne` replaces `OnZero::Dividend` (it applies to `SDiv` and `SRem` too); `Op::Sample` has `compare`,
   `offset` and `clamp`; `Program` has `patch` and `workgroup`, `Var` has `len`, `space` and `init`, `MeshFacts` has
   `payload`. `Op`, `Node`, `Unary`, `Binary` and `Terminator` have new variants, which an exhaustive `match` must take.
