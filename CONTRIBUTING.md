@@ -28,6 +28,18 @@ fails on a panic, or on a program that goes further or less far than `iridia/tes
 widens, replace that table with the current one (the failure names its path) in the same commit. GitHub CI has no game
 data and skips it.
 
+A change that moves what the coverage table (`docs/coverage`) records, a lifter's, `iridia-exec`'s or the runners' in
+`tools/coverage`, makes the table again and commits it:
+
+```sh
+cargo run --release --locked -p iridia-coverage -- table docs/coverage <offload-golden-images checkout>
+```
+
+It needs no game data: the suites it runs are in `tools/coverage/suites`, programs included, and the golden images are a
+checkout of [llvm/offload-golden-images](https://github.com/llvm/offload-golden-images) at the commit
+`tools/coverage/suites/offload/README.md` names. CI's coverage job makes it the same way and fails where it differs from
+the committed one.
+
 ## No I/O in libraries
 
 The library crates read the bytes and text they are given and never touch files, the environment or processes: `clippy.toml` disallows those calls and every `lib.rs` denies the lint. Examples and tests may.
