@@ -10,8 +10,8 @@ use alloc::{format, string::String, vec, vec::Vec};
 
 use iridia_ir::{
     Axis, Binary, Body, Cmp, End, Fineness, FloatToInt, Function, MinMaxNan, MulZero, Node, OnZero, Op,
-    OutOfBounds, Program, QuadSwap, Region, Rounding, SaturateNan, Scalar, Ternary, Type, Unary, ValueId,
-    Wave, WaveOp, WaveScan,
+    OutOfBounds, Program, QuadSwap, Region, Res, Rounding, SaturateNan, Scalar, Ternary, Type, Unary,
+    ValueId, Wave, WaveOp, WaveScan,
     interface::{
         Access, BufferKind, ResourceId, ResourceKind, SampleType, Stage, StorageTarget, TextureDim, Value,
     },
@@ -1042,16 +1042,56 @@ impl Lower<'_> {
             .map(|(_, g)| *g)
             .ok_or_else(|| err(format!("resource {} has no binding", id.0)))
     }
-    fn constant_rows(&self, id: ResourceId) -> Result<u32, Error> {
-        match self
-            .program
+    fn resource(&self, id: ResourceId) -> Result<&iridia_ir::interface::Resource, Error> {
+        self.program
             .interface
             .resources
             .iter()
             .find(|r| r.id == id)
-            .map(|r| &r.kind)
-        {
-            Some(ResourceKind::ConstantBuffer { layout }) => Ok(layout.size.div_ceil(16)),
+            .ok_or_else(|| err(format!("resource {} is not in the interface", id.0)))
+    }
+    /// The global `g` of resource `r.id` as an operation names it: the global, or for an array of resources (a binding
+    /// array) the element `r.index` picks, element 0 where it names none. An element past the array is undefined, as
+    /// in Direct3D: the index is not clamped (an unbounded array's length is the bound data's, not the program's).
+    fn pick(&mut self, g: Handle<GlobalVariable>, r: Res) -> Result<Handle<E>, Error> {
+        let base = self.expr(E::GlobalVariable(g));
+        if !self.resource(r.id)?.is_array() {
+            return Ok(base);
+        }
+        Ok(match r.index {
+            None => self.expr(E::AccessIndex { base, index: 0 }),
+            Some(i) => {
+                let index = self.index_u32(i)?;
+                self.expr(E::Access { base, index })
+            }
+        })
+    }
+    /// A texture, storage image or sampler an operation names ([`Lower::pick`]).
+    fn handle(&mut self, r: Res) -> Result<Handle<E>, Error> {
+        let g = self.global(r.id)?;
+        self.pick(g, r)
+    }
+    /// The pointer to the array of a buffer an operation names (its words, elements or constant rows): its global's,
+    /// or for an element of an array of buffers the element's one member ([`binding_array`]).
+    fn buffer(&mut self, r: Res) -> Result<Handle<E>, Error> {
+        let g = self.global(r.id)?;
+        self.member(g, r)
+    }
+    /// The array of global `g` (a buffer's, a hidden counter's) for the resource `r` names.
+    fn member(&mut self, g: Handle<GlobalVariable>, r: Res) -> Result<Handle<E>, Error> {
+        let picked = self.pick(g, r)?;
+        Ok(if self.resource(r.id)?.is_array() {
+            self.expr(E::AccessIndex {
+                base: picked,
+                index: 0,
+            })
+        } else {
+            picked
+        })
+    }
+    fn constant_rows(&self, id: ResourceId) -> Result<u32, Error> {
+        match &self.resource(id)?.kind {
+            ResourceKind::ConstantBuffer { layout } => Ok(layout.size.div_ceil(16)),
             _ => Err(err(format!("resource {} is not a constant buffer", id.0))),
         }
     }
@@ -1059,7 +1099,7 @@ impl Lower<'_> {
     /// at a fixed address may name any 32-bit word (a bank of 32-bit booleans, four to a row); an indexed one whole rows.
     fn load_buffer(
         &mut self,
-        resource: ResourceId,
+        resource: Res,
         index: Option<ValueId>,
         stride: u32,
         offset: u32,
@@ -1078,9 +1118,8 @@ impl Lower<'_> {
                 "a buffer read of {t} across a row at offset {offset}"
             )));
         }
-        let rows = self.constant_rows(resource)?;
-        let g = self.global(resource)?;
-        let bank = self.expr(E::GlobalVariable(g));
+        let rows = self.constant_rows(resource.id)?;
+        let bank = self.buffer(resource)?;
         let first = offset / 16;
         let (row, inside) = match index {
             None => {
@@ -1571,12 +1610,7 @@ impl Lower<'_> {
                 offset,
             } => self.gather(texture, sampler, coord, component, compare, offset)?,
             Op::LoadTexel { texture, coord, .. } if self.typed_buffer(texture.id)? => {
-                if texture.index.is_some() {
-                    return Err(err(
-                        "a read of an element of an array of buffers is not lowered yet",
-                    ));
-                }
-                self.load_element(texture.id, coord, t)?
+                self.load_element(texture, coord, t)?
             }
             Op::LoadTexel {
                 texture,
@@ -1585,14 +1619,7 @@ impl Lower<'_> {
                 sample,
                 offset,
             } => self.load_texel(texture, coord, level, sample, offset, t)?,
-            Op::Query(r, iridia_ir::Query::Elements) => {
-                if r.index.is_some() {
-                    return Err(err(
-                        "a query of an element of an array of buffers is not lowered yet",
-                    ));
-                }
-                self.elements(r.id)?
-            }
+            Op::Query(r, iridia_ir::Query::Elements) => self.elements(r)?,
             Op::Query(r, q) => self.image_query(r, q, t)?,
             Op::Atomic {
                 memory,
@@ -1604,28 +1631,16 @@ impl Lower<'_> {
             Op::ReportHit { .. } => {
                 return Err(err("an intersection program's reported hit is not lowered yet"));
             }
-            Op::Counter(r, op) => {
-                if r.index.is_some() {
-                    return Err(err(
-                        "a counter of an element of an array of buffers is not lowered yet",
-                    ));
-                }
-                self.counter(r.id, op)?
-            }
+            Op::Counter(r, op) => self.counter(r, op)?,
             Op::LoadBuffer {
                 resource,
                 address,
                 oob,
             } => {
-                if resource.index.is_some() {
-                    return Err(err(
-                        "a read of an element of an array of buffers is not lowered yet",
-                    ));
-                }
                 if self.words_buffer(resource.id)? {
-                    self.load_words(resource.id, address, t)?
+                    self.load_words(resource, address, t)?
                 } else {
-                    self.load_buffer(resource.id, address.index, address.stride, address.offset, oob, t)?
+                    self.load_buffer(resource, address.index, address.stride, address.offset, oob, t)?
                 }
             }
             Op::Sample {
@@ -2048,23 +2063,13 @@ impl Lower<'_> {
                 address,
                 value,
             } => {
-                if resource.index.is_some() {
-                    return Err(err(
-                        "a write of an element of an array of buffers is not lowered yet",
-                    ));
-                }
                 if !self.words_buffer(resource.id)? {
                     return Err(err(format!("a buffer write of resource {}", resource.id.0)));
                 }
-                self.store_words(resource.id, *address, *value)?;
+                self.store_words(*resource, *address, *value)?;
             }
             Node::StoreTexel { image, coord, value } if self.typed_buffer(image.id)? => {
-                if image.index.is_some() {
-                    return Err(err(
-                        "a write of an element of an array of buffers is not lowered yet",
-                    ));
-                }
-                self.store_element(image.id, *coord, *value)?;
+                self.store_element(*image, *coord, *value)?;
             }
             Node::StoreTexel { image, coord, value } => self.store_texel(*image, *coord, *value)?,
             Node::StorePatch(..) => return Err(err("a patch constant store is not lowered yet")),
@@ -2364,6 +2369,12 @@ pub fn module(program: &Program, plan: &BindingPlan) -> Result<naga::Module, Err
             } => (l.buffer_type(r.id, *kind)?, storage(*access != Access::Read)),
             other => return Err(err(format!("a {other:?} resource is not lowered yet"))),
         };
+        // an array of resources is one binding array at its first register
+        let ty = if r.is_array() {
+            l.binding_array(ty, space, r.count)?
+        } else {
+            ty
+        };
         let g = l.module.global_variables.append(
             GlobalVariable {
                 name: Some(bind.name.clone()),
@@ -2394,6 +2405,13 @@ pub fn module(program: &Program, plan: &BindingPlan) -> Result<naga::Module, Err
             size: ArraySize::Dynamic,
             stride: 4,
         });
+        // an array of views has an array of counters, one each
+        let count = l.resource(id)?.count;
+        let ty = if count == 1 {
+            ty
+        } else {
+            l.binding_array(ty, storage(true), count)?
+        };
         let g = l.module.global_variables.append(
             GlobalVariable {
                 name: Some(bind.name.clone()),
@@ -2617,6 +2635,42 @@ impl Lower<'_> {
             arrayed,
             class: ImageClass::Storage { format, access },
         }))
+    }
+
+    /// The type of an array of `count` resources whose one element is of type `ty` in `space`: naga's binding array
+    /// (unsized for an array the program does not size, [`iridia_ir::interface::Resource::UNBOUNDED`]). naga holds a
+    /// binding array of buffers as one of structures only, so a buffer's array (its words, elements or constant rows)
+    /// is the one member `data` of a structure.
+    fn binding_array(
+        &mut self,
+        ty: Handle<naga::Type>,
+        space: AddressSpace,
+        count: u32,
+    ) -> Result<Handle<naga::Type>, Error> {
+        let base = if space == AddressSpace::Handle {
+            ty
+        } else {
+            // a runtime-sized array takes one element's room in the structure's span
+            let span = self.module.types[ty]
+                .inner
+                .try_size(self.module.to_ctx())
+                .ok_or_else(|| err("a buffer's array has no size"))?;
+            let members = vec![StructMember {
+                name: Some("data".into()),
+                ty,
+                binding: None,
+                offset: 0,
+            }];
+            self.ty(TypeInner::Struct { members, span })
+        };
+        let size = if count == iridia_ir::interface::Resource::UNBOUNDED {
+            ArraySize::Dynamic
+        } else {
+            ArraySize::Constant(
+                core::num::NonZeroU32::new(count).ok_or_else(|| err("an array of no resources"))?,
+            )
+        };
+        Ok(self.ty(TypeInner::BindingArray { base, size }))
     }
 
     /// A buffer's array: of 32-bit words (atomic words where an atomic reaches it) for a raw or structured buffer, of

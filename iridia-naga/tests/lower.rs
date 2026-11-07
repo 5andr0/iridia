@@ -5,8 +5,9 @@
 use iridia_ir::{
     FloatEnv, Program, Provenance,
     interface::{
-        Interface, Label, Resource, ResourceId, ResourceKind, ResourceProvenance, ScalarType, ShaderFormat,
-        Stage, StageFacts, StateParam, SystemValue, Value, Varying, VaryingProvenance,
+        D3dBinding, D3dClass, Interface, Label, Resource, ResourceId, ResourceKind, ResourceProvenance,
+        SampleType, ScalarType, ShaderFormat, Stage, StageFacts, StateParam, SystemValue, TextureDim, Value,
+        Varying, VaryingProvenance,
     },
 };
 
@@ -262,6 +263,83 @@ fn main {
     )
     .validate(&module)
     .unwrap_or_else(|e| panic!("{e:?}\n{wgsl}"));
+}
+
+#[test]
+fn arrays_of_resources_are_binding_arrays_of_naga_s_dialect() {
+    let bound = |id: u32, kind: ResourceKind, count: u32, name: &str, class: D3dClass| Resource {
+        id: ResourceId(id),
+        kind,
+        count,
+        provenance: ResourceProvenance {
+            name: name.into(),
+            d3d: Some(D3dBinding {
+                class,
+                register: 0,
+                space: 0,
+            }),
+            ..ResourceProvenance::default()
+        },
+    };
+    let textures = ResourceKind::Texture {
+        dim: TextureDim::D2,
+        arrayed: false,
+        multisampled: false,
+        sample: SampleType::Float,
+    };
+    let samplers = ResourceKind::Sampler { comparison: false };
+    let p = program(
+        "iridia-ir 1
+fn main {
+  %0: vec4<f32> = input 0.xyzw
+  %1: vec2<f32> = %0.xy
+  %2: f32 = %0.z
+  %3: u32 = bitcast %2
+  %4: vec4<f32> = sample r0@%3, r1@%3!, %1 level 0
+  output 0.xyzw = %4
+  return
+}
+",
+        &[F4],
+        &[F4],
+        vec![
+            bound(0, textures, 4, "tex", D3dClass::ShaderResource),
+            bound(1, samplers, Resource::UNBOUNDED, "smp", D3dClass::Sampler),
+        ],
+    );
+    // a binding array of each class, and one indexed per invocation
+    let needs: Vec<_> = iridia_naga::requirements(&p)
+        .iter()
+        .map(|r| r.capability)
+        .collect();
+    assert_eq!(
+        needs,
+        [
+            naga::valid::Capabilities::TEXTURE_AND_SAMPLER_BINDING_ARRAY,
+            naga::valid::Capabilities::TEXTURE_AND_SAMPLER_BINDING_ARRAY_NON_UNIFORM_INDEXING
+        ]
+    );
+    // WGSL has no arrays of resources
+    let e = iridia_naga::wgsl(&p, &iridia_naga::Profile::BROWSER).unwrap_err();
+    assert!(
+        e.0.starts_with("browser WGSL cannot carry this program: resource tex is an array of textures"),
+        "{e}"
+    );
+    // naga's dialect binds each array at its first register, a binding array of its length (unsized for the
+    // unbounded one), and picks the element the program names
+    let wgsl = iridia_naga::wgsl(&p, &iridia_naga::Profile::NAGA).unwrap();
+    assert!(wgsl.starts_with("enable wgpu_binding_array;"), "{wgsl}");
+    assert!(
+        wgsl.contains("@group(1) @binding(0) \nvar t0_: binding_array<texture_2d<f32>, 4>;"),
+        "{wgsl}"
+    );
+    assert!(
+        wgsl.contains("@group(2) @binding(0) \nvar s0_: binding_array<sampler>;"),
+        "{wgsl}"
+    );
+    assert!(wgsl.contains("textureSampleLevel(t0_[_e3], s0_[_e3], "), "{wgsl}");
+    let module = naga::front::wgsl::parse_str(&wgsl).unwrap_or_else(|e| panic!("{e}\n{wgsl}"));
+    iridia_naga::validate(&module, &iridia_naga::Profile::NAGA).unwrap_or_else(|e| panic!("{e}\n{wgsl}"));
 }
 
 #[test]

@@ -4,8 +4,10 @@
 
 use alloc::{format, string::String, vec::Vec};
 
-use crate::interface::{InterpSampling, ResourceKind, ScalarType, Stage, SystemValue, TextureDim};
-use crate::{Op, Program, Scalar};
+use crate::interface::{
+    InterpSampling, ResourceKind, ScalarType, Stage, StorageTarget, SystemValue, TextureDim,
+};
+use crate::{Body, Function, Memory, Node, Op, Program, Res, Scalar};
 
 /// A capability of a target that WebGPU's core does not promise everywhere.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -30,6 +32,86 @@ pub enum Capability {
     Subgroup,
     /// Subgroup operations in a vertex program.
     SubgroupVertexStage,
+    /// An array of resources of the class (a resource whose `count` is not 1): naga's binding arrays; WGSL has none.
+    BindingArray(ArrayClass),
+    /// An element of an array of resources of the class that an invocation picks as its own (Direct3D's
+    /// `NonUniformResourceIndex`).
+    BindingArrayNonUniform(ArrayClass),
+}
+
+/// What an array of resources is of, as targets tell their binding arrays apart.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ArrayClass {
+    /// Textures, or samplers.
+    TexturesAndSamplers,
+    /// Constant buffers.
+    ConstantBuffers,
+    /// Buffers read or written (storage buffers).
+    Buffers,
+    /// Storage images.
+    StorageImages,
+}
+
+/// The class of an array of this kind of resource, and what the array is of in words; `None` for pipeline state and
+/// acceleration structures, which are not in arrays.
+fn array_class(kind: &ResourceKind) -> Option<(ArrayClass, &'static str)> {
+    Some(match kind {
+        ResourceKind::ConstantBuffer { .. } => (ArrayClass::ConstantBuffers, "constant buffers"),
+        ResourceKind::Buffer(_)
+        | ResourceKind::Storage {
+            target: StorageTarget::Buffer(_),
+            ..
+        } => (ArrayClass::Buffers, "buffers"),
+        ResourceKind::Texture { .. } => (ArrayClass::TexturesAndSamplers, "textures"),
+        ResourceKind::Sampler { .. } => (ArrayClass::TexturesAndSamplers, "samplers"),
+        ResourceKind::Storage {
+            target: StorageTarget::Image { .. },
+            ..
+        } => (ArrayClass::StorageImages, "storage images"),
+        _ => return None,
+    })
+}
+
+/// Every resource an operation or a store of `f` names, with the element it picks.
+fn named(f: &Function) -> Vec<Res> {
+    let mut out = Vec::new();
+    for v in &f.values {
+        match v.op {
+            Op::LoadBuffer { resource: r, .. }
+            | Op::LoadTexel { texture: r, .. }
+            | Op::Query(r, _)
+            | Op::Counter(r, _)
+            | Op::Atomic {
+                memory: Memory::Buffer(r, _) | Memory::Image(r, _),
+                ..
+            } => out.push(r),
+            Op::Sample { texture, sampler, .. } | Op::Gather { texture, sampler, .. } => {
+                out.push(texture);
+                out.push(sampler);
+            }
+            _ => {}
+        }
+    }
+    fn stores(nodes: &[Node], out: &mut Vec<Res>) {
+        for n in nodes {
+            match n {
+                Node::StoreBuffer { resource: r, .. } | Node::StoreTexel { image: r, .. } => out.push(*r),
+                _ => {}
+            }
+            for r in n.regions() {
+                stores(&r.nodes, out);
+            }
+        }
+    }
+    match &f.body {
+        Body::Regions(r) => stores(&r.nodes, &mut out),
+        Body::Cfg(blocks) => {
+            for b in blocks {
+                stores(&b.nodes, &mut out);
+            }
+        }
+    }
+    out
 }
 
 /// One capability a program needs, and the first feature of the program that needs it.
@@ -137,6 +219,33 @@ pub fn requirements(program: &Program) -> Vec<Requirement> {
             need(
                 Capability::CubeArrayTextures,
                 format!("resource {} is a cube array texture", r.provenance.name),
+            );
+        }
+        if r.is_array()
+            && let Some((class, what)) = array_class(&r.kind)
+        {
+            need(
+                Capability::BindingArray(class),
+                format!("resource {} is an array of {what}", r.provenance.name),
+            );
+        }
+    }
+    for r in named(f).into_iter().filter(|r| r.nonuniform && r.index.is_some()) {
+        let Some(resource) = program
+            .interface
+            .resources
+            .iter()
+            .find(|x| x.id == r.id && x.is_array())
+        else {
+            continue;
+        };
+        if let Some((class, what)) = array_class(&resource.kind) {
+            need(
+                Capability::BindingArrayNonUniform(class),
+                format!(
+                    "resource {}, an array of {what}, is indexed per invocation",
+                    resource.provenance.name
+                ),
             );
         }
     }

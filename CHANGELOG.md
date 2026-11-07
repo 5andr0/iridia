@@ -37,6 +37,19 @@
   text it was). Behaviour: a pixel program's lane index and lane count are carried as `u32` (the built-ins' type) by
   `iridia-naga` too, and `iridia`'s refusal of a used clip or cull distance outside a vertex program's outputs reads
   "a clip or cull distance as a Pixel input has no built-in", as `iridia-naga`'s did.
+- `iridia-naga` lowers arrays of resources: an array of textures, samplers, storage images, constant buffers or
+  buffers (a `Resource` whose `count` is not 1, sized or unbounded) is a naga binding array (`binding_array<T, N>`, or
+  `binding_array<T>` unbounded; a buffer's element is a structure of its one member), and an element of one (`Res`
+  with an `index`) an index of it, unclamped as in Direct3D. It was refused ("an element of an array of resources is
+  not lowered yet", "a sample through an element of an array of samplers ..."). `Profile::NAGA` has naga's binding
+  array capabilities, so its WGSL is naga's dialect (`enable wgpu_binding_array;`); `Profile::BROWSER` refuses such a
+  program by name ("resource t is an array of textures": WGSL has no arrays of resources). The requirements name each
+  array and each one indexed per invocation: `iridia_ir::target::Capability::BindingArray` and
+  `BindingArrayNonUniform`, of an `ArrayClass` (textures and samplers, constant buffers, buffers, storage images),
+  which `iridia-naga` maps to naga's `*_BINDING_ARRAY` and `*_NON_UNIFORM_INDEXING` capabilities. Breaking:
+  `Capability` has the two new variants. The DXBC 5.1 and DXIL fixtures'
+  arrays (sized, unbounded, indexed per invocation, in spaces) lowered and run on naga's executor give, lane for lane,
+  what the IR's executor gives.
 - `iridia-passes`: `prepare(&mut Program)`, the passes every output and executor takes a lifted program through, on
   each of its functions: `structurize`, `promote`, `simplify` and `break_flags`. What it gives is what `iridia-exec`'s
   `::from_ir` constructors and `iridia-naga` take, so a caller no longer copies the sequence (the slim gate and the IR

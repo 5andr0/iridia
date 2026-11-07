@@ -9,7 +9,7 @@
 use alloc::{format, string::String, vec::Vec};
 
 use iridia_ir::Program;
-use iridia_ir::target::{self, Bindings, Capability};
+use iridia_ir::target::{self, ArrayClass, Bindings, Capability};
 use naga::valid::Capabilities;
 
 use crate::Error;
@@ -52,7 +52,8 @@ impl Profile {
             .union(Capabilities::CUBE_ARRAY_TEXTURES)
             .union(Capabilities::CLIP_DISTANCES)
             .union(Capabilities::SUBGROUP)
-            .union(Capabilities::SUBGROUP_VERTEX_STAGE),
+            .union(Capabilities::SUBGROUP_VERTEX_STAGE)
+            .union(BINDING_ARRAYS),
         bindings: Bindings::D3d,
         directives: Directives::Naga,
     };
@@ -60,7 +61,8 @@ impl Profile {
     /// WebGPU's core WGSL: per-sample shading (`sample_index`, `@interpolate(..., sample)`) and cube array textures
     /// are core; `f16` (`shader-f16`), `primitive_index` (`primitive-index`) and the subgroup operations
     /// (`subgroups`, `Capabilities::SUBGROUP`) are optional device features a consumer adds with [`Profile::with`]
-    /// when its device has them; WGSL has no 64-bit or 16-bit integers and no `f64`. Resources bind inside WebGPU's
+    /// when its device has them; WGSL has no 64-bit or 16-bit integers, no `f64` and no arrays of resources (naga's
+    /// binding arrays, `enable wgpu_binding_array;` in its dialect). Resources bind inside WebGPU's
     /// default limits, and the WGSL states the standard's directives.
     pub const BROWSER: Profile = Profile {
         name: "browser WGSL",
@@ -80,6 +82,16 @@ impl Profile {
         }
     }
 }
+
+/// naga's binding arrays, of each class of resource, indexed alike or per invocation: an array of resources is one.
+const BINDING_ARRAYS: Capabilities = Capabilities::TEXTURE_AND_SAMPLER_BINDING_ARRAY
+    .union(Capabilities::BUFFER_BINDING_ARRAY)
+    .union(Capabilities::STORAGE_TEXTURE_BINDING_ARRAY)
+    .union(Capabilities::STORAGE_BUFFER_BINDING_ARRAY)
+    .union(Capabilities::TEXTURE_AND_SAMPLER_BINDING_ARRAY_NON_UNIFORM_INDEXING)
+    .union(Capabilities::BUFFER_BINDING_ARRAY_NON_UNIFORM_INDEXING)
+    .union(Capabilities::STORAGE_TEXTURE_BINDING_ARRAY_NON_UNIFORM_INDEXING)
+    .union(Capabilities::STORAGE_BUFFER_BINDING_ARRAY_NON_UNIFORM_INDEXING);
 
 /// One capability a program's lowering needs, and the first feature of the program that needs it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -103,6 +115,20 @@ fn capability(c: Capability) -> Capabilities {
         Capability::ClipDistances => Capabilities::CLIP_DISTANCES,
         Capability::Subgroup => Capabilities::SUBGROUP,
         Capability::SubgroupVertexStage => Capabilities::SUBGROUP_VERTEX_STAGE,
+        Capability::BindingArray(class) => match class {
+            ArrayClass::TexturesAndSamplers => Capabilities::TEXTURE_AND_SAMPLER_BINDING_ARRAY,
+            ArrayClass::ConstantBuffers => Capabilities::BUFFER_BINDING_ARRAY,
+            ArrayClass::Buffers => Capabilities::STORAGE_BUFFER_BINDING_ARRAY,
+            ArrayClass::StorageImages => Capabilities::STORAGE_TEXTURE_BINDING_ARRAY,
+        },
+        Capability::BindingArrayNonUniform(class) => match class {
+            ArrayClass::TexturesAndSamplers => {
+                Capabilities::TEXTURE_AND_SAMPLER_BINDING_ARRAY_NON_UNIFORM_INDEXING
+            }
+            ArrayClass::ConstantBuffers => Capabilities::BUFFER_BINDING_ARRAY_NON_UNIFORM_INDEXING,
+            ArrayClass::Buffers => Capabilities::STORAGE_BUFFER_BINDING_ARRAY_NON_UNIFORM_INDEXING,
+            ArrayClass::StorageImages => Capabilities::STORAGE_TEXTURE_BINDING_ARRAY_NON_UNIFORM_INDEXING,
+        },
     }
 }
 

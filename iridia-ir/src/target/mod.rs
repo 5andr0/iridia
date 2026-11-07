@@ -9,5 +9,5 @@ mod capability;
 mod entry;
 
 pub use bind::{Bind, BindingPlan, Bindings};
-pub use capability::{Capability, Requirement, requirements};
+pub use capability::{ArrayClass, Capability, Requirement, requirements};
 pub use entry::{Binding, BuiltIn, EntryIo, IoItem, IoType, carried, entry_io, varying_name};

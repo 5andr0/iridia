@@ -56,18 +56,7 @@ impl Shape {
 
 impl Lower<'_> {
     fn shape(&self, r: Res) -> Result<Shape, Error> {
-        if r.index.is_some() {
-            return Err(err("an element of an array of resources is not lowered yet"));
-        }
-        let kind = self
-            .program
-            .interface
-            .resources
-            .iter()
-            .find(|x| x.id == r.id)
-            .map(|x| &x.kind)
-            .ok_or_else(|| err(format!("resource {} is not in the interface", r.id.0)))?;
-        Ok(match *kind {
+        Ok(match self.resource(r.id)?.kind {
             ResourceKind::Texture {
                 dim,
                 arrayed,
@@ -95,8 +84,7 @@ impl Lower<'_> {
     }
 
     fn image(&mut self, r: Res) -> Result<Handle<E>, Error> {
-        let g = self.global(r.id)?;
-        Ok(self.expr(E::GlobalVariable(g)))
+        self.handle(r)
     }
 
     fn query(&mut self, image: Handle<E>, query: ImageQuery) -> Handle<E> {
@@ -226,11 +214,6 @@ impl Lower<'_> {
         if clamp.is_some() {
             return Err(err("a sample with a level clamp has no WGSL form"));
         }
-        if sampler.index.is_some() {
-            return Err(err(
-                "a sample through an element of an array of samplers is not lowered yet",
-            ));
-        }
         let shape = self.shape(texture)?;
         let (coordinate, array_index) = self.sample_address(shape, coord)?;
         let offset = if offset == [0; 3] {
@@ -284,8 +267,7 @@ impl Lower<'_> {
             }
         };
         let image = self.image(texture)?;
-        let s = self.global(sampler.id)?;
-        let sampler = self.expr(E::GlobalVariable(s));
+        let sampler = self.handle(sampler)?;
         Ok(self.expr(E::ImageSample {
             image,
             sampler,
@@ -328,11 +310,6 @@ impl Lower<'_> {
         compare: Option<ValueId>,
         offset: GatherOffset,
     ) -> Result<Handle<E>, Error> {
-        if sampler.index.is_some() {
-            return Err(err(
-                "a gather through an element of an array of samplers is not lowered yet",
-            ));
-        }
         let shape = self.shape(texture)?;
         let offset = match offset {
             GatherOffset::Fixed([0, 0, 0]) => None,
@@ -353,8 +330,7 @@ impl Lower<'_> {
             None => None,
         };
         let image = self.image(texture)?;
-        let s = self.global(sampler.id)?;
-        let sampler = self.expr(E::GlobalVariable(s));
+        let sampler = self.handle(sampler)?;
         Ok(self.expr(E::ImageSample {
             image,
             sampler,

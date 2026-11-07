@@ -9,7 +9,7 @@
 use alloc::{collections::BTreeMap, format, vec::Vec};
 
 use iridia_ir::{
-    Address, AtomicOp, Barrier, Function, Memory, Op, Scalar, Scope, Type, ValueId, VarId,
+    Address, AtomicOp, Barrier, Function, Memory, Op, Res, Scalar, Scope, Type, ValueId, VarId,
     interface::{BufferKind, ResourceId, ResourceKind, StorageTarget},
 };
 use naga::{AtomicFunction, BinaryOperator as Bo, Block, Expression as E, Handle, ScalarKind, Statement};
@@ -89,13 +89,7 @@ pub(super) fn counted(f: &Function) -> Vec<ResourceId> {
 
 impl Lower<'_> {
     fn resource_kind(&self, id: ResourceId) -> Result<&ResourceKind, Error> {
-        self.program
-            .interface
-            .resources
-            .iter()
-            .find(|r| r.id == id)
-            .map(|r| &r.kind)
-            .ok_or_else(|| err(format!("resource {} is not in the interface", id.0)))
+        Ok(&self.resource(id)?.kind)
     }
 
     /// The words of a raw or structured buffer (read or storage), or `None` for another resource.
@@ -122,10 +116,9 @@ impl Lower<'_> {
         ))
     }
 
-    /// `arrayLength` of a resource's runtime-sized array.
-    fn length(&mut self, id: ResourceId) -> Result<Handle<E>, Error> {
-        let g = self.global(id)?;
-        let pointer = self.expr(E::GlobalVariable(g));
+    /// `arrayLength` of a buffer's runtime-sized array.
+    fn length(&mut self, r: Res) -> Result<Handle<E>, Error> {
+        let pointer = self.buffer(r)?;
         Ok(self.expr(E::ArrayLength(pointer)))
     }
 
@@ -153,15 +146,14 @@ impl Lower<'_> {
         Ok(self.binary(Bo::ShiftRight, bytes, two))
     }
 
-    /// The pointer to element `index` (`u32`) of a resource's array, clamped into it, and whether `index` is inside.
-    fn element_of(&mut self, id: ResourceId, index: Handle<E>) -> Result<(Handle<E>, Handle<E>), Error> {
-        let len = self.length(id)?;
+    /// The pointer to element `index` (`u32`) of a buffer's array, clamped into it, and whether `index` is inside.
+    fn element_of(&mut self, r: Res, index: Handle<E>) -> Result<(Handle<E>, Handle<E>), Error> {
+        let len = self.length(r)?;
         let inside = self.binary(Bo::Less, index, len);
         let one = self.literal_bits(Scalar::U32, 1)?;
         let last = self.binary(Bo::Subtract, len, one);
         let clamped = self.math(naga::MathFunction::Min, index, &[last]);
-        let g = self.global(id)?;
-        let base = self.expr(E::GlobalVariable(g));
+        let base = self.buffer(r)?;
         let pointer = self.expr(E::Access { base, index: clamped });
         Ok((pointer, inside))
     }
@@ -186,12 +178,7 @@ impl Lower<'_> {
 
     /// `LoadBuffer` of a raw or structured buffer: the result's lanes as consecutive words from the byte address, each
     /// word past the end zero.
-    pub(super) fn load_words(
-        &mut self,
-        id: ResourceId,
-        address: Address,
-        t: Type,
-    ) -> Result<Handle<E>, Error> {
+    pub(super) fn load_words(&mut self, r: Res, address: Address, t: Type) -> Result<Handle<E>, Error> {
         if t.scalar.bits() != 32 {
             return Err(err(format!("a buffer read of {t} is not lowered yet")));
         }
@@ -200,9 +187,9 @@ impl Lower<'_> {
         let mut lanes = Vec::new();
         for k in 0..t.lanes {
             let wk = self.plus(w, k)?;
-            let (pointer, inside) = self.element_of(id, wk)?;
+            let (pointer, inside) = self.element_of(r, wk)?;
             let word = self.expr(E::Load { pointer });
-            let word = self.word_u32(id, word);
+            let word = self.word_u32(r.id, word);
             lanes.push(self.select(inside, word, zero));
         }
         let bits = match lanes.as_slice() {
@@ -236,18 +223,13 @@ impl Lower<'_> {
     }
 
     /// `StoreBuffer` of a raw or structured buffer: each word inside the buffer takes its lane.
-    pub(super) fn store_words(
-        &mut self,
-        id: ResourceId,
-        address: Address,
-        value: ValueId,
-    ) -> Result<(), Error> {
+    pub(super) fn store_words(&mut self, r: Res, address: Address, value: ValueId) -> Result<(), Error> {
         let t = self.vty(value)?;
         if t.scalar.bits() != 32 {
             return Err(err(format!("a buffer write of {t} is not lowered yet")));
         }
         let x = self.get(value)?;
-        let word_kind = match self.atomics.resources.get(&id) {
+        let word_kind = match self.atomics.resources.get(&r.id) {
             Some(s) => s.kind,
             None => ScalarKind::Uint,
         };
@@ -260,7 +242,7 @@ impl Lower<'_> {
         for k in 0..t.lanes {
             let lane = self.lane(bits, t, k)?;
             let wk = self.plus(w, k)?;
-            let (pointer, inside) = self.element_of(id, wk)?;
+            let (pointer, inside) = self.element_of(r, wk)?;
             self.store_if(inside, pointer, lane)?;
         }
         Ok(())
@@ -268,13 +250,8 @@ impl Lower<'_> {
 
     /// The atomic word of lane `lane` of element `index` of a typed buffer an atomic reaches (its element clamped
     /// into the buffer), and whether the element is inside it.
-    fn element_word(
-        &mut self,
-        id: ResourceId,
-        index: Handle<E>,
-        lane: u8,
-    ) -> Result<(Handle<E>, Handle<E>), Error> {
-        let (element, inside) = self.element_of(id, index)?;
+    fn element_word(&mut self, r: Res, index: Handle<E>, lane: u8) -> Result<(Handle<E>, Handle<E>), Error> {
+        let (element, inside) = self.element_of(r, index)?;
         let pointer = self.expr(E::AccessIndex {
             base: element,
             index: u32::from(lane),
@@ -283,25 +260,20 @@ impl Lower<'_> {
     }
 
     /// `LoadTexel` of a typed buffer: element `coord`'s four lanes in the view's type, zero past the end.
-    pub(super) fn load_element(
-        &mut self,
-        id: ResourceId,
-        coord: ValueId,
-        t: Type,
-    ) -> Result<Handle<E>, Error> {
+    pub(super) fn load_element(&mut self, r: Res, coord: ValueId, t: Type) -> Result<Handle<E>, Error> {
         if t.lanes != 4 || t.scalar.bits() != 32 {
             return Err(err(format!("a typed buffer read of {t}")));
         }
         let index = self.index_u32(coord)?;
         let ty = self.ty_of(Type::U32X4)?;
         let zero = self.expr(E::ZeroValue(ty));
-        let bits = if self.atomics.resources.contains_key(&id) {
+        let bits = if self.atomics.resources.contains_key(&r.id) {
             let mut lanes = Vec::new();
             let mut inside = None;
             for k in 0..4 {
-                let (pointer, at) = self.element_word(id, index, k)?;
+                let (pointer, at) = self.element_word(r, index, k)?;
                 let word = self.expr(E::Load { pointer });
-                lanes.push(self.word_u32(id, word));
+                lanes.push(self.word_u32(r.id, word));
                 inside = Some(at);
             }
             let bits = self.expr(E::Compose {
@@ -311,7 +283,7 @@ impl Lower<'_> {
             let inside = inside.ok_or_else(|| err("an element of no lanes"))?;
             self.select(inside, bits, zero)
         } else {
-            let (pointer, inside) = self.element_of(id, index)?;
+            let (pointer, inside) = self.element_of(r, index)?;
             let bits = self.expr(E::Load { pointer });
             self.select(inside, bits, zero)
         };
@@ -324,12 +296,7 @@ impl Lower<'_> {
     }
 
     /// `StoreTexel` of a typed buffer: element `coord` takes the value's four lanes, where it is inside.
-    pub(super) fn store_element(
-        &mut self,
-        id: ResourceId,
-        coord: ValueId,
-        value: ValueId,
-    ) -> Result<(), Error> {
+    pub(super) fn store_element(&mut self, r: Res, coord: ValueId, value: ValueId) -> Result<(), Error> {
         let t = self.vty(value)?;
         if t.lanes != 4 || t.scalar.bits() != 32 {
             return Err(err(format!("a typed buffer write of {t}")));
@@ -341,9 +308,9 @@ impl Lower<'_> {
             self.bitcast(x, ScalarKind::Uint)
         };
         let index = self.index_u32(coord)?;
-        if let Some(&scalar) = self.atomics.resources.get(&id) {
+        if let Some(&scalar) = self.atomics.resources.get(&r.id) {
             for k in 0..4 {
-                let (pointer, inside) = self.element_word(id, index, k)?;
+                let (pointer, inside) = self.element_word(r, index, k)?;
                 let lane = self.lane(bits, Type::U32X4, k)?;
                 let lane = if scalar.kind == ScalarKind::Sint {
                     self.bitcast(lane, ScalarKind::Sint)
@@ -354,13 +321,13 @@ impl Lower<'_> {
             }
             return Ok(());
         }
-        let (pointer, inside) = self.element_of(id, index)?;
+        let (pointer, inside) = self.element_of(r, index)?;
         self.store_if(inside, pointer, bits)
     }
 
     /// `Query::Elements` of a buffer: its bytes for a raw buffer, its elements for a structured or typed one.
-    pub(super) fn elements(&mut self, id: ResourceId) -> Result<Handle<E>, Error> {
-        let kind = match self.resource_kind(id)? {
+    pub(super) fn elements(&mut self, r: Res) -> Result<Handle<E>, Error> {
+        let kind = match self.resource_kind(r.id)? {
             ResourceKind::Buffer(k)
             | ResourceKind::Storage {
                 target: StorageTarget::Buffer(k),
@@ -368,7 +335,7 @@ impl Lower<'_> {
             } => *k,
             other => return Err(err(format!("the elements of a {other:?}"))),
         };
-        let len = self.length(id)?;
+        let len = self.length(r)?;
         Ok(match kind {
             BufferKind::Typed(_) => len,
             BufferKind::Raw => {
@@ -385,15 +352,16 @@ impl Lower<'_> {
         })
     }
 
-    /// `Op::Counter`: the view's hidden counter incremented (the count before) or decremented (the count after).
-    pub(super) fn counter(&mut self, id: ResourceId, op: iridia_ir::CounterOp) -> Result<Handle<E>, Error> {
+    /// `Op::Counter`: the view's hidden counter incremented (the count before) or decremented (the count after); an
+    /// element of an array of views has a counter of its own, an element of the counters' binding array.
+    pub(super) fn counter(&mut self, r: Res, op: iridia_ir::CounterOp) -> Result<Handle<E>, Error> {
         let g = self
             .counters
             .iter()
-            .find(|(r, _)| *r == id)
+            .find(|(id, _)| *id == r.id)
             .map(|(_, g)| *g)
-            .ok_or_else(|| err(format!("resource {} has no counter", id.0)))?;
-        let base = self.expr(E::GlobalVariable(g));
+            .ok_or_else(|| err(format!("resource {} has no counter", r.id.0)))?;
+        let base = self.member(g, r)?;
         let pointer = self.expr(E::AccessIndex { base, index: 0 });
         let one = self.literal_bits(Scalar::U32, 1)?;
         let fun = match op {
@@ -421,11 +389,6 @@ impl Lower<'_> {
     fn atomic_word(&mut self, memory: Memory) -> Result<Word, Error> {
         match memory {
             Memory::Buffer(r, address) => {
-                if r.index.is_some() {
-                    return Err(err(
-                        "an atomic of an element of an array of buffers is not lowered yet",
-                    ));
-                }
                 if !self.words_buffer(r.id)? {
                     return Err(err(format!("a word atomic of resource {}", r.id.0)));
                 }
@@ -435,7 +398,7 @@ impl Lower<'_> {
                     .get(&r.id)
                     .ok_or_else(|| err(format!("resource {} has no atomic words", r.id.0)))?;
                 let w = self.word_index(address)?;
-                let (pointer, inside) = self.element_of(r.id, w)?;
+                let (pointer, inside) = self.element_of(r, w)?;
                 Ok(Word {
                     pointer,
                     scalar,
@@ -443,18 +406,13 @@ impl Lower<'_> {
                 })
             }
             Memory::Image(r, coord) if self.typed_buffer(r.id)? => {
-                if r.index.is_some() {
-                    return Err(err(
-                        "an atomic of an element of an array of buffers is not lowered yet",
-                    ));
-                }
                 let scalar = *self
                     .atomics
                     .resources
                     .get(&r.id)
                     .ok_or_else(|| err(format!("resource {} has no atomic words", r.id.0)))?;
                 let index = self.index_u32(coord)?;
-                let (pointer, inside) = self.element_word(r.id, index, 0)?;
+                let (pointer, inside) = self.element_word(r, index, 0)?;
                 Ok(Word {
                     pointer,
                     scalar,

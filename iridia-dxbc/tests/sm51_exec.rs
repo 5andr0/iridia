@@ -1,12 +1,17 @@
-//! The same HLSL compiled to SM5.1, SM6.0, and SM5.0 where expressible, lifted onto the IR and evaluated on identical
-//! CPU inputs.
+//! The same HLSL compiled to SM5.1, SM6.0, and SM5.0 where expressible, evaluated on identical CPU inputs: each build
+//! runs as lifted onto the IR, prepared, and lowered to WGSL (`iridia_naga`).
 #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
-use iridia::{ResourceId, ResourceKind, Stage, StorageTarget};
-use iridia_exec::{Backend, Element, Executable, ImageLoad, ImageSample, ImageStore, Resources};
+use iridia::{Interface, ResourceId, ResourceKind, Stage, StorageTarget};
+use iridia_exec::{
+    Backend, Element, Executable, ImageLoad, ImageQuery, ImageSample, ImageStore, QueryKind, Resources,
+};
 use iridia_ir::Program;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+
+mod lowered;
+use lowered::{Unlowered, lower_c};
 
 const NAMES: &[&str] = &[
     "spaces",
@@ -86,6 +91,14 @@ impl Backend for Host<'_> {
             value
         })
     }
+    /// Every image is 2x2, of one level, layer and sample (as the inputs describe them): what the lowered program's
+    /// bounds checks ask.
+    fn query(&mut self, r: ImageQuery<Element>) -> Result<[u32; 4], String> {
+        Ok(match r.kind {
+            QueryKind::Size => [2, 2, 1, 0],
+            QueryKind::Levels | QueryKind::Layers | QueryKind::Samples => [1, 0, 0, 0],
+        })
+    }
     fn store_image(&mut self, r: ImageStore<ResourceId>) -> Result<(), String> {
         let key = format!("{}:{}:{:?}:{:?}", self.names[&r.view], r.index, r.texel, r.layer);
         self.stores.insert(key, r.value[..usize::from(r.lanes)].to_vec());
@@ -94,7 +107,7 @@ impl Backend for Host<'_> {
 }
 
 fn execute(program: &Program, input: &Value) -> Value {
-    execute_with(&Executable::from_ir(program).unwrap(), program, input)
+    execute_with(&Executable::from_ir(program).unwrap(), &program.interface, input)
 }
 
 /// The IR lift of a container of Shader Model `model` (6.0 is DXIL, the others DXBC): as lifted (a graph structured as
@@ -115,15 +128,15 @@ fn lifted(bytes: &[u8], model: u32, prepared: bool) -> Result<Program, String> {
     Ok(p)
 }
 
-/// The runs of `input` on `exe`, a compile of a program with `program`'s interface.
-fn execute_with(exe: &Executable, program: &Program, input: &Value) -> Value {
+/// The runs of `input` on `exe`, bound using its program's interface.
+fn execute_with(exe: &Executable, interface: &Interface, input: &Value) -> Value {
     let mut all = Vec::new();
     for invocation in input["runs"].as_array().unwrap() {
         let mut bound_data = Resources::default();
         let mut names = BTreeMap::new();
         let mut writes = BTreeMap::new();
         let mut elements = BTreeMap::new();
-        for resource in &program.interface.resources {
+        for resource in &interface.resources {
             let name = &resource.provenance.name;
             names.insert(resource.id, name.clone());
             match &resource.kind {
@@ -167,15 +180,14 @@ fn execute_with(exe: &Executable, program: &Program, input: &Value) -> Value {
             data: input,
             stores: BTreeMap::new(),
         };
-        let output = if program.stage == Stage::Compute {
+        let output = if interface.stage == Stage::Compute {
             let groups: [u32; 3] = words(&invocation["groups"]).try_into().unwrap();
             exe.dispatch_elements(&bound, &mut host, &mut writes, &mut elements, groups, 4)
                 .unwrap();
             let buffers: BTreeMap<_, _> = writes
                 .iter()
                 .filter(|(id, _)| {
-                    program
-                        .interface
+                    interface
                         .resources
                         .iter()
                         .any(|r| r.id == **id && matches!(r.kind, ResourceKind::Storage { .. }))
@@ -185,8 +197,7 @@ fn execute_with(exe: &Executable, program: &Program, input: &Value) -> Value {
                     elements
                         .iter()
                         .filter(|((id, _), _)| {
-                            program
-                                .interface
+                            interface
                                 .resources
                                 .iter()
                                 .any(|r| r.id == *id && matches!(r.kind, ResourceKind::Storage { .. }))
@@ -236,11 +247,32 @@ fn sm51_matches_dxil_and_sm50_bit_for_bit() {
             let ir = lifted(&bytes, model, false).unwrap_or_else(|e| panic!("{name}.{model} as lifted: {e}"));
             let exe = Executable::from_ir(&ir).unwrap_or_else(|e| panic!("{name}.{model} as lifted: {e}"));
             assert_eq!(
-                execute_with(&exe, &p, &input),
+                execute_with(&exe, &ir.interface, &input),
                 output,
                 "{name}.{model}: as lifted"
             );
             println!("{name}.{model}: as lifted, {} lanes identical", lanes(&output));
+            // C still uses the older module only to restore names and entry bindings after WGSL is read back.
+            // Its executable is entirely the prepared IR's lowering, never the older lift's code.
+            let old = if model == 60 {
+                iridia_dxil::lift(&bytes)
+            } else {
+                iridia_dxbc::lift(&bytes)
+            }
+            .unwrap_or_else(|e| panic!("{name}.{model} entry metadata: {e}"));
+            let c = lower_c(&old, &p).unwrap_or_else(|e| match e {
+                Unlowered::Refused(e) | Unlowered::Unbuilt(e) => panic!("{name}.{model} lowered: {e}"),
+            });
+            let exe = Executable::new(&c).unwrap_or_else(|e| panic!("{name}.{model} lowered: {e}"));
+            assert_eq!(
+                execute_with(&exe, &c.interface, &input),
+                output,
+                "{name}.{model}: the IR lift lowered to WGSL"
+            );
+            println!(
+                "{name}.{model}: the IR lift lowered to WGSL, {} lanes identical",
+                lanes(&output)
+            );
             if let Some(expected) = &baseline {
                 assert_eq!(&output, expected, "{name}.{model}");
                 println!("{name}: 5.1 vs {model}, {} lanes identical", lanes(&output));
