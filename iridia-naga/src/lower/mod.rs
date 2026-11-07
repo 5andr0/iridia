@@ -10,7 +10,8 @@ use alloc::{format, string::String, vec, vec::Vec};
 
 use iridia_ir::{
     Axis, Binary, Body, Cmp, End, Fineness, FloatToInt, Function, MinMaxNan, MulZero, Node, OnZero, Op,
-    OutOfBounds, Program, Region, Rounding, SaturateNan, Scalar, Ternary, Type, Unary, ValueId,
+    OutOfBounds, Program, QuadSwap, Region, Rounding, SaturateNan, Scalar, Ternary, Type, Unary, ValueId,
+    Wave, WaveOp, WaveScan,
     interface::{
         Access, BufferKind, ResourceId, ResourceKind, SampleType, Stage, StorageTarget, TextureDim, Value,
     },
@@ -204,8 +205,12 @@ impl Lower<'_> {
         }
     }
     fn expr(&mut self, e: E) -> Handle<E> {
-        // a statement's result (an atomic's) is not emitted either: its statement makes it
-        let pre = e.needs_pre_emit() || matches!(e, E::AtomicResult { .. });
+        // a statement's result (an atomic's, a subgroup operation's) is not emitted either: its statement makes it
+        let pre = e.needs_pre_emit()
+            || matches!(
+                e,
+                E::AtomicResult { .. } | E::SubgroupBallotResult | E::SubgroupOperationResult { .. }
+            );
         if pre {
             self.flush();
         }
@@ -1150,6 +1155,90 @@ impl Lower<'_> {
         })
     }
 
+    /// `Op::Wave`: naga's subgroup operation, whose statement makes its result. naga scans only sums and products,
+    /// and reads a quad's lane at a constant number only.
+    fn wave(&mut self, w: Wave, t: Type) -> Result<Handle<E>, Error> {
+        use naga::{CollectiveOperation, Direction, GatherMode, SubgroupOperation};
+        let ty = self.ty_of(t)?;
+        let (mode, argument) = match w {
+            Wave::Ballot(c) => {
+                let predicate = self.get(c)?;
+                let result = self.expr(E::SubgroupBallotResult);
+                self.statement(Statement::SubgroupBallot {
+                    result,
+                    predicate: Some(predicate),
+                })?;
+                return Ok(result);
+            }
+            Wave::Collective { op, scan, value } => {
+                let collective_op = match scan {
+                    WaveScan::Reduce => CollectiveOperation::Reduce,
+                    WaveScan::Inclusive => CollectiveOperation::InclusiveScan,
+                    WaveScan::Exclusive => CollectiveOperation::ExclusiveScan,
+                };
+                let op = match op {
+                    WaveOp::Add => SubgroupOperation::Add,
+                    WaveOp::Mul => SubgroupOperation::Mul,
+                    WaveOp::Min => SubgroupOperation::Min,
+                    WaveOp::Max => SubgroupOperation::Max,
+                    WaveOp::And => SubgroupOperation::And,
+                    WaveOp::Or => SubgroupOperation::Or,
+                    WaveOp::Xor => SubgroupOperation::Xor,
+                    WaveOp::All => SubgroupOperation::All,
+                    WaveOp::Any => SubgroupOperation::Any,
+                };
+                if scan != WaveScan::Reduce && !matches!(op, SubgroupOperation::Add | SubgroupOperation::Mul)
+                {
+                    return Err(err(format!("a wave scan of {op:?} has no naga form")));
+                }
+                let argument = self.get(value)?;
+                let result = self.expr(E::SubgroupOperationResult { ty });
+                self.statement(Statement::SubgroupCollectiveOperation {
+                    op,
+                    collective_op,
+                    argument,
+                    result,
+                })?;
+                return Ok(result);
+            }
+            Wave::First(a) => (GatherMode::BroadcastFirst, a),
+            Wave::Lane(a, l) => (GatherMode::Shuffle(self.lane_number(l)?), a),
+            Wave::QuadLane(a, l) => {
+                let Some(Op::Literal(bits)) = self.f.value(l).map(|d| d.op.clone()) else {
+                    return Err(err("a quad read of a computed lane is not lowered yet"));
+                };
+                let index = self.unemitted(E::Literal(Literal::U32(u32::try_from(bits[0] & 3).unwrap_or(0))));
+                (GatherMode::QuadBroadcast(index), a)
+            }
+            Wave::QuadSwap(a, s) => (
+                GatherMode::QuadSwap(match s {
+                    QuadSwap::X => Direction::X,
+                    QuadSwap::Y => Direction::Y,
+                    QuadSwap::Diagonal => Direction::Diagonal,
+                }),
+                a,
+            ),
+        };
+        let argument = self.get(argument)?;
+        let result = self.expr(E::SubgroupOperationResult { ty });
+        self.statement(Statement::SubgroupGather {
+            mode,
+            argument,
+            result,
+        })?;
+        Ok(result)
+    }
+
+    /// A lane number as the `u32` naga's subgroup reads take.
+    fn lane_number(&mut self, l: ValueId) -> Result<Handle<E>, Error> {
+        let x = self.get(l)?;
+        Ok(if self.vty(l)?.scalar == Scalar::U32 {
+            x
+        } else {
+            self.bitcast(x, ScalarKind::Uint)
+        })
+    }
+
     fn op(&mut self, v: ValueId) -> Result<Handle<E>, Error> {
         let def = self
             .f
@@ -1514,6 +1603,7 @@ impl Lower<'_> {
                 value,
                 compare,
             } => self.atomic(memory, op, value, compare, t)?,
+            Op::Wave(w) => self.wave(w, t)?,
             Op::Counter(r, op) => {
                 if r.index.is_some() {
                     return Err(err(

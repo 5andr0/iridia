@@ -14,8 +14,9 @@ use super::{SCHEMA, binary, builtin, ternary, unary};
 use crate::{
     Address, AtomicOp, Axis, Barrier, Binary, Block, Body, Builtin, Case, Cmp, CounterOp, End, Fineness,
     FloatToInt, Function, GatherOffset, LabelId, Level, Memory, MinMaxNan, MulZero, Node, OnZero, Op,
-    OutOfBounds, Precision, Query, Region, Res, Rounding, SaturateNan, Scalar, Scope, Space, Target,
-    Terminator, Ternary, Type, Unary, ValueDef, ValueId, Var, VarId, interface::ResourceId,
+    OutOfBounds, Precision, QuadSwap, Query, Region, Res, Rounding, SaturateNan, Scalar, Scope, Space,
+    Target, Terminator, Ternary, Type, Unary, ValueDef, ValueId, Var, VarId, Wave, WaveOp, WaveScan,
+    interface::ResourceId,
 };
 
 /// Why a text cannot be read: the line (from 1) and what is wrong there.
@@ -148,6 +149,23 @@ const BUILTINS: [Builtin; 5] = [
     Builtin::DomainLocation,
     Builtin::PhaseInstance,
 ];
+/// Every wave operation of one value, in the text form's order.
+const WAVE_OPS: [WaveOp; 9] = [
+    WaveOp::Add,
+    WaveOp::Mul,
+    WaveOp::Min,
+    WaveOp::Max,
+    WaveOp::And,
+    WaveOp::Or,
+    WaveOp::Xor,
+    WaveOp::All,
+    WaveOp::Any,
+];
+
+const WAVE_SCANS: [WaveScan; 3] = [WaveScan::Reduce, WaveScan::Inclusive, WaveScan::Exclusive];
+
+const QUAD_SWAPS: [QuadSwap; 3] = [QuadSwap::X, QuadSwap::Y, QuadSwap::Diagonal];
+
 const ATOMICS: [AtomicOp; 11] = [
     AtomicOp::Add,
     AtomicOp::Sub,
@@ -576,6 +594,7 @@ impl<'a> Parser<'a> {
             name if name.starts_with("gather.") => self.gather(name.trim_start_matches("gather."), rest)?,
             name if name.starts_with("query.") => self.query(name.trim_start_matches("query."), rest)?,
             name if name.starts_with("atomic.") => self.atomic(name.trim_start_matches("atomic."), rest)?,
+            name if name.starts_with("wave.") => self.wave(name, rest)?,
             "counter.increment" => Op::Counter(self.res(rest)?, CounterOp::Increment),
             "counter.decrement" => Op::Counter(self.res(rest)?, CounterOp::Decrement),
             "state" => Op::LoadState(self.resource(rest)?),
@@ -746,6 +765,44 @@ impl<'a> Parser<'a> {
             sample,
             offset,
         })
+    }
+    /// A wave operation: its name (as [`super::wave`] prints it) and its values.
+    fn wave(&self, name: &str, s: &str) -> Result<Op> {
+        let values = self.list(s)?;
+        let one = |w: fn(ValueId) -> Wave| match values.as_slice() {
+            [a] => Ok(Op::Wave(w(*a))),
+            _ => self.fail(format!("{name} takes one value")),
+        };
+        let two = |w: fn(ValueId, ValueId) -> Wave| match values.as_slice() {
+            [a, b] => Ok(Op::Wave(w(*a, *b))),
+            _ => self.fail(format!("{name} takes two values")),
+        };
+        match name {
+            "wave.ballot" => return one(Wave::Ballot),
+            "wave.first" => return one(Wave::First),
+            "wave.lane" => return two(Wave::Lane),
+            "wave.quadlane" => return two(Wave::QuadLane),
+            _ => {}
+        }
+        let value = match values.as_slice() {
+            [a] => *a,
+            _ => return self.fail(format!("{name} takes one value")),
+        };
+        if let Some(s) = QUAD_SWAPS
+            .into_iter()
+            .find(|s| super::wave(&Wave::QuadSwap(value, *s)) == name)
+        {
+            return Ok(Op::Wave(Wave::QuadSwap(value, s)));
+        }
+        for op in WAVE_OPS {
+            for scan in WAVE_SCANS {
+                let w = Wave::Collective { op, scan, value };
+                if super::wave(&w) == name {
+                    return Ok(Op::Wave(w));
+                }
+            }
+        }
+        self.fail(format!("no wave operation {name}"))
     }
     fn query(&self, what: &str, s: &str) -> Result<Op> {
         let (head, keys) = keywords(s, &["level", "index"]);

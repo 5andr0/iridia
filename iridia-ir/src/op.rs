@@ -506,6 +506,80 @@ pub enum Query {
     Elements,
 }
 
+/// What an [`Op::Wave`] does across the active invocations of a wave.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+pub enum Wave {
+    /// Which active invocations' condition (a `bool`) holds: a `vec4<u32>` whose word `n / 32` holds invocation
+    /// `n`'s bit `n % 32` (Direct3D's `WaveActiveBallot`).
+    Ballot(ValueId),
+    /// The value the active invocation of the lowest number has (`WaveReadLaneFirst`).
+    First(ValueId),
+    /// The value invocation `.1` (a `u32`, which may differ between invocations) has; undefined where that
+    /// invocation is not active (`WaveReadLaneAt`).
+    Lane(ValueId, ValueId),
+    /// The value invocation `.1` (a `u32`, 0 to 3) of the invocation's 2x2 quad has (`QuadReadLaneAt`).
+    QuadLane(ValueId, ValueId),
+    /// The value the invocation's neighbour in its quad has (`QuadReadAcrossX`, `QuadReadAcrossY`,
+    /// `QuadReadAcrossDiagonal`).
+    QuadSwap(ValueId, QuadSwap),
+    /// The operation over the active invocations' values: of all of them, or of those numbered up to this one
+    /// (`WaveActiveSum`, `WavePrefixSum`, `WaveActiveBitAnd`, `WaveActiveAllTrue`).
+    Collective {
+        /// The operation.
+        op: WaveOp,
+        /// Which invocations' values it takes.
+        scan: WaveScan,
+        /// The value.
+        value: ValueId,
+    },
+}
+
+/// The neighbour a [`Wave::QuadSwap`] reads, by its place in the quad.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+pub enum QuadSwap {
+    /// The invocation beside it, across x.
+    X,
+    /// The invocation above or below it, across y.
+    Y,
+    /// The invocation across the diagonal.
+    Diagonal,
+}
+
+/// The operation of a [`Wave::Collective`]. A minimum or maximum compares as the value's type does (signed for
+/// `i32`); `And`, `Or` and `Xor` take integers, `All` and `Any` bools.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+pub enum WaveOp {
+    /// The sum.
+    Add,
+    /// The product.
+    Mul,
+    /// The least.
+    Min,
+    /// The greatest.
+    Max,
+    /// The bitwise and.
+    And,
+    /// The bitwise or.
+    Or,
+    /// The bitwise exclusive or.
+    Xor,
+    /// Whether every value holds.
+    All,
+    /// Whether any value holds.
+    Any,
+}
+
+/// The invocations whose values a [`Wave::Collective`] takes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+pub enum WaveScan {
+    /// Every active invocation's.
+    Reduce,
+    /// The active invocations' numbered up to this one, this one's too.
+    Inclusive,
+    /// The active invocations' numbered below this one (the operation's identity where there are none).
+    Exclusive,
+}
+
 /// A value the pipeline gives a stage that is not one of its interface's inputs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
 pub enum Builtin {
@@ -694,6 +768,12 @@ pub enum Op {
     },
     /// An atomic change of a buffer's hidden counter (a `u32`), as [`CounterOp`] says.
     Counter(Res, CounterOp),
+    /// An operation across the invocations of the invocation's wave (Direct3D's wave, a subgroup), as [`Wave`] says.
+    /// Which invocations make a wave, and how many, is the device's. An invocation takes part where it is active:
+    /// where its control flow reaches the operation with the others' (a demoted invocation, a helper, is not active);
+    /// a quad's invocations are those of its 2x2 pixels in a pixel program, four consecutive invocations in a compute
+    /// program.
+    Wave(Wave),
 }
 
 impl Res {
@@ -809,6 +889,11 @@ impl Op {
                 v.extend(compare.as_mut());
             }
             Op::Counter(r, _) => r.operands_mut(&mut v),
+            Op::Wave(w) => match w {
+                Wave::Ballot(a) | Wave::First(a) | Wave::QuadSwap(a, _) => v.push(a),
+                Wave::Lane(a, l) | Wave::QuadLane(a, l) => v.extend([a, l]),
+                Wave::Collective { value, .. } => v.push(value),
+            },
         }
         v
     }
@@ -844,8 +929,8 @@ impl Op {
         }
     }
 
-    /// Whether the operation reads state other than its operands (inputs, variables, resources, the quad); such a
-    /// value is placed where its node is and is not moved across stores.
+    /// Whether the operation reads state other than its operands (inputs, variables, resources, the quad, the wave);
+    /// such a value is placed where its node is and is not moved across stores.
     pub fn reads_state(&self) -> bool {
         // a derivative reads the quad's other invocations, so it stays where its control flow puts it
         !matches!(

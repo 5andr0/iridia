@@ -209,6 +209,7 @@ fn op_name(op: &Op) -> &'static str {
         Op::Query(..) => "a resource query",
         Op::Atomic { .. } => "an atomic",
         Op::Counter(..) => "a buffer counter",
+        Op::Wave(_) => "a wave operation",
         _ => "the operation",
     }
 }
@@ -869,7 +870,8 @@ impl Machine<'_, '_> {
             | Op::LoadTexel { .. }
             | Op::Query(..)
             | Op::Atomic { .. }
-            | Op::Counter(..) => {
+            | Op::Counter(..)
+            | Op::Wave(_) => {
                 return Err(format!("{} is not run here: iridia-exec runs it", op_name(op)).into());
             }
             // the pure operations, which `eval` took above

@@ -267,6 +267,10 @@ impl Lift<'_> {
             80 => self.barrier(args),
             82 => self.discard(args),
             83..=86 => {
+                if self.setup.interface.stage != iridia_ir::interface::Stage::Pixel {
+                    // Shader Model 6.6 takes a compute program's derivatives over its quads of invocations
+                    return self.refuse("a derivative outside a pixel program is not lifted onto the IR yet");
+                }
                 let x = self.float(self.arg(args, 1)?)?;
                 let (axis, fineness) = match code {
                     83 => (Axis::X, Fineness::Coarse),
@@ -307,6 +311,7 @@ impl Lift<'_> {
                 value(self, r)
             }
             97..=99 => self.stream_op(code, args),
+            110..=123 | 135 | 136 => self.wave(inst, code, args),
             100 => self.pipeline_value(inst, Builtin::GsInstance),
             103 => self.load_output_control_point(inst, args),
             104 => self.load_patch_constant(inst, args),
@@ -333,7 +338,7 @@ impl Lift<'_> {
     }
 
     /// The input varying a system value is, and its lane `component` (all its lanes for `None`), as `u32`s.
-    fn system_input(&mut self, system: SystemValue, component: Option<u8>) -> Result<IrValue> {
+    pub(crate) fn system_input(&mut self, system: SystemValue, component: Option<u8>) -> Result<IrValue> {
         let Some(slot) = self
             .setup
             .interface

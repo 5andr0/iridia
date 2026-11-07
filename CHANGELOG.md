@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- `iridia-ir`: wave and quad operations, `Op::Wave` (`Wave`: a ballot, a read of the first active invocation's
+  value, of another invocation's or of another of the quad's, and a reduction or scan of a value over the active
+  invocations, `WaveOp` and `WaveScan`), in the text form as `wave.ballot`, `wave.first`, `wave.lane`,
+  `wave.quadlane`, `wave.quadswap.x` and `wave.add.exclusive`. `iridia-exec` runs them as it runs naga's subgroup
+  operations; `iridia-naga` lowers them to naga's (the `NAGA` profile allows `SUBGROUP`, and the preflight names the
+  operation or lane input that needs it) and refuses a scan other than a sum or a product, and a quad read of a
+  computed lane, which naga has no form of. The lane number and lane count inputs lower to naga's subgroup built-ins.
+- `iridia-dxil::ir` lifts the wave and quad operations the older lift does (`WaveIsFirstLane` to `QuadOp`,
+  `WaveAllBitCount`, `WavePrefixBitCount`), as it reads them: a read of a lane at a number is a shuffle, a prefix an
+  exclusive scan, a flag read across the wave travels as 1 or 0, and a 64-bit value keeps its width; a 64-bit atomic
+  operation and a derivative outside a pixel program are refused by name. The lane number of a thread group laid out in
+  more than one dimension is the invocation's rank among its wave's when the program starts, as the older lift makes it.
+  On the slim set's 4,059 DXIL programs, the older lift runs 1,616 and the IR agrees on 1,350, 1,123 again through
+  `iridia-naga`'s WGSL; none differ. The IR refuses 51 programs the older lift takes (mesh and ray tracing stages, ray
+  queries, compute derivatives) and lifts 1,006 it refuses.
 - `iridia-dxil::ir`: a lift of DXIL onto the IR, its body a control flow graph (block parameters for LLVM's phis,
   blocks in reverse post-order) that `iridia_passes::structurize` makes structured. It lifts vertex (one that writes no
   position too), pixel, compute, hull, domain and geometry programs (a hull program's patch-constant function is the
@@ -16,12 +31,9 @@
   `Coverage`. A 16-bit lane of a raw or structured buffer is half of a word: read with a shift and a mask, written with
   an atomic and and or, so another invocation's half of the word is never overwritten; `tests/ir_warp.rs` holds such a
   program (`fixtures/buffer_lanes16`) to the memory Direct3D 12 WARP leaves, word for word. Mesh, amplification and
-  ray tracing programs, wave and quad operations and ray queries are refused by name for now.
-  `iridia-dxbc/tests/ir_gate.rs` takes DXIL containers: on the slim set's 4,059 DXIL programs, of the 852 the older
-  lift runs (132 of them programs of functions) the IR agrees with it on 767 (on the other 85 the older lift's
-  executor runs none of the vectors it is given), and 586 agree again through `iridia-naga`'s WGSL; none differ. The IR
-  refuses 1,012 programs the older lift takes, by name (waves, quads, ray queries, mesh and ray tracing stages), and
-  lifts 685 it refuses. The slim pre-push gate has the `IR` and `IR WGSL` columns for DXIL.
+  ray tracing programs and ray queries are refused by name for now. `iridia-dxbc/tests/ir_gate.rs` takes DXIL
+  containers (the gate's numbers are in the wave operations' entry above). The slim pre-push gate has the `IR` and
+  `IR WGSL` columns for DXIL.
 - `iridia-dxil`: a structured buffer whose element holds native 16-bit members (`-enable-16bit-types`) is no longer
   refused for a layout the interface reads as 32-bit lanes: its layout, which the interface's types cannot state, is
   left out.

@@ -18,7 +18,8 @@ use iridia_ir::{
 };
 
 use crate::flat::{
-    AtomOp, Executable, GlobalDesc, GlobalKind, LevelOp, Loc, Member, Op, Pick, Reg, Res, St, WordAt,
+    AtomOp, Executable, GlobalDesc, GlobalKind, LevelOp, Loc, Member, Op, Pick, Reg, Res, St, WaveGather,
+    WaveKind, WaveOp, WaveScan, WordAt,
 };
 use crate::request::{Dim, ImageAtomicOp, QueryKind};
 
@@ -751,9 +752,92 @@ impl Cx<'_> {
     }
 
     /// An atomic operation or a counter change: a statement of its own, its value the word or count it gives.
+    /// `Op::Wave`: the executor's wave statement, as the naga-path compile makes it of naga's subgroup operation (a
+    /// lane read at a number is its shuffle). Each value is 32-bit lanes.
+    fn wave(&mut self, v: ValueId, w: ir::Wave, out: &mut Vec<St>) -> Result<(), String> {
+        let lanes = |c: &Self, x: ValueId| -> Result<u8, String> {
+            let t = c.value(x)?.ty;
+            if t.scalar != Scalar::Bool && t.scalar.bits() != 32 {
+                return Err(format!("a wave operation of {t} is not run"));
+            }
+            Ok(t.lanes)
+        };
+        let (mode, value) = match w {
+            ir::Wave::Ballot(c) => {
+                return self.statement(
+                    out,
+                    St::WaveBallot {
+                        predicate: Some(c.0),
+                        result: v.0,
+                    },
+                );
+            }
+            ir::Wave::Collective { op, scan, value } => {
+                let n = lanes(self, value)?;
+                let t = self.value(value)?.ty;
+                let kind = if t.scalar.is_float() {
+                    WaveKind::F
+                } else if t.scalar.is_signed() {
+                    WaveKind::I
+                } else {
+                    WaveKind::U
+                };
+                let op = match op {
+                    ir::WaveOp::Add => WaveOp::Add,
+                    ir::WaveOp::Mul => WaveOp::Mul,
+                    ir::WaveOp::Min => WaveOp::Min,
+                    ir::WaveOp::Max => WaveOp::Max,
+                    ir::WaveOp::And => WaveOp::And,
+                    ir::WaveOp::Or => WaveOp::Or,
+                    ir::WaveOp::Xor => WaveOp::Xor,
+                    ir::WaveOp::All => WaveOp::All,
+                    ir::WaveOp::Any => WaveOp::Any,
+                };
+                let scan = match scan {
+                    ir::WaveScan::Reduce => WaveScan::Reduce,
+                    ir::WaveScan::Inclusive => WaveScan::Inclusive,
+                    ir::WaveScan::Exclusive => WaveScan::Exclusive,
+                };
+                return self.statement(
+                    out,
+                    St::WaveOp {
+                        op,
+                        scan,
+                        value: value.0,
+                        n,
+                        kind,
+                        result: v.0,
+                    },
+                );
+            }
+            ir::Wave::First(a) => (WaveGather::First, a),
+            ir::Wave::Lane(a, l) => (WaveGather::Shuffle(l.0), a),
+            ir::Wave::QuadLane(a, l) => (WaveGather::QuadLane(l.0), a),
+            ir::Wave::QuadSwap(a, s) => (
+                WaveGather::QuadSwap(match s {
+                    ir::QuadSwap::X => 1,
+                    ir::QuadSwap::Y => 2,
+                    ir::QuadSwap::Diagonal => 3,
+                }),
+                a,
+            ),
+        };
+        let n = lanes(self, value)?;
+        self.statement(
+            out,
+            St::WaveGather {
+                mode,
+                value: value.0,
+                n,
+                result: v.0,
+            },
+        )
+    }
+
     fn effect(&mut self, v: ValueId, out: &mut Vec<St>) -> Result<(), String> {
         let d = self.value(v)?.clone();
         match &d.op {
+            ir::Op::Wave(w) => self.wave(v, *w, out),
             ir::Op::Counter(r, op) => {
                 let tex = self.res(r)?;
                 self.statement(

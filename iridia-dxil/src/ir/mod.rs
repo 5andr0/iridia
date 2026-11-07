@@ -18,6 +18,7 @@ mod dxop;
 mod resources;
 mod stages;
 mod values;
+mod waves;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -243,6 +244,8 @@ pub(crate) struct Lift<'m> {
     pub(crate) notes: BTreeSet<String>,
     /// The bit offset of the instruction being lifted, for refusals.
     pub(crate) at: usize,
+    /// The lane's number where it is the invocation's rank among its wave's, made at the start of the entry block.
+    lane: Option<IrValue>,
 }
 
 impl<'m> Lift<'m> {
@@ -268,6 +271,7 @@ impl<'m> Lift<'m> {
             memory: BTreeMap::new(),
             notes: BTreeSet::new(),
             at: 0,
+            lane: None,
         };
         lift.begin(f)?;
         Ok(lift)
@@ -303,6 +307,7 @@ impl<'m> Lift<'m> {
         self.params = vec![Vec::new(); f.blocks];
         self.memory.clear();
         self.at = 0;
+        self.lane = None;
         Ok(())
     }
 
@@ -310,6 +315,7 @@ impl<'m> Lift<'m> {
     fn function(&mut self, f: &'m LlvmFunction, name: &str) -> Result<Function> {
         self.begin(f)?;
         self.prepare()?;
+        self.lane_at_start();
         self.blocks()?;
         self.prune();
         self.finish_function(name)

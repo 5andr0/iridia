@@ -1216,8 +1216,21 @@ impl Lift<'_> {
         }
     }
 
+    /// Refuse an atomic operation on a 64-bit integer by name: the lift takes 32-bit words.
+    fn narrow_atomic(&self, inst: &Instruction) -> Result<()> {
+        let wide = match inst.result {
+            Some((_, ty)) => self.carried_type(ty)?.is_some_and(|t| t.scalar.bits() == 64),
+            None => false,
+        };
+        if wide {
+            return self.refuse("a 64-bit atomic operation is not lifted onto the IR yet");
+        }
+        Ok(())
+    }
+
     /// `AtomicBinOp(view, op, a0, a1, a2, value)`: the word as it was; outside the view nothing changes and it is 0.
     pub(crate) fn buffer_atomic(&mut self, inst: &Instruction, args: &[ValueId]) -> Result<()> {
+        self.narrow_atomic(inst)?;
         let (resource, i) = self.handle(self.arg(args, 1)?)?;
         let Some(op) = self
             .const_arg(args, 2)
@@ -1244,6 +1257,7 @@ impl Lift<'_> {
 
     /// `AtomicCompareExchange(view, a0, a1, a2, compare, value)`.
     pub(crate) fn buffer_compare_exchange(&mut self, inst: &Instruction, args: &[ValueId]) -> Result<()> {
+        self.narrow_atomic(inst)?;
         let (resource, i) = self.handle(self.arg(args, 1)?)?;
         let (memory, scalar) = self.atomic_target(resource, i, args, 2)?;
         let t = Type::scalar(scalar);

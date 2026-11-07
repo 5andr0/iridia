@@ -316,10 +316,10 @@ impl Lift<'_> {
 }
 
 /// `WaveActiveOp` codes.
-const WAVE_SUM: i64 = 0;
-const WAVE_PRODUCT: i64 = 1;
-const WAVE_MIN: i64 = 2;
-const WAVE_MAX: i64 = 3;
+pub(crate) const WAVE_SUM: i64 = 0;
+pub(crate) const WAVE_PRODUCT: i64 = 1;
+pub(crate) const WAVE_MIN: i64 = 2;
+pub(crate) const WAVE_MAX: i64 = 3;
 
 impl Lift<'_> {
     /// A subgroup operation's result of `kind`, made before the statement that fills it.

@@ -78,6 +78,8 @@ fn builtin(stage: Stage, output: bool, system: SystemValue) -> Option<naga::Buil
         (Stage::Compute, false, GroupThreadId) => naga::BuiltIn::LocalInvocationId,
         (Stage::Compute, false, DispatchThreadId) => naga::BuiltIn::GlobalInvocationId,
         (Stage::Compute, false, GroupIndex) => naga::BuiltIn::LocalInvocationIndex,
+        (Stage::Compute | Stage::Pixel, false, LaneIndex) => naga::BuiltIn::SubgroupInvocationId,
+        (Stage::Compute | Stage::Pixel, false, LaneCount) => naga::BuiltIn::SubgroupSize,
         _ => return None,
     })
 }

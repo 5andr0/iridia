@@ -50,8 +50,8 @@ pub use func::{
 };
 pub use op::{
     Address, AtomicOp, Axis, Barrier, Binary, Builtin, Cmp, CounterOp, Fineness, FloatToInt, GatherOffset,
-    LabelId, Level, Memory, MinMaxNan, MulZero, OnZero, Op, OutOfBounds, Query, Res, Rounding, SaturateNan,
-    Scope, Ternary, Unary, ValueId, VarId, standard_sample_position,
+    LabelId, Level, Memory, MinMaxNan, MulZero, OnZero, Op, OutOfBounds, QuadSwap, Query, Res, Rounding,
+    SaturateNan, Scope, Ternary, Unary, ValueId, VarId, Wave, WaveOp, WaveScan, standard_sample_position,
 };
 pub use program::{ClipDepth, Conventions, Corner, Denormals, FloatEnv, Program, Provenance};
 pub use refusal::{Refusal, Unit, source_hash};

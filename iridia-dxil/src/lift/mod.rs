@@ -12,7 +12,7 @@
 //! buffers, samples, loads, derivatives, discard), and `alloca`, `getelementptr`, `load` and `store` the local arrays
 //! and constant tables.
 
-mod compute;
+pub(crate) mod compute;
 pub(crate) mod dxop;
 mod flow;
 mod memory;

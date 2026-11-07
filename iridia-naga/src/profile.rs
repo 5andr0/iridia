@@ -34,13 +34,15 @@ impl Profile {
             .union(Capabilities::PRIMITIVE_INDEX)
             .union(Capabilities::MULTISAMPLED_SHADING)
             .union(Capabilities::CUBE_ARRAY_TEXTURES)
-            .union(Capabilities::CLIP_DISTANCES),
+            .union(Capabilities::CLIP_DISTANCES)
+            .union(Capabilities::SUBGROUP)
+            .union(Capabilities::SUBGROUP_VERTEX_STAGE),
     };
 
     /// WebGPU's core WGSL: per-sample shading (`sample_index`, `@interpolate(..., sample)`) and cube array textures
-    /// are core; `f16` (`shader-f16`) and `primitive_index` (`primitive-index`) are optional device features a
-    /// consumer adds with [`Profile::with`] when its device has them; WGSL has no 64-bit or 16-bit integers and no
-    /// `f64`.
+    /// are core; `f16` (`shader-f16`), `primitive_index` (`primitive-index`) and the subgroup operations
+    /// (`subgroups`, `Capabilities::SUBGROUP`) are optional device features a consumer adds with [`Profile::with`]
+    /// when its device has them; WGSL has no 64-bit or 16-bit integers and no `f64`.
     pub const BROWSER: Profile = Profile {
         name: "browser WGSL",
         capabilities: Capabilities::MULTISAMPLED_SHADING.union(Capabilities::CUBE_ARRAY_TEXTURES),
@@ -88,6 +90,15 @@ pub fn requirements(program: &Program) -> Vec<Requirement> {
         if let Some((c, what)) = capability_of(v.ty.scalar) {
             need(c, format!("value %{n} is {what}"));
         }
+        if matches!(v.op, iridia_ir::Op::Wave(_)) {
+            need(Capabilities::SUBGROUP, format!("value %{n} is a wave operation"));
+            if program.interface.stage == Stage::Vertex {
+                need(
+                    Capabilities::SUBGROUP_VERTEX_STAGE,
+                    format!("value %{n} is a wave operation of a vertex program"),
+                );
+            }
+        }
         // an f64's bits are moved and tested as 64-bit integers (a bitcast to or from 32-bit lanes, a NaN test)
         if v.ty.scalar == Scalar::F64 {
             need(
@@ -118,6 +129,12 @@ pub fn requirements(program: &Program) -> Vec<Requirement> {
                 need(
                     Capabilities::PRIMITIVE_INDEX,
                     format!("{name} is the primitive index"),
+                );
+            }
+            Some(SystemValue::LaneIndex | SystemValue::LaneCount) if list == "input" => {
+                need(
+                    Capabilities::SUBGROUP,
+                    format!("{name} is the lane number or the wave's lane count"),
                 );
             }
             Some(SystemValue::SampleIndex) if pixel_input => {

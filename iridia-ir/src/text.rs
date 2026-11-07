@@ -8,7 +8,7 @@ use core::fmt::Write;
 use crate::{
     Address, Barrier, Binary, Body, Builtin, End, Function, GatherOffset, Level, Memory, Node, Op,
     OutOfBounds, Precision, Query, Region, Res, Scalar, Scope, Space, Target, Terminator, Ternary, Type,
-    Unary, ValueId, Var,
+    Unary, ValueId, Var, Wave,
 };
 
 mod parse;
@@ -130,6 +130,22 @@ fn oob(o: OutOfBounds) -> &'static str {
 
 fn builtin(b: Builtin) -> String {
     alloc::format!("{b:?}").to_lowercase()
+}
+
+/// A wave operation's name in the text form: `wave.ballot`, `wave.add.exclusive`.
+pub(crate) fn wave(w: &Wave) -> String {
+    match w {
+        Wave::Ballot(_) => "wave.ballot".into(),
+        Wave::First(_) => "wave.first".into(),
+        Wave::Lane(..) => "wave.lane".into(),
+        Wave::QuadLane(..) => "wave.quadlane".into(),
+        Wave::QuadSwap(_, s) => alloc::format!("wave.quadswap.{}", alloc::format!("{s:?}").to_lowercase()),
+        Wave::Collective { op, scan, .. } => alloc::format!(
+            "wave.{}.{}",
+            alloc::format!("{op:?}").to_lowercase(),
+            alloc::format!("{scan:?}").to_lowercase()
+        ),
+    }
 }
 
 /// `rN`, an element of an array `rN@%i`, a non-uniform one `rN@%i!`.
@@ -367,6 +383,11 @@ fn op(out: &mut String, f: &Function, ty: Type, o: &Op) {
             alloc::format!("{c:?}").to_lowercase(),
             res(r)
         ),
+        Op::Wave(w) => {
+            let _ = write!(out, "{} ", wave(w));
+            list(out, &o.operands());
+            Ok(())
+        }
     };
 }
 

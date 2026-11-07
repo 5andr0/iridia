@@ -6,7 +6,7 @@ use core::fmt;
 
 use crate::{
     AtomicOp, Barrier, Binary, Block, Body, Builtin, End, Function, GatherOffset, LabelId, Level, Memory,
-    Node, Op, Program, Query, Region, Res, Scalar, Terminator, Ternary, Type, Unary, ValueId,
+    Node, Op, Program, Query, Region, Res, Scalar, Terminator, Ternary, Type, Unary, ValueId, Wave, WaveOp,
     interface::{
         BufferKind, Interface, Resource, ResourceKind, SampleType, ScalarType, Stage, StageFacts,
         StorageTarget, TextureDim, Value, Varying,
@@ -95,6 +95,45 @@ pub fn derived_type(op: &Op, ty: impl Fn(ValueId) -> Option<Type>) -> Result<Opt
         | Op::Query(..)
         | Op::Atomic { .. }
         | Op::Counter(..) => return Ok(None),
+        Op::Wave(w) => {
+            // a value read from another invocation, or gathered over them, is a scalar or vector of numbers
+            let numbers = |t: Type, what: &str| {
+                if t.scalar == Scalar::Bool {
+                    Err(format!("{what} of {t}, which is not a number"))
+                } else {
+                    Ok(t)
+                }
+            };
+            match w {
+                Wave::Ballot(c) => {
+                    same(get(*c)?, Type::BOOL, "a ballot's condition")?;
+                    Type::U32X4
+                }
+                Wave::First(a) | Wave::QuadSwap(a, _) => numbers(get(*a)?, "a wave read")?,
+                Wave::Lane(a, l) | Wave::QuadLane(a, l) => {
+                    index_type(get(*l)?, "a lane number")?;
+                    numbers(get(*a)?, "a wave read")?
+                }
+                Wave::Collective { op, value, .. } => {
+                    let t = get(*value)?;
+                    match op {
+                        WaveOp::All | WaveOp::Any => {
+                            same(t, Type::BOOL, "a wave's all or any")?;
+                            t
+                        }
+                        WaveOp::And | WaveOp::Or | WaveOp::Xor => {
+                            if !t.scalar.is_integer() {
+                                return Err(format!("a wave bit operation of {t}"));
+                            }
+                            t
+                        }
+                        WaveOp::Add | WaveOp::Mul | WaveOp::Min | WaveOp::Max => {
+                            numbers(t, "a wave operation")?
+                        }
+                    }
+                }
+            }
+        }
         Op::Unary(u, a) => {
             let t = get(*a)?;
             match u {
@@ -908,6 +947,11 @@ impl Checker<'_> {
             }
             Op::Builtin(Builtin::DomainLocation) if stage != Stage::Domain => {
                 Some("the domain location outside a domain program")
+            }
+            Op::Wave(Wave::QuadLane(..) | Wave::QuadSwap(..))
+                if !matches!(stage, Stage::Pixel | Stage::Compute) =>
+            {
+                Some("a quad read outside a pixel or compute program")
             }
             _ => None,
         };
