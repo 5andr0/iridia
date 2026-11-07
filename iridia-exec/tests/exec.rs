@@ -791,6 +791,59 @@ fn program_of(build: impl FnOnce(&mut Builder, Val, Val) -> Val) -> Program {
     }
 }
 
+/// A value loaded from a local is what the local held at the load: a store to the local after the load does not
+/// reach a lane or swizzle of the value read after the store (WGSL's `let s = l; l = ...; s.zw`), whether the read
+/// follows the store directly or after a construct.
+#[test]
+fn a_loaded_value_keeps_what_the_local_held_at_the_load() {
+    let run = |program: Program| {
+        let shader = ProgramShader::new(program).unwrap();
+        lanes(
+            shader
+                .execute(&[bits([0.25, 0.5, 0.0, 0.0])], &[], &mut Unused)
+                .unwrap()
+                .outputs[0],
+        )
+    };
+    for after_a_construct in [false, true] {
+        for by_swizzle in [false, true] {
+            let program = program_of(|b, x, y| {
+                let f4 = b.ty_of(Kind::F, Width::Four);
+                let l = b.local("l", f4);
+                let one = b.lit_f(1.0);
+                let first = b.compose(&[x, y, one, y]);
+                let p = b.local_ptr(l);
+                b.store(p, first);
+                let p = b.local_ptr(l);
+                let held = b.load(p, Kind::F, Width::Four);
+                let zero = b.lit_f(0.0);
+                let second = b.compose(&[zero, zero, zero, zero]);
+                let p = b.local_ptr(l);
+                b.store(p, second);
+                if after_a_construct {
+                    b.push(naga::Statement::Block(naga::Block::new()));
+                }
+                if by_swizzle {
+                    b.swizzle(held, &[3, 2, 1, 0])
+                } else {
+                    let parts = [0, 1, 2, 3].map(|k| b.lane(held, k));
+                    b.compose(&parts)
+                }
+            });
+            let want = if by_swizzle {
+                [0.5, 1.0, 0.5, 0.25]
+            } else {
+                [0.25, 0.5, 1.0, 0.5]
+            };
+            assert_eq!(
+                run(program),
+                want,
+                "after a construct {after_a_construct}, by swizzle {by_swizzle}"
+            );
+        }
+    }
+}
+
 /// The inverse trigonometric and hyperbolic functions, the fused multiply-add and the float remainder, against the
 /// values f64 gives rounded once (and C's fmod: the sign of the dividend).
 #[test]

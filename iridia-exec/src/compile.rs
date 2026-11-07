@@ -18,6 +18,50 @@ use super::run::Decision;
 use iridia::rt as iridia_rt;
 use iridia::{Program, ResourceId};
 
+/// The stretch of statements each of a function's `n` expressions is emitted in: stretches are numbered in the order
+/// the body states them, and a statement other than an `Emit` (a store, a call, an atomic, a construct, the start
+/// or end of a block) begins the next one, so nothing changes memory between two expressions of one stretch. `None`
+/// for an expression no `Emit` covers.
+fn emit_stretches(body: &naga::Block, n: usize) -> Vec<Option<u32>> {
+    fn walk(b: &naga::Block, out: &mut Vec<Option<u32>>, stretch: &mut u32) {
+        *stretch = stretch.saturating_add(1);
+        for s in b.iter() {
+            if let Statement::Emit(r) = s {
+                for h in r.clone() {
+                    if let Some(at) = out.get_mut(h.index()) {
+                        *at = Some(*stretch);
+                    }
+                }
+                continue;
+            }
+            *stretch = stretch.saturating_add(1);
+            match s {
+                Statement::Block(x) => walk(x, out, stretch),
+                Statement::If { accept, reject, .. } => {
+                    walk(accept, out, stretch);
+                    walk(reject, out, stretch);
+                }
+                Statement::Loop { body, continuing, .. } => {
+                    walk(body, out, stretch);
+                    walk(continuing, out, stretch);
+                }
+                Statement::Switch { cases, .. } => {
+                    for c in cases {
+                        walk(&c.body, out, stretch);
+                    }
+                }
+                _ => {}
+            }
+            *stretch = stretch.saturating_add(1);
+        }
+        *stretch = stretch.saturating_add(1);
+    }
+    let mut out = vec![None; n];
+    let mut stretch = 0;
+    walk(body, &mut out, &mut stretch);
+    out
+}
+
 /// The scalar kind of a typed value.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Kind {
@@ -456,6 +500,16 @@ pub(super) fn compile(
     let mut args: Vec<(u32, u8)> = Vec::new();
     // static load per expression (for fusion): (loc, n)
     let mut static_load: Vec<Option<(Loc, u8)>> = vec![None; n_expr];
+    // the stretch each expression is emitted in: a lane or swizzle of a load from memory reads the memory itself only
+    // where both are emitted in one stretch, as no statement (a store) comes between them then
+    let emitted_in = emit_stretches(&f.body, n_expr);
+    let fusable = |load: Handle<E>, at: usize| {
+        emitted_in
+            .get(load.index())
+            .copied()
+            .flatten()
+            .is_some_and(|r| emitted_in.get(at).copied().flatten() == Some(r))
+    };
 
     let lit = |l: &Literal| -> Result<u32, String> {
         Ok(match l {
@@ -640,7 +694,9 @@ pub(super) fn compile(
                 for (to, &from) in pat.iter_mut().zip(pattern.iter()).take(*size as usize) {
                     *to = from as u8;
                 }
-                if let Some((loc, _)) = *static_load.at(vector.index())? {
+                if let Some((loc, _)) = *static_load.at(vector.index())?
+                    && fusable(*vector, i)
+                {
                     *op_of.at_mut(i)? = Some(Op::LoadLanes {
                         loc,
                         offs: pat,
@@ -729,7 +785,9 @@ pub(super) fn compile(
                     if let Some(columns) = nested_of.get(&s) {
                         *agg_of.at_mut(i)? = Some(columns.clone());
                     }
-                } else if let Some((loc, _)) = *static_load.at(base.index())? {
+                } else if let Some((loc, _)) = *static_load.at(base.index())?
+                    && fusable(*base, i)
+                {
                     *op_of.at_mut(i)? = Some(Op::LoadLanes {
                         loc,
                         offs: [lane_u8(*index as usize), 0, 0, 0],
