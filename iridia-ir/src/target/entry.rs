@@ -281,9 +281,15 @@ pub fn entry_io(interface: &Interface) -> Result<EntryIo, String> {
                 // the interface lists what the container declares; an element nothing reads or writes, and the module
                 // cannot bind, is not carried
                 Some(SystemValue::ClipDistance | SystemValue::CullDistance) if !v.used => continue,
-                Some(SystemValue::ClipDistance | SystemValue::CullDistance) => {
+                Some(SystemValue::ClipDistance) => {
                     return Err(format!(
-                        "{name}: a clip or cull distance as {} {direction} has no built-in",
+                        "{name}: clip distances as {} {direction} have no built-in binding",
+                        stage.with_article()
+                    ));
+                }
+                Some(SystemValue::CullDistance) => {
+                    return Err(format!(
+                        "{name}: CullDistance as {} {direction} has no built-in binding",
                         stage.with_article()
                     ));
                 }
