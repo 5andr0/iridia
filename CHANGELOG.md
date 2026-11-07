@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- The dx readers are 0.11.0 (`d3d9-reader`, `dxbc-reader`, `dxil-reader`, `dxcontainer`; before, 0.5.0). The
+  `d3d9-reader` types `iridia-d3d9` and `iridia-d3d9-ir` re-export (`Comment`, `Constant`, `ConstantTable`, `Type`,
+  `TypeMember`, `Comparison`, `Opcode`, `Version`) are 0.11.0's. A DXIL resource whose lower bound or tag is -1 (an
+  unbounded range) is read, so 10 slim programs go further and are refused later by name. A `_feedback` sample is read,
+  and refused by its opcode's name where the reader refused its operands. The DXBC lifter ignores the debug layer's
+  messages (`printf`) and refuses by name a declaration a later reader reads that it does not know.
+- `iridia-d3d9` and `iridia-d3d9-ir` refuse an instruction of another version (`texkill` in a vertex program, `defb` in
+  `ps_2_0`), and `iridia-d3d9-ir` co-issue and a result shift outside pixel 1.x, which the reader refused before
+  0.9.0 and now reads, as Microsoft's disassembler lists them.
 - Tests: the corpus tests read their programs through primase-testdata 0.2.5's `oracle_tree` (`Tree::names`,
   `Tree::read`), so a corpus may be a folder or an archive: iridia-dxil's `lift_corpus`, `metadata_census` and
   `container_digest`, iridia-dxbc's census helpers (`tests/common`: `lift_corpus`, `container_digest`,

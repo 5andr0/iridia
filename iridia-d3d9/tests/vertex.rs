@@ -124,7 +124,7 @@ fn vertex_refuses_undeclared_unwritten_and_unsupported_features() {
         ),
         (
             [position(), instruction(1, &[0x800f_0800, 0x90e4_000f])].concat(),
-            "register type 8 is not a register of vs_3_0",
+            "register type 8, index 0 outside the supported Vertex SM3 banks",
         ),
         (
             [position(), dcl(5, 0, 0xe003_0007)].concat(),

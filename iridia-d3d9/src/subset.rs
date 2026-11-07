@@ -413,9 +413,38 @@ fn source(s: &d3d9_reader::Source, stage: Stage) -> Result<Source> {
     })
 }
 
+/// Refuse an opcode that is not an instruction of `version`. The reader reads one in any version, with the operands it
+/// takes there, as Microsoft's disassembler lists it; no Direct3D 9 runtime takes such a program.
+fn in_version(opcode: d3d9_reader::Opcode, word: usize, version: d3d9_reader::Version) -> Result<()> {
+    use d3d9_reader::Stage::{Pixel, Vertex};
+    if opcode.in_version(version) {
+        return Ok(());
+    }
+    let (other, name) = match version.stage {
+        Vertex => (Pixel, "pixel"),
+        Pixel => (Vertex, "vertex"),
+    };
+    let code = opcode.code();
+    let detail = if opcode.in_version(d3d9_reader::Version {
+        stage: other,
+        ..version
+    }) {
+        format!(
+            "{} (opcode {code}) is a {name} instruction, not one of {version}",
+            opcode.name()
+        )
+    } else {
+        format!(
+            "{} (opcode {code}) is not an instruction of {version}",
+            opcode.name()
+        )
+    };
+    Err(error(word, detail))
+}
+
 /// Read a complete raw pixel or vertex shader, including comment/CTAB payloads and END, and check that it is in the
 /// subset this crate lifts: the version, the bank limits, declaration order, duplicate definitions, the modifiers and
-/// every operation. The reader's own refusals keep their word and text.
+/// every operation, each of the version's. The reader's own refusals keep their word and text.
 pub fn read(bytes: &[u8]) -> Result<Shader> {
     let mut records = d3d9_reader::records(bytes).map_err(|e| error(e.word, e.detail))?;
     // the reader reads the version token first; any but the two this crate lifts is refused before the rest is read
@@ -606,9 +635,10 @@ pub fn read(bytes: &[u8]) -> Result<Shader> {
                         format!("instruction controls/predication/coissue {instruction:#010x}"),
                     ));
                 }
-                let opcode = Opcode::decode(op, word)?;
                 // an opcode of the other stage (cmp, dp2add, texld and texkill in a vertex program; slt, sge and mova
-                // in a pixel one) is not an instruction of the version, which the reader refuses
+                // in a pixel one) is not an instruction of the version
+                in_version(i.opcode, word, records.version())?;
+                let opcode = Opcode::decode(op, word)?;
                 let destination = match &i.destination {
                     Some(d) => Some(destination(d, bytes, false, stage)?),
                     None => None,

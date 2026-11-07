@@ -502,8 +502,8 @@
 5f4376413c391d98e3f57ef3c4888dcb1ad482ea86e8ef538499fb49a40038f9	IR	lift: dcl_index_range of operand register type InputControlPoint: only inputs and outputs are lifted
 5f4376413c391d98e3f57ef3c4888dcb1ad482ea86e8ef538499fb49a40038f9	IR WGSL	not reached
 5fdceb162a18a18395091aa3b788022c2e302cd384b5c81bfb19d6071407591e	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-60a4722611cad4a7b0704e03831a66bf4f53f9279ed4b7d3fe8262cd2de03866	A	lift: sample_d_clamp_feedback has N operands, its format is N destinations and N sources
-60a4722611cad4a7b0704e03831a66bf4f53f9279ed4b7d3fe8262cd2de03866	IR	lift: sample_d_clamp_feedback has N operands, its format is N destinations and N sources
+60a4722611cad4a7b0704e03831a66bf4f53f9279ed4b7d3fe8262cd2de03866	A	lift: sample_d_clamp_feedback: opcode N is not lifted
+60a4722611cad4a7b0704e03831a66bf4f53f9279ed4b7d3fe8262cd2de03866	IR	lift: sample_d_clamp_feedback: opcode N is not lifted to the IR yet
 60a4722611cad4a7b0704e03831a66bf4f53f9279ed4b7d3fe8262cd2de03866	IR WGSL	not reached
 60d4b62e228a379140db9429f552c8048879e765180ccfea248930b39ee9fd7a	IR WGSL	lower: a Geometry program is not lowered yet
 60e54bed7664c58808b173ca2e525db8ede3120b238e4a248d8b973273e90c54	A	lift: reflection: DXBC at word N: N constant buffers named cb: their declarations do not tell which binding takes which layout

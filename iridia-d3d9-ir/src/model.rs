@@ -574,8 +574,37 @@ fn writable(opcode: Opcode, r: Register, shader: &Shader) -> bool {
     }
 }
 
-/// Read a complete program and check every register against its version's banks; the reader's own refusals keep
-/// their word and text.
+/// Refuse an opcode that is not an instruction of `version`. The reader reads one in any version, with the operands it
+/// takes there, as Microsoft's disassembler lists it; no Direct3D 9 runtime takes such a program.
+fn in_version(opcode: d3d9_reader::Opcode, word: usize, version: d3d9_reader::Version) -> Result<()> {
+    use d3d9_reader::Stage::{Pixel, Vertex};
+    if opcode.in_version(version) {
+        return Ok(());
+    }
+    let (other, name) = match version.stage {
+        Vertex => (Pixel, "pixel"),
+        Pixel => (Vertex, "vertex"),
+    };
+    let code = opcode.code();
+    let detail = if opcode.in_version(d3d9_reader::Version {
+        stage: other,
+        ..version
+    }) {
+        format!(
+            "{} (opcode {code}) is a {name} instruction, not one of {version}",
+            opcode.name()
+        )
+    } else {
+        format!(
+            "{} (opcode {code}) is not an instruction of {version}",
+            opcode.name()
+        )
+    };
+    Err(error(word, detail))
+}
+
+/// Read a complete program and check every register against its version's banks and every record against its
+/// version's instructions; the reader's own refusals keep their word and text.
 pub fn read(bytes: &[u8]) -> Result<Shader> {
     let mut records = d3d9_reader::records(bytes).map_err(|e| error(e.word, e.detail))?;
     let version = records.version();
@@ -612,6 +641,19 @@ pub fn read(bytes: &[u8]) -> Result<Shader> {
     while let Some(item) = records.next() {
         let item = item.map_err(|e| error(e.word, e.detail))?;
         let word = item.word();
+        let opcode = match &item {
+            Item::Comment(_) => None,
+            Item::Declaration(_) => Some(Opcode::Dcl),
+            Item::Definition(def) => Some(match def.literal {
+                Literal::Float(_) => Opcode::Def,
+                Literal::Integer(_) => Opcode::DefI,
+                Literal::Bool(_) => Opcode::DefB,
+            }),
+            Item::Instruction(i) => Some(i.opcode),
+        };
+        if let Some(opcode) = opcode {
+            in_version(opcode, word, version)?;
+        }
         match item {
             Item::Comment(comment) => {
                 if comment.data.first() == Some(&u32::from_le_bytes(*b"CTAB"))
@@ -766,6 +808,11 @@ pub fn read(bytes: &[u8]) -> Result<Shader> {
                         format!("instruction controls {:#x} on {}", i.control, i.opcode.name()),
                     ));
                 }
+                // the reader reads pixel 1.x's co-issue and result shifts in any version, as Microsoft's disassembler
+                // lists them
+                if i.coissue && !shader.pixel_1x() {
+                    return Err(error(word, "co-issue outside a pixel 1.x program"));
+                }
                 let destination = i
                     .destination
                     .as_ref()
@@ -794,6 +841,12 @@ pub fn read(bytes: &[u8]) -> Result<Shader> {
                                 ),
                             ));
                         }
+                    }
+                    if d.shift != 0 && !shader.pixel_1x() {
+                        return Err(error(
+                            at,
+                            format!("result shift {} outside a pixel 1.x program", d.shift),
+                        ));
                     }
                     if stage == Stage::Vertex && d.partial_precision {
                         return Err(error(at, "vertex partial precision modifier not supported"));

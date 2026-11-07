@@ -358,7 +358,8 @@ impl Setup {
                     }
                 }
                 Declared::ImmediateBuffer(rows) => setup.immediates = rows.clone(),
-                Declared::CustomData { .. } => {}
+                // comments, debug data and the debug layer's messages (`printf`) change nothing the program computes
+                Declared::CustomData { .. } | Declared::ShaderMessage { .. } => {}
                 Declared::Input {
                     operand,
                     interpolation,
@@ -568,7 +569,7 @@ impl Setup {
                     }))
                 }
                 Declared::ThreadGroup(size) => setup.workgroup = Some(*size),
-                Declared::GroupSharedRaw { register, bytes } => {
+                Declared::GroupSharedRaw { register, bytes, .. } => {
                     if *bytes > MAX_SHARED_BYTES {
                         return Err(at(format!(
                             "dcl_tgsm_raw g{register}: {bytes} bytes, D3D has at most {MAX_SHARED_BYTES} per \
@@ -586,6 +587,7 @@ impl Setup {
                     register,
                     stride,
                     count,
+                    ..
                 } => {
                     let words = stride
                         .div_ceil(4)
@@ -715,6 +717,14 @@ impl Setup {
                     return Err(at(format!(
                         "{} ({opcode}) is not lifted",
                         dxbc_reader::decode::opcode_name(*opcode)
+                    )));
+                }
+                // a kind of declaration a later dxbc-reader reads that this lifter does not know
+                _ => {
+                    return Err(at(format!(
+                        "{} ({}) is not lifted",
+                        dxbc_reader::decode::opcode_name(d.opcode),
+                        d.opcode
                     )));
                 }
             }

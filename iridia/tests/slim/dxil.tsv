@@ -551,8 +551,8 @@
 1b0a3d179e51dd5dd2308304acfe39fb4dbf018c618e8152dc01af6f12e8089c	IR	lift: dx.op.quadVote.iN: dx.op N is not lifted onto the IR yet
 1b0a3d179e51dd5dd2308304acfe39fb4dbf018c618e8152dc01af6f12e8089c	IR WGSL	not reached
 1b53b716d5fa08b5e0310b61ebbbc029ff69869a8840f0d8330590581ab19047	A	validate: module: Entry point main at Compute is invalid: The type of [N] doesn't match the type stored in [N]
-1b5d696148505cbae885486be257171517a4e63ae2623c1f639fe59cd2a424cd	A	lift: resource tags: tag value: -N is out of range
-1b5d696148505cbae885486be257171517a4e63ae2623c1f639fe59cd2a424cd	IR	lift: resource tags: tag value: -N is out of range
+1b5d696148505cbae885486be257171517a4e63ae2623c1f639fe59cd2a424cd	A	lift: a handle of a resource that is not a global's value
+1b5d696148505cbae885486be257171517a4e63ae2623c1f639fe59cd2a424cd	IR	lift: a handle of a resource that is not a global's value
 1b5d696148505cbae885486be257171517a4e63ae2623c1f639fe59cd2a424cd	IR WGSL	not reached
 1b65127534c89d379e83914c6de79fe69040b8c76a39dc918fa53c005f78ad42	IR WGSL	lower: a Mesh program is not lowered yet
 1b9ed9684b2f15db78ad09586313f86aa4c482048ff8d51b44fafedb3416b8b7	IR WGSL	lower: resource N (ResourceDescriptorHeap) has no DND register
@@ -897,8 +897,8 @@
 29064854ccd3b050e707a0f82234f07210ac4b250cb75c216acc60cdcc8e0168	IR	lift: OUTN: signature component type N is not a known value
 29064854ccd3b050e707a0f82234f07210ac4b250cb75c216acc60cdcc8e0168	IR WGSL	not reached
 29594bebb1525da31ce7158b5b01a504bc51fda20efbe706f449d09a496b7661	A	lift: double-precision floats are not lifted
-298e379142bcc38f7ccecbdd6efdf4b20a848e04a3b572bbaa14dae52e7f5a40	A	lift: resource: lower bound: -N is out of range
-298e379142bcc38f7ccecbdd6efdf4b20a848e04a3b572bbaa14dae52e7f5a40	IR	lift: resource: lower bound: -N is out of range
+298e379142bcc38f7ccecbdd6efdf4b20a848e04a3b572bbaa14dae52e7f5a40	A	lift: dx.op.hitObject_FromRayQuery: dx.op N is not lifted
+298e379142bcc38f7ccecbdd6efdf4b20a848e04a3b572bbaa14dae52e7f5a40	IR	lift: a RayGeneration program is not lifted onto the IR yet
 298e379142bcc38f7ccecbdd6efdf4b20a848e04a3b572bbaa14dae52e7f5a40	IR WGSL	not reached
 299a330d673382501d72ed207a68531d8bef756db92b5864fa16356327e2ac5a	A	lift: a constant load of other than four N-bit lanes (N-bit and N-bit rows are not lifted)
 299a330d673382501d72ed207a68531d8bef756db92b5864fa16356327e2ac5a	IR	lift: a constant load of other than four N-bit lanes (N-bit and N-bit rows are not lifted)
@@ -1168,11 +1168,11 @@
 372c3b83c35dfc2c9f6380ff24f8202e9bc4722396596c56ec0e211376b06ec8	A	lift: dx.entryPoints: expected exactly one entry point with a function, found N
 372c3b83c35dfc2c9f6380ff24f8202e9bc4722396596c56ec0e211376b06ec8	IR	lift: dx.entryPoints: expected exactly one entry point with a function, found N
 372c3b83c35dfc2c9f6380ff24f8202e9bc4722396596c56ec0e211376b06ec8	IR WGSL	not reached
-37399346843ca30f322a7b815208068fb0ba477ab0809716e8189ff28dc12b7a	A	lift: resource: lower bound: -N is out of range
-37399346843ca30f322a7b815208068fb0ba477ab0809716e8189ff28dc12b7a	IR	lift: resource: lower bound: -N is out of range
+37399346843ca30f322a7b815208068fb0ba477ab0809716e8189ff28dc12b7a	A	lift: a Pixel program without its ISGN part
+37399346843ca30f322a7b815208068fb0ba477ab0809716e8189ff28dc12b7a	IR	lift: a Pixel program without its ISGN part
 37399346843ca30f322a7b815208068fb0ba477ab0809716e8189ff28dc12b7a	IR WGSL	not reached
-37487f9e01d40dfdd7a877320a01ecb7876cd762d5547b73af91327e022e6d32	A	lift: resource: lower bound: -N is out of range
-37487f9e01d40dfdd7a877320a01ecb7876cd762d5547b73af91327e022e6d32	IR	lift: resource: lower bound: -N is out of range
+37487f9e01d40dfdd7a877320a01ecb7876cd762d5547b73af91327e022e6d32	A	lift: a Compute program without its ISGN part
+37487f9e01d40dfdd7a877320a01ecb7876cd762d5547b73af91327e022e6d32	IR	lift: a Compute program without its ISGN part
 37487f9e01d40dfdd7a877320a01ecb7876cd762d5547b73af91327e022e6d32	IR WGSL	not reached
 374e35eaaa6f1f9eb0bebc8adec3890f538e505ac61898dd2f18c7bcc5771eb3	A	lift: a constant of N bits is not mapped
 374e35eaaa6f1f9eb0bebc8adec3890f538e505ac61898dd2f18c7bcc5771eb3	IR	lift: a constant of N bits is not mapped
@@ -1644,8 +1644,8 @@
 4f3b3731d0c14219ef3d69815fbc4c99280d0868159c9f0e80c5dc0677c5da44	IR WGSL	not reached
 4f5ab39a48430c3e7c587142403631a5875e1feccce0be99b67573f56c16fed8	A	lift: memory of type Half
 4f5d6b4c9823336ae314078d42ebe3f55c73d33fc282c1c9e9a6a77b74dc883a	A	lift: memory of type Half
-4f691f8f0204fe7240bccb24dc0979b96eef1029c1aa0f9562c232530998ae0b	A	lift: resource: lower bound: -N is out of range
-4f691f8f0204fe7240bccb24dc0979b96eef1029c1aa0f9562c232530998ae0b	IR	lift: resource: lower bound: -N is out of range
+4f691f8f0204fe7240bccb24dc0979b96eef1029c1aa0f9562c232530998ae0b	A	lift: a Vertex program without its ISGN part
+4f691f8f0204fe7240bccb24dc0979b96eef1029c1aa0f9562c232530998ae0b	IR	lift: a Vertex program without its ISGN part
 4f691f8f0204fe7240bccb24dc0979b96eef1029c1aa0f9562c232530998ae0b	IR WGSL	not reached
 4f7b577149b4a404bdd57d0099da98bd7b5cb8c70a983104a4435f53fde59eba	A	lift: a constant load of other than four N-bit lanes (N-bit and N-bit rows are not lifted)
 4f7b577149b4a404bdd57d0099da98bd7b5cb8c70a983104a4435f53fde59eba	IR	lift: a constant load of other than four N-bit lanes (N-bit and N-bit rows are not lifted)
@@ -2191,8 +2191,8 @@
 68bb759a6c7d6ffbe488a946a9d759d90d8933b85a49fc32ccbcd9b1a8ac52c7	IR	lift: dx.op.allocateRayQuery: dx.op N is not lifted onto the IR yet
 68bb759a6c7d6ffbe488a946a9d759d90d8933b85a49fc32ccbcd9b1a8ac52c7	IR WGSL	not reached
 68bfca9d8957df68d9d4e08bf3fffe74b625bef60c821658e86f8811100caefb	A	lift: memory of type Half
-68d3ab358c4f79d94f67a4ccb5f7a9aa6c5d11c66ec2df5c27052d71d5cb96de	A	lift: resource: lower bound: -N is out of range
-68d3ab358c4f79d94f67a4ccb5f7a9aa6c5d11c66ec2df5c27052d71d5cb96de	IR	lift: resource: lower bound: -N is out of range
+68d3ab358c4f79d94f67a4ccb5f7a9aa6c5d11c66ec2df5c27052d71d5cb96de	A	lift: a Pixel program without its ISGN part
+68d3ab358c4f79d94f67a4ccb5f7a9aa6c5d11c66ec2df5c27052d71d5cb96de	IR	lift: a Pixel program without its ISGN part
 68d3ab358c4f79d94f67a4ccb5f7a9aa6c5d11c66ec2df5c27052d71d5cb96de	IR WGSL	not reached
 68d60502d6c69753372645fbdc153bb2947a7cd113f036e9c8b22b7fbb645917	A	lift: memory of type Half
 68fb1616393f2c157433d94693cdb94221761f4fb25a8e6eef9c2c0b30cde68c	A	lift: N-bit lanes of a raw or structured buffer are not lifted
@@ -2729,8 +2729,8 @@
 87594c2bc361cadae3a08169867988686e213f06abff70cd7490b98a50855a2f	IR WGSL	not reached
 875c9d6ec1ba6eea1763016ecf0d4768a5019512d43041a8fde59f2ad7ab0f4a	A	lift: memory of type Half
 8785d24fe67fd7e6414eb462e5f6477f5645270d1ad296f1ba6e8c05774aa710	IR WGSL	lower: an element of an array of resources is not lowered yet
-8789ecb9662c29c1ee4e3ea1d907e64f2585c520f4c410047646190c16ff58a5	A	lift: resource: lower bound: -N is out of range
-8789ecb9662c29c1ee4e3ea1d907e64f2585c520f4c410047646190c16ff58a5	IR	lift: resource: lower bound: -N is out of range
+8789ecb9662c29c1ee4e3ea1d907e64f2585c520f4c410047646190c16ff58a5	A	lift: structured element has no complete member annotations
+8789ecb9662c29c1ee4e3ea1d907e64f2585c520f4c410047646190c16ff58a5	IR	lift: structured element has no complete member annotations
 8789ecb9662c29c1ee4e3ea1d907e64f2585c520f4c410047646190c16ff58a5	IR WGSL	not reached
 878c455978d9b537f2647b98380b0541c70e01a8c97194977be605f3f37b1424	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 8797ea7ed639e1225981fc75e8102b8252d9d9d58781531c289120bb3a4fd57e	A	lift: N-bit lanes of a raw or structured buffer are not lifted
@@ -2977,8 +2977,8 @@
 9234bba24233c047e2a8f4465ec455271365bec66a2848d256b6ebe0d928e797	IR	lift: ARGN: signature component type N is not a known value
 9234bba24233c047e2a8f4465ec455271365bec66a2848d256b6ebe0d928e797	IR WGSL	not reached
 9299cc272160d6104666e65db0cff08f0da0877274230c2a4a76a278f00a951f	A	lift: N-bit lanes of a raw or structured buffer are not lifted
-92c5c76282e838e400bebeaa786b854fd1e7eb59ffebec3119ff5e4c575e8a4f	A	lift: resource: lower bound: -N is out of range
-92c5c76282e838e400bebeaa786b854fd1e7eb59ffebec3119ff5e4c575e8a4f	IR	lift: resource: lower bound: -N is out of range
+92c5c76282e838e400bebeaa786b854fd1e7eb59ffebec3119ff5e4c575e8a4f	A	lift: a Compute program without its ISGN part
+92c5c76282e838e400bebeaa786b854fd1e7eb59ffebec3119ff5e4c575e8a4f	IR	lift: a Compute program without its ISGN part
 92c5c76282e838e400bebeaa786b854fd1e7eb59ffebec3119ff5e4c575e8a4f	IR WGSL	not reached
 92c7fd23f920775482684c96644271c0bfa701ff892cbd6ec38a65982c624ae3	A	lift: structured element has no complete member annotations
 92c7fd23f920775482684c96644271c0bfa701ff892cbd6ec38a65982c624ae3	IR	lift: structured element has no complete member annotations
@@ -3005,8 +3005,8 @@
 937e27bcf1ae2a709fb5e1c2ebb2addcba9724c7f1122221b1b3ec178fb8788d	A	lift: a constant load of other than four N-bit lanes (N-bit and N-bit rows are not lifted)
 937e27bcf1ae2a709fb5e1c2ebb2addcba9724c7f1122221b1b3ec178fb8788d	IR	lift: a constant load of other than four N-bit lanes (N-bit and N-bit rows are not lifted)
 937e27bcf1ae2a709fb5e1c2ebb2addcba9724c7f1122221b1b3ec178fb8788d	IR WGSL	not reached
-9386ce732aaa56a67c72666ddd01f39b2c8b237fdf3015c5ac99a5be133c7fc4	A	lift: resource: lower bound: -N is out of range
-9386ce732aaa56a67c72666ddd01f39b2c8b237fdf3015c5ac99a5be133c7fc4	IR	lift: resource: lower bound: -N is out of range
+9386ce732aaa56a67c72666ddd01f39b2c8b237fdf3015c5ac99a5be133c7fc4	A	lift: a Pixel program without its ISGN part
+9386ce732aaa56a67c72666ddd01f39b2c8b237fdf3015c5ac99a5be133c7fc4	IR	lift: a Pixel program without its ISGN part
 9386ce732aaa56a67c72666ddd01f39b2c8b237fdf3015c5ac99a5be133c7fc4	IR WGSL	not reached
 9386e3620f03d3a98f81ead9a0cd976097719e7d126b20d56aa7356d2bb383fe	A	lift: dx.op.evalCentroid.fN: dx.op N is not lifted
 9386e3620f03d3a98f81ead9a0cd976097719e7d126b20d56aa7356d2bb383fe	IR	lift: dx.op.evalCentroid.fN: dx.op N is not lifted onto the IR yet
@@ -4108,8 +4108,8 @@ cab054c293e849713f67291283d76be723bbed0cf24ab07d76e2a89f019d0fa7	A	lift: FOON: s
 cab054c293e849713f67291283d76be723bbed0cf24ab07d76e2a89f019d0fa7	IR	lift: FOON: signature component type N is not a known value
 cab054c293e849713f67291283d76be723bbed0cf24ab07d76e2a89f019d0fa7	IR WGSL	not reached
 cac555c4b3624adbc05609c0102424dfb73ecd1e3fd9645c78d94bde07652b1e	A	lift: N-bit lanes of a raw or structured buffer are not lifted
-caca87704e254864e3c703005e40e6321130fc00d45e067d3616ae5eeae8e17b	A	lift: resource: lower bound: -N is out of range
-caca87704e254864e3c703005e40e6321130fc00d45e067d3616ae5eeae8e17b	IR	lift: resource: lower bound: -N is out of range
+caca87704e254864e3c703005e40e6321130fc00d45e067d3616ae5eeae8e17b	A	lift: a Pixel program without its ISGN part
+caca87704e254864e3c703005e40e6321130fc00d45e067d3616ae5eeae8e17b	IR	lift: a Pixel program without its ISGN part
 caca87704e254864e3c703005e40e6321130fc00d45e067d3616ae5eeae8e17b	IR WGSL	not reached
 cacdef6d85335835b136a915d241719c4fb288ae0b5f89592b66e75e9fb9fe1f	A	lift: a constant load of other than four N-bit lanes (N-bit and N-bit rows are not lifted)
 cacdef6d85335835b136a915d241719c4fb288ae0b5f89592b66e75e9fb9fe1f	IR	lift: a constant load of other than four N-bit lanes (N-bit and N-bit rows are not lifted)
