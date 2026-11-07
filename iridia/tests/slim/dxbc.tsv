@@ -200,7 +200,7 @@
 260bada5f1dbe1e4c546410176dfa6143673e2d39195c5868c0cbc4cda866df1	A	lift: a declared input of register type OutputControlPoint
 260bada5f1dbe1e4c546410176dfa6143673e2d39195c5868c0cbc4cda866df1	IR	lift: a declared input of register type OutputControlPoint
 260bada5f1dbe1e4c546410176dfa6143673e2d39195c5868c0cbc4cda866df1	IR WGSL	not reached
-2620713599be13fb4f026976ba80f500012c4e80b255d421bc4116b378be8bfc	A	validate: module: Entry point main at Fragment is invalid: Expression [N] is invalid: Gather component Z doesn't exist in the image
+2620713599be13fb4f026976ba80f500012c4e80b255d421bc4116b378be8bfc	A	lift: gatherN_c: a gather of lane N of a depth texture
 2620713599be13fb4f026976ba80f500012c4e80b255d421bc4116b378be8bfc	IR WGSL	lower: a gather of lane N of a depth texture
 2667d9f1a4ac8e23d82cac87e62d070e090b7677496da77ab24845f118b29cfd	A	lift: ld_uav_typed_feedback: opcode N is not lifted
 2667d9f1a4ac8e23d82cac87e62d070e090b7677496da77ab24845f118b29cfd	IR	lift: ld_uav_typed_feedback: opcode N is not lifted to the IR yet
@@ -734,7 +734,7 @@
 9003d4f22775eb412788e89d8fc5a1978037c55e94375303514c002f64639995	IR WGSL	lower: an atomic of an image is not lowered yet
 9098267117f504c1d4842bbfb2f81bd293a4baa7123cf38c70ccacd120deaf90	IR WGSL	lower: a Domain program is not lowered yet
 90bb18ee73b783446631bd892436ca431ed9e51e437879e198699eeada51c1ba	A	lift: double precision is enabled (global flag): doubles are not lifted
-90dc5020ef6e5fc223ee22cc05de033d3640aaeb74ac40afbd2a8b0e6e4cd046	A	validate: module: Entry point main at Fragment is invalid: Expression [N] is invalid: Gather component W doesn't exist in the image
+90dc5020ef6e5fc223ee22cc05de033d3640aaeb74ac40afbd2a8b0e6e4cd046	A	lift: gatherN_c: a gather of lane N of a depth texture
 90dc5020ef6e5fc223ee22cc05de033d3640aaeb74ac40afbd2a8b0e6e4cd046	IR WGSL	lower: a gather of lane N of a depth texture
 91060748b9691a6a4f47e9aca94972d402a585fc3b961a8f2a2aebf5b1720763	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 914fc9cd1f2c83dfc8d46aa91446682c849e8fddfd249eb1ae888a486e2094be	IR WGSL	lower: a write of an element of an array of buffers is not lowered yet
@@ -947,7 +947,7 @@ b60687ea7d80d8e5c30993af555915ded79e1d601d6c76d22cfd9725fae539ea	IR WGSL	lower: 
 b6ab04e870897cac220a874d9607a691cb511760a10b37d49857b2da8481b723	A	lift: ld_feedback: opcode N is not lifted
 b6ab04e870897cac220a874d9607a691cb511760a10b37d49857b2da8481b723	IR	lift: ld_feedback: opcode N is not lifted to the IR yet
 b6ab04e870897cac220a874d9607a691cb511760a10b37d49857b2da8481b723	IR WGSL	not reached
-b70f2c9e3cbb4392554b0e9764e00a6272a04ab148e83b409ae856413600754f	A	validate: module: Entry point main at Fragment is invalid: Expression [N] is invalid: Gather component Y doesn't exist in the image
+b70f2c9e3cbb4392554b0e9764e00a6272a04ab148e83b409ae856413600754f	A	lift: gatherN_c: a gather of lane N of a depth texture
 b70f2c9e3cbb4392554b0e9764e00a6272a04ab148e83b409ae856413600754f	IR WGSL	lower: a gather of lane N of a depth texture
 b845bc0eb01fb40ddbf83e82613d25daf5bcb12a71fbcd66d265713505e0c985	A	WGSL read back: error: no definition in scope for identifier: `texture_Nd_array`    ┌─ wgsl:N:N    │ N │ var tN_: texture_Nd_array<fN>;    │          ^^^^^^^^^^^^^^^^ unknown identifier  
 b845bc0eb01fb40ddbf83e82613d25daf5bcb12a71fbcd66d265713505e0c985	IR WGSL	lower: a ND array texture has no WGSL form
@@ -1031,7 +1031,7 @@ ce0142013af6521fb0f5717f6fcba3dc6bf1a21b5cfe94f3c2ecbe2f3c542d99	IR WGSL	lower: 
 ce0191721622bce665aed020b83d1b02481c30c15549d231f6062c53054bf8c4	A	lift: reflection: DXBC at word N: WorkQueue: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 ce0191721622bce665aed020b83d1b02481c30c15549d231f6062c53054bf8c4	IR	lift: reflection: DXBC at word N: WorkQueue: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 ce0191721622bce665aed020b83d1b02481c30c15549d231f6062c53054bf8c4	IR WGSL	not reached
-ce6b3392ce705e466f316f55918f2bacaa03bd32b0d3c59fea8fe77b9f26844c	A	validate: module: Entry point main at Fragment is invalid: Expression [N] is invalid: Gather component Z doesn't exist in the image
+ce6b3392ce705e466f316f55918f2bacaa03bd32b0d3c59fea8fe77b9f26844c	A	lift: gatherN_c: a gather of lane N of a depth texture
 ce6b3392ce705e466f316f55918f2bacaa03bd32b0d3c59fea8fe77b9f26844c	IR WGSL	lower: a gather of lane N of a depth texture
 ce6def489d491d8ddacfe09d753a00553499ac2b4d43da3bd8ab87d61747a3ef	IR WGSL	lower: a Geometry program is not lowered yet
 cebe9fc4877f9b795738c81106d607b492036e20162ebc1168612f44973f8970	IR WGSL	lower: a Domain program is not lowered yet
@@ -1045,7 +1045,7 @@ d0fa1594a569f3403bcacd8fe9119df777826860fefba22012e6a72372d507b1	A	WGSL: wgsl ca
 d0fa1594a569f3403bcacd8fe9119df777826860fefba22012e6a72372d507b1	IR WGSL	lower: an atomic of an image is not lowered yet
 d12dcc1a3e9f03d7f35fa9153a880a78aebc6a38e4222c5f4d381e70f5ec7a34	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 d1462fecb1413f553762f3ca3d5e6be5cf74cde7e2c49165f59f802b3c1229e2	IR WGSL	lower: a sample through an element of an array of samplers is not lowered yet
-d1ba669673d202fafe40f532343466d11e41e0b67bda8511dc2dddb96acf1436	A	validate: module: Entry point main at Fragment is invalid: Expression [N] is invalid: Gather component Y doesn't exist in the image
+d1ba669673d202fafe40f532343466d11e41e0b67bda8511dc2dddb96acf1436	A	lift: gatherN_c: a gather of lane N of a depth texture
 d1ba669673d202fafe40f532343466d11e41e0b67bda8511dc2dddb96acf1436	IR WGSL	lower: a gather of lane N of a depth texture
 d1dffefcfad8714e616f7973513392832784a4d10eb0b380df1baadc69ea250c	IR WGSL	lower: an element of an array of resources is not lowered yet
 d245d9cef1700c2951c00e1fed393e61ef2edd04faf7f087bcb121f4f39e81ee	A	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
@@ -1244,7 +1244,7 @@ f8f888232705dab4a575d3b5164fc9a61c3949ae1bedb3e60c8f3044035bb1e0	IR WGSL	lower: 
 f922423370362878529aad0e4259c11f3928a3a8220e3122ec30e3ba04d4788e	A	lift: sample_pos: opcode N is not lifted
 f922423370362878529aad0e4259c11f3928a3a8220e3122ec30e3ba04d4788e	IR	lift: sample_pos: opcode N is not lifted to the IR yet
 f922423370362878529aad0e4259c11f3928a3a8220e3122ec30e3ba04d4788e	IR WGSL	not reached
-fa21b4a17c1ff9caf294e4b9f5bd33228793319f3dde54cf7da1c8861fbe4bb7	A	validate: module: Entry point main at Fragment is invalid: Expression [N] is invalid: Gather component Y doesn't exist in the image
+fa21b4a17c1ff9caf294e4b9f5bd33228793319f3dde54cf7da1c8861fbe4bb7	A	lift: gatherN_c: a gather of lane N of a depth texture
 fa21b4a17c1ff9caf294e4b9f5bd33228793319f3dde54cf7da1c8861fbe4bb7	IR WGSL	lower: a gather of lane N of a depth texture
 faa6c252830549a5eb50a805957752d1fd6c1b2c981a3d5acbc7aab5c48bc955	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 fb7f7b170c5a4f665b4db3a5cef7c19dc13b8b918cee99ae426ac319edef14bc	A	lift: a declared input of register type OutputControlPoint

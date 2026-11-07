@@ -43,6 +43,9 @@
 - `iridia-passes::promote` renumbers every variable a node or operation names among those it keeps: a mesh launch's
   payload was left at its old number, so a private variable promoted ahead of it left the launch naming another.
   `Node::vars_mut`, `Op::var` and `Op::var_mut` name them.
+- `iridia-dxbc` and `iridia-dxil` refuse by name a gather of a depth texture's channel other than red
+  (`GatherCmpGreen` of a shadow texture: "a gather of lane 1 of a depth texture", the words the IR's lowering refuses
+  it in): they made a module naga refuses, since WGSL gathers a depth texture's one lane.
 - `iridia-ir`'s `f32tof16` gives the quiet NaN 0x7e00 for every NaN (`iridia-exec-ir`'s definition, the WGSL
   `iridia-naga` writes for it, and `pack2x16float` in `iridia-exec`): the sign and payload of an operation's NaN are
   open in IEEE 754, and two lifts or a pass that orders an operation's operands otherwise made different ones, which

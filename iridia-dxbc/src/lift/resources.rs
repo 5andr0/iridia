@@ -534,6 +534,13 @@ impl Lift<'_> {
             Selection::Swizzle(s) => s[0],
             _ => 0,
         };
+        // WGSL gathers a depth texture's one lane
+        if t.depth && matches!(name, "gather4" | "gather4_c") {
+            let lane = component_of(ins.operand(3)?);
+            if lane != 0 {
+                return self.refuse(format!("a gather of lane {lane} of a depth texture"));
+            }
+        }
         let (gather, depth_ref, level) = match name {
             "sample" => (None, None, SampleLevel::Auto),
             "sample_l" => (

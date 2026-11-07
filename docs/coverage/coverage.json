@@ -2272,16 +2272,16 @@
         "unchecked": 4
       },
       "lifted": {
-        "ok": 3013,
-        "refused": 105
+        "ok": 3005,
+        "refused": 113
       },
       "wgsl": {
         "ok": 2952,
-        "failed": 61
+        "failed": 53
       },
       "executed": {
         "pass": 2696,
-        "fail": 59
+        "fail": 57
       },
       "proved_by": [
         "vkd3d"
@@ -2750,16 +2750,16 @@
         "unchecked": 7
       },
       "lifted": {
-        "ok": 3660,
-        "refused": 95
+        "ok": 3652,
+        "refused": 103
       },
       "wgsl": {
         "ok": 3634,
-        "failed": 26
+        "failed": 18
       },
       "executed": {
         "pass": 3428,
-        "fail": 56
+        "fail": 54
       },
       "proved_by": [
         "vkd3d"
@@ -2878,16 +2878,16 @@
         "unchecked": 0
       },
       "lifted": {
-        "ok": 422,
-        "refused": 32
+        "ok": 414,
+        "refused": 40
       },
       "wgsl": {
         "ok": 414,
-        "failed": 8
+        "failed": 0
       },
       "executed": {
         "pass": 349,
-        "fail": 15
+        "fail": 13
       },
       "proved_by": [
         "vkd3d"
@@ -2974,16 +2974,16 @@
         "unchecked": 0
       },
       "lifted": {
-        "ok": 237,
-        "refused": 19
+        "ok": 229,
+        "refused": 27
       },
       "wgsl": {
         "ok": 229,
-        "failed": 8
+        "failed": 0
       },
       "executed": {
         "pass": 197,
-        "fail": 2
+        "fail": 0
       },
       "proved_by": [
         "vkd3d"
@@ -4586,16 +4586,16 @@
         "unchecked": 0
       },
       "lifted": {
-        "ok": 12,
-        "refused": 0
+        "ok": 4,
+        "refused": 8
       },
       "wgsl": {
         "ok": 4,
-        "failed": 8
+        "failed": 0
       },
       "executed": {
         "pass": 2,
-        "fail": 2
+        "fail": 0
       },
       "proved_by": [
         "vkd3d"
@@ -6072,16 +6072,16 @@
         "unchecked": 8
       },
       "lifted": {
-        "ok": 3892,
-        "refused": 107
+        "ok": 3884,
+        "refused": 115
       },
       "wgsl": {
         "ok": 3818,
-        "failed": 74
+        "failed": 66
       },
       "executed": {
         "pass": 3554,
-        "fail": 60
+        "fail": 58
       },
       "proved_by": [
         "vkd3d"
@@ -7538,12 +7538,12 @@
         "unchecked": 2
       },
       "lifted": {
-        "ok": 918,
-        "refused": 37
+        "ok": 914,
+        "refused": 41
       },
       "wgsl": {
         "ok": 914,
-        "failed": 4
+        "failed": 0
       },
       "executed": {
         "pass": 847,
@@ -7570,16 +7570,16 @@
         "unchecked": 0
       },
       "lifted": {
-        "ok": 866,
-        "refused": 41
+        "ok": 862,
+        "refused": 45
       },
       "wgsl": {
         "ok": 862,
-        "failed": 4
+        "failed": 0
       },
       "executed": {
         "pass": 731,
-        "fail": 36
+        "fail": 34
       },
       "proved_by": [
         "vkd3d"
@@ -7760,16 +7760,16 @@
         "unchecked": 123
       },
       "lifted": {
-        "ok": 677,
-        "refused": 232
+        "ok": 673,
+        "refused": 236
       },
       "wgsl": {
         "ok": 659,
-        "failed": 18
+        "failed": 14
       },
       "executed": {
         "pass": 403,
-        "fail": 63
+        "fail": 61
       },
       "proved_by": [
         "offload",
@@ -9282,16 +9282,16 @@
         "unchecked": 598
       },
       "lifted": {
-        "ok": 2976,
-        "refused": 614
+        "ok": 2960,
+        "refused": 630
       },
       "wgsl": {
         "ok": 2901,
-        "failed": 75
+        "failed": 59
       },
       "executed": {
         "pass": 2036,
-        "fail": 235
+        "fail": 227
       },
       "proved_by": [
         "offload",
@@ -9405,16 +9405,16 @@
         "unchecked": 123
       },
       "lifted": {
-        "ok": 675,
-        "refused": 232
+        "ok": 671,
+        "refused": 236
       },
       "wgsl": {
         "ok": 657,
-        "failed": 18
+        "failed": 14
       },
       "executed": {
         "pass": 403,
-        "fail": 63
+        "fail": 61
       },
       "proved_by": [
         "offload",
@@ -9535,17 +9535,19 @@
       },
       "lifted": {
         "ok": 0,
-        "refused": 1
+        "refused": 0
       },
       "wgsl": {
         "ok": 0,
         "failed": 0
       },
       "executed": {
-        "pass": 0,
+        "pass": 1,
         "fail": 0
       },
-      "proved_by": []
+      "proved_by": [
+        "offload"
+      ]
     },
     {
       "format": "dxil",
@@ -10145,15 +10147,15 @@
         "unchecked": 4
       },
       "lifted": {
-        "ok": 11,
-        "refused": 22
+        "ok": 13,
+        "refused": 20
       },
       "wgsl": {
-        "ok": 11,
+        "ok": 13,
         "failed": 0
       },
       "executed": {
-        "pass": 2,
+        "pass": 3,
         "fail": 0
       },
       "proved_by": [
@@ -10344,10 +10346,12 @@
         "failed": 0
       },
       "executed": {
-        "pass": 0,
+        "pass": 1,
         "fail": 0
       },
-      "proved_by": []
+      "proved_by": [
+        "offload"
+      ]
     },
     {
       "format": "dxil",
@@ -13102,15 +13106,15 @@
         "unchecked": 4
       },
       "lifted": {
-        "ok": 11,
-        "refused": 22
+        "ok": 13,
+        "refused": 20
       },
       "wgsl": {
-        "ok": 11,
+        "ok": 13,
         "failed": 0
       },
       "executed": {
-        "pass": 2,
+        "pass": 3,
         "fail": 0
       },
       "proved_by": [
@@ -13194,16 +13198,16 @@
         "unchecked": 104
       },
       "lifted": {
-        "ok": 4551,
-        "refused": 314
+        "ok": 4531,
+        "refused": 334
       },
       "wgsl": {
         "ok": 4381,
-        "failed": 170
+        "failed": 150
       },
       "executed": {
         "pass": 3473,
-        "fail": 149
+        "fail": 139
       },
       "proved_by": [
         "offload",
@@ -13382,15 +13386,15 @@
         "unchecked": 4
       },
       "lifted": {
-        "ok": 11,
-        "refused": 22
+        "ok": 13,
+        "refused": 20
       },
       "wgsl": {
-        "ok": 11,
+        "ok": 13,
         "failed": 0
       },
       "executed": {
-        "pass": 2,
+        "pass": 3,
         "fail": 0
       },
       "proved_by": [
@@ -13846,16 +13850,16 @@
         "unchecked": 2
       },
       "lifted": {
-        "ok": 32,
-        "refused": 0
+        "ok": 12,
+        "refused": 20
       },
       "wgsl": {
         "ok": 12,
-        "failed": 20
+        "failed": 0
       },
       "executed": {
         "pass": 2,
-        "fail": 10
+        "fail": 0
       },
       "proved_by": [
         "offload"
@@ -14083,7 +14087,7 @@
         "failed": 5
       },
       "executed": {
-        "pass": 72,
+        "pass": 73,
         "fail": 0
       },
       "proved_by": [
@@ -18589,17 +18593,19 @@
       },
       "lifted": {
         "ok": 0,
-        "refused": 29
+        "refused": 28
       },
       "wgsl": {
         "ok": 0,
         "failed": 0
       },
       "executed": {
-        "pass": 0,
+        "pass": 1,
         "fail": 0
       },
-      "proved_by": []
+      "proved_by": [
+        "offload"
+      ]
     },
     {
       "format": "dxil",
@@ -18778,15 +18784,15 @@
         "unchecked": 4
       },
       "lifted": {
-        "ok": 11,
-        "refused": 22
+        "ok": 13,
+        "refused": 20
       },
       "wgsl": {
-        "ok": 11,
+        "ok": 13,
         "failed": 0
       },
       "executed": {
-        "pass": 2,
+        "pass": 3,
         "fail": 0
       },
       "proved_by": [
@@ -18810,16 +18816,16 @@
         "unchecked": 63
       },
       "lifted": {
-        "ok": 4220,
-        "refused": 430
+        "ok": 4200,
+        "refused": 450
       },
       "wgsl": {
         "ok": 4148,
-        "failed": 72
+        "failed": 52
       },
       "executed": {
         "pass": 3192,
-        "fail": 156
+        "fail": 146
       },
       "proved_by": [
         "offload",
@@ -18869,35 +18875,35 @@
       "licence": "LGPL-2.1-or-later",
       "description": "Each test file run at each shader model on each of vkd3d's Windows runners (d3d9, d3d11, d3d12 with fxc, d3d12 with dxc), every step in order, every probe compared as vkd3d compares it. A row is one run: pass when every probe holds that vkd3d's runner runs at that model (selected); a run it runs none of is extended (selected false), its status that of all its probes, and the probes vkd3d leaves out of the others are their extended_status: the same expectations at a model vkd3d's own runs leave out, which need not hold on any device. A probe vkd3d's test marks winbug where Windows itself reads otherwise is counted as winbug and decides no run (winbug_outcomes: what those found); one marked winbug for a driver's bug (driver_bug_probes) is a probe like any other.",
       "totals": {
-        "error": 9,
+        "error": 7,
         "fail": 19,
         "not-modelled": 6,
         "pass": 840,
-        "refused": 63
+        "refused": 65
       },
       "probe_totals": {
-        "error": 690,
+        "error": 680,
         "fail": 138,
-        "not-modelled": 21,
-        "pass": 7971,
-        "refused": 674,
+        "not-modelled": 7,
+        "pass": 7984,
+        "refused": 685,
         "winbug": 29
       },
       "extended_totals": {
         "compiler-refused": 7,
-        "error": 30,
+        "error": 25,
         "fail": 41,
         "not-modelled": 17,
         "pass": 1795,
-        "refused": 105
+        "refused": 110
       },
       "extended_probe_totals": {
         "compiler-refused": 43,
-        "error": 2667,
+        "error": 2642,
         "fail": 265,
-        "not-modelled": 39,
-        "pass": 17952,
-        "refused": 1701,
+        "not-modelled": 25,
+        "pass": 17965,
+        "refused": 1727,
         "winbug": 100
       },
       "winbug_outcomes": {
@@ -29846,8 +29852,8 @@
           "runner": "d3d12",
           "format": "dxbc",
           "model": "5.0",
-          "status": "error",
-          "detail": "line 74: a9ccea5c1dbd493d: program at 0: module: Entry point main at Fragment is invalid: Expression [6] is invalid: Gather component Y doesn't exist in the image",
+          "status": "refused",
+          "detail": "line 74: a9ccea5c1dbd493d: DXBC at word 13: gather4_c: a gather of lane 1 of a depth texture",
           "probes": 7,
           "selected": true,
           "selected_probes": 7,
@@ -29859,8 +29865,8 @@
           "runner": "d3d12",
           "format": "dxbc",
           "model": "5.1",
-          "status": "error",
-          "detail": "line 74: 6e96a18263e0b0ad: program at 0: module: Entry point main at Fragment is invalid: Expression [6] is invalid: Gather component Y doesn't exist in the image",
+          "status": "refused",
+          "detail": "line 74: 6e96a18263e0b0ad: DXBC at word 19: gather4_c: a gather of lane 1 of a depth texture",
           "probes": 7,
           "selected": false,
           "selected_probes": 0,
@@ -47383,8 +47389,8 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.0",
-          "status": "error",
-          "detail": "line 74: bbb5dd455ae5c3cf: program at 0: module: Entry point main at Fragment is invalid: Expression [6] is invalid: Gather component Y doesn't exist in the image",
+          "status": "refused",
+          "detail": "line 74: bbb5dd455ae5c3cf: DXIL at bit 11548: a gather of lane 1 of a depth texture",
           "probes": 7,
           "selected": true,
           "selected_probes": 7,
@@ -47396,8 +47402,8 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.1",
-          "status": "error",
-          "detail": "line 74: 80d00e87e0ecd101: program at 0: module: Entry point main at Fragment is invalid: Expression [6] is invalid: Gather component Y doesn't exist in the image",
+          "status": "refused",
+          "detail": "line 74: 80d00e87e0ecd101: DXIL at bit 11548: a gather of lane 1 of a depth texture",
           "probes": 7,
           "selected": false,
           "selected_probes": 0,
@@ -47409,8 +47415,8 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.2",
-          "status": "error",
-          "detail": "line 74: 4f389d08db7c5d63: program at 0: module: Entry point main at Fragment is invalid: Expression [6] is invalid: Gather component Y doesn't exist in the image",
+          "status": "refused",
+          "detail": "line 74: 4f389d08db7c5d63: DXIL at bit 11548: a gather of lane 1 of a depth texture",
           "probes": 7,
           "selected": false,
           "selected_probes": 0,
@@ -47422,8 +47428,8 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.5",
-          "status": "error",
-          "detail": "line 74: 88c43992156969d5: program at 0: module: Entry point main at Fragment is invalid: Expression [6] is invalid: Gather component Y doesn't exist in the image",
+          "status": "refused",
+          "detail": "line 74: 88c43992156969d5: DXIL at bit 11580: a gather of lane 1 of a depth texture",
           "probes": 7,
           "selected": false,
           "selected_probes": 0,
@@ -47435,8 +47441,8 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.6",
-          "status": "error",
-          "detail": "line 74: 2a421a0ed617eee1: program at 0: module: Entry point main at Fragment is invalid: Expression [6] is invalid: Gather component Y doesn't exist in the image",
+          "status": "refused",
+          "detail": "line 74: 2a421a0ed617eee1: DXIL at bit 12684: a gather of lane 1 of a depth texture",
           "probes": 7,
           "selected": false,
           "selected_probes": 0,
@@ -57035,8 +57041,8 @@
       "totals": {
         "fail": 7,
         "not-modelled": 30,
-        "pass": 378,
-        "refused": 304,
+        "pass": 379,
+        "refused": 303,
         "unsupported": 85,
         "xfail": 3
       },
@@ -62366,8 +62372,8 @@
           "case": "Graphics/MeshShaders/SimpleAmplification.test",
           "format": "dxil",
           "model": "as_6",
-          "status": "refused",
-          "detail": "fda50a8306e59fb1: DXIL at bit 0: amplification shader programs are not lifted"
+          "status": "pass",
+          "detail": ""
         },
         {
           "id": "Graphics/MeshShaders/SimpleLines.test",

@@ -1050,6 +1050,10 @@ impl Lift<'_> {
             73 | 74 => {
                 let channel = const_int(self.m, self.f, self.arg(args, 9)?)
                     .map_or_else(|| self.refuse("a gather channel that is not constant"), Ok)?;
+                // WGSL gathers a depth texture's one lane
+                if depth && channel != 0 {
+                    return self.refuse(format!("a gather of lane {channel} of a depth texture"));
+                }
                 let reference = if code == 74 {
                     Some(self.float(self.arg(args, 10)?)?.expr)
                 } else {

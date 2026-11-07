@@ -29,6 +29,10 @@ const AMPLIFICATION_FIXTURES: [&str; 5] = [
     "payload_layout_mesh.dxil",
 ];
 
+/// Fixtures that gather a depth texture's channel other than red, which WGSL's depth gather does not read: the lifter
+/// refuses each by name (iridia-dxbc's tests/depth_gather.rs checks both lifts). The refusal is the outcome asserted.
+const DEPTH_GATHER_FIXTURES: [&str; 1] = ["gather_cmp_green.dxil"];
+
 /// Fixtures that are a library of several programs, whose programs are the per-export fixtures beside them.
 const WHOLE_LIBRARIES: [&str; 1] = ["ray_subobjects.dxil"];
 
@@ -62,6 +66,15 @@ fn every_fixture_lifts() {
                 Err(e) if e.to_string().contains("amplification programs are not lifted") => {}
                 other => failures.push(format!(
                     "{name}: expected the refusal of an amplification pipeline, got {other:?}"
+                )),
+            }
+            continue;
+        }
+        if DEPTH_GATHER_FIXTURES.contains(&name.as_str()) {
+            match lift(&fixture(name)) {
+                Err(e) if e.to_string().contains("a gather of lane 1 of a depth texture") => {}
+                other => failures.push(format!(
+                    "{name}: expected the refusal of a depth gather of lane 1, got {other:?}"
                 )),
             }
             continue;
