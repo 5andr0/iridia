@@ -351,3 +351,10 @@ fn a_minimum_precision_constant_is_the_half_in_its_word() {
     assert_eq!(probes.len(), 1);
     assert_eq!(probes[0].outcome.class(), "pass", "{:?}", probes[0].outcome);
 }
+
+/// A hull program without a control-point phase passes its input control points through: fxc leaves the phase out
+/// where the program returns `input[i]`, and the domain program then reads the vertex program's outputs, not zeros.
+#[test]
+fn a_hull_program_without_a_control_point_phase_passes_its_points_through() {
+    assert_selected_pass(&vkd3d_runs("vkd3d/dxbc.json.gz", "tessellation.shader_test"));
+}

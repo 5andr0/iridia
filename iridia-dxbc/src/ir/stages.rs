@@ -304,12 +304,13 @@ impl Lift<'_> {
     }
 
     /// A hull program without a control-point phase: each output point is the input point of its number, an output
-    /// taking the input varying placed in the same register lanes.
+    /// register's lanes taking the input varying placed in the same register lanes. The registers are what the
+    /// epilogue stores as the outputs, as a control-point phase's writes are.
     fn pass_through(&mut self) -> Result<()> {
         let point = self.b.value(Type::U32, Op::Builtin(Builtin::OutputControlPoint));
         let inputs = self.setup.interface.inputs.clone();
         let outputs = self.setup.interface.outputs.clone();
-        for (slot, o) in (0u32..).zip(&outputs) {
+        for o in &outputs {
             let Some(d3d) = o.provenance.d3d else {
                 return self.refuse(format!("output {} has no register", o.label.name));
             };
@@ -324,15 +325,17 @@ impl Lift<'_> {
                     o.label.name
                 ));
             };
-            let width = o.value.width;
+            let Some(&var) = self.outputs.get(&d3d.register) else {
+                return self.refuse(format!("output register o{} is not declared", d3d.register));
+            };
+            let lanes = lanes_of(d3d.mask);
             let read = self.b.value(
                 Type::vector(scalar_of(i.value.scalar), i.value.width),
                 Op::LoadInputAt(from, every(i.value.width), point),
             );
             let bits = self.raw_bits(read, i.value.width)?;
-            let bits = self.swizzle(bits, &(0..width).collect::<Vec<_>>())?;
-            let value = self.of_bits(bits, scalar_of(o.value.scalar), width)?;
-            self.b.store_output(slot, every(width), value);
+            let bits = self.swizzle(bits, &(0u8..).take(lanes.len()).collect::<Vec<_>>())?;
+            self.store_lanes(var, d3d.mask, bits)?;
         }
         Ok(())
     }

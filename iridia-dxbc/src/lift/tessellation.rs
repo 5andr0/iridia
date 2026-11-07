@@ -480,6 +480,48 @@ impl Lift<'_> {
         Ok(())
     }
 
+    /// The control-point phase of a hull program that has none: output control point `vOutputControlPointID` is
+    /// that input control point, register for register (D3D11.3 10.4, "pass-through" control points, which fxc
+    /// leaves out of the bytecode where the program returns its input point).
+    fn pass_control_points_through(&mut self) -> Result<()> {
+        let (Some((array, registers)), Some(id)) = (self.control_points, self.point_id) else {
+            return self.refuse("a hull program without a control-point phase has no input control points");
+        };
+        let p = self.b.local_ptr(id);
+        let ids = self.b.load(p, Kind::U, Width::Four);
+        let point = self.b.lane(ids, 0);
+        let stride = self.b.lit_u(registers);
+        let base = self.b.binary(naga::BinaryOperator::Multiply, point, stride);
+        // the control points' registers: the output signature's, not the patch constants' that share `o#`
+        let mut placed: Vec<u32> = (self.setup.interface.outputs.iter())
+            .filter_map(|v| v.provenance.d3d.map(|d| d.register))
+            .filter(|&r| r != u32::MAX)
+            .collect();
+        placed.sort_unstable();
+        placed.dedup();
+        for register in placed {
+            let Some(&local) = self.outputs.get(&register) else {
+                return self.refuse(format!("a pass-through output o{register} that has no register"));
+            };
+            if register >= registers {
+                return self.refuse(format!(
+                    "a pass-through output o{register} past the input control point's {registers} registers"
+                ));
+            }
+            let offset = self.b.lit_u(register);
+            let at = self.b.binary(naga::BinaryOperator::Add, base, offset);
+            let pointer = self.b.local_ptr(array);
+            let element = self.b.app(E::Access {
+                base: pointer,
+                index: at.expr,
+            });
+            let value = self.b.load(element, Kind::U, Width::Four);
+            let target = self.b.local_ptr(local);
+            self.b.store(target, value);
+        }
+        Ok(())
+    }
+
     /// The local of a fork or join phase's instance number, made the first time it is needed.
     fn instance_local(&mut self, kind: PhaseKind) -> Handle<LocalVariable> {
         let existing = if kind == PhaseKind::Fork {
@@ -516,6 +558,15 @@ impl Lift<'_> {
             // the control-point phase is `main`; the fork and join phases are the patch constants, each instance of a
             // phase unrolled with its number
             self.in_phase = true;
+            if sig.name == "main"
+                && !self
+                    .setup
+                    .phases
+                    .iter()
+                    .any(|p| p.kind == PhaseKind::ControlPoint)
+            {
+                self.pass_control_points_through()?;
+            }
             for phase in self.setup.phases.clone() {
                 if (sig.name == "main") != (phase.kind == PhaseKind::ControlPoint) {
                     continue;
