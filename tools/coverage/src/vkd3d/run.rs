@@ -177,6 +177,8 @@ impl RunResult {
 struct State {
     input_layout: Vec<InputElement>,
     depth: Option<Compare>,
+    /// Direct3D 12's depth bounds (`depth-bounds <min> <max>`).
+    depth_bounds: Option<[f32; 2]>,
     /// Direct3D 9's alpha test.
     alpha_test: Option<AlphaTest>,
     /// Direct3D 9's user clip planes, by index.
@@ -743,6 +745,18 @@ fn run_as(programs: &Programs<'_>, run: &Run, flushed: bool) -> RunResult {
                         "depth" => {
                             state.depth = value.as_str().and_then(|c| Compare::named(c).ok());
                         }
+                        "depth_bounds" => match (
+                            value.get(0).and_then(float_bits),
+                            value.get(1).and_then(float_bits),
+                        ) {
+                            (Some(min), Some(max)) => {
+                                state.depth_bounds = Some([min, max]);
+                                state.unmodelled.remove(name);
+                            }
+                            _ => {
+                                state.unmodelled.insert(name.clone(), value.to_string());
+                            }
+                        },
                         "viewport" => {
                             let v = value.as_array().cloned().unwrap_or_default();
                             let index = v.first().and_then(serde_json::Value::as_u64).unwrap_or(0) as u32;
@@ -1406,6 +1420,7 @@ fn draw_step(
             Some(DepthState {
                 compare: draw_compare(compare),
                 write: true,
+                bounds: state.depth_bounds,
             })
         }
         None => None,

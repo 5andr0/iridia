@@ -87,7 +87,9 @@
 //!   nothing, and neither does one that fails Direct3D 9's alpha test ([`Rasterizer::alpha_test`]), which compares
 //!   the alpha of the program's first target with the reference, or one whose sample the sample mask leaves out. Direct3D
 //!   9's fog ([`Rasterizer::fog`]) then moves the first target's colour toward the fog colour. The
-//!   depth test runs after the pixel program (its result is the same: a pixel that fails writes nothing); a pixel
+//!   depth test (and the depth bounds) runs after the pixel program (its result is the same: a pixel that fails writes
+//!   nothing), but before it where the program forces early tests (`[earlydepthstencil]`), so a pixel that fails runs
+//!   no program and has none of its effects, and one that passes writes its depth whatever the program does; a pixel
 //!   that passes writes every target lane the program writes and, when the state writes depth, its depth. Primitives are drawn in order, so a later one overwrites an earlier one where both pass.
 use crate::geometry::Topology;
 use crate::{Error, Execution, PixelShader, ProgramShader, Sampler};
@@ -167,12 +169,24 @@ impl Compare {
 }
 
 /// The depth test and whether a pixel that passes writes its depth.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DepthState {
     /// The comparison of the pixel's depth with the depth buffer's.
     pub compare: Compare,
     /// Whether a pixel that passes writes its depth.
     pub write: bool,
+    /// Direct3D 12's depth bounds test (`DepthBoundsTestEnable`, `OMSetDepthBounds`): a pixel passes only where the
+    /// depth buffer's value is within `[min, max]`; `None`: no bounds.
+    pub bounds: Option<[f32; 2]>,
+}
+
+impl DepthState {
+    /// Whether a pixel at `depth` passes over the depth buffer's `stored`: within the bounds and by the comparison.
+    fn passes(&self, depth: f32, stored: f32) -> bool {
+        self.bounds
+            .is_none_or(|[min, max]| min <= stored && stored <= max)
+            && self.compare.passes(depth, stored)
+    }
 }
 
 /// The fixed-function state of a draw.
@@ -1042,6 +1056,17 @@ impl<'a> Raster<'a> {
             return Ok(());
         };
         let depth_range = (vp.min_depth.min(vp.max_depth), vp.max_depth.max(vp.min_depth));
+        // the pixel is inside the surface: the bounds are clamped to its width and height
+        let index = |px: i64, py: i64| {
+            usize::try_from(slice.saturating_add(py.saturating_mul(w)).saturating_add(px))
+                .map_err(|_| error(format!("pixel ({px}, {py}) is outside the surface")))
+        };
+        // a program that forces early tests (`[earlydepthstencil]`) runs only where they pass
+        let early = self
+            .pixel
+            .program()
+            .and_then(|p| p.module.entry_points.first())
+            .is_some_and(|e| e.early_depth_test.is_some());
         let qx0 = min_x & !1;
         let qy0 = min_y & !1;
         let mut lane_inputs: [Vec<[u32; 4]>; 4] = Default::default();
@@ -1063,6 +1088,20 @@ impl<'a> Raster<'a> {
                     let f = cover.fragment(px, py);
                     *covered = f.covered && px < w && py < h;
                     *depth = f.depth.clamp(depth_range.0, depth_range.1);
+                    if early
+                        && *covered
+                        && let (Some(test), Some(buffer)) = (state.depth, surface.depth.as_mut())
+                    {
+                        let stored = buffer.get_mut(index(px, py)?).ok_or_else(|| {
+                            error(format!("pixel ({px}, {py}) is outside the depth buffer"))
+                        })?;
+                        if !test.passes(*depth, *stored) {
+                            stats.depth_failed = stats.depth_failed.saturating_add(1);
+                            *covered = false;
+                        } else if test.write {
+                            *stored = *depth;
+                        }
+                    }
                     if let Some(state_fog) = state.fog.filter(|_| *covered) {
                         *fog = fog_coordinate(state_fog.source, drawn, &f)?;
                     }
@@ -1108,14 +1147,12 @@ impl<'a> Raster<'a> {
                     {
                         *first = fog.apply(*first, fog_at);
                     }
-                    // the pixel is inside the surface: the bounds are clamped to its width and height
-                    let at = usize::try_from(slice.saturating_add(py.saturating_mul(w)).saturating_add(px))
-                        .map_err(|_| error(format!("pixel ({px}, {py}) is outside the surface")))?;
-                    if let (Some(test), Some(buffer)) = (state.depth, surface.depth.as_mut()) {
+                    let at = index(px, py)?;
+                    if !early && let (Some(test), Some(buffer)) = (state.depth, surface.depth.as_mut()) {
                         let stored = buffer.get_mut(at).ok_or_else(|| {
                             error(format!("pixel ({px}, {py}) is outside the depth buffer"))
                         })?;
-                        if !test.compare.passes(depth, *stored) {
+                        if !test.passes(depth, *stored) {
                             stats.depth_failed = stats.depth_failed.saturating_add(1);
                             continue;
                         }

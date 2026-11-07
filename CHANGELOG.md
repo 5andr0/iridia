@@ -94,6 +94,9 @@
   program's `FOG` output (or its specular alpha) or the position's z or w, interpolated perspective-correct, gives a
   factor (`FogFactor`: the coordinate, linear, exp, exp2), and a pixel that passes the alpha test writes its first
   target as `(colour - fog colour) * saturate(factor) + fog colour`.
+  `DepthState::bounds` is Direct3D 12's depth bounds test, on the depth buffer's value, ends included; a pixel
+  program that forces early tests (`[earlydepthstencil]`, naga's `early_depth_test`) runs only where the depth test
+  and bounds pass, and writes its depth before it runs, where the tests ran after every program.
 - `iridia-dxil`: a boolean converts to a float as 1 or 0 (`uitofp`) and -1 or 0 (`sitofp`), where it converted its
   all-ones word; and extended to a 16-bit integer (`zext`, `sext`), it is cut to the 16 bits. An array of read-write
   views keeps a counter per element, the element's word at its index (`counter_of`, documented in `iridia-ir`). A

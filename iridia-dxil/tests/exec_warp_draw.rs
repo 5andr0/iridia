@@ -450,7 +450,11 @@ fn state_of(c: &DrawCase) -> Rasterizer {
         sample_mask: u32::MAX,
         cull: c.cull,
         front_counter_clockwise: c.ccw,
-        depth: c.depth.map(|(compare, write, _)| DepthState { compare, write }),
+        depth: c.depth.map(|(compare, write, _)| DepthState {
+            compare,
+            write,
+            bounds: None,
+        }),
         alpha_test: None,
         clip_planes: [None; 6],
         point_size: None,

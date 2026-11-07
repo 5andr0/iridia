@@ -989,6 +989,7 @@ fn raster(
         depth: Some(DepthState {
             compare: DepthCompare::Less,
             write: true,
+            bounds: None,
         }),
         alpha_test: None,
         clip_planes: [None; 6],

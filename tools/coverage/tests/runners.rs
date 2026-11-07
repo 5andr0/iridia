@@ -472,3 +472,11 @@ fn direct3d_9_fogs_the_first_target_by_its_mode_and_source() {
         assert!(lines.contains(&line), "the probe at line {line} is selected");
     }
 }
+
+/// Direct3D 12's depth bounds pass a pixel only where the depth buffer's value is within them, ends included, and a
+/// program that forces early tests (`[earlydepthstencil]`) runs only where they pass, so its UAV store is not made
+/// where they fail (depth-bounds.shader_test).
+#[test]
+fn the_depth_bounds_and_early_tests_hold_back_a_pixel_and_its_program() {
+    assert_selected_pass(&vkd3d_runs("vkd3d/dxbc.json.gz", "depth-bounds.shader_test"));
+}
