@@ -336,3 +336,18 @@ fn a_multisampled_texture_states_its_sample_count() {
 fn a_dispatch_stores_every_lane_of_a_typed_buffer_element() {
     assert_selected_pass(&vkd3d_runs("vkd3d/dxil.json.gz", "barriers.shader_test"));
 }
+
+/// A constant row of four minimum-precision lanes (`cbufferLoadLegacy.f16` with four lanes) holds each lane's half in
+/// the low 16 bits of its word: arithmetic-float-uniform's `min16float u[4]` reads 0x4180 as 2.75.
+#[test]
+fn a_minimum_precision_constant_is_the_half_in_its_word() {
+    let runs = vkd3d_runs("vkd3d/dxil.json.gz", "arithmetic-float-uniform.shader_test");
+    let probes: Vec<_> = runs
+        .iter()
+        .filter(|r| r.model == "6.0")
+        .flat_map(|r| &r.probes)
+        .filter(|p| p.line == 359)
+        .collect();
+    assert_eq!(probes.len(), 1);
+    assert_eq!(probes[0].outcome.class(), "pass", "{:?}", probes[0].outcome);
+}

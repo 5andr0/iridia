@@ -847,7 +847,17 @@ impl Lift<'_> {
         for (lane, &e) in elements.iter().enumerate() {
             let kind = self.kind_of_type(e)?;
             let x = self.b.lane(lanes, super::lane_u8(lane));
-            out.push(Lv::Scalar(self.b.bitcast_to(x, kind)));
+            // a row of four 16-bit lanes (minimum precision: `min16float`, `min16int`) keeps each lane in a word of its
+            // own, its value the word's low 16 bits
+            let v = match self.m.types.get(e) {
+                Some(dxil_reader::module::Type::Half) => {
+                    let pair = self.b.math(naga::MathFunction::Unpack2x16float, &[x]);
+                    self.b.lane(pair, 0)
+                }
+                Some(dxil_reader::module::Type::Integer(16)) => self.mask_narrow(x, 16),
+                _ => self.b.bitcast_to(x, kind),
+            };
+            out.push(Lv::Scalar(v));
         }
         self.define_result(inst.result, Lv::Agg(out))
     }
