@@ -70,8 +70,10 @@
   the projection flag, the bound texture's dimension), which WGSL cannot read, is specialised by each draw's state
   (`iridia_passes::specialise`) and made again for it; the table shows it at Direct3D 9's defaults. The device
   holds multisampled resources (a texel's samples together), loads a multisampled texture's sample, and a probe
-  reads a multisampled target resolved, as vkd3d's runners do. CI makes the table again (`docs/coverage`) and fails when it differs from the one
-  committed.
+  reads a multisampled target resolved, as vkd3d's runners do. A mesh dispatch runs the mesh program's thread groups
+  (`iridia_exec::mesh`) and draws the primitives they emit with the pixel program; an amplification program and a
+  pixel program reading primitive outputs are refused by name. CI makes the table again (`docs/coverage`) and fails
+  when it differs from the one committed.
 - `iridia-exec`: `draw` draws points and lines as well as triangles (every list and strip topology), each primitive
   numbered for `SV_PrimitiveID`; an aliased line by the diamond exit rule (3.4.3), which an NVIDIA RTX 5070 Ti draws
   exactly on every pixel of 10,640 recorded lines and WARP differs from in four classes the tests name and count;

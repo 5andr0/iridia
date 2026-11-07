@@ -510,3 +510,75 @@ fn a_multisampled_target_is_drawn_and_read_by_its_samples() {
         assert!(seen.contains(&line), "the probe at line {line} is selected");
     }
 }
+
+/// A mesh dispatch runs the mesh program's thread groups and draws the primitives they emit with the pixel program,
+/// held to vkd3d's expected values: mesh.shader_test's sections without an amplification program (lines 35, 66, 101
+/// and 143: the output counts the first thread sets, vertices and indices written by several threads, and each
+/// coordinate by a thread of its own). Refused by name: the pixel program reading primitive outputs (line 205, whose
+/// probe is `winbug(amd)`, every Windows driver but AMD's giving it, so the cases leave it out as a probe of the
+/// hardware; it is put back here), since the IR carries no per-primitive outputs, and the sections with an
+/// amplification program, since iridia-dxil does not lift amplification programs or a mesh program's payload.
+#[test]
+fn a_mesh_dispatch_draws_the_primitives_its_program_emits() {
+    use vkd3d::cases::{Step, What};
+    let text = read_text(&suite("vkd3d/dxil.json.gz")).expect("the vkd3d case file");
+    let mut file = vkd3d::cases::read(&text).expect("the vkd3d case file");
+    file.cases.retain(|r| r.file == "mesh.shader_test");
+    assert!(!file.cases.is_empty(), "mesh.shader_test has runs");
+    for case in &mut file.cases {
+        let at = case
+            .steps
+            .iter()
+            .position(|s| s.line == 199 && matches!(s.what, What::DispatchMesh { .. }))
+            .expect("the primitive output section's dispatch at line 199");
+        case.steps.insert(
+            at + 1,
+            Step {
+                line: 205,
+                what: What::Probe {
+                    probe: [0, 0, 640, 480],
+                    target: "rtv-0".into(),
+                    kind: "f32".into(),
+                    count: 4,
+                    expect: [0.25f32, 0.5, 0.75, 1.0].map(f32::to_bits).to_vec(),
+                    ulps: 0,
+                    layer: 0,
+                },
+            },
+        );
+    }
+    let runs = vkd3d::run::run_all(&file, 4).0;
+    assert!(
+        runs.iter().any(|r| r.selected()),
+        "a run of mesh.shader_test is selected"
+    );
+    let mut seen = Vec::new();
+    for r in &runs {
+        for p in &r.probes {
+            let (class, why) = match p.line {
+                ..205 => ("pass", ""),
+                205 => ("refused", "per-primitive outputs"),
+                _ => ("not modelled", "amplification"),
+            };
+            assert_eq!(
+                p.outcome.class(),
+                class,
+                "{} {} line {}: {:?}",
+                r.file,
+                r.model,
+                p.line,
+                p.outcome
+            );
+            assert!(
+                p.outcome.detail().contains(why),
+                "line {}: {:?}",
+                p.line,
+                p.outcome
+            );
+            seen.push(p.line);
+        }
+    }
+    for line in [35, 66, 101, 143, 205] {
+        assert!(seen.contains(&line), "the probe at line {line} is run");
+    }
+}

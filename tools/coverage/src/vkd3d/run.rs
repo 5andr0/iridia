@@ -15,6 +15,7 @@ use iridia_exec::draw::{
     PointSize, Primitive, Rasterizer, Surface, Viewport,
 };
 use iridia_exec::geometry::{GeometryShader, Topology};
+use iridia_exec::mesh::MeshShader;
 use iridia_exec::tessellation::TessellationShader;
 use iridia_exec::{PixelShader, ProgramShader};
 use iridia_ir::interface::{StateParam, TextureDim};
@@ -25,7 +26,7 @@ use crate::device::resource::{Counter, Dim, Kind, Resource};
 use crate::device::sample::{Address, Compare, Reduction, Sampler};
 use crate::device::{Device, Dispatch, SlotRequests};
 use crate::front::{Form, Lifts, Programs, Ready, Stop, d3d9};
-use crate::stages::{Assembly, Bank, Stages, Stopped as StageStop};
+use crate::stages::{Assembly, Bank, Stages, Stopped as StageStop, mesh_draw};
 
 /// The wave width compute programs run with: 32 lanes, as most Direct3D 12 hardware reports.
 pub const WAVE: u32 = 32;
@@ -989,12 +990,24 @@ fn run_as(programs: &Programs<'_>, run: &Run, flushed: bool) -> RunResult {
                     }
                 }
             }
-            What::DispatchMesh { programs: stages, .. } => {
+            What::DispatchMesh {
+                dispatch_mesh,
+                programs: stages,
+            } => {
                 for name in stages.values() {
                     used.entry(name.clone()).or_insert(None);
                 }
-                let why = Outcome::NotModelled("a mesh dispatch".into());
-                taint_targets(&device, &mut state, &why);
+                if let Err(why) = mesh_step(programs, &mut device, &mut state, stages, *dispatch_mesh) {
+                    for name in stages.values() {
+                        if let Some(slot) = used.get_mut(name)
+                            && slot.is_none()
+                            && why.class() != "not modelled"
+                        {
+                            *slot = Some(why.clone());
+                        }
+                    }
+                    taint_targets(&device, &mut state, &why);
+                }
             }
             What::Probe {
                 probe,
@@ -1357,6 +1370,165 @@ fn draw_step(
             }
         }
     }
+    // shader models 1 and 2 pass colours through registers of [0, 1] (`oD#`), 3 through general ones
+    let clamp_colours = d3d9 && shader_model(&vs.lifted.program.provenance.target).is_some_and(|m| m < 3);
+    let Targets {
+        mut surface,
+        pixel_count,
+        rasterizer,
+    } = targets_of(device, state, d3d9, clamp_colours)?;
+    let vs_constants = constant_rows(vsh, device);
+    let ps_constants = constant_rows(psh, device);
+    let vs_banks: Vec<Bank<'_>> = vs_constants.iter().map(|(s, r)| (*s, r.as_slice())).collect();
+    let ps_banks: Vec<Bank<'_>> = ps_constants.iter().map(|(s, r)| (*s, r.as_slice())).collect();
+    // the constant buffers of the stages between
+    let rows = constant_words(device);
+    let staged = Stages {
+        vs: vsh,
+        tessellation: tessellation.as_ref(),
+        gs: gs.as_ref(),
+        ps: psh,
+    };
+    if d3d9 {
+        for slot in psh.samplers().iter().chain(vsh.samplers()) {
+            device.samplers.entry(*slot).or_insert_with(d3d9_default_sampler);
+        }
+    }
+    let mut requests = SlotRequests::new(device, &interfaces).map_err(Outcome::NotModelled)?;
+    let mut written = 0usize;
+    for (vertices, assembly) in &draws {
+        let stats = match &linked {
+            Some(linked) => {
+                let primitives = primitives_of(*assembly, vertices.len())?;
+                linked
+                    .draw(
+                        vertices,
+                        &primitives,
+                        &vs_banks,
+                        &ps_banks,
+                        &mut requests,
+                        &rasterizer,
+                        &mut surface,
+                    )
+                    .map_err(|e| Outcome::Error(ps_name.clone(), e.to_string()))?
+            }
+            None => staged
+                .draw(
+                    vertices,
+                    *assembly,
+                    [&vs_banks, &ps_banks],
+                    &rows,
+                    &mut requests,
+                    &rasterizer,
+                    &mut surface,
+                )
+                .map_err(|e| match e {
+                    StageStop::NotModelled(m) => Outcome::NotModelled(m),
+                    StageStop::Failed(stage, m) => {
+                        Outcome::Error(stages.get(stage).cloned().unwrap_or_default(), m)
+                    }
+                })?,
+        };
+        written += stats.written;
+    }
+    let device = requests.device;
+    write_back(device, state, &surface, written, pixel_count);
+    Ok(())
+}
+
+/// The device's constant buffers as a stage's program reads them, by register (space 0: the runner binds no other):
+/// `n` rows of the buffer at `register`, zeros past what it holds.
+fn constant_words(device: &Device) -> impl Fn(u32, u32, usize) -> Vec<[u32; 4]> + use<> {
+    let words = device.constants.clone();
+    move |register: u32, space: u32, n: usize| -> Vec<[u32; 4]> {
+        let w = words
+            .get(&register)
+            .filter(|_| space == 0)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        (0..n)
+            .map(|r| [0, 1, 2, 3].map(|l| w.get(r * 4 + l).copied().unwrap_or(0)))
+            .collect()
+    }
+}
+
+/// Run a mesh dispatch: the mesh program's thread groups and the pixel program over their primitives.
+fn mesh_step(
+    programs: &Programs<'_>,
+    device: &mut Device,
+    state: &mut State,
+    stages: &BTreeMap<String, String>,
+    groups: [u32; 3],
+) -> Result<(), Outcome> {
+    if let Some((name, value)) = state.unmodelled.iter().next() {
+        return Err(Outcome::NotModelled(format!("the state {name} {value}")));
+    }
+    if stages.contains_key("as") {
+        return Err(Outcome::NotModelled(
+            "an amplification program (iridia-dxil does not lift them)".into(),
+        ));
+    }
+    let ms_name = stages
+        .get("ms")
+        .ok_or_else(|| Outcome::NotModelled("a mesh dispatch with no mesh program".into()))?;
+    let ps_name = stages
+        .get("ps")
+        .ok_or_else(|| Outcome::NotModelled("a mesh dispatch with no pixel program".into()))?;
+    let ms = ready(programs, ms_name)?;
+    let ps = ready(programs, ps_name)?;
+    let mesh = MeshShader::new(Program::clone(&ms.lifted.program))
+        .map_err(|e| Outcome::Error(ms_name.clone(), e.to_string()))?;
+    let psh = match ps.shader(Form::Lifted, false) {
+        Some(Ok(shader)) => shader,
+        Some(Err(e)) => return Err(Outcome::Error(ps_name.clone(), e.clone())),
+        None => return Err(Outcome::Error(ps_name.clone(), "no pixel program".into())),
+    };
+    let interfaces = [&ms.lifted.program.interface, psh.interface()];
+    unknown_read(device, state, &interfaces)?;
+    for (interface, name) in [(interfaces[0], ms_name), (interfaces[1], ps_name)] {
+        if let Some(why) = unbindable(interface) {
+            return Err(Outcome::NotModelled(format!("{name}: {why}")));
+        }
+    }
+    let Targets {
+        mut surface,
+        pixel_count,
+        rasterizer,
+    } = targets_of(device, state, false, false)?;
+    let ps_constants = constant_rows(psh, device);
+    let ps_banks: Vec<Bank<'_>> = ps_constants.iter().map(|(s, r)| (*s, r.as_slice())).collect();
+    let rows = constant_words(device);
+    let mut requests = SlotRequests::new(device, &interfaces).map_err(Outcome::NotModelled)?;
+    let stats = mesh_draw(
+        &mesh,
+        psh,
+        groups,
+        WAVE,
+        &ps_banks,
+        &rows,
+        &mut requests,
+        &rasterizer,
+        &mut surface,
+    )
+    .map_err(|e| match e {
+        StageStop::NotModelled(m) => Outcome::NotModelled(m),
+        StageStop::Failed(stage, m) => Outcome::Error(stages.get(stage).cloned().unwrap_or_default(), m),
+    })?;
+    write_back(requests.device, state, &surface, stats.written, pixel_count);
+    Ok(())
+}
+
+/// The render targets and depth buffer a draw writes, as the draw takes them, and the fixed-function state over them.
+struct Targets {
+    surface: Surface,
+    /// Pixels a target has (each of its samples together).
+    pixel_count: usize,
+    rasterizer: Rasterizer,
+}
+
+/// The device's render targets and depth buffer as a draw's surface, and the run's state as its rasterizer; Direct3D
+/// 9's colours clamped between the stages where `clamp_colours`.
+fn targets_of(device: &Device, state: &State, d3d9: bool, clamp_colours: bool) -> Result<Targets, Outcome> {
     // the targets
     let targets: Vec<(u32, (u32, u32))> = device
         .resources
@@ -1482,75 +1654,19 @@ fn draw_step(
         point_size: state.point_size,
         point_sprite: state.point_sprite,
         flat_colours: d3d9 && state.flat,
-        // shader models 1 and 2 pass colours through registers of [0, 1] (`oD#`), 3 through general ones
-        clamp_colours: d3d9 && shader_model(&vs.lifted.program.provenance.target).is_some_and(|m| m < 3),
+        clamp_colours,
         fog: state.fog.fog().filter(|_| d3d9),
     };
-    let vs_constants = constant_rows(vsh, device);
-    let ps_constants = constant_rows(psh, device);
-    let vs_banks: Vec<Bank<'_>> = vs_constants.iter().map(|(s, r)| (*s, r.as_slice())).collect();
-    let ps_banks: Vec<Bank<'_>> = ps_constants.iter().map(|(s, r)| (*s, r.as_slice())).collect();
-    // the constant buffers of the stages between, by register (space 0: the runner binds no other)
-    let words = device.constants.clone();
-    let rows = move |register: u32, space: u32, n: usize| -> Vec<[u32; 4]> {
-        let w = words
-            .get(&register)
-            .filter(|_| space == 0)
-            .map(Vec::as_slice)
-            .unwrap_or(&[]);
-        (0..n)
-            .map(|r| [0, 1, 2, 3].map(|l| w.get(r * 4 + l).copied().unwrap_or(0)))
-            .collect()
-    };
-    let staged = Stages {
-        vs: vsh,
-        tessellation: tessellation.as_ref(),
-        gs: gs.as_ref(),
-        ps: psh,
-    };
-    if d3d9 {
-        for slot in psh.samplers().iter().chain(vsh.samplers()) {
-            device.samplers.entry(*slot).or_insert_with(d3d9_default_sampler);
-        }
-    }
-    let mut requests = SlotRequests::new(device, &interfaces).map_err(Outcome::NotModelled)?;
-    let mut written = 0usize;
-    for (vertices, assembly) in &draws {
-        let stats = match &linked {
-            Some(linked) => {
-                let primitives = primitives_of(*assembly, vertices.len())?;
-                linked
-                    .draw(
-                        vertices,
-                        &primitives,
-                        &vs_banks,
-                        &ps_banks,
-                        &mut requests,
-                        &rasterizer,
-                        &mut surface,
-                    )
-                    .map_err(|e| Outcome::Error(ps_name.clone(), e.to_string()))?
-            }
-            None => staged
-                .draw(
-                    vertices,
-                    *assembly,
-                    [&vs_banks, &ps_banks],
-                    &rows,
-                    &mut requests,
-                    &rasterizer,
-                    &mut surface,
-                )
-                .map_err(|e| match e {
-                    StageStop::NotModelled(m) => Outcome::NotModelled(m),
-                    StageStop::Failed(stage, m) => {
-                        Outcome::Error(stages.get(stage).cloned().unwrap_or_default(), m)
-                    }
-                })?,
-        };
-        written += stats.written;
-    }
-    let device = requests.device;
+    Ok(Targets {
+        surface,
+        pixel_count,
+        rasterizer,
+    })
+}
+
+/// A draw's surface back into the device's targets and depth buffer, `written` of the `pixel_count` pixels written (a
+/// target the draw wrote whole is known again).
+fn write_back(device: &mut Device, state: &mut State, surface: &Surface, written: usize, pixel_count: usize) {
     // the targets back into the resources
     for (slot, texels) in surface.targets.iter().enumerate() {
         let Some(texels) = texels else { continue };
@@ -1572,7 +1688,6 @@ fn draw_step(
             bytes[..4].copy_from_slice(&d.to_bits().to_le_bytes());
         }
     }
-    Ok(())
 }
 
 /// Run a compute dispatch.
