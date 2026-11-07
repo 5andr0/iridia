@@ -353,7 +353,7 @@ impl Lower<'_> {
     }
 
     /// `Op::Counter`: the view's hidden counter incremented (the count before) or decremented (the count after); an
-    /// element of an array of views has a counter of its own, an element of the counters' binding array.
+    /// element of an array of views has a counter of its own, word n of the resource's packed counter buffer.
     pub(super) fn counter(&mut self, r: Res, op: iridia_ir::CounterOp) -> Result<Handle<E>, Error> {
         let g = self
             .counters
@@ -361,8 +361,14 @@ impl Lower<'_> {
             .find(|(id, _)| *id == r.id)
             .map(|(_, g)| *g)
             .ok_or_else(|| err(format!("resource {} has no counter", r.id.0)))?;
-        let base = self.member(g, r)?;
-        let pointer = self.expr(E::AccessIndex { base, index: 0 });
+        let base = self.expr(E::GlobalVariable(g));
+        let pointer = match r.index {
+            Some(i) => {
+                let index = self.index_u32(i)?;
+                self.expr(E::Access { base, index })
+            }
+            None => self.expr(E::AccessIndex { base, index: 0 }),
+        };
         let one = self.literal_bits(Scalar::U32, 1)?;
         let fun = match op {
             iridia_ir::CounterOp::Increment => AtomicFunction::Add,

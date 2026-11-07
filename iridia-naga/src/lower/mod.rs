@@ -1081,7 +1081,7 @@ impl Lower<'_> {
         let g = self.global(r.id)?;
         self.member(g, r)
     }
-    /// The array of global `g` (a buffer's, a hidden counter's) for the resource `r` names.
+    /// The array of global `g` (a buffer's) for the resource `r` names.
     fn member(&mut self, g: Handle<GlobalVariable>, r: Res) -> Result<Handle<E>, Error> {
         let picked = self.pick(g, r)?;
         Ok(if self.resource(r.id)?.is_array() {
@@ -2451,13 +2451,8 @@ pub fn module(program: &Program, plan: &BindingPlan) -> Result<naga::Module, Err
             size: ArraySize::Dynamic,
             stride: 4,
         });
-        // an array of views has an array of counters, one each
-        let count = l.resource(id)?.count;
-        let ty = if count == 1 {
-            ty
-        } else {
-            l.binding_array(ty, storage(true), count)?
-        };
+        // Keep counters packed in one buffer: word n counts view element n. The binding plan has one counter
+        // buffer per resource, independently of whether the resource itself is an array of bindings.
         let g = l.module.global_variables.append(
             GlobalVariable {
                 name: Some(bind.name.clone()),

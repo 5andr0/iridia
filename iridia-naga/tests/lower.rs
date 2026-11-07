@@ -342,6 +342,53 @@ fn main {
     iridia_naga::validate(&module, &iridia_naga::Profile::NAGA).unwrap_or_else(|e| panic!("{e}\n{wgsl}"));
 }
 
+#[test]
+fn array_elements_share_one_packed_counter_buffer() {
+    let p = program(
+        "iridia-ir 1
+fn main {
+  %0: u32 = input 0.x
+  %1: u32 = counter.increment r0@%0
+  %2: u32 = counter.decrement r0@%0
+  return
+}
+",
+        &[(ScalarType::Uint, 1)],
+        &[],
+        vec![Resource {
+            id: ResourceId(0),
+            kind: ResourceKind::Storage {
+                target: StorageTarget::Buffer(iridia_ir::interface::BufferKind::Structured { stride: 4 }),
+                access: Access::ReadWrite,
+            },
+            count: 4,
+            provenance: ResourceProvenance {
+                name: "views".into(),
+                d3d: Some(D3dBinding {
+                    class: D3dClass::UnorderedAccess,
+                    register: 0,
+                    space: 0,
+                }),
+                ..ResourceProvenance::default()
+            },
+        }],
+    );
+    let wgsl = iridia_naga::wgsl(&p, &iridia_naga::Profile::NAGA).unwrap();
+    let module = naga::front::wgsl::parse_str(&wgsl).unwrap();
+    let counter = module
+        .global_variables
+        .iter()
+        .find(|(_, g)| g.name.as_deref() == Some("u0_counter"))
+        .unwrap()
+        .1;
+    assert!(
+        matches!(module.types[counter.ty].inner, naga::TypeInner::Array { .. }),
+        "{wgsl}"
+    );
+    assert!(wgsl.contains("u0_counter[TEXCOORD0_]"), "{wgsl}");
+    iridia_naga::validate(&module, &iridia_naga::Profile::NAGA).unwrap();
+}
+
 /// A storage image of `u32` or `i32` texels at register `u0`.
 fn image(sample: SampleType) -> Resource {
     Resource {
