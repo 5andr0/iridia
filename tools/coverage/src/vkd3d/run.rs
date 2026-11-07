@@ -316,6 +316,13 @@ fn probe_size(kind: &str, count: u32) -> usize {
     }
 }
 
+/// How many bytes apart a probe of `kind` with `count` elements finds consecutive texels: vkd3d reads any vector (two
+/// or four lanes) as a 16-byte `vec4`, `dvec2`, `uvec4` or `u64vec2` (`get_readback_vec4` and the rest, in its
+/// tests/utils.h), so x steps 16 bytes whatever the lanes; a scalar steps its own size.
+fn probe_step_bytes(kind: &str, count: u32) -> usize {
+    if count > 1 { 16 } else { probe_size(kind, count) }
+}
+
 /// Whether the bytes `got` match a probe's expectation.
 fn holds(kind: &str, count: u32, got: &[u8], expect: &[u32], ulps: u32) -> bool {
     let word = |i: usize| u32::from_le_bytes([got[i * 4], got[i * 4 + 1], got[i * 4 + 2], got[i * 4 + 3]]);
@@ -904,6 +911,7 @@ fn probe_step(
         return Outcome::NotModelled(format!("a probe of {target}, which the run never defined"));
     };
     let size = probe_size(kind, count);
+    let step = probe_step_bytes(kind, count);
     let [w, h, _] = r.level_dims(0);
     let row = if r.dim == Dim::Buffer {
         r.data.len()
@@ -919,7 +927,7 @@ fn probe_step(
         if r.dim != Dim::Buffer && (x >= i64::from(w) || y >= i64::from(h)) {
             return Outcome::NotModelled(format!("a probe at ({x}, {y}), past {target}"));
         }
-        let at = base + y as usize * row + x as usize * size;
+        let at = base + y as usize * row + x as usize * step;
         let Some(got) = r.data.get(at..at + size) else {
             return Outcome::Fail(format!("({x}, {y}): past the end of {target}"));
         };

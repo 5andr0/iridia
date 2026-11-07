@@ -293,3 +293,15 @@ fn a_draw_addresses_a_structured_buffer_by_the_programs_stride() {
         assert_selected_pass(&vkd3d_runs(cases, "srv-structuredbuffer.shader_test"));
     }
 }
+
+/// A vector probe steps 16 bytes through its target, as vkd3d reads any vector as a `vec4`: `probe uav-2 (4)
+/// f32(-3.0, 22.0)` reads words 16 and 17, not 8 and 9.
+#[test]
+fn a_vector_probe_steps_a_vec4() {
+    for cases in ["vkd3d/dxbc.json.gz", "vkd3d/dxil.json.gz"] {
+        let mut runs = vkd3d_runs(cases, "uav-rwstructuredbuffer.shader_test");
+        // the 6.2 run's 16-bit structures are refused (the next test)
+        runs.retain(|r| r.model != "6.2");
+        assert_selected_pass(&runs);
+    }
+}
