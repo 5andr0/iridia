@@ -123,6 +123,15 @@
     that way was not taken, so `Flow` puts those conditions on what follows.
   - Nested loops take one walk of each body, with header values installed before the walk and unchanged headers
     removed afterwards. The oracle bounds the legacy analysis in a subprocess and records an out-of-memory refusal.
+- `iridia-exec-ir::value` ports `iridia_exec::value` onto `iridia_analysis::flow::Values`, with the same shape:
+  - `Evaluator::new(values, flush_denormals, leaf)` and `evaluate(id)`, which gives an `Evaluated::Word` or the
+    `Evaluated::Unknown` leaf it needs;
+  - each operation is evaluated by `iridia_exec_ir::eval`, the interpreter's own definition;
+  - a derivative, a wave operation, an atomic's result, an undefined value, a loop's value, a merge whose arms
+    differ, a run-time indexed element and a value that is no bool or 32-bit scalar are refused, never guessed.
+
+  `iridia-exec-ir` now depends on `iridia-analysis`. `iridia-analysis`'s tests check each output lane the evaluator
+  gives against a run of the program, on generated programs and on every program of the oracle sets.
 - `iridia-ir`: the operation enums are `PartialOrd` and `Ord`, so a graph can key on them: `Unary`, `Binary`,
   `Ternary`, `Cmp`, `AtomicOp`, `WaveOp`, `WaveScan`, `QuadSwap`, `Axis`, `Fineness`, `MinMaxNan`, `SaturateNan`,
   `MulZero`, `OnZero`, `FloatToInt` and `Rounding`.

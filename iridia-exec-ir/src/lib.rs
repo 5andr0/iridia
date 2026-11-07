@@ -26,6 +26,7 @@
     )
 )]
 
+pub mod value;
 mod wide;
 
 use iridia_ir::{

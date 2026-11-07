@@ -17,7 +17,9 @@
 //! (the path is in the failure) to replace the committed one where the change is meant.
 //!
 //! A program the older analyses refuse and the IR's read is counted, not compared; one the IR's refuse and the older
-//! read fails. A lift that refuses is the lifter's, counted.
+//! read fails. A lift that refuses is the lifter's, counted. Each program's value graph is also evaluated
+//! ([`iridia_exec_ir::value`]) from the inputs and constant words of a run, and an output lane it gives otherwise than
+//! the run fails.
 mod inputs;
 mod legacy;
 mod perturb;
@@ -259,6 +261,8 @@ enum Verdict {
     Unsound(String),
     /// The IR's analyses panic: a failure.
     Panic(String),
+    /// The value graph's evaluator gives an output lane otherwise than a run of the program: a failure.
+    EvaluatorDiffers(String),
     /// Execution evidence stopped at the measured corpus budget; never counted as an agreement.
     BudgetExhausted(u64, String),
 }
@@ -267,7 +271,7 @@ impl Verdict {
     fn fails(&self) -> bool {
         matches!(
             self,
-            Verdict::IrRefuses(_) | Verdict::Unsound(_) | Verdict::Panic(_)
+            Verdict::IrRefuses(_) | Verdict::Unsound(_) | Verdict::Panic(_) | Verdict::EvaluatorDiffers(_)
         )
     }
 
@@ -282,6 +286,7 @@ impl Verdict {
             Verdict::Differ { kinds, runs, .. } => format!("differ: {kinds}; {runs}"),
             Verdict::Unsound(_) => "IR unsound".into(),
             Verdict::Panic(why) => format!("IR panics: {why}"),
+            Verdict::EvaluatorDiffers(_) => "the evaluator differs from a run".into(),
             Verdict::BudgetExhausted(budget, analysis) => {
                 format!("budget exhausted at {budget}; {analysis}")
             }
@@ -537,11 +542,17 @@ fn compare_inner(bytes: &[u8]) -> (Verdict, String) {
         Err(e) => format!("refused: {}", grouped(e)),
     };
     let older = legacy::answers(bytes);
-    let execution = graph.as_ref().ok().map(|_| perturb::execution(&new));
-    let execution_note = execution.as_ref().and_then(|e| e.not_run.clone());
+    let evaluator = graph
+        .as_ref()
+        .ok()
+        .map(|(_, values)| perturb::evaluations(&new, values));
+    let execution_note = evaluator.as_ref().and_then(|e| e.not_run.clone());
     let ir = graph.map(|(answers, _)| answers);
     let verdict = match (older, ir) {
         (_, Err(e)) if e.starts_with("panic: ") => Verdict::Panic(e),
+        _ if let Some(e) = evaluator.filter(|e| !e.differ.is_empty()) => {
+            Verdict::EvaluatorDiffers(e.differ.join("; "))
+        }
         (Err(e), _) if e.starts_with("older lift: ") => Verdict::NotLifted(grouped(&e)),
         (Ok(a), Ok(b)) if a == b => Verdict::Agree,
         (Ok(a), Ok(b)) => judge(&a, &b, &new),
@@ -696,6 +707,7 @@ fn hold(set: &str, source: Source) {
         .filter(|(_, v, _)| v.fails())
         .map(|(name, v, _)| match v {
             Verdict::Unsound(at) => format!("  {name}: IR unsound: {at}"),
+            Verdict::EvaluatorDiffers(at) => format!("  {name}: the evaluator differs from a run: {at}"),
             other => format!("  {name}: {}", other.group()),
         })
         .collect();
@@ -881,18 +893,17 @@ fn tint_countdown_early_exit() {
         .read("programs/dxbc/f61b7e97b8b31c2f98e733d19b03fbd305b103d7988a833513714c295cc262cd.dxbc")
         .unwrap();
     let program = lift_ir(&bytes).unwrap();
-    let result = perturb::execution_with_input(&program, 0, 0, 0);
+    let values = Values::of_program(&program).unwrap();
+    let result = perturb::evaluations_with_input(&program, &values, 0, 0, 0);
     assert!(result.not_run.is_none(), "{result:?}");
-    assert!(
-        result
-            .complete
-            .as_ref()
-            .is_some_and(|r| r.outputs.iter().any(Option::is_some)),
-        "{result:?}"
-    );
+    assert!(result.differ.is_empty(), "{result:?}");
+    assert!(result.agree > 0, "{result:?}");
     let counts = perturb::take_counts();
     assert_eq!(counts.exhausted, 0);
-    eprintln!("Tint input.x=0: completed in {} steps", counts.maximum);
+    eprintln!(
+        "Tint input.x=0: {} lanes compared, {} steps",
+        result.agree, counts.maximum
+    );
 }
 
 /// Each vertex fixture with each pixel fixture of its family: the vertex input lanes the pair needs, the same of both
@@ -1006,7 +1017,7 @@ fn one() {
     println!("value graph: {values:#?}");
     let (verdict, line) = compare(&bytes);
     println!("comparison: {} {line}", verdict.group());
-    if let Verdict::Unsound(why) = verdict {
+    if let Verdict::EvaluatorDiffers(why) | Verdict::Unsound(why) = verdict {
         panic!("{why}");
     }
 }

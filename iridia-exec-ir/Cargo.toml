@@ -12,6 +12,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+iridia-analysis.workspace = true
 iridia-ir.workspace = true
 
 [dev-dependencies]

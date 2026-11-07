@@ -9,6 +9,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use iridia_analysis::flow::{At, Node, Values};
+use iridia_exec_ir::value::{Evaluated, Evaluator};
 use iridia_exec_ir::{Bound, Lanes, Lod, Run, Sample};
 use iridia_exec_ir::{Counted, Finish, QuadFinish};
 use iridia_ir::interface::{
@@ -849,6 +851,23 @@ pub fn check(program: &Program, target: Target, source: Source, runs: u64) -> Ou
     }
 }
 
+/// How the value graph's evaluator ([`iridia_exec_ir::value`]) agrees with a run of the program: each output lane
+/// evaluated from the leaves the run was given (input lanes and constant words; the other leaves unknown), and the
+/// word it gives held to the lane the run stored.
+#[derive(Debug, Default)]
+pub struct Evaluations {
+    /// Lanes evaluated to the run's word.
+    pub agree: usize,
+    /// Lanes that need a leaf the run's world does not give the evaluator.
+    pub unknown: usize,
+    /// Why the evaluator refused a lane, each reason once.
+    pub refused: BTreeSet<String>,
+    /// Lanes evaluated to another word than the run's, described.
+    pub differ: Vec<String>,
+    /// Why the program did not run (the evaluator was then not asked).
+    pub not_run: Option<String>,
+}
+
 impl World {
     /// A constant word or a pipeline state lane of the world.
     fn word(&self, resource: ResourceId, word: u32) -> Option<u32> {
@@ -866,49 +885,76 @@ impl World {
     }
 }
 
-/// One execution of a selected test input, recorded independently of analysis agreement.
-#[derive(Debug, Default)]
-pub struct Execution {
-    pub complete: Option<Run>,
-    pub not_run: Option<String>,
+/// Each output lane of `values` (the graph of `program`) evaluated in the world of seed 0 against a run of it there.
+pub fn evaluations(program: &Program, values: &Values) -> Evaluations {
+    let world = World::new(program, 0);
+    evaluate_in_world(program, values, &world)
 }
 
-pub fn execution(program: &Program) -> Execution {
-    execute(program, &World::new(program, 0))
-}
-
-pub fn execution_with_input(program: &Program, input: usize, lane: usize, word: u32) -> Execution {
+/// Compare an explicitly selected input, including a fast exit of a program whose other input needs enormous work.
+pub fn evaluations_with_input(
+    program: &Program,
+    values: &Values,
+    input: usize,
+    lane: usize,
+    word: u32,
+) -> Evaluations {
     let mut world = World::new(program, 0);
     world.inputs[input][lane] = word;
-    execute(program, &world)
+    evaluate_in_world(program, values, &world)
 }
 
-fn execute(program: &Program, world: &World) -> Execution {
-    match world.run(program) {
+fn evaluate_in_world(program: &Program, values: &Values, world: &World) -> Evaluations {
+    let mut out = Evaluations::default();
+    let run = match world.run(program) {
         Ok(Counted {
             finish: Finish::Complete(r),
             ..
-        }) if r.killed => Execution {
-            not_run: Some("the run is killed".into()),
-            ..Default::default()
-        },
+        }) if r.killed => {
+            out.not_run = Some("the run is killed".into());
+            return out;
+        }
         Ok(Counted {
             finish: Finish::Complete(r),
             ..
-        }) => Execution {
-            complete: Some(r),
-            ..Default::default()
-        },
+        }) => r,
         Ok(Counted {
             finish: Finish::Exhausted,
             ..
-        }) => Execution {
-            not_run: Some(format!("budget exhausted at {}", execution_budget(program).0)),
-            ..Default::default()
-        },
-        Err(e) => Execution {
-            not_run: Some(e),
-            ..Default::default()
-        },
+        }) => {
+            out.not_run = Some(format!("budget exhausted at {}", execution_budget(program).0));
+            return out;
+        }
+        Err(e) => {
+            out.not_run = Some(e);
+            return out;
+        }
+    };
+    // the run's own rule: kept where the program leaves it open, as the runs here take it
+    let flush = program.float.f32 == Denormals::Flush;
+    let mut evaluator = Evaluator::new(values, flush, |_, node: &Node, _: &[u32]| match node {
+        Node::Input { input, lane } => world.inputs.get(*input)?.get(usize::from(*lane)).copied(),
+        Node::Global {
+            resource,
+            at: At::Component(word),
+        } => world.word(*resource, *word),
+        _ => None,
+    });
+    for (&(slot, lane), &node) in values.outputs() {
+        let Some(stored) = run.outputs.get(slot).copied().flatten() else {
+            continue;
+        };
+        let stored = stored[usize::from(lane & 3)];
+        match evaluator.evaluate(node) {
+            Ok(Evaluated::Word(w)) if w == stored => out.agree += 1,
+            Ok(Evaluated::Word(w)) => out.differ.push(format!(
+                "output {slot} lane {lane}: evaluated {w:#x}, run {stored:#x}"
+            )),
+            Ok(Evaluated::Unknown(_)) => out.unknown += 1,
+            Err(e) => {
+                out.refused.insert(e);
+            }
+        }
     }
+    out
 }

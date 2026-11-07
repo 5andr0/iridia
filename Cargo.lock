@@ -407,6 +407,7 @@ dependencies = [
 name = "iridia-exec-ir"
 version = "0.6.0"
 dependencies = [
+ "iridia-analysis",
  "iridia-ir",
  "proptest",
 ]

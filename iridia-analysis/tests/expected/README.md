@@ -98,7 +98,8 @@ Two inputs still exhaust the default and the representative 1,048,576-step probe
   loop counter advances by four, with adaptive changes to the bound. Its initial nominal bound alone is 265,289,728
   iterations. Exhaustion is recorded with that input and the larger probe, not described as nontermination.
 - `f61b7e97…`: Tint's two-word decrement starts at `0xffffffff00000000` (18,446,744,069,414,584,320), requiring about
-  2^64 iterations on the nonzero-input path. A separate test supplies input.x=0 and executes the early exit in one step.
+  2^64 iterations on the nonzero-input path. A separate test supplies input.x=0 and compares the early exit exactly:
+  one output lane, one step.
 
 The legacy analysis runs in a separate process capped at 512 MiB and 30 seconds per request. Either limit produces
 `legacy oracle refused (resource budget)`. Diagnostics log which cap won; scheduling can change

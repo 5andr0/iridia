@@ -7,6 +7,7 @@
 //!   output lane's reach (or the discard's) is changed in runs of the program in `iridia-exec-ir`, and the lane stays.
 //! - [`WordsRead`] holds every word that reaches a lane or the discard.
 //! - The graph is closed: each operand of a node is a node of it, and each output lane the program has is in it.
+//! - The value graph's evaluator ([`iridia_exec_ir::value`]) gives each output lane it evaluates as a run does.
 #[allow(
     dead_code,
     reason = "the oracle changes texels; the generated programs read none"
@@ -363,6 +364,16 @@ proptest! {
     }
 
     #[test]
+    fn the_evaluator_agrees_with_a_run(bytes in prop::collection::vec(any::<u8>(), 0..160)) {
+        let text = text(&bytes);
+        let program = program(&text);
+        let values = Values::of_program(&program).unwrap();
+        let e = perturb::evaluations(&program, &values);
+        prop_assert!(e.differ.is_empty(), "{:?}
+{text}", e.differ);
+    }
+
+    #[test]
     fn the_graph_is_closed(bytes in prop::collection::vec(any::<u8>(), 0..160)) {
         let text = text(&bytes);
         let program = program(&text);
@@ -542,6 +553,39 @@ fn a_way_out_decides_only_what_it_skips() {
 "
         )
     );
+}
+
+/// The evaluator gives straight code's lanes as a run does: arithmetic, a comparison and a select over input lanes
+/// and a constant word.
+#[test]
+fn the_evaluator_evaluates_straight_code() {
+    let program = program(
+        "iridia-ir 1
+fn main {
+  %0: f32 = input 0.x
+  %1: f32 = input 0.y
+  %2: vec4<u32> = buffer r0 + 16 oob.zero
+  %3: u32 = %2.y
+  %4: f32 = bitcast %3
+  %5: f32 = fmul.ieee %0, %4
+  %6: f32 = fadd %5, %1
+  %7: bool = fcmp.lt %6, %0
+  %8: f32 = select %7, %6, %1
+  output 0.x = %5
+  output 0.y = %6
+  output 0.z = %8
+  output 0.w = %4
+  return
+}
+",
+    );
+    let values = Values::of_program(&program).unwrap();
+    let e = perturb::evaluations(&program, &values);
+    assert!(
+        e.differ.is_empty() && e.refused.is_empty() && e.not_run.is_none(),
+        "{e:?}"
+    );
+    assert_eq!(e.agree, 4, "{e:?}");
 }
 
 #[test]
