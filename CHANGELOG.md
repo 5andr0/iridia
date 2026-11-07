@@ -66,7 +66,9 @@
   it writes otherwise than the WGSL's draw. A sample reduces its coordinate to its address mode's range before scaling
   it (D3D11.3 7.18.6; a NaN left is 0), a draw steps through a structured buffer by the stride the program declares
   whatever the view's, a vector probe steps 16 bytes as vkd3d's readback does, and a dispatch's typed buffer store
-  reaches every lane of its element. CI makes the table again (`docs/coverage`) and fails when it differs from the one
+  reaches every lane of its element. A Direct3D 9 program that reads its texture stage's state (a `ps_1_x` `tex`:
+  the projection flag, the bound texture's dimension), which WGSL cannot read, is specialised by each draw's state
+  (`iridia_passes::specialise`) and made again for it; the table shows it at Direct3D 9's defaults. CI makes the table again (`docs/coverage`) and fails when it differs from the one
   committed.
 - `iridia-exec`: `draw` draws points and lines as well as triangles (every list and strip topology), each primitive
   numbered for `SV_PrimitiveID`; an aliased line by the diamond exit rule (3.4.3), which an NVIDIA RTX 5070 Ti draws

@@ -6,13 +6,85 @@
 use std::{cell::RefCell, collections::BTreeMap, sync::Arc};
 
 use iridia_exec::{Execution, PixelShader, ProgramShader, Sampler};
-use iridia_ir::interface::{D3dSignature, Interface, ResourceId, Stage, SystemValue};
+use iridia_ir::interface::{
+    D3dSignature, Interface, ResourceId, ResourceKind, Stage, StateParam, SystemValue, TextureDim,
+};
 
 use super::{Lifted, Stop};
 
-/// Lift a Direct3D 9 program and prepare it in every form.
-pub fn lift(bytes: &[u8]) -> Result<Lifted, Stop> {
+/// The pipeline state a draw gives a program: the lanes of each piece (`Op::LoadState`) as
+/// [`iridia_passes::specialise`] folds them.
+pub type StateOf<'s> = &'s dyn Fn(StateParam) -> [u64; 4];
+
+/// Direct3D 9's state where a run sets none (the `D3DTSS_*` defaults): no stage projects its coordinate, the bump
+/// matrices and luminance terms are 0, and a stage's texture is taken as 2D.
+pub fn default_state(param: StateParam) -> [u64; 4] {
+    match param {
+        StateParam::TextureDim(_) => [u64::from(TextureDim::D2.state_code()), 0, 0, 0],
+        _ => [0; 4],
+    }
+}
+
+/// A Direct3D 9 program that reads pipeline state (a `ps_1_x` `tex` reads its stage's projection flag and texture
+/// dimension): neither WGSL nor `iridia-exec` reads the state, so the program is made again for the state of each
+/// draw, its IR as lifted specialised by it ([`iridia_passes::specialise`]).
+#[derive(Debug)]
+pub struct Stateful {
+    /// The IR as lifted.
+    ir: iridia_ir::Program,
+    /// The state it reads, by its resource.
+    params: Vec<(ResourceId, StateParam)>,
+}
+
+impl Stateful {
+    /// `ir`'s state, where it reads any.
+    fn of(ir: &iridia_ir::Program) -> Option<Self> {
+        let params: Vec<_> = ir
+            .interface
+            .resources
+            .iter()
+            .filter_map(|r| match r.kind {
+                ResourceKind::PipelineState(param) => Some((r.id, param)),
+                _ => None,
+            })
+            .collect();
+        (!params.is_empty()).then(|| Stateful {
+            ir: ir.clone(),
+            params,
+        })
+    }
+
+    /// The values `state` gives the pieces the program reads, in order.
+    pub fn values(&self, state: StateOf<'_>) -> Vec<[u64; 4]> {
+        self.params.iter().map(|&(_, param)| state(param)).collect()
+    }
+
+    /// The program for the state [`values`](Self::values) gives, prepared in every form.
+    pub fn lift(&self, values: &[[u64; 4]]) -> Result<Lifted, Stop> {
+        let known: Vec<_> = self
+            .params
+            .iter()
+            .map(|&(id, _)| id)
+            .zip(values.iter().copied())
+            .collect();
+        let mut ir = self.ir.clone();
+        iridia_passes::specialise(&mut ir, &known).map_err(|e| Stop::Failed(format!("specialise: {e}")))?;
+        finish(ir)
+    }
+}
+
+/// Lift a Direct3D 9 program and prepare it in every form; one that reads pipeline state at Direct3D 9's defaults
+/// ([`default_state`]), with what makes it again for other state.
+pub fn lift(bytes: &[u8]) -> Result<(Lifted, Option<Stateful>), Stop> {
     let ir = iridia_d3d9_ir::lift(bytes).map_err(|e| Stop::Refused(e.to_string()))?;
+    match Stateful::of(&ir) {
+        Some(stateful) => Ok((stateful.lift(&stateful.values(&default_state))?, Some(stateful))),
+        None => Ok((finish(ir)?, None)),
+    }
+}
+
+/// A lifted program prepared in every form.
+fn finish(ir: iridia_ir::Program) -> Result<Lifted, Stop> {
     let prepared = prepare(ir).map_err(Stop::Failed)?;
     // the WGSL read back by naga's front end is a naga program
     let program = prepared

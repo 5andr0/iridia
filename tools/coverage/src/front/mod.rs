@@ -102,8 +102,9 @@ pub fn read_back(wgsl: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Lift a program of any bytecode.
-pub fn lift(bytes: &[u8]) -> Result<Lifted, Stop> {
+/// Lift a program of any bytecode; a Direct3D 9 program that reads pipeline state at Direct3D 9's defaults, with
+/// what makes it again for other state.
+pub fn lift(bytes: &[u8]) -> Result<(Lifted, Option<d3d9::Stateful>), Stop> {
     let bytecode = Bytecode::of(bytes);
     if bytecode == Bytecode::D3d9 {
         return d3d9::lift(bytes);
@@ -116,12 +117,15 @@ pub fn lift(bytes: &[u8]) -> Result<Lifted, Stop> {
     let wgsl = iridia::emit::wgsl(&program)
         .map_err(|e| format!("WGSL: {e}"))
         .and_then(|text| read_back(&text));
-    Ok(Lifted {
-        bytecode,
-        program: Arc::new(program),
-        ir: None,
-        wgsl,
-    })
+    Ok((
+        Lifted {
+            bytecode,
+            program: Arc::new(program),
+            ir: None,
+            wgsl,
+        },
+        None,
+    ))
 }
 
 /// A program lifted and made runnable.
@@ -153,6 +157,38 @@ pub enum Form {
 }
 
 impl Ready {
+    /// A lifted program made runnable in every form it has.
+    fn of(lifted: Lifted) -> Self {
+        let shader = ProgramShader::new((*lifted.program).clone()).map_err(|e| e.to_string());
+        let flushed = lifted.denormals_open().then(|| {
+            let mut program = (*lifted.program).clone();
+            program.modes.flush_denormals = true;
+            ProgramShader::new(program).map_err(|e| e.to_string())
+        });
+        let executable = Executable::new(&lifted.program).map_err(|e| e.to_string());
+        // the IR in the register view the WGSL runs in
+        let ir = lifted.ir.as_ref().map(|p| {
+            let mut ir = p.ir.clone();
+            d3d9::own_registers(&mut ir.interface).map(|()| ir)
+        });
+        let ir_shader = ir
+            .clone()
+            .map(|p| ProgramShader::from_ir(p?).map_err(|e| e.to_string()));
+        let ir_flushed = ir.filter(|_| lifted.denormals_open()).map(|p| {
+            let mut p = p?;
+            p.float.f32 = iridia_ir::Denormals::Flush;
+            ProgramShader::from_ir(p).map_err(|e| e.to_string())
+        });
+        Ready {
+            lifted,
+            shader,
+            flushed,
+            ir_shader,
+            ir_flushed,
+            executable,
+        }
+    }
+
     /// The vertex or pixel program `iridia-exec` runs in `form`, its denormals flushed where `flushed` and the
     /// program leaves them open; `None` where the program has no such form (an IR of DXBC or DXIL).
     pub fn shader(&self, form: Form, flushed: bool) -> Option<&Result<ProgramShader, String>> {
@@ -164,15 +200,31 @@ impl Ready {
     }
 }
 
+/// The stop of a lock another thread panicked holding.
+fn poisoned<T>(_: T) -> Stop {
+    Stop::Failed("a poisoned lock".into())
+}
+
+/// A program ready to run, or why it stopped.
+pub type Lift = Result<Arc<Ready>, Stop>;
+
+/// A Direct3D 9 program that reads pipeline state, by its name and the values of the state it reads.
+type Specialised = (String, Vec<[u64; 4]>);
+
 /// Each program lifted so far, by name: it, ready to run, or why it stopped.
-pub type Lifts = BTreeMap<String, Result<Arc<Ready>, Stop>>;
+pub type Lifts = BTreeMap<String, Lift>;
 
 type Source<'f> = Box<dyn Fn(&str) -> Result<Vec<u8>, String> + Send + Sync + 'f>;
 
 /// A suite's programs by name, lifted once and shared by the runs that use them.
 pub struct Programs<'f> {
     bytes: Source<'f>,
+    /// Each program at Direct3D 9's default state ([`d3d9::default_state`]) where it reads any.
     lifted: Mutex<Lifts>,
+    /// The Direct3D 9 programs that read pipeline state, by name.
+    stateful: Mutex<BTreeMap<String, Arc<d3d9::Stateful>>>,
+    /// Those programs made for other state, by name and the values of the state they read.
+    specialised: Mutex<BTreeMap<Specialised, Lift>>,
 }
 
 impl std::fmt::Debug for Programs<'_> {
@@ -187,6 +239,8 @@ impl<'f> Programs<'f> {
         Programs {
             bytes: Box::new(bytes),
             lifted: Mutex::new(BTreeMap::new()),
+            stateful: Mutex::new(BTreeMap::new()),
+            specialised: Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -195,47 +249,47 @@ impl<'f> Programs<'f> {
         (self.bytes)(name)
     }
 
-    /// Program `name`, lifted.
+    /// Program `name`, lifted; at Direct3D 9's default state where it reads any.
     pub fn get(&self, name: &str) -> Result<Arc<Ready>, Stop> {
-        let poisoned = |_| Stop::Failed("a poisoned lock".into());
         if let Some(done) = self.lifted.lock().map_err(poisoned)?.get(name) {
             return done.clone();
         }
         let bytes = (self.bytes)(name).map_err(Stop::Failed)?;
-        let done = lift(&bytes).map(|lifted| {
-            let shader = ProgramShader::new((*lifted.program).clone()).map_err(|e| e.to_string());
-            let flushed = lifted.denormals_open().then(|| {
-                let mut program = (*lifted.program).clone();
-                program.modes.flush_denormals = true;
-                ProgramShader::new(program).map_err(|e| e.to_string())
-            });
-            let executable = Executable::new(&lifted.program).map_err(|e| e.to_string());
-            // the IR in the register view the WGSL runs in
-            let ir = lifted.ir.as_ref().map(|p| {
-                let mut ir = p.ir.clone();
-                d3d9::own_registers(&mut ir.interface).map(|()| ir)
-            });
-            let ir_shader = ir
-                .clone()
-                .map(|p| ProgramShader::from_ir(p?).map_err(|e| e.to_string()));
-            let ir_flushed = ir.filter(|_| lifted.denormals_open()).map(|p| {
-                let mut p = p?;
-                p.float.f32 = iridia_ir::Denormals::Flush;
-                ProgramShader::from_ir(p).map_err(|e| e.to_string())
-            });
-            Arc::new(Ready {
-                lifted,
-                shader,
-                flushed,
-                ir_shader,
-                ir_flushed,
-                executable,
-            })
+        let done = lift(&bytes).map(|(lifted, stateful)| {
+            if let Some(stateful) = stateful
+                && let Ok(mut known) = self.stateful.lock()
+            {
+                known.insert(name.to_owned(), Arc::new(stateful));
+            }
+            Arc::new(Ready::of(lifted))
         });
         self.lifted
             .lock()
             .map_err(poisoned)?
             .insert(name.to_owned(), done.clone());
+        done
+    }
+
+    /// Program `name` for a draw whose pipeline state `state` gives: a Direct3D 9 program that reads state is
+    /// specialised by it ([`d3d9::Stateful`]); any other is [`get`](Self::get)'s.
+    pub fn get_in(&self, name: &str, state: d3d9::StateOf<'_>) -> Result<Arc<Ready>, Stop> {
+        let base = self.get(name)?;
+        let Some(stateful) = self.stateful.lock().map_err(poisoned)?.get(name).cloned() else {
+            return Ok(base);
+        };
+        let values = stateful.values(state);
+        if values == stateful.values(&d3d9::default_state) {
+            return Ok(base);
+        }
+        let key = (name.to_owned(), values);
+        if let Some(done) = self.specialised.lock().map_err(poisoned)?.get(&key) {
+            return done.clone();
+        }
+        let done = stateful.lift(&key.1).map(|lifted| Arc::new(Ready::of(lifted)));
+        self.specialised
+            .lock()
+            .map_err(poisoned)?
+            .insert(key, done.clone());
         done
     }
 

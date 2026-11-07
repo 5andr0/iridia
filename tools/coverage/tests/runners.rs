@@ -425,3 +425,32 @@ fn direct3d_9_reads_unwritten_inputs_as_zero_and_shader_model_2_colours_as_white
         "the white probe is selected"
     );
 }
+
+/// A Direct3D 9 `ps_1_x` `tex` reads its texture stage's state, which neither WGSL nor `iridia-exec` reads: a draw
+/// makes the program again for its own state, the stage's projection flag (`projected`, ps1-projection) and the
+/// dimension of the texture bound at the stage (ps1-sampler's 2D, volume and cube sections, to line 107; its later
+/// sections wait on a `ps_1_x` program's colour output being saturated).
+#[test]
+fn a_direct3d_9_draw_specialises_its_programs_by_the_texture_stage_state() {
+    assert_selected_pass(&vkd3d_runs("vkd3d/d3d9.json.gz", "ps1-projection.shader_test"));
+    let runs = vkd3d_runs("vkd3d/d3d9.json.gz", "ps1-sampler.shader_test");
+    let mut lines = Vec::new();
+    for r in &runs {
+        for p in r.probes.iter().filter(|p| p.selected && p.line <= 107) {
+            assert_eq!(
+                p.outcome.class(),
+                "pass",
+                "{} {} line {}: {:?}",
+                r.file,
+                r.model,
+                p.line,
+                p.outcome
+            );
+            lines.push(p.line);
+        }
+    }
+    // the volume's probes and the cube's
+    for line in [67, 70, 92, 107] {
+        assert!(lines.contains(&line), "the probe at line {line} is selected");
+    }
+}

@@ -6,7 +6,7 @@
 //! the lifter refused, an executor error, state this runner does not model), every resource that step would have
 //! written is marked with why, and a probe of it is counted as that, not checked: until a clear or a new definition
 //! of the resource, or a draw that writes every pixel of a target, replaces its contents.
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use iridia::{Interface, Program, ResourceKind, SystemValue};
@@ -17,13 +17,14 @@ use iridia_exec::draw::{
 use iridia_exec::geometry::{GeometryShader, Topology};
 use iridia_exec::tessellation::TessellationShader;
 use iridia_exec::{PixelShader, ProgramShader};
+use iridia_ir::interface::{StateParam, TextureDim};
 
 use super::cases::{File, InputElement, Run, What};
 use crate::device::format::{Class, named};
 use crate::device::resource::{Counter, Dim, Kind, Resource};
 use crate::device::sample::{Address, Compare, Reduction, Sampler};
 use crate::device::{Device, Dispatch, SlotRequests};
-use crate::front::{Form, Lifts, Programs, Ready, Stop};
+use crate::front::{Form, Lifts, Programs, Ready, Stop, d3d9};
 use crate::stages::{Assembly, Bank, Stages, Stopped as StageStop};
 
 /// The wave width compute programs run with: 32 lanes, as most Direct3D 12 hardware reports.
@@ -186,6 +187,8 @@ struct State {
     point_sprite: bool,
     /// Direct3D 9's flat shade mode (`shade mode flat`), which only vkd3d's Direct3D 9 runs take.
     flat: bool,
+    /// The Direct3D 9 texture stages that divide their coordinate by its last lane (`D3DTTFF_PROJECTED`).
+    projected: BTreeSet<u32>,
     viewports: BTreeMap<u32, [f32; 4]>,
     sample_mask: Option<u32>,
     /// The fixed-function state set that this runner does not model, by name.
@@ -478,10 +481,45 @@ fn primitives_of(assembly: Assembly, vertices: usize) -> Result<Vec<Primitive>, 
 
 /// The program a step names for a stage, lifted.
 fn ready(programs: &Programs<'_>, name: &str) -> Result<Arc<Ready>, Outcome> {
-    programs.get(name).map_err(|e| match e {
+    programs.get(name).map_err(|e| outcome_of(name, e))
+}
+
+/// Program `name` for a draw with this device and state: a Direct3D 9 program that reads pipeline state reads the
+/// draw's ([`d3d9_state`]).
+fn ready_in(
+    programs: &Programs<'_>,
+    name: &str,
+    device: &Device,
+    state: &State,
+) -> Result<Arc<Ready>, Outcome> {
+    programs
+        .get_in(name, &|param| d3d9_state(device, state, param))
+        .map_err(|e| outcome_of(name, e))
+}
+
+/// Why program `name` cannot run, as a probe's outcome.
+fn outcome_of(name: &str, stop: Stop) -> Outcome {
+    match stop {
         Stop::Refused(m) => Outcome::Refused(name.to_owned(), m),
         Stop::Failed(m) => Outcome::Failed(name.to_owned(), m),
-    })
+    }
+}
+
+/// The Direct3D 9 pipeline state a draw gives a program: a stage projects where the run says so (`projected`), its
+/// texture's dimension is that of the view at the stage's slot, and what a run cannot set is Direct3D 9's default.
+fn d3d9_state(device: &Device, state: &State, param: StateParam) -> [u64; 4] {
+    match param {
+        StateParam::Projected(stage) => [u64::from(state.projected.contains(&stage)), 0, 0, 0],
+        StateParam::TextureDim(stage) => {
+            let dim = match device.view(Kind::Srv, stage, 0).map(|r| r.dim) {
+                Some(Dim::D3) => TextureDim::D3,
+                Some(Dim::Cube) => TextureDim::Cube,
+                _ => TextureDim::D2,
+            };
+            [u64::from(dim.state_code()), 0, 0, 0]
+        }
+        _ => d3d9::default_state(param),
+    }
 }
 
 /// The constant buffers a program binds, by slot, from the device.
@@ -649,6 +687,21 @@ fn run_as(programs: &Programs<'_>, run: &Run, flushed: bool) -> RunResult {
                                 state.unmodelled.remove(name);
                             }
                             None => {
+                                state.unmodelled.insert(name.clone(), value.to_string());
+                            }
+                        },
+                        "projected" => match (value.get(0).and_then(serde_json::Value::as_u64), value.get(1))
+                        {
+                            (Some(stage), Some(&serde_json::Value::Bool(on))) => {
+                                let stage = stage as u32;
+                                if on {
+                                    state.projected.insert(stage);
+                                } else {
+                                    state.projected.remove(&stage);
+                                }
+                                state.unmodelled.remove(name);
+                            }
+                            _ => {
                                 state.unmodelled.insert(name.clone(), value.to_string());
                             }
                         },
@@ -1040,8 +1093,8 @@ fn draw_step(
     let ps_name = stages
         .get("ps")
         .ok_or_else(|| Outcome::NotModelled("a draw with no pixel program".into()))?;
-    let vs = ready(programs, vs_name)?;
-    let ps = ready(programs, ps_name)?;
+    let vs = ready_in(programs, vs_name, device, state)?;
+    let ps = ready_in(programs, ps_name, device, state)?;
     let shader = |r: &'_ Ready, name: &str| -> Result<(), Outcome> {
         r.shader(form, flushed)
             .ok_or_else(|| Outcome::Error(name.to_owned(), format!("no {form:?} form")))?
