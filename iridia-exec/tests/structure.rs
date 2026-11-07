@@ -1,22 +1,41 @@
 #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
-//! The structurizer's lowering, end to end: random control flow graphs are structured, written as naga statements
-//! (blocks and loops with routed branches), validated, and run by the executor. Every node adds to an accumulator, so
-//! the output is a hash of the nodes and edges visited in order; each deciding node picks its way from a hash of its
-//! visit count. The output must be the one a walk of the graph itself gives, including for graphs with loops, switches
-//! and branches that leave several constructs at once.
-use iridia::build::structure::{self, Cfg, Emit, Term};
-use iridia::build::{Builder, Kind, Val, Width};
-use iridia::{
-    Conventions, D3dModes, D3dSignature, Interface, InterpMode, Label, Program, Provenance, ScalarType,
-    ShaderFormat, Stage, SystemValue, Value, Varying, VaryingProvenance, entry_io,
+//! The structurizer's regions, end to end: random control flow graphs are written as a graph body of the IR, structured
+//! (`structurize`, then `break_flags` routes the exits innermost-only `break` and `continue` cannot take), validated, and
+//! run by the executor. Every node adds to an accumulator, so the output is a hash of the nodes and edges visited in
+//! order; each deciding node picks its way from a hash of its visit count. The output must be the one a walk of the
+//! graph itself gives, including for graphs with loops, switches and branches that leave several constructs at once,
+//! and the reference interpreter's run of the graph before it is structured must give it too.
+mod support;
+
+use iridia_exec::{PixelShader, ProgramShader};
+use iridia_ir::{
+    Binary, Block, Body, Cmp, Function, Node, OnZero, Op, Precision, Program, Target, Terminator, Type,
+    ValueDef, ValueId, Var, VarId,
+    interface::{Interface, ScalarType, ShaderFormat, Stage, StageFacts, SystemValue},
 };
-use iridia_exec::PixelShader;
-use iridia_exec::ProgramShader;
-use naga::{Expression, Handle, Statement, SwitchValue};
 
 const LIMIT: u32 = 64;
 
-/// The way node `n` goes the `visit`-th time, of `ways`: a 32-bit hash both the shader and the walk compute.
+/// A control flow graph: node `n` ends in `terms[n]`; node 0 is the entry.
+#[derive(Debug)]
+struct Cfg {
+    terms: Vec<Term>,
+}
+
+/// How a node ends.
+#[derive(Debug)]
+enum Term {
+    /// The graph ends.
+    Exit,
+    /// On to a node.
+    Goto(usize),
+    /// On to the first node or the second, as the node decides.
+    If(usize, usize),
+    /// On to one of the nodes, as the node decides.
+    Switch(Vec<usize>),
+}
+
+/// The way node `n` goes the `visit`-th time, of `ways`: a 32-bit hash both the program and the walk compute.
 fn way(seed: u32, n: usize, visit: u32, ways: u32) -> u32 {
     let mut x = seed.wrapping_mul(0x9e37_79b1)
         ^ (n as u32 + 1).wrapping_mul(0x85eb_ca6b)
@@ -55,217 +74,247 @@ fn walk(cfg: &Cfg, seed: u32) -> u32 {
     }
 }
 
+/// The graph body being written: its values and variables, and the nodes of the block being filled.
 struct Toy {
-    seed: u32,
-    acc: Handle<naga::LocalVariable>,
-    steps: Handle<naga::LocalVariable>,
-    visits: Vec<Handle<naga::LocalVariable>>,
-    result: Handle<naga::Type>,
+    f: Function,
+    acc: VarId,
+    steps: VarId,
+    visits: Vec<VarId>,
 }
 
 impl Toy {
-    fn load(&self, b: &mut Builder, local: Handle<naga::LocalVariable>) -> Val {
-        let p = b.local_ptr(local);
-        b.load(p, Kind::U, Width::One)
-    }
-    fn set(&self, b: &mut Builder, local: Handle<naga::LocalVariable>, v: Val) {
-        let p = b.local_ptr(local);
-        b.store(p, v);
-    }
-    fn accumulate(&self, b: &mut Builder, word: u32) {
-        use naga::BinaryOperator::{Add, Multiply};
-        let acc = self.load(b, self.acc);
-        let k = b.lit_u(31);
-        let times = b.binary(Multiply, acc, k);
-        let w = b.lit_u(word);
-        let sum = b.binary(Add, times, w);
-        self.set(b, self.acc, sum);
-    }
-    fn return_acc(&self, b: &mut Builder) {
-        let acc = self.load(b, self.acc);
-        let bits = b.bitcast(acc, Kind::F);
-        let zero = b.lit_f(0.0);
-        let colour = b.compose(&[bits, zero, zero, zero]);
-        let out = b.app(Expression::Compose {
-            ty: self.result,
-            components: vec![colour.expr],
+    fn value(&mut self, nodes: &mut Vec<Node>, op: Op) -> ValueId {
+        let ty = match op {
+            Op::Binary(Binary::UCmp(_), ..) => Type::BOOL,
+            _ => Type::U32,
+        };
+        let id = ValueId(u32::try_from(self.f.values.len()).unwrap());
+        self.f.values.push(ValueDef {
+            ty,
+            op,
+            origin: None,
+            precision: Precision::Full,
         });
-        b.push(Statement::Return { value: Some(out) });
+        nodes.push(Node::Value(id));
+        id
     }
-    /// The hash of the node's visit, advancing the count.
-    fn pick(&self, b: &mut Builder, node: usize, ways: u32) -> Val {
-        use naga::BinaryOperator::{ExclusiveOr, Modulo, Multiply, ShiftRight};
-        let visit = self.load(b, self.visits[node]);
-        let one = b.lit_u(1);
-        let next = b.binary(naga::BinaryOperator::Add, visit, one);
-        self.set(b, self.visits[node], next);
-        let seed = b.lit_u(self.seed);
-        let k1 = b.lit_u(0x9e37_79b1);
-        let a = b.binary(Multiply, seed, k1);
-        let n1 = b.lit_u(node as u32 + 1);
-        let k2 = b.lit_u(0x85eb_ca6b);
-        let c = b.binary(Multiply, n1, k2);
-        let v1 = b.binary(naga::BinaryOperator::Add, visit, one);
-        let k3 = b.lit_u(0xc2b2_ae35);
-        let d = b.binary(Multiply, v1, k3);
-        let ac = b.binary(ExclusiveOr, a, c);
-        let mut x = b.binary(ExclusiveOr, ac, d);
+    fn lit(&mut self, nodes: &mut Vec<Node>, x: u32) -> ValueId {
+        self.value(nodes, Op::Literal([u64::from(x), 0, 0, 0]))
+    }
+    fn binary(&mut self, nodes: &mut Vec<Node>, op: Binary, a: ValueId, b: ValueId) -> ValueId {
+        self.value(nodes, Op::Binary(op, a, b))
+    }
+    /// `acc = acc * 31 + word`.
+    fn accumulate(&mut self, nodes: &mut Vec<Node>, word: u32) {
+        let acc = self.value(nodes, Op::LoadVar(self.acc));
+        let k = self.lit(nodes, 31);
+        let times = self.binary(nodes, Binary::IMul, acc, k);
+        let w = self.lit(nodes, word);
+        let sum = self.binary(nodes, Binary::IAdd, times, w);
+        nodes.push(Node::StoreVar(self.acc, sum));
+    }
+    /// The hash of node `n`'s visit, advancing its count.
+    fn pick(&mut self, nodes: &mut Vec<Node>, seed: u32, n: usize, ways: u32) -> ValueId {
+        let visit = self.value(nodes, Op::LoadVar(self.visits[n]));
+        let one = self.lit(nodes, 1);
+        let next = self.binary(nodes, Binary::IAdd, visit, one);
+        nodes.push(Node::StoreVar(self.visits[n], next));
+        let s = self.lit(nodes, seed);
+        let k1 = self.lit(nodes, 0x9e37_79b1);
+        let a = self.binary(nodes, Binary::IMul, s, k1);
+        let n1 = self.lit(nodes, n as u32 + 1);
+        let k2 = self.lit(nodes, 0x85eb_ca6b);
+        let c = self.binary(nodes, Binary::IMul, n1, k2);
+        let k3 = self.lit(nodes, 0xc2b2_ae35);
+        let d = self.binary(nodes, Binary::IMul, next, k3);
+        let ac = self.binary(nodes, Binary::Xor, a, c);
+        let mut x = self.binary(nodes, Binary::Xor, ac, d);
         for (shift, mul) in [(15, 0x2c1b_3c6d_u32), (12, 0x297a_2d39), (15, 1)] {
-            let s = b.lit_u(shift);
-            let shifted = b.binary(ShiftRight, x, s);
-            x = b.binary(ExclusiveOr, x, shifted);
+            let s = self.lit(nodes, shift);
+            let shifted = self.binary(nodes, Binary::ShrU, x, s);
+            x = self.binary(nodes, Binary::Xor, x, shifted);
             if mul != 1 {
-                let m = b.lit_u(mul);
-                x = b.binary(Multiply, x, m);
+                let m = self.lit(nodes, mul);
+                x = self.binary(nodes, Binary::IMul, x, m);
             }
         }
-        let w = b.lit_u(ways);
-        b.binary(Modulo, x, w)
+        let w = self.lit(nodes, ways);
+        self.binary(nodes, Binary::URem(OnZero::ByOne), x, w)
     }
 }
 
-impl Emit for Toy {
-    type Error = std::convert::Infallible;
-    fn node(&mut self, b: &mut Builder, node: usize) -> Result<(), Self::Error> {
-        use naga::BinaryOperator::{Add, GreaterEqual};
-        let steps = self.load(b, self.steps);
-        let one = b.lit_u(1);
-        let steps = b.binary(Add, steps, one);
-        self.set(b, self.steps, steps);
-        self.accumulate(b, node as u32 + 1);
-        let limit = b.lit_u(LIMIT);
-        let over = b.binary(GreaterEqual, steps, limit);
-        b.blocks.push(naga::Block::new());
-        self.return_acc(b);
-        let accept = b.blocks.pop().unwrap();
-        b.push(Statement::If {
-            condition: over.expr,
-            accept,
-            reject: naga::Block::new(),
-        });
-        Ok(())
-    }
-    fn edge(&mut self, b: &mut Builder, from: usize, to: usize) -> Result<(), Self::Error> {
-        self.accumulate(b, 200 + (from * 16 + to) as u32);
-        Ok(())
-    }
-    fn condition(&mut self, b: &mut Builder, node: usize) -> Result<Handle<Expression>, Self::Error> {
-        let w = self.pick(b, node, 2);
-        let zero = b.lit_u(0);
-        Ok(b.binary(naga::BinaryOperator::Equal, w, zero).expr)
-    }
-    fn selector(
-        &mut self,
-        b: &mut Builder,
-        node: usize,
-    ) -> Result<(Handle<Expression>, Vec<SwitchValue>), Self::Error> {
-        // the number of ways is the node's: the toy knows it from its table
-        let ways = TOY_WAYS.with(|w| w.borrow()[node]);
-        let w = self.pick(b, node, ways);
-        Ok((w.expr, (0..ways - 1).map(SwitchValue::U32).collect()))
-    }
-    fn exit(&mut self, b: &mut Builder, _node: usize) -> Result<(), Self::Error> {
-        self.return_acc(b);
-        Ok(())
+fn to(block: usize) -> Target {
+    Target {
+        block: u32::try_from(block).unwrap(),
+        args: Vec::new(),
     }
 }
 
-thread_local! {
-    static TOY_WAYS: std::cell::RefCell<Vec<u32>> = const { std::cell::RefCell::new(Vec::new()) };
-}
-
-fn program(cfg: &Cfg, seed: u32) -> Result<Program, structure::Error> {
-    let code = structure::structure(cfg)?;
-    TOY_WAYS.with(|w| {
-        *w.borrow_mut() = cfg
-            .terms
-            .iter()
-            .map(|t| match t {
-                Term::Switch(ts) => ts.len() as u32,
-                _ => 2,
-            })
-            .collect();
+/// The program of `cfg` for `seed`, a graph body: a start block, then for each node `n` a block that counts the step,
+/// adds the node to the accumulator and leaves for the exit at the step limit, a block that decides the way, and a block
+/// per way that adds the edge; and the exit, which outputs the accumulator.
+fn program(cfg: &Cfg, seed: u32) -> Program {
+    let n = cfg.terms.len();
+    let u32_var = |name: String| Var::new(&name, Type::U32);
+    let mut vars = vec![u32_var("acc".into()), u32_var("steps".into())];
+    vars.extend((0..n).map(|i| u32_var(format!("v{i}"))));
+    let mut toy = Toy {
+        f: Function {
+            name: "main".into(),
+            values: Vec::new(),
+            vars,
+            body: Body::Cfg(Vec::new()),
+        },
+        acc: VarId(0),
+        steps: VarId(1),
+        visits: (0..n).map(|i| VarId(u32::try_from(i).unwrap() + 2)).collect(),
+    };
+    // the blocks: start 0; node i's step block, decision block and edge blocks; the exit last
+    let ways = |t: &Term| match t {
+        Term::Exit => 0,
+        Term::Goto(_) => 1,
+        Term::If(..) => 2,
+        Term::Switch(ts) => ts.len(),
+    };
+    let mut first = Vec::with_capacity(n);
+    let mut next = 1;
+    for t in &cfg.terms {
+        first.push(next);
+        next += 2 + ways(t);
+    }
+    let exit = next;
+    let mut blocks = Vec::new();
+    let mut start = Vec::new();
+    let zero = toy.lit(&mut start, 0);
+    for v in [toy.acc, toy.steps].into_iter().chain(toy.visits.clone()) {
+        start.push(Node::StoreVar(v, zero));
+    }
+    blocks.push(Block {
+        params: Vec::new(),
+        nodes: start,
+        term: Terminator::Jump(to(first[0])),
     });
+    for (i, t) in cfg.terms.iter().enumerate() {
+        let (decision, edges) = (first[i] + 1, first[i] + 2);
+        // the step
+        let mut nodes = Vec::new();
+        let steps = toy.value(&mut nodes, Op::LoadVar(toy.steps));
+        let one = toy.lit(&mut nodes, 1);
+        let steps = toy.binary(&mut nodes, Binary::IAdd, steps, one);
+        nodes.push(Node::StoreVar(toy.steps, steps));
+        toy.accumulate(&mut nodes, i as u32 + 1);
+        let limit = toy.lit(&mut nodes, LIMIT);
+        let over = toy.binary(&mut nodes, Binary::UCmp(Cmp::Ge), steps, limit);
+        blocks.push(Block {
+            params: Vec::new(),
+            nodes,
+            term: Terminator::Branch {
+                cond: over,
+                accept: to(exit),
+                reject: to(decision),
+            },
+        });
+        // the decision
+        let mut nodes = Vec::new();
+        let term = match t {
+            Term::Exit => Terminator::Jump(to(exit)),
+            Term::Goto(_) => Terminator::Jump(to(edges)),
+            Term::If(..) => {
+                let w = toy.pick(&mut nodes, seed, i, 2);
+                let zero = toy.lit(&mut nodes, 0);
+                let first_way = toy.binary(&mut nodes, Binary::UCmp(Cmp::Eq), w, zero);
+                Terminator::Branch {
+                    cond: first_way,
+                    accept: to(edges),
+                    reject: to(edges + 1),
+                }
+            }
+            Term::Switch(ts) => {
+                let w = toy.pick(&mut nodes, seed, i, ts.len() as u32);
+                Terminator::Switch {
+                    selector: w,
+                    cases: (0..ts.len() - 1).map(|k| (k as u32, to(edges + k))).collect(),
+                    default: to(edges + ts.len() - 1),
+                }
+            }
+        };
+        blocks.push(Block {
+            params: Vec::new(),
+            nodes,
+            term,
+        });
+        // the edges
+        let targets = match t {
+            Term::Exit => Vec::new(),
+            Term::Goto(a) => vec![*a],
+            Term::If(a, b) => vec![*a, *b],
+            Term::Switch(ts) => ts.clone(),
+        };
+        for target in targets {
+            let mut nodes = Vec::new();
+            toy.accumulate(&mut nodes, 200 + (i * 16 + target) as u32);
+            blocks.push(Block {
+                params: Vec::new(),
+                nodes,
+                term: Terminator::Jump(to(first[target])),
+            });
+        }
+    }
+    let mut nodes = Vec::new();
+    let acc = toy.value(&mut nodes, Op::LoadVar(toy.acc));
+    nodes.push(Node::StoreOutput(0, 0b1, acc));
+    blocks.push(Block {
+        params: Vec::new(),
+        nodes,
+        term: Terminator::Return,
+    });
+    assert_eq!(blocks.len(), exit + 1);
+    toy.f.body = Body::Cfg(blocks);
     let interface = Interface {
         stage: Stage::Pixel,
-        inputs: vec![],
-        outputs: vec![Varying {
-            label: Label {
-                name: "SV_Target".into(),
-                index: 0,
-            },
-            system: Some(SystemValue::Target(0)),
-            value: Value {
-                scalar: ScalarType::Float,
-                width: 4,
-            },
-            interp: None,
-            used: true,
-            provenance: VaryingProvenance {
-                d3d: Some(D3dSignature {
-                    register: 0,
-                    mask: 15,
-                    read_write_mask: 0,
-                }),
-            },
-        }],
-        resources: vec![],
-        facts: Default::default(),
+        inputs: Vec::new(),
+        outputs: vec![support::varying(
+            "SV_Target",
+            0,
+            ScalarType::Uint,
+            1,
+            Some((0, 0b1)),
+            Some(SystemValue::Target(0)),
+        )],
+        resources: Vec::new(),
+        facts: StageFacts::default(),
     };
-    let _ = InterpMode::Flat;
-    let mut b = Builder::new();
-    let u1 = b.ty_of(Kind::U, Width::One);
-    let acc = b.local("acc", u1);
-    let steps = b.local("steps", u1);
-    let jump = b.local("jump", u1);
-    let visits: Vec<_> = (0..cfg.terms.len())
-        .map(|i| b.local(&format!("v{i}"), u1))
-        .collect();
-    let io = entry_io(&interface).unwrap();
-    let declared = b.declare_entry(&io).unwrap();
-    let mut toy = Toy {
-        seed,
-        acc,
-        steps,
-        visits,
-        result: declared.result.unwrap(),
-    };
-    structure::lower(&mut b, &code, &mut toy, jump).unwrap();
-    let module = b
-        .finish(
-            "main",
-            naga::ShaderStage::Fragment,
-            declared.arguments,
-            declared.result,
-            false,
-        )
-        .expect("the module finishes");
-    Ok(Program {
-        module,
-        stage: Stage::Pixel,
-        entry: "main".into(),
-        interface,
-        bindings: vec![],
-        conventions: Conventions::D3D,
-        modes: D3dModes::default(),
-        provenance: Provenance {
-            format: ShaderFormat::Dxbc,
-            target: "toy".into(),
-            lifter: "test".into(),
-            lifter_version: 0,
-            source_hash: None,
-            instruction_count: None,
-        },
-        notes: vec![],
-    })
+    support::program(toy.f, interface, ShaderFormat::Dxbc, "toy")
 }
 
-fn run(program: Program) -> u32 {
-    let shader = ProgramShader::new(program).unwrap();
+/// The graph's program structured as the executor takes it, with the count of exits `break_flags` routed; `None` where
+/// the graph is irreducible, which `structurize` refuses.
+fn structured(p: &Program) -> Option<(Program, usize)> {
+    let mut s = p.clone();
+    if let Err(e) = iridia_passes::structurize(&mut s.entry) {
+        assert!(e.contains("irreducible"), "{e}");
+        return None;
+    }
+    let routed = iridia_passes::break_flags(&mut s.entry).unwrap();
+    iridia_ir::validate(&s).unwrap_or_else(|e| panic!("{e:?}\n{}", iridia_ir::text::print(&s.entry)));
+    Some((s, routed))
+}
+
+/// The accumulator a run of the structured program ends with in the executor; the reference interpreter's run of the
+/// graph and of its structured form must give the same.
+fn run(graph: &Program, structured: Program) -> u32 {
+    let reference = |p: &Program| {
+        let out = support::reference(p, &[], &[], &mut |_| Err("no samples".into()));
+        out.outputs[0].unwrap()[0]
+    };
+    let (of_graph, of_regions) = (reference(graph), reference(&structured));
+    let shader = ProgramShader::from_ir(structured).unwrap();
     let execution = shader
         .execute(&[], &[], &mut |_: iridia_exec::Sample| Ok([0.0; 4]))
         .unwrap();
-    execution.outputs[0][0]
+    let acc = execution.outputs[0][0];
+    assert_eq!((of_graph, of_regions), (acc, acc), "the reference interpreter");
+    acc
 }
 
 #[test]
@@ -309,8 +358,9 @@ fn lowered_graphs_run_as_their_walk() {
     ];
     for cfg in &shapes {
         for seed in 0..8 {
-            let p = program(cfg, seed).unwrap();
-            assert_eq!(run(p), walk(cfg, seed), "{cfg:?} seed {seed}");
+            let p = program(cfg, seed);
+            let (s, _) = structured(&p).unwrap_or_else(|| panic!("{cfg:?} is irreducible"));
+            assert_eq!(run(&p, s), walk(cfg, seed), "{cfg:?} seed {seed}");
         }
     }
 }
@@ -337,9 +387,10 @@ fn random_lowered_graphs_run_as_their_walk() {
             .collect();
         let cfg = Cfg { terms };
         for seed in 0..4 {
-            let Ok(p) = program(&cfg, seed) else { break };
-            routed += usize::from(iridia::emit::wgsl(&p).unwrap().contains("jump"));
-            assert_eq!(run(p), walk(&cfg, seed), "{cfg:?} seed {seed}");
+            let p = program(&cfg, seed);
+            let Some((s, flags)) = structured(&p) else { break };
+            routed += usize::from(flags > 0);
+            assert_eq!(run(&p, s), walk(&cfg, seed), "{cfg:?} seed {seed}");
             ran += 1;
         }
     }

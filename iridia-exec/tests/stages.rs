@@ -1,7 +1,11 @@
 #![allow(clippy::unwrap_used)]
 //! Programs of the stages naga has no entry point for, built by hand: a hull program (a control-point function and a
-//! patch-constant function), the domain program that reads its patches, and a vertex program that feeds them. They
-//! validate against the functions the interface says, are shown as text, and are refused by the WGSL writer by name.
+//! patch-constant function), the domain program that reads its patches, and a geometry program that passes a triangle
+//! through. In the naga form they validate against the functions the interface says, are shown as text, and are refused
+//! by the WGSL writer by name. On the IR (written as text) they validate, the IR's WGSL refuses them by name, and the
+//! executor runs their functions with the registers and results the interface's functions say.
+mod support;
+
 use iridia::build::{Builder, Kind, Width};
 use iridia::emit;
 use iridia::{
@@ -220,10 +224,8 @@ fn a_module_that_is_not_the_stages_functions_is_refused() {
     );
 }
 
-/// A geometry program that passes a triangle through: `main` returns the three vertices, a count of three, and a strip
-/// that starts at the first.
-fn geometry() -> Program {
-    let interface = Interface {
+fn geometry_interface() -> Interface {
+    Interface {
         stage: Stage::Geometry,
         inputs: vec![varying("COLOR", 0, 4, None)],
         outputs: vec![varying("SV_Position", 0, 4, Some(SystemValue::ClipPosition))],
@@ -234,7 +236,13 @@ fn geometry() -> Program {
             max_vertices: 3,
             instances: 1,
         }),
-    };
+    }
+}
+
+/// A geometry program that passes a triangle through: `main` returns the three vertices, a count of three, and a strip
+/// that starts at the first.
+fn geometry() -> Program {
+    let interface = geometry_interface();
     let sigs = iridia::stage_functions(&interface).unwrap().unwrap();
     let mut b = Builder::new();
     let decl = b.declare_function(&sigs[0]).unwrap();
@@ -301,13 +309,216 @@ fn a_geometry_program_is_a_function_of_a_primitive_returning_its_vertices() {
     assert!(p.validate().is_err());
 }
 
+// The same programs on the IR.
+
+/// The hull program on the IR: `main` stores output control point `id` as input control point `id`; the patch constant
+/// function stores a tessellation factor of 4 and an inside factor of 2.
+fn hull_ir() -> iridia_ir::Program {
+    let main = support::function(
+        "iridia-ir 1
+fn main {
+  %0: u32 = builtin outputcontrolpoint
+  %1: vec3<f32> = input 0.xyz [%0]
+  output 0.xyz = %1
+  return
+}
+",
+    );
+    let patch = support::function(
+        "iridia-ir 1
+fn patch_constant {
+  %0: f32 = f32(4.0)
+  patch 0.x = %0
+  %1: f32 = f32(2.0)
+  patch 1.x = %1
+  return
+}
+",
+    );
+    let mut p = support::unchecked(main, hull_interface(), ShaderFormat::Dxbc, "hs_5_0");
+    p.patch = Some(patch);
+    p
+}
+
+/// The domain program on the IR: the clip position is the domain location with a w of 1.
+fn domain_ir() -> iridia_ir::Program {
+    let main = support::function(
+        "iridia-ir 1
+fn main {
+  %0: vec3<f32> = builtin domainlocation
+  %1: f32 = f32(1.0)
+  %2: vec4<f32> = compose %0, %1
+  output 0.xyzw = %2
+  return
+}
+",
+    );
+    support::unchecked(main, domain_interface(), ShaderFormat::Dxbc, "ds_5_0")
+}
+
+/// The geometry program on the IR: the three vertices' COLOR0 emitted as one strip.
+fn geometry_ir() -> iridia_ir::Program {
+    let main = support::function(
+        "iridia-ir 1
+fn main {
+  %0: u32 = u32(0)
+  %1: vec4<f32> = input 0.xyzw [%0]
+  output 0.xyzw = %1
+  emit 0
+  %2: u32 = u32(1)
+  %3: vec4<f32> = input 0.xyzw [%2]
+  output 0.xyzw = %3
+  emit 0
+  %4: u32 = u32(2)
+  %5: vec4<f32> = input 0.xyzw [%4]
+  output 0.xyzw = %5
+  emit 0
+  return
+}
+",
+    );
+    support::unchecked(main, geometry_interface(), ShaderFormat::Dxbc, "gs_5_0")
+}
+
+fn ir_problems(p: &iridia_ir::Program) -> Vec<String> {
+    iridia_ir::validate(p)
+        .err()
+        .unwrap_or_default()
+        .iter()
+        .map(ToString::to_string)
+        .collect()
+}
+
+#[test]
+fn the_programs_on_the_ir_validate_and_their_wgsl_is_refused_by_name() {
+    for p in [hull_ir(), domain_ir(), geometry_ir()] {
+        assert_eq!(ir_problems(&p), Vec::<String>::new(), "{:?}", p.stage);
+        let error = iridia_naga::wgsl(&p, &iridia_naga::Profile::NAGA)
+            .unwrap_err()
+            .to_string();
+        let refusal = format!("{} program is not lowered yet", p.stage.with_article());
+        assert!(error.contains(&refusal), "{error}");
+    }
+    // the patch constant function is a function of its own in the hull program
+    let text = iridia_ir::text::print(hull_ir().patch.as_ref().unwrap());
+    assert!(text.contains("fn patch_constant {"), "{text}");
+    assert!(text.contains("patch 0.x = %0"), "{text}");
+}
+
+#[test]
+fn a_patch_constant_function_belongs_to_a_hull_program_only() {
+    let mut p = hull_ir();
+    p.patch = None;
+    let problems = ir_problems(&p);
+    assert!(
+        problems
+            .iter()
+            .any(|m| m.contains("a hull program without its patch constant function")),
+        "{problems:?}"
+    );
+    let mut p = domain_ir();
+    p.patch = hull_ir().patch;
+    let problems = ir_problems(&p);
+    assert!(
+        problems
+            .iter()
+            .any(|m| m.contains("a patch constant function in a program that is not a hull program")),
+        "{problems:?}"
+    );
+    // nor is a hull program an entry point of its own
+    let error = iridia_exec::Executable::from_ir(&hull_ir())
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("compile it with Executable::function_from_ir"),
+        "{error}"
+    );
+}
+
+struct NoTextures;
+impl iridia_exec::Backend for NoTextures {
+    fn sample(&mut self, _: iridia_exec::ImageSample<iridia_exec::Element>) -> Result<[f32; 4], String> {
+        Err("none".into())
+    }
+}
+
+/// The hull program's functions run one invocation each, on the registers the interface's functions take: `main` the
+/// three control points, the output control point's number and the patch's, `patch_constant` the input and output
+/// control points and the patch's number.
+#[test]
+fn the_hull_functions_run_on_the_registers_the_interface_says() {
+    use iridia_exec::{Executable, Resources, Runner};
+    let p = hull_ir();
+    let bits = |x: [f32; 4]| x.map(f32::to_bits);
+    let points = [
+        bits([1.0, 2.0, 3.0, 0.0]),
+        bits([4.0, 5.0, 6.0, 0.0]),
+        bits([7.0, 8.0, 9.0, 0.0]),
+    ];
+    let resources = Resources::default();
+    let mut backend = NoTextures;
+    let main = Executable::function_from_ir(&p, "main").unwrap();
+    let bound = main.bind_resources(&resources).unwrap();
+    for id in 0..3u32 {
+        let registers = [points[0], points[1], points[2], [id, 0, 0, 0], [7, 0, 0, 0]];
+        let [out] = Runner::<1>::new(&main, &bound, &mut backend, None)
+            .run([&registers])
+            .unwrap();
+        assert_eq!(out.values[0][..3], points[id as usize][..3], "control point {id}");
+    }
+    let patch = Executable::function_from_ir(&p, "patch_constant").unwrap();
+    let bound = patch.bind_resources(&resources).unwrap();
+    let registers = [
+        points[0],
+        points[1],
+        points[2],
+        points[0],
+        points[1],
+        points[2],
+        [7, 0, 0, 0],
+    ];
+    let [out] = Runner::<1>::new(&patch, &bound, &mut backend, None)
+        .run([&registers])
+        .unwrap();
+    assert_eq!(
+        out.values.iter().map(|v| v[0]).collect::<Vec<_>>(),
+        [4f32.to_bits(), 2f32.to_bits()]
+    );
+}
+
+/// The domain function runs for one point of the patch: its registers are the two patch constants, the three control
+/// points, the domain location and the patch's number; its result the clip position.
+#[test]
+fn the_domain_function_runs_on_the_registers_the_interface_says() {
+    use iridia_exec::{Executable, Resources, Runner};
+    let p = domain_ir();
+    let exe = Executable::function_from_ir(&p, "main").unwrap();
+    let bits = |x: [f32; 4]| x.map(f32::to_bits);
+    let registers = [
+        bits([4.0, 0.0, 0.0, 0.0]),
+        bits([2.0, 0.0, 0.0, 0.0]),
+        bits([1.0, 2.0, 3.0, 0.0]),
+        bits([4.0, 5.0, 6.0, 0.0]),
+        bits([7.0, 8.0, 9.0, 0.0]),
+        bits([0.25, 0.25, 0.5, 0.0]),
+        [7, 0, 0, 0],
+    ];
+    let resources = Resources::default();
+    let bound = exe.bind_resources(&resources).unwrap();
+    let mut backend = NoTextures;
+    let [out] = Runner::<1>::new(&exe, &bound, &mut backend, None)
+        .run([&registers])
+        .unwrap();
+    assert_eq!(out.values, [bits([0.25, 0.25, 0.5, 1.0])]);
+}
+
 /// The geometry function runs for one primitive: the three input vertices come back as the output array, then the
 /// vertex count (3) and the strip starts (1, 0, 0); each array element is an entry of its own.
 #[test]
 fn the_geometry_function_returns_its_vertices_count_and_strip_starts() {
     use iridia_exec::{Executable, Resources, Runner};
-    let p = geometry();
-    let exe = Executable::function(&p, "main").unwrap();
+    let p = geometry_ir();
+    let exe = Executable::function_from_ir(&p, "main").unwrap();
     let bits = |x: [f32; 4]| x.map(f32::to_bits);
     let vertices = [
         bits([1.0, 2.0, 3.0, 4.0]),
@@ -318,13 +529,7 @@ fn the_geometry_function_returns_its_vertices_count_and_strip_starts() {
     let registers = [vertices[0], vertices[1], vertices[2], [7, 0, 0, 0], [0, 0, 0, 0]];
     let resources = Resources::default();
     let bound = exe.bind_resources(&resources).unwrap();
-    struct None_;
-    impl iridia_exec::Backend for None_ {
-        fn sample(&mut self, _: iridia_exec::ImageSample<iridia_exec::Element>) -> Result<[f32; 4], String> {
-            Err("none".into())
-        }
-    }
-    let mut backend = None_;
+    let mut backend = NoTextures;
     let mut runner = Runner::<1>::new(&exe, &bound, &mut backend, None);
     let [out] = runner.run([&registers]).unwrap();
     assert_eq!(

@@ -19,6 +19,13 @@ impl Sampler for PermissiveImages {
     }
 }
 
+/// A program as the IR lifts give it, taken through the passes every executor expects, in the executor.
+fn shader(lifted: iridia_ir::Program) -> ProgramShader {
+    let mut program = lifted;
+    iridia_passes::prepare(&mut program).unwrap();
+    ProgramShader::from_ir(program).unwrap()
+}
+
 fn extents() -> BTreeMap<u32, BufferExtent> {
     BTreeMap::from([(
         3,
@@ -55,15 +62,15 @@ fn compiled_programs_read_answered_buffers_and_images_together() {
     let programs = [
         (
             "fxc",
-            iridia_dxbc::lift(include_bytes!("../../tests/fixtures/answered_buffers.dxbc")).unwrap(),
+            iridia_dxbc::ir::lift(include_bytes!("../../tests/fixtures/answered_buffers.dxbc")).unwrap(),
         ),
         (
             "dxc",
-            iridia_dxil::lift(include_bytes!("../../tests/fixtures/answered_buffers.dxil")).unwrap(),
+            iridia_dxil::ir::lift(include_bytes!("../../tests/fixtures/answered_buffers.dxil")).unwrap(),
         ),
     ];
     for (compiler, program) in programs {
-        let shader = ProgramShader::new(program).unwrap();
+        let shader = shader(program);
         let inputs = vec![[0.25f32.to_bits(), 0.75f32.to_bits(), 0, 0]; shader.input_count()];
         let mut answers = AnsweredBuffers::new(images(), extents(), word).unwrap();
         let output = shader
@@ -192,8 +199,9 @@ fn a_missing_word_keeps_its_reason_and_writes_remain_refused() {
 
 #[test]
 fn an_image_default_cannot_hide_a_missing_structured_view() {
-    let program = iridia_dxbc::lift(include_bytes!("../../tests/fixtures/answered_buffers.dxbc")).unwrap();
-    let shader = ProgramShader::new(program).unwrap();
+    let program =
+        iridia_dxbc::ir::lift(include_bytes!("../../tests/fixtures/answered_buffers.dxbc")).unwrap();
+    let shader = shader(program);
     let inputs = vec![[0; 4]; shader.input_count()];
     let mut answers = AnsweredBuffers::new(PermissiveImages, BTreeMap::new(), word).unwrap();
     assert_eq!(answers.buffer_elements(3), None);

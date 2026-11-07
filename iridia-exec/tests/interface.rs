@@ -9,9 +9,9 @@ use iridia::{
 };
 use std::collections::BTreeMap;
 
-/// A fixture's interface from each bytecode. DXBC's interpolation is the program's: only the lift of the program reads it
-/// (the signature has none), so the varyings fixture is lifted and the resource fixture, which uses doubles (the lifter
-/// refuses them), is reflected.
+/// A fixture's interface from each bytecode. DXBC's interpolation is the program's: only the IR lift of the program
+/// reads it (the signature has none), so the varyings fixture is lifted and the resource fixture, which uses doubles
+/// (the lifter refuses them), is reflected.
 fn interfaces(resources: bool) -> Vec<(&'static str, Interface)> {
     let (dxbc, dxil): (&[u8], &[u8]) = if resources {
         (
@@ -30,7 +30,7 @@ fn interfaces(resources: bool) -> Vec<(&'static str, Interface)> {
             if resources {
                 iridia_dxbc::reflection(dxbc).unwrap()
             } else {
-                iridia_dxbc::lift(dxbc).unwrap().interface
+                iridia_dxbc::ir::lift(dxbc).unwrap().interface
             },
         ),
         ("DXIL", iridia_dxil::interface(dxil).unwrap()),

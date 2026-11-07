@@ -3,22 +3,33 @@
 //! that fails names them, and a program that is not a vertex program is refused.
 use std::collections::BTreeMap;
 
-use iridia::{Program, ResourceKind};
 use iridia_exec::probe::{LOAD_STAND_IN, QUERY_STAND_IN, SAMPLE_STAND_IN, TextureUse, VertexProbe, Zeros};
+use iridia_ir::{Program, interface::ResourceKind};
 
 const POSITION: [f32; 4] = [0.25, 0.5, 0.75, 1.0];
 const SCALE: [f32; 4] = [2.0, 2.0, 2.0, 1.0];
 const OFFSET: [f32; 4] = [0.0, 0.0, 0.5, 0.0];
 
+/// A program of the IR as a lifter gives it, taken through the passes every executor expects.
+fn prepared(lifted: Program) -> Program {
+    let mut p = lifted;
+    iridia_passes::prepare(&mut p).expect("the passes take the program");
+    p
+}
+
 fn programs() -> [(&'static str, Program); 2] {
     [
         (
             "fxc",
-            iridia_dxbc::lift(include_bytes!("fixtures/probe_vs.dxbc")).expect("fxc's program lifts"),
+            prepared(
+                iridia_dxbc::ir::lift(include_bytes!("fixtures/probe_vs.dxbc")).expect("fxc's program lifts"),
+            ),
         ),
         (
             "dxc",
-            iridia_dxil::lift(include_bytes!("fixtures/probe_vs.dxil")).expect("dxc's program lifts"),
+            prepared(
+                iridia_dxil::ir::lift(include_bytes!("fixtures/probe_vs.dxil")).expect("dxc's program lifts"),
+            ),
         ),
     ]
 }
@@ -29,9 +40,8 @@ fn bits(v: [f32; 4]) -> [u32; 4] {
 
 /// One run of the probe with `lift`: the constant buffer `Probe` as the fixture lays it out, the position and a UV.
 fn run(probe: &VertexProbe, lift: f32) -> iridia_exec::probe::ProbeRun<Zeros> {
-    let program = probe.program();
-    let buffer = program
-        .interface
+    let interface = probe.interface();
+    let buffer = interface
         .resources
         .iter()
         .find(|r| matches!(r.kind, ResourceKind::ConstantBuffer { .. }))
@@ -41,8 +51,7 @@ fn run(probe: &VertexProbe, lift: f32) -> iridia_exec::probe::ProbeRun<Zeros> {
         buffer,
         vec![bits(SCALE), bits(OFFSET), bits([lift, 0.0, 0.0, 0.0])],
     )]);
-    let inputs: Vec<[u32; 4]> = program
-        .interface
+    let inputs: Vec<[u32; 4]> = interface
         .inputs
         .iter()
         .map(|i| match i.label.name.to_ascii_uppercase().as_str() {
@@ -79,7 +88,7 @@ fn a_programs_texture_is_answered_with_stand_ins_and_counted() {
         queries: 2,
     };
     for (compiler, program) in programs() {
-        let probe = VertexProbe::new(program).expect("a vertex program with a clip position");
+        let probe = VertexProbe::from_ir(program).expect("a vertex program with a clip position");
         let still = run(&probe, 0.0);
         assert!(near(still.clip, base), "{compiler}: {:?}", still.clip);
         assert_eq!(still.textures, counted, "{compiler}");
@@ -119,7 +128,9 @@ fn a_run_that_reads_no_texture_names_no_stand_in() {
 /// A program that is not a vertex program is refused before it is run.
 #[test]
 fn a_pixel_program_is_refused() {
-    let pixel = iridia_dxbc::lift(include_bytes!("fixtures/lanes.dxbc")).expect("the pixel program lifts");
-    let refused = VertexProbe::new(pixel).expect_err("a pixel program");
+    let pixel = prepared(
+        iridia_dxbc::ir::lift(include_bytes!("fixtures/lanes.dxbc")).expect("the pixel program lifts"),
+    );
+    let refused = VertexProbe::from_ir(pixel).expect_err("a pixel program");
     assert_eq!(refused, "the program is not a vertex program");
 }

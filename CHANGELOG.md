@@ -9,6 +9,10 @@
   arguments").
 - The dx readers are 0.12.0 (`d3d9-reader`, `dxbc-reader`, `dxil-reader`, `dxcontainer`; before, 0.11.0). Nothing a
   lift reads changes; the `d3d9-reader` types `iridia-d3d9` and `iridia-d3d9-ir` re-export are 0.12.0's.
+- `iridia-exec`: `VertexProbe::from_ir(iridia_ir::Program)`, the probe of a vertex program on the IR, with the checks
+  `VertexProbe::new` makes (a vertex program that writes a clip position), and `VertexProbe::ir` and
+  `VertexProbe::interface`. Breaking: `VertexProbe::program` gives an `Option<&Program>` (`None` for a probe of an IR
+  program).
 - `iridia-exec`: a scalar evaluation of an IR program takes the derivative of an input it reads through bitcasts and
   composes (as a DXBC lift reads registers as bits) from the derivatives it is given, as it does a plain read; it was
   refused as "a derivative of a computed value".

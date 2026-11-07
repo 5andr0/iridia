@@ -13,9 +13,12 @@ use iridia_exec::{
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-fn executor(program: iridia::Program) -> ProgramShader {
-    program.validate().unwrap_or_else(|p| panic!("{p:?}"));
-    ProgramShader::new(program).unwrap()
+/// A program as the IR lifts give it, taken through the passes every executor expects, in the executor.
+fn executor(lifted: iridia_ir::Program) -> ProgramShader {
+    let mut program = lifted;
+    iridia_passes::prepare(&mut program).unwrap();
+    iridia_ir::validate(&program).unwrap_or_else(|p| panic!("{p:?}"));
+    ProgramShader::from_ir(program).unwrap()
 }
 
 fn shaders() -> Vec<(&'static str, Box<dyn PixelShader>)> {
@@ -23,13 +26,13 @@ fn shaders() -> Vec<(&'static str, Box<dyn PixelShader>)> {
         (
             "DXBC",
             Box::new(executor(
-                iridia_dxbc::lift(include_bytes!("fixtures/evaluate.dxbc")).unwrap(),
+                iridia_dxbc::ir::lift(include_bytes!("fixtures/evaluate.dxbc")).unwrap(),
             )),
         ),
         (
             "DXIL",
             Box::new(executor(
-                iridia_dxil::lift(include_bytes!("fixtures/evaluate.dxil")).unwrap(),
+                iridia_dxil::ir::lift(include_bytes!("fixtures/evaluate.dxil")).unwrap(),
             )),
         ),
     ]

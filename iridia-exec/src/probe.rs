@@ -18,7 +18,7 @@ use std::collections::BTreeMap;
 mod buffers;
 pub use buffers::{AnsweredBuffers, BufferExtent, BufferRead};
 
-use iridia::{Program, ResourceId, Stage, SystemValue};
+use iridia::{Interface, Program, ResourceId, Stage, SystemValue};
 
 use crate::{
     Backend, Dim, Element, Executable, ImageLoad, ImageQuery, ImageSample, Resources, Runner, Sample, Sampler,
@@ -352,35 +352,67 @@ pub struct ProbeRun<B> {
 /// A vertex program made ready to run one vertex at a time.
 #[derive(Debug)]
 pub struct VertexProbe {
-    program: Program,
+    interface: Interface,
+    program: Option<Program>,
+    ir: Option<iridia_ir::Program>,
     executable: Executable,
     position: usize,
+}
+
+/// The output slot of a vertex program's clip position.
+fn clip_position(interface: &Interface) -> Result<usize, String> {
+    if interface.stage != Stage::Vertex {
+        return Err("the program is not a vertex program".into());
+    }
+    interface
+        .outputs
+        .iter()
+        .position(|o| o.system == Some(SystemValue::ClipPosition))
+        .ok_or_else(|| "the program writes no clip position".into())
 }
 
 impl VertexProbe {
     /// The probe of `program`, a vertex program that writes a clip position and that the executor takes.
     pub fn new(program: Program) -> Result<Self, String> {
-        if program.interface.stage != Stage::Vertex {
-            return Err("the program is not a vertex program".into());
-        }
-        let position = program
-            .interface
-            .outputs
-            .iter()
-            .position(|o| o.system == Some(SystemValue::ClipPosition))
-            .ok_or("the program writes no clip position")?;
+        let position = clip_position(&program.interface)?;
         let executable =
             Executable::new(&program).map_err(|e| format!("the executor does not take the program: {e}"))?;
         Ok(VertexProbe {
-            program,
+            interface: program.interface.clone(),
+            program: Some(program),
+            ir: None,
             executable,
             position,
         })
     }
 
-    /// The vertex program the probe runs.
-    pub fn program(&self) -> &Program {
-        &self.program
+    /// [`VertexProbe::new`] for a vertex program of the IR ([`Executable::from_ir`]).
+    pub fn from_ir(program: iridia_ir::Program) -> Result<Self, String> {
+        let position = clip_position(&program.interface)?;
+        let executable = Executable::from_ir(&program)
+            .map_err(|e| format!("the executor does not take the program: {e}"))?;
+        Ok(VertexProbe {
+            interface: program.interface.clone(),
+            program: None,
+            ir: Some(program),
+            executable,
+            position,
+        })
+    }
+
+    /// The vertex program the probe runs, where it was made from the naga form ([`VertexProbe::new`]).
+    pub fn program(&self) -> Option<&Program> {
+        self.program.as_ref()
+    }
+
+    /// The vertex program the probe runs, where it was made from a program of the IR ([`VertexProbe::from_ir`]).
+    pub fn ir(&self) -> Option<&iridia_ir::Program> {
+        self.ir.as_ref()
+    }
+
+    /// The vertex program's interface: its inputs in the order [`VertexProbe::run`] takes them, its constant buffers.
+    pub fn interface(&self) -> &Interface {
+        &self.interface
     }
 
     /// Runs one vertex: the constant buffers' rows by resource (a buffer not given is zeros), the program's inputs in
@@ -395,7 +427,7 @@ impl VertexProbe {
             constants,
             ..Resources::default()
         };
-        for r in &self.program.interface.resources {
+        for r in &self.interface.resources {
             if let iridia::ResourceKind::ConstantBuffer { layout } = &r.kind {
                 resources
                     .constants

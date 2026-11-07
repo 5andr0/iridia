@@ -1,311 +1,88 @@
 #![allow(clippy::unwrap_used)]
-//! The program executor on hand-built programs: a scalar run with the derivatives the caller states, a quad's own
-//! derivatives, and the requests a 3D sample makes of its sampler.
-use iridia::build::{Builder, Kind, Val, Width};
-use iridia::{
-    BufferLayout, Conventions, D3dBinding, D3dClass, D3dModes, D3dSignature, Interface, Label, Program,
-    Provenance, Resource, ResourceId, ResourceKind, ResourceProvenance, SampleType, ScalarType, ShaderFormat,
-    Stage, TextureDim, Value, Varying, VaryingProvenance,
-};
+//! The program executor on programs of the IR written as text: a scalar run with the derivatives the caller states, a
+//! quad's own derivatives, the requests a 3D sample makes of its sampler, resource arrays, variables, and the float
+//! operations. Where the reference interpreter (`iridia-exec-ir`) runs the program too, the two agree.
+mod support;
+
 use iridia_exec::probe::AnsweredReads;
-use iridia_exec::{Dim, ImageLod, ImageSample, ProgramShader};
-use iridia_exec::{PixelShader, Sampler};
-use naga::{
-    AddressSpace, Binding, DerivativeAxis, DerivativeControl, FunctionArgument, GlobalVariable, ImageClass,
-    ImageDimension, ResourceBinding, SampleLevel, ScalarKind, StructMember, TypeInner,
-};
+use iridia_exec::{Dim, ImageLod, ImageSample, PixelShader, ProgramShader, Sampler};
+use iridia_ir::Program;
+use iridia_ir::interface::{BufferLayout, D3dClass, Resource, ResourceKind, SampleType, TextureDim};
+use support::{agree, input, pixel, reference, reference_quad, resource, target};
 
-fn val(expr: naga::Handle<naga::Expression>, kind: Kind, width: Width) -> Val {
-    Val { expr, kind, width }
-}
-
-fn varying(name: &str, width: u8, mask: u8) -> Varying {
-    Varying {
-        label: Label {
-            name: name.into(),
-            index: 0,
-        },
-        system: None,
-        value: Value {
-            scalar: ScalarType::Float,
-            width,
-        },
-        interp: Some(iridia::Interpolation {
-            mode: iridia::InterpMode::Perspective,
-            sampling: iridia::InterpSampling::Center,
-        }),
-        used: true,
-        provenance: VaryingProvenance {
-            d3d: Some(D3dSignature {
-                register: 0,
-                mask,
-                read_write_mask: 0,
-            }),
-        },
-    }
-}
-
-fn target() -> Varying {
-    let mut v = varying("SV_Target", 4, 0xf);
-    v.system = Some(iridia::SystemValue::Target(0));
-    v.interp = None;
-    v
-}
-
-fn result_type(b: &mut Builder) -> naga::Handle<naga::Type> {
-    let f4 = b.ty_of(Kind::F, Width::Four);
-    b.ty(TypeInner::Struct {
-        members: vec![StructMember {
-            name: Some("SV_Target0".into()),
-            ty: f4,
-            binding: Some(Binding::Location {
-                location: 0,
-                interpolation: None,
-                sampling: None,
-                blend_src: None,
-                per_primitive: false,
-            }),
-            offset: 0,
-        }],
-        span: 16,
-    })
-}
-
-fn argument(name: &str, ty: naga::Handle<naga::Type>) -> FunctionArgument {
-    FunctionArgument {
-        name: Some(name.into()),
-        ty,
-        binding: Some(Binding::Location {
-            location: 0,
-            interpolation: Some(naga::Interpolation::Perspective),
-            sampling: None,
-            blend_src: None,
-            per_primitive: false,
-        }),
-    }
-}
-
-fn provenance() -> Provenance {
-    Provenance {
-        format: ShaderFormat::Dxbc,
-        target: "ps_5_0".into(),
-        lifter: "test".into(),
-        lifter_version: 0,
-        source_hash: None,
-        instruction_count: None,
-    }
-}
-
-/// `SV_Target0 = float4(uv.x * cb0[0].x, uv.y * cb0[0].y, ddx(uv.x), ddy(uv.y))`
+/// `SV_Target0 = float4(uv.x * cb0[0].x, uv.y * cb0[0].y, ddx(uv.x), ddy(uv.y))`, the constant buffer at `cb3`.
 fn derivative_program() -> Program {
-    let mut b = Builder::new();
-    let u4 = b.ty_of(Kind::U, Width::Four);
-    let cb_ty = b.ty(TypeInner::Array {
-        base: u4,
-        size: naga::ArraySize::Constant(std::num::NonZeroU32::new(1).unwrap()),
-        stride: 16,
-    });
-    let cb = b.global(GlobalVariable {
-        name: Some("cb0".into()),
-        space: AddressSpace::Uniform,
-        binding: Some(ResourceBinding { group: 0, binding: 0 }),
-        ty: cb_ty,
-        init: None,
-        memory_decorations: Default::default(),
-    });
-    let f2 = b.ty_of(Kind::F, Width::Two);
-    let uv = b.app(naga::Expression::FunctionArgument(0));
-    let uv = val(uv, Kind::F, Width::Two);
-    let ptr = b.global_ptr(cb);
-    let zero = b.lit_u(0);
-    let row = b.app(naga::Expression::Access {
-        base: ptr,
-        index: zero.expr,
-    });
-    let row = b.load(row, Kind::U, Width::Four);
-    let scale = b.bitcast(row, Kind::F);
-    let scale = b.swizzle(scale, &[0, 1]);
-    let product = b.binary(naga::BinaryOperator::Multiply, uv, scale);
-    let (x, y) = (b.lane(uv, 0), b.lane(uv, 1));
-    let dx = b.app(naga::Expression::Derivative {
-        axis: DerivativeAxis::X,
-        ctrl: DerivativeControl::Coarse,
-        expr: x.expr,
-    });
-    let dy = b.app(naga::Expression::Derivative {
-        axis: DerivativeAxis::Y,
-        ctrl: DerivativeControl::Coarse,
-        expr: y.expr,
-    });
-    let (px, py) = (b.lane(product, 0), b.lane(product, 1));
-    let colour = b.compose(&[px, py, val(dx, Kind::F, Width::One), val(dy, Kind::F, Width::One)]);
-    let out_ty = result_type(&mut b);
-    let out = b.app(naga::Expression::Compose {
-        ty: out_ty,
-        components: vec![colour.expr],
-    });
-    b.push(naga::Statement::Return { value: Some(out) });
-    let module = b
-        .finish(
-            "main",
-            naga::ShaderStage::Fragment,
-            vec![argument("TEXCOORD0", f2)],
-            Some(out_ty),
-            false,
-        )
-        .expect("the module finishes");
-    let cb_global = module.global_variables.iter().next().unwrap().0;
-    Program {
-        module,
-        stage: Stage::Pixel,
-        entry: "main".into(),
-        interface: Interface {
-            stage: Stage::Pixel,
-            inputs: vec![varying("TEXCOORD", 2, 0x3)],
-            outputs: vec![target()],
-            resources: vec![Resource {
-                id: ResourceId(0),
-                kind: ResourceKind::ConstantBuffer {
-                    layout: BufferLayout {
-                        size: 16,
-                        constants: vec![],
-                    },
-                },
-                count: 1,
-                provenance: ResourceProvenance {
-                    name: "cb0".into(),
-                    d3d: Some(D3dBinding {
-                        class: D3dClass::ConstantBuffer,
-                        register: 3,
-                        space: 0,
-                    }),
-                    counter_of: None,
-                    layout: None,
-                },
-            }],
-            facts: Default::default(),
+    let text = "iridia-ir 1
+fn main {
+  %0: vec2<f32> = input 0.xy
+  %1: vec4<u32> = buffer r0 + 0 oob.zero
+  %2: vec4<f32> = bitcast %1
+  %3: vec2<f32> = %2.xy
+  %4: vec2<f32> = fmul.ieee %0, %3
+  %5: f32 = %0.x
+  %6: f32 = %0.y
+  %7: f32 = deriv.x.coarse %5
+  %8: f32 = deriv.y.coarse %6
+  %9: f32 = %4.x
+  %10: f32 = %4.y
+  %11: vec4<f32> = compose %9, %10, %7, %8
+  output 0.xyzw = %11
+  return
+}
+";
+    let cb = resource(
+        0,
+        "cb0",
+        ResourceKind::ConstantBuffer {
+            layout: BufferLayout {
+                size: 16,
+                constants: vec![],
+            },
         },
-        bindings: vec![(ResourceId(0), cb_global)],
-        conventions: Conventions::D3D,
-        modes: D3dModes::ALL,
-        provenance: provenance(),
-        notes: Vec::new(),
-    }
+        D3dClass::ConstantBuffer,
+        3,
+        1,
+    );
+    pixel(text, vec![input("TEXCOORD", 2, 0x3)], vec![target()], vec![cb])
 }
 
-/// `SV_Target0 = tex3d.Sample(smp, TEXCOORD0.xyz)`
+/// `SV_Target0 = tex3d.Sample(smp, TEXCOORD0.xyz)`, the volume at `t2` and the sampler at `s1`.
 fn volume_program() -> Program {
-    let mut b = Builder::new();
-    let image_ty = b.ty(TypeInner::Image {
-        dim: ImageDimension::D3,
-        arrayed: false,
-        class: ImageClass::Sampled {
-            kind: ScalarKind::Float,
-            multi: false,
+    let text = "iridia-ir 1
+fn main {
+  %0: vec3<f32> = input 0.xyz
+  %1: vec4<f32> = sample r0, r1, %0
+  output 0.xyzw = %1
+  return
+}
+";
+    let volume = resource(
+        0,
+        "volume",
+        ResourceKind::Texture {
+            dim: TextureDim::D3,
+            arrayed: false,
+            multisampled: false,
+            sample: SampleType::Float,
         },
-    });
-    let sampler_ty = b.ty(TypeInner::Sampler { comparison: false });
-    let image = b.global(GlobalVariable {
-        name: Some("t2".into()),
-        space: AddressSpace::Handle,
-        binding: Some(ResourceBinding { group: 1, binding: 2 }),
-        ty: image_ty,
-        init: None,
-        memory_decorations: Default::default(),
-    });
-    let sampler = b.global(GlobalVariable {
-        name: Some("s1".into()),
-        space: AddressSpace::Handle,
-        binding: Some(ResourceBinding { group: 2, binding: 1 }),
-        ty: sampler_ty,
-        init: None,
-        memory_decorations: Default::default(),
-    });
-    let f3 = b.ty_of(Kind::F, Width::Three);
-    let uvw = b.app(naga::Expression::FunctionArgument(0));
-    let (image_ptr, sampler_ptr) = (b.global_ptr(image), b.global_ptr(sampler));
-    let colour = b.app(naga::Expression::ImageSample {
-        image: image_ptr,
-        sampler: sampler_ptr,
-        gather: None,
-        coordinate: uvw,
-        array_index: None,
-        offset: None,
-        level: SampleLevel::Auto,
-        depth_ref: None,
-        clamp_to_edge: false,
-    });
-    let out_ty = result_type(&mut b);
-    let out = b.app(naga::Expression::Compose {
-        ty: out_ty,
-        components: vec![colour],
-    });
-    b.push(naga::Statement::Return { value: Some(out) });
-    let module = b
-        .finish(
-            "main",
-            naga::ShaderStage::Fragment,
-            vec![argument("TEXCOORD0", f3)],
-            Some(out_ty),
-            false,
-        )
-        .expect("the module finishes");
-    let (image, sampler) = {
-        let mut globals = module.global_variables.iter();
-        (globals.next().unwrap().0, globals.next().unwrap().0)
-    };
-    let resource = |id: u32, name: &str, kind: ResourceKind, class: D3dClass, register: u32| Resource {
-        id: ResourceId(id),
-        kind,
-        count: 1,
-        provenance: ResourceProvenance {
-            name: name.into(),
-            d3d: Some(D3dBinding {
-                class,
-                register,
-                space: 0,
-            }),
-            counter_of: None,
-            layout: None,
-        },
-    };
-    Program {
-        module,
-        stage: Stage::Pixel,
-        entry: "main".into(),
-        interface: Interface {
-            stage: Stage::Pixel,
-            inputs: vec![varying("TEXCOORD", 3, 0x7)],
-            outputs: vec![target()],
-            resources: vec![
-                resource(
-                    0,
-                    "volume",
-                    ResourceKind::Texture {
-                        dim: TextureDim::D3,
-                        arrayed: false,
-                        multisampled: false,
-                        sample: SampleType::Float,
-                    },
-                    D3dClass::ShaderResource,
-                    2,
-                ),
-                resource(
-                    1,
-                    "linear",
-                    ResourceKind::Sampler { comparison: false },
-                    D3dClass::Sampler,
-                    1,
-                ),
-            ],
-            facts: Default::default(),
-        },
-        bindings: vec![(ResourceId(0), image), (ResourceId(1), sampler)],
-        conventions: Conventions::D3D,
-        modes: D3dModes::ALL,
-        provenance: provenance(),
-        notes: Vec::new(),
-    }
+        D3dClass::ShaderResource,
+        2,
+        1,
+    );
+    let linear = resource(
+        1,
+        "linear",
+        ResourceKind::Sampler { comparison: false },
+        D3dClass::Sampler,
+        1,
+        1,
+    );
+    pixel(
+        text,
+        vec![input("TEXCOORD", 3, 0x7)],
+        vec![target()],
+        vec![volume, linear],
+    )
 }
 
 struct Unused;
@@ -313,6 +90,10 @@ impl Sampler for Unused {
     fn sample(&mut self, _: iridia_exec::Sample) -> Result<[f32; 4], String> {
         Err("no samples expected".into())
     }
+}
+
+fn no_samples(_: iridia_exec_ir::Sample) -> Result<[f32; 4], String> {
+    Err("no samples expected".into())
 }
 
 fn bits(x: [f32; 4]) -> [u32; 4] {
@@ -325,9 +106,9 @@ fn lanes(x: [u32; 4]) -> [f32; 4] {
 
 #[test]
 fn a_scalar_run_reads_the_derivatives_the_caller_states() {
-    let shader = ProgramShader::new(derivative_program()).unwrap();
+    let shader = ProgramShader::from_ir(derivative_program()).unwrap();
     assert!(shader.needs_quad());
-    assert!(!ProgramShader::new(branch_program()).unwrap().needs_quad());
+    assert!(!ProgramShader::from_ir(branch_program()).unwrap().needs_quad());
     assert_eq!(shader.input_count(), 1);
     assert_eq!(shader.constant_buffers(), &[(3, 1)]);
     let cb = [bits([2.0, 3.0, 0.0, 0.0])];
@@ -349,7 +130,8 @@ fn a_scalar_run_reads_the_derivatives_the_caller_states() {
 
 #[test]
 fn a_quad_takes_its_own_derivatives_from_its_four_lanes() {
-    let shader = ProgramShader::new(derivative_program()).unwrap();
+    let program = derivative_program();
+    let shader = ProgramShader::from_ir(program.clone()).unwrap();
     let cb = [bits([2.0, 3.0, 0.0, 0.0])];
     // lanes 0, 1 the top row, 2, 3 the bottom: x grows 0.125 to the right, y 0.0625 downwards
     let lane = |k: u32| {
@@ -368,17 +150,25 @@ fn a_quad_takes_its_own_derivatives_from_its_four_lanes() {
             &mut Unused,
         )
         .unwrap();
-    for (k, e) in e.iter().enumerate() {
+    let reference = reference_quad(
+        &program,
+        [&inputs[0], &inputs[1], &inputs[2], &inputs[3]],
+        &[(3, &cb)],
+        &no_samples,
+    );
+    for (k, (e, run)) in e.iter().zip(&reference).enumerate() {
         let (x, y) = (0.25 + (k & 1) as f32 * 0.125, 0.5 + (k >> 1) as f32 * 0.0625);
         assert_eq!(lanes(e.outputs[0]), [x * 2.0, y * 3.0, 0.125, 0.0625], "lane {k}");
         // each lane takes part in the program's two derivatives
         assert_eq!(e.derivatives, 2, "lane {k}");
+        agree(&program, e, run);
     }
 }
 
 #[test]
 fn a_volume_sample_reaches_a_sampler_that_answers_it_and_is_refused_by_one_that_does_not() {
-    let shader = ProgramShader::new(volume_program()).unwrap();
+    let program = volume_program();
+    let shader = ProgramShader::from_ir(program.clone()).unwrap();
     // a volume is reached through sample_image: textures() lists the planes Sampler::sample answers
     assert_eq!(shader.textures(), &[] as &[u32]);
     assert_eq!(shader.samplers(), &[1]);
@@ -394,79 +184,57 @@ fn a_volume_sample_reaches_a_sampler_that_answers_it_and_is_refused_by_one_that_
     assert_eq!(r.coord, [0.1, 0.2, 0.3]);
     assert_eq!(r.lod, ImageLod::Implicit);
     assert!(r.offset == [0; 3] && r.gather.is_none() && r.depth_ref.is_none() && !r.depth);
+    // the reference asks its sampler the same: the volume and the sampler, the three lanes, the implicit level
+    let mut asked = Vec::new();
+    let run = reference(&program, &inputs, &[], &mut |s| {
+        asked.push(s);
+        Ok([0.5, 0.25, 0.125, 1.0])
+    });
+    agree(&program, &e, &run);
+    let [s] = asked.as_slice() else {
+        panic!("{asked:?}")
+    };
+    assert_eq!(
+        (s.texture.0, s.sampler.0, s.coord, s.lanes, s.lod),
+        (0, 1, [0.1, 0.2, 0.3], 3, iridia_exec_ir::Lod::Auto)
+    );
     // the default sampler answers plain 2D samples only
     let e = shader.execute(&inputs, &[], &mut Unused).unwrap_err();
     assert!(e.detail.contains("plain 2D samples only"), "{e}");
 }
 
-/// `if (uv.x > 0.5) { return red; } return green;`: two returns with results of their own.
+/// `if (uv.x > 0.5) { return red; } return green;`: two returns, each after storing a result of its own.
 fn branch_program() -> Program {
-    let mut b = Builder::new();
-    let f2 = b.ty_of(Kind::F, Width::Two);
-    let uv = b.app(naga::Expression::FunctionArgument(0));
-    let uv = val(uv, Kind::F, Width::Two);
-    let x = b.lane(uv, 0);
-    let half = b.lit_f(0.5);
-    let above = b.binary(naga::BinaryOperator::Greater, x, half);
-    let (one, zero) = (b.lit_f(1.0), b.lit_f(0.0));
-    let red = b.compose(&[one, zero, zero, one]);
-    let green = b.compose(&[zero, one, zero, one]);
-    let out_ty = result_type(&mut b);
-    let red_out = b.app(naga::Expression::Compose {
-        ty: out_ty,
-        components: vec![red.expr],
-    });
-    let green_out = b.app(naga::Expression::Compose {
-        ty: out_ty,
-        components: vec![green.expr],
-    });
-    let mut early = naga::Block::new();
-    early.push(
-        naga::Statement::Return { value: Some(red_out) },
-        naga::Span::UNDEFINED,
-    );
-    b.push(naga::Statement::If {
-        condition: above.expr,
-        accept: early,
-        reject: naga::Block::new(),
-    });
-    b.push(naga::Statement::Return {
-        value: Some(green_out),
-    });
-    let module = b
-        .finish(
-            "main",
-            naga::ShaderStage::Fragment,
-            vec![argument("TEXCOORD0", f2)],
-            Some(out_ty),
-            false,
-        )
-        .expect("the module finishes");
-    Program {
-        module,
-        stage: Stage::Pixel,
-        entry: "main".into(),
-        interface: Interface {
-            stage: Stage::Pixel,
-            inputs: vec![varying("TEXCOORD", 2, 0x3)],
-            outputs: vec![target()],
-            resources: Vec::new(),
-            facts: Default::default(),
-        },
-        bindings: Vec::new(),
-        conventions: Conventions::D3D,
-        modes: D3dModes::ALL,
-        provenance: provenance(),
-        notes: Vec::new(),
-    }
+    let text = "iridia-ir 1
+fn main {
+  %0: vec2<f32> = input 0.xy
+  %1: f32 = %0.x
+  %2: f32 = f32(0.5)
+  %3: bool = fcmp.gt %1, %2
+  if %3 {
+    %4: vec4<f32> = vec4<f32>(1.0, 0.0, 0.0, 1.0)
+    output 0.xyzw = %4
+    return
+  } else {
+    yield
+  }
+  %5: vec4<f32> = vec4<f32>(0.0, 1.0, 0.0, 1.0)
+  output 0.xyzw = %5
+  return
+}
+";
+    pixel(text, vec![input("TEXCOORD", 2, 0x3)], vec![target()], Vec::new())
 }
 
 #[test]
 fn each_return_leaves_with_its_own_result() {
-    let shader = ProgramShader::new(branch_program()).unwrap();
+    let program = branch_program();
+    let shader = ProgramShader::from_ir(program.clone()).unwrap();
     let run = |x: f32| {
         let inputs = [bits([x, 0.0, 0.0, 0.0])];
-        lanes(shader.execute(&inputs, &[], &mut Unused).unwrap().outputs[0])
+        let e = shader.execute(&inputs, &[], &mut Unused).unwrap();
+        agree(&program, &e, &reference(&program, &inputs, &[], &mut no_samples));
+        lanes(e.outputs[0])
     };
     assert_eq!(run(0.75), [1.0, 0.0, 0.0, 1.0]);
     assert_eq!(run(0.25), [0.0, 1.0, 0.0, 1.0]);
@@ -488,193 +256,84 @@ fn each_return_leaves_with_its_own_result() {
     );
 }
 
-/// `SV_Target0 = float4(uv.x, uv.y, uv.y, uv.x)`, the argument named by two expressions: both are the one argument.
+/// `SV_Target0 = float4(uv.x, uv.y, uv.y, uv.x)`, the input read by two operations: both are the one input.
 #[test]
-fn an_argument_named_by_several_expressions_is_the_same_value_in_each() {
-    let mut b = Builder::new();
-    let f2 = b.ty_of(Kind::F, Width::Two);
-    let first = b.app(naga::Expression::FunctionArgument(0));
-    let second = b.app(naga::Expression::FunctionArgument(0));
-    let x = b.lane(val(first, Kind::F, Width::Two), 0);
-    let y = b.lane(val(second, Kind::F, Width::Two), 1);
-    let colour = b.compose(&[x, y, y, x]);
-    let out_ty = result_type(&mut b);
-    let out = b.app(naga::Expression::Compose {
-        ty: out_ty,
-        components: vec![colour.expr],
-    });
-    b.push(naga::Statement::Return { value: Some(out) });
-    let module = b
-        .finish(
-            "main",
-            naga::ShaderStage::Fragment,
-            vec![argument("TEXCOORD0", f2)],
-            Some(out_ty),
-            false,
-        )
-        .expect("the module finishes");
-    let program = Program {
-        module,
-        stage: Stage::Pixel,
-        entry: "main".into(),
-        interface: Interface {
-            stage: Stage::Pixel,
-            inputs: vec![varying("TEXCOORD", 2, 0x3)],
-            outputs: vec![target()],
-            resources: Vec::new(),
-            facts: Default::default(),
-        },
-        bindings: Vec::new(),
-        conventions: Conventions::D3D,
-        modes: D3dModes::ALL,
-        provenance: provenance(),
-        notes: Vec::new(),
-    };
-    let shader = ProgramShader::new(program).unwrap();
-    let e = shader
-        .execute(&[bits([0.25, 0.75, 0.0, 0.0])], &[], &mut Unused)
-        .unwrap();
+fn an_input_read_by_several_operations_is_the_same_value_in_each() {
+    let text = "iridia-ir 1
+fn main {
+  %0: vec2<f32> = input 0.xy
+  %1: vec2<f32> = input 0.xy
+  %2: f32 = %0.x
+  %3: f32 = %1.y
+  %4: vec4<f32> = compose %2, %3, %3, %2
+  output 0.xyzw = %4
+  return
+}
+";
+    let program = pixel(text, vec![input("TEXCOORD", 2, 0x3)], vec![target()], Vec::new());
+    let shader = ProgramShader::from_ir(program.clone()).unwrap();
+    let inputs = [bits([0.25, 0.75, 0.0, 0.0])];
+    let e = shader.execute(&inputs, &[], &mut Unused).unwrap();
     assert_eq!(lanes(e.outputs[0]), [0.25, 0.75, 0.75, 0.25]);
+    agree(&program, &e, &reference(&program, &inputs, &[], &mut no_samples));
 }
 
-/// `SV_Target0 = tex[uint(x)].SampleLevel(smp[uint(x) + 1], (0.5, 0.5), 0)` with four textures and an unbounded
+/// The resources of [`array_program`]: four textures, and an unbounded array of samplers.
+fn arrays(textures: u32) -> Vec<Resource> {
+    vec![
+        resource(
+            0,
+            "tex",
+            ResourceKind::Texture {
+                dim: TextureDim::D2,
+                arrayed: false,
+                multisampled: false,
+                sample: SampleType::Float,
+            },
+            D3dClass::ShaderResource,
+            0,
+            textures,
+        ),
+        resource(
+            1,
+            "smp",
+            ResourceKind::Sampler { comparison: false },
+            D3dClass::Sampler,
+            0,
+            Resource::UNBOUNDED,
+        ),
+    ]
+}
+
+/// `SV_Target0 = tex[uint(x)].SampleLevel(smp[uint(x) + 1], (0.5, 0.5), 0)` with `textures` textures and an unbounded
 /// sampler array: both picked by an index the program computes.
-fn array_program() -> Program {
-    let mut b = Builder::new();
-    let image_ty = b.ty(TypeInner::Image {
-        dim: ImageDimension::D2,
-        arrayed: false,
-        class: ImageClass::Sampled {
-            kind: ScalarKind::Float,
-            multi: false,
-        },
-    });
-    let sampler_ty = b.ty(TypeInner::Sampler { comparison: false });
-    let images = b.ty(TypeInner::BindingArray {
-        base: image_ty,
-        size: naga::ArraySize::Constant(std::num::NonZeroU32::new(4).unwrap()),
-    });
-    let samplers = b.ty(TypeInner::BindingArray {
-        base: sampler_ty,
-        size: naga::ArraySize::Dynamic,
-    });
-    let global = |b: &mut Builder, name: &str, group, ty| {
-        b.global(GlobalVariable {
-            name: Some(name.into()),
-            space: AddressSpace::Handle,
-            binding: Some(ResourceBinding { group, binding: 0 }),
-            ty,
-            init: None,
-            memory_decorations: Default::default(),
-        })
-    };
-    let image = global(&mut b, "t0", 1, images);
-    let sampler = global(&mut b, "s0", 2, samplers);
-    let f1 = b.ty_of(Kind::F, Width::One);
-    let x = b.app(naga::Expression::FunctionArgument(0));
-    let element = b.convert(val(x, Kind::F, Width::One), Kind::U);
-    let one = b.lit_u(1);
-    let next = b.binary(naga::BinaryOperator::Add, element, one);
-    let (image_base, sampler_base) = (b.global_ptr(image), b.global_ptr(sampler));
-    let image_ptr = b.app(naga::Expression::Access {
-        base: image_base,
-        index: element.expr,
-    });
-    let sampler_ptr = b.app(naga::Expression::Access {
-        base: sampler_base,
-        index: next.expr,
-    });
-    let half = b.lit_f(0.5);
-    let uv = b.compose(&[half, half]);
-    let colour = b.app(naga::Expression::ImageSample {
-        image: image_ptr,
-        sampler: sampler_ptr,
-        gather: None,
-        coordinate: uv.expr,
-        array_index: None,
-        offset: None,
-        level: SampleLevel::Zero,
-        depth_ref: None,
-        clamp_to_edge: false,
-    });
-    let out_ty = result_type(&mut b);
-    let out = b.app(naga::Expression::Compose {
-        ty: out_ty,
-        components: vec![colour],
-    });
-    b.push(naga::Statement::Return { value: Some(out) });
-    let module = b
-        .finish(
-            "main",
-            naga::ShaderStage::Fragment,
-            vec![argument("IDX0", f1)],
-            Some(out_ty),
-            false,
-        )
-        .expect("the module finishes");
-    let (image, sampler) = {
-        let mut globals = module.global_variables.iter();
-        (globals.next().unwrap().0, globals.next().unwrap().0)
-    };
-    let resource = |id: u32, name: &str, kind: ResourceKind, class: D3dClass, count: u32| Resource {
-        id: ResourceId(id),
-        kind,
-        count,
-        provenance: ResourceProvenance {
-            name: name.into(),
-            d3d: Some(D3dBinding {
-                class,
-                register: 0,
-                space: 0,
-            }),
-            counter_of: None,
-            layout: None,
-        },
-    };
-    Program {
-        module,
-        stage: Stage::Pixel,
-        entry: "main".into(),
-        interface: Interface {
-            stage: Stage::Pixel,
-            inputs: vec![varying("IDX", 1, 0x1)],
-            outputs: vec![target()],
-            resources: vec![
-                resource(
-                    0,
-                    "tex",
-                    ResourceKind::Texture {
-                        dim: TextureDim::D2,
-                        arrayed: false,
-                        multisampled: false,
-                        sample: SampleType::Float,
-                    },
-                    D3dClass::ShaderResource,
-                    4,
-                ),
-                resource(
-                    1,
-                    "smp",
-                    ResourceKind::Sampler { comparison: false },
-                    D3dClass::Sampler,
-                    Resource::UNBOUNDED,
-                ),
-            ],
-            facts: Default::default(),
-        },
-        bindings: vec![(ResourceId(0), image), (ResourceId(1), sampler)],
-        conventions: Conventions::D3D,
-        modes: D3dModes::ALL,
-        provenance: provenance(),
-        notes: Vec::new(),
-    }
+fn array_program(textures: u32) -> Program {
+    let text = "iridia-ir 1
+fn main {
+  %0: f32 = input 0.x
+  %1: u32 = convert.saturate %0
+  %2: u32 = u32(1)
+  %3: u32 = iadd %1, %2
+  %4: vec2<f32> = vec2<f32>(0.5, 0.5)
+  %5: vec4<f32> = sample r0@%1, r1@%3, %4 level 0
+  output 0.xyzw = %5
+  return
+}
+";
+    pixel(text, vec![input("IDX", 1, 0x1)], vec![target()], arrays(textures))
 }
 
 /// Answers a sample with the elements it names: (texture element, sampler element, 0, 1).
 struct Elements;
 impl iridia_exec::Backend for Elements {
     fn sample(&mut self, r: ImageSample<iridia_exec::Element>) -> Result<[f32; 4], String> {
-        assert_eq!((r.texture.id, r.sampler.id), (ResourceId(0), ResourceId(1)));
+        assert_eq!(
+            (r.texture.id, r.sampler.id),
+            (
+                iridia_ir::interface::ResourceId(0),
+                iridia_ir::interface::ResourceId(1)
+            )
+        );
         Ok([r.texture.index as f32, r.sampler.index as f32, 0.0, 1.0])
     }
 }
@@ -685,9 +344,8 @@ impl iridia_exec::Backend for Elements {
 #[test]
 fn an_index_the_program_computes_picks_an_element_of_a_resource_array() {
     use iridia_exec::{Executable, Resources, Runner};
-    let program = array_program();
-    program.validate().unwrap();
-    let exe = Executable::new(&program).unwrap();
+    let program = array_program(4);
+    let exe = Executable::from_ir(&program).unwrap();
     let resources = Resources::default();
     let bound = exe.bind_resources(&resources).unwrap();
     let mut backend = Elements;
@@ -714,129 +372,107 @@ fn an_index_the_program_computes_picks_an_element_of_a_resource_array() {
     );
 }
 
-/// The program writes as WGSL with its arrays of bindings, and the interface's count must be the global's.
+/// The interface's count is a resource array's length, the one place the IR states it, and a run checks an index
+/// against it. The naga-based writer wrote the arrays as WGSL (`binding_array<texture_2d<f32>, 4>`,
+/// `binding_array<sampler>`); the IR's lowering to naga takes no element of an array of resources yet, and says so.
 #[test]
 fn a_resource_array_is_written_and_its_count_is_checked() {
-    let mut program = array_program();
-    let wgsl = iridia::emit::wgsl(&program).unwrap();
-    assert!(wgsl.contains("binding_array<texture_2d<f32>, 4>"), "{wgsl}");
-    assert!(wgsl.contains("binding_array<sampler>"), "{wgsl}");
-    program.interface.resources[0].count = 3;
-    let problems = program
-        .validate()
-        .unwrap_err()
-        .iter()
-        .map(ToString::to_string)
-        .collect::<Vec<_>>();
+    let e = iridia_naga::wgsl(&array_program(4), &iridia_naga::Profile::NAGA).unwrap_err();
     assert!(
-        problems
-            .iter()
-            .any(|p| p.contains("resource 0: the global's array size")),
-        "{problems:?}"
+        e.to_string()
+            .contains("a sample through an element of an array of samplers is not lowered yet"),
+        "{e}"
     );
-    program.interface.resources[0].count = 1;
-    let problems = program
-        .validate()
-        .unwrap_err()
-        .iter()
-        .map(ToString::to_string)
-        .collect::<Vec<_>>();
+    // three textures: element 3 is past the array
+    use iridia_exec::{Executable, Resources, Runner};
+    let three = array_program(3);
+    let exe = Executable::from_ir(&three).unwrap();
+    let resources = Resources::default();
+    let bound = exe.bind_resources(&resources).unwrap();
+    let mut backend = Elements;
+    let error = Runner::<1>::new(&exe, &bound, &mut backend, None)
+        .run([&[[3f32.to_bits(), 0, 0, 0]][..]])
+        .unwrap_err();
     assert!(
-        problems
-            .iter()
-            .any(|p| p.contains("resource 0 (tex): the global")),
-        "{problems:?}"
+        error.contains("resource 0: element 3 of an array of 3"),
+        "{error}"
     );
 }
 
-/// A pixel program over `uv` (TEXCOORD0, two lanes) whose `SV_Target0` is what `build` makes of the lanes.
-fn program_of(build: impl FnOnce(&mut Builder, Val, Val) -> Val) -> Program {
-    let mut b = Builder::new();
-    let f2 = b.ty_of(Kind::F, Width::Two);
-    let uv = b.app(naga::Expression::FunctionArgument(0));
-    let uv = val(uv, Kind::F, Width::Two);
-    let (x, y) = (b.lane(uv, 0), b.lane(uv, 1));
-    let colour = build(&mut b, x, y);
-    let out_ty = result_type(&mut b);
-    let out = b.app(naga::Expression::Compose {
-        ty: out_ty,
-        components: vec![colour.expr],
-    });
-    b.push(naga::Statement::Return { value: Some(out) });
-    let module = b
-        .finish(
-            "main",
-            naga::ShaderStage::Fragment,
-            vec![argument("TEXCOORD0", f2)],
-            Some(out_ty),
-            false,
-        )
-        .expect("the module finishes");
-    Program {
-        module,
-        stage: Stage::Pixel,
-        entry: "main".into(),
-        interface: Interface {
-            stage: Stage::Pixel,
-            inputs: vec![varying("TEXCOORD", 2, 0x3)],
-            outputs: vec![target()],
-            resources: Vec::new(),
-            facts: Default::default(),
-        },
-        bindings: Vec::new(),
-        conventions: Conventions::D3D,
-        modes: D3dModes::ALL,
-        provenance: provenance(),
-        notes: Vec::new(),
-    }
+/// A pixel program over `uv` (TEXCOORD0, two lanes, `%0`) whose `SV_Target0` is the text's lines' last value,
+/// `%result` in them.
+fn program_of(body: &str, result: u32) -> Program {
+    let text = format!(
+        "iridia-ir 1
+fn main {{
+  %0: vec2<f32> = input 0.xy
+  %1: f32 = %0.x
+  %2: f32 = %0.y
+{body}  output 0.xyzw = %{result}
+  return
+}}
+"
+    );
+    pixel(&text, vec![input("TEXCOORD", 2, 0x3)], vec![target()], Vec::new())
 }
 
-/// A value loaded from a local is what the local held at the load: a store to the local after the load does not
-/// reach a lane or swizzle of the value read after the store (WGSL's `let s = l; l = ...; s.zw`), whether the read
+/// The program's `SV_Target0` for `uv = (x, y)` in `iridia-exec`, which `iridia-exec-ir` agrees with.
+fn run(program: Program, x: f32, y: f32) -> [f32; 4] {
+    let shader = ProgramShader::from_ir(program.clone()).unwrap();
+    let inputs = [bits([x, y, 0.0, 0.0])];
+    let e = shader.execute(&inputs, &[], &mut Unused).unwrap();
+    agree(&program, &e, &reference(&program, &inputs, &[], &mut no_samples));
+    lanes(e.outputs[0])
+}
+
+/// A value loaded from a variable is what the variable held at the load: a store to the variable after the load does
+/// not reach a lane or swizzle of the value read after the store (WGSL's `let s = l; l = ...; s.zw`), whether the read
 /// follows the store directly or after a construct.
 #[test]
 fn a_loaded_value_keeps_what_the_local_held_at_the_load() {
-    let run = |program: Program| {
-        let shader = ProgramShader::new(program).unwrap();
-        lanes(
-            shader
-                .execute(&[bits([0.25, 0.5, 0.0, 0.0])], &[], &mut Unused)
-                .unwrap()
-                .outputs[0],
-        )
-    };
     for after_a_construct in [false, true] {
         for by_swizzle in [false, true] {
-            let program = program_of(|b, x, y| {
-                let f4 = b.ty_of(Kind::F, Width::Four);
-                let l = b.local("l", f4);
-                let one = b.lit_f(1.0);
-                let first = b.compose(&[x, y, one, y]);
-                let p = b.local_ptr(l);
-                b.store(p, first);
-                let p = b.local_ptr(l);
-                let held = b.load(p, Kind::F, Width::Four);
-                let zero = b.lit_f(0.0);
-                let second = b.compose(&[zero, zero, zero, zero]);
-                let p = b.local_ptr(l);
-                b.store(p, second);
-                if after_a_construct {
-                    b.push(naga::Statement::Block(naga::Block::new()));
-                }
-                if by_swizzle {
-                    b.swizzle(held, &[3, 2, 1, 0])
-                } else {
-                    let parts = [0, 1, 2, 3].map(|k| b.lane(held, k));
-                    b.compose(&parts)
-                }
-            });
+            let construct = if after_a_construct {
+                "  block '0 {\n    yield\n  }\n"
+            } else {
+                ""
+            };
+            let (read, result) = if by_swizzle {
+                ("  %7: vec4<f32> = %5.wzyx\n".to_owned(), 7)
+            } else {
+                (
+                    "  %7: f32 = %5.x\n  %8: f32 = %5.y\n  %9: f32 = %5.z\n  %10: f32 = %5.w\n  \
+                     %11: vec4<f32> = compose %7, %8, %9, %10\n"
+                        .to_owned(),
+                    11,
+                )
+            };
+            let text = format!(
+                "iridia-ir 1
+fn main {{
+  var l: vec4<f32>
+  %0: vec2<f32> = input 0.xy
+  %1: f32 = %0.x
+  %2: f32 = %0.y
+  %3: f32 = f32(1.0)
+  %4: vec4<f32> = compose %1, %2, %3, %2
+  l = %4
+  %5: vec4<f32> = load l
+  %6: vec4<f32> = vec4<f32>(0.0, 0.0, 0.0, 0.0)
+  l = %6
+{construct}{read}  output 0.xyzw = %{result}
+  return
+}}
+"
+            );
+            let program = pixel(&text, vec![input("TEXCOORD", 2, 0x3)], vec![target()], Vec::new());
             let want = if by_swizzle {
                 [0.5, 1.0, 0.5, 0.25]
             } else {
                 [0.25, 0.5, 1.0, 0.5]
             };
             assert_eq!(
-                run(program),
+                run(program, 0.25, 0.5),
                 want,
                 "after a construct {after_a_construct}, by swizzle {by_swizzle}"
             );
@@ -848,25 +484,24 @@ fn a_loaded_value_keeps_what_the_local_held_at_the_load() {
 /// values f64 gives rounded once (and C's fmod: the sign of the dividend).
 #[test]
 fn trigonometry_fma_and_the_float_remainder() {
-    use naga::MathFunction as Mf;
-    let run = |program: Program, x: f32, y: f32| {
-        let shader = ProgramShader::new(program).unwrap();
-        lanes(
-            shader
-                .execute(&[bits([x, y, 0.0, 0.0])], &[], &mut Unused)
-                .unwrap()
-                .outputs[0],
-        )
-    };
-    let unary = program_of(|b, x, _| {
-        let f = |b: &mut Builder, fun| b.math(fun, &[x]);
-        let parts = [Mf::Acos, Mf::Asin, Mf::Atan, Mf::Tan].map(|fun| f(b, fun));
-        b.compose(&parts)
-    });
-    let hyperbolic = program_of(|b, x, _| {
-        let parts = [Mf::Sinh, Mf::Cosh, Mf::Tanh, Mf::Sinh].map(|fun| b.math(fun, &[x]));
-        b.compose(&parts)
-    });
+    let unary = program_of(
+        "  %3: f32 = facos %1
+  %4: f32 = fasin %1
+  %5: f32 = fatan %1
+  %6: f32 = ftan %1
+  %7: vec4<f32> = compose %3, %4, %5, %6
+",
+        7,
+    );
+    let hyperbolic = program_of(
+        "  %3: f32 = fsinh %1
+  %4: f32 = fcosh %1
+  %5: f32 = ftanh %1
+  %6: f32 = fsinh %1
+  %7: vec4<f32> = compose %3, %4, %5, %6
+",
+        7,
+    );
     let x = 0.3f32;
     let want = |f: fn(f64) -> f64| f(x as f64) as f32;
     assert_eq!(
@@ -877,113 +512,123 @@ fn trigonometry_fma_and_the_float_remainder() {
         run(hyperbolic, x, 0.0),
         [want(f64::sinh), want(f64::cosh), want(f64::tanh), want(f64::sinh)]
     );
-    let remainder = program_of(|b, x, y| {
-        let rem = b.binary(naga::BinaryOperator::Modulo, x, y);
-        let neg = b.unary(naga::UnaryOperator::Negate, x);
-        let rem_neg = b.binary(naga::BinaryOperator::Modulo, neg, y);
-        let z = b.lit_f(0.5);
-        let fused = b.math(Mf::Fma, &[x, y, z]);
-        b.compose(&[rem, rem_neg, fused, z])
-    });
+    let remainder = program_of(
+        "  %3: f32 = frem %1, %2
+  %4: f32 = fneg %1
+  %5: f32 = frem %4, %2
+  %6: f32 = f32(0.5)
+  %7: f32 = fma %1, %2, %6
+  %8: vec4<f32> = compose %3, %5, %7, %6
+",
+        8,
+    );
     assert_eq!(
         run(remainder, 5.5, 2.0),
         [1.5, -1.5, 5.5f32.mul_add(2.0, 0.5), 0.5]
     );
 }
 
-/// `mix` of vectors by a vector and by a scalar, `normalize`, `sign` and the relational functions, against the values
-/// worked out here: with x = 0.5 and y = 2, v = (x, y, 2, 0.5) and w = (y, x, -1, 4).
+/// A mix of vectors by a vector and by a scalar and a normalization, as a lifter writes them out (the IR has no `mix`
+/// or `normalize`: HLSL's `lerp(v, w, a)` is `v + (w - v) * a`, `normalize(v)` is `v / sqrt(dot(v, v))`), `sign` and
+/// the relational operations, against the values worked out here: with x = 0.5 and y = 2, v = (x, y, 2, 0.5) and
+/// w = (y, x, -1, 4).
 #[test]
 fn mix_normalize_sign_and_the_relational_functions() {
-    use naga::{MathFunction as Mf, RelationalFunction as Rf};
-    let run = |program: Program| {
-        let shader = ProgramShader::new(program).unwrap();
-        lanes(
-            shader
-                .execute(&[bits([0.5, 2.0, 0.0, 0.0])], &[], &mut Unused)
-                .unwrap()
-                .outputs[0],
+    // v (%7) and w (%8)
+    let vectors = "  %3: f32 = f32(2.0)
+  %4: f32 = f32(0.5)
+  %5: f32 = f32(-1.0)
+  %6: f32 = f32(4.0)
+  %7: vec4<f32> = compose %1, %2, %3, %4
+  %8: vec4<f32> = compose %2, %1, %5, %6
+";
+    let mix = |a: &str| {
+        program_of(
+            &format!(
+                "{vectors}{a}  %10: vec4<f32> = fsub %8, %7
+  %11: vec4<f32> = fmul.ieee %10, %9
+  %12: vec4<f32> = fadd %7, %11
+"
+            ),
+            12,
         )
     };
-    let vectors = |b: &mut Builder, x: Val, y: Val| {
-        let (two, half, minus_one, four) = (b.lit_f(2.0), b.lit_f(0.5), b.lit_f(-1.0), b.lit_f(4.0));
-        (b.compose(&[x, y, two, half]), b.compose(&[y, x, minus_one, four]))
-    };
-    // by a scalar: v * (1 - x) + w * x
-    let by_scalar = program_of(|b, x, y| {
-        let (v, w) = vectors(b, x, y);
-        b.math(Mf::Mix, &[v, w, x])
-    });
-    assert_eq!(run(by_scalar), [1.25, 1.25, 0.5, 2.25]);
+    // by a scalar
+    let by_scalar = mix("  %9: vec4<f32> = splat %1\n");
+    assert_eq!(run(by_scalar, 0.5, 2.0), [1.25, 1.25, 0.5, 2.25]);
     // by a vector (x, x, y, y)
-    let by_vector = program_of(|b, x, y| {
-        let (v, w) = vectors(b, x, y);
-        let a = b.compose(&[x, x, y, y]);
-        b.math(Mf::Mix, &[v, w, a])
-    });
-    assert_eq!(run(by_vector), [1.25, 1.25, -4.0, 7.5]);
-    let normalized = program_of(|b, x, y| {
-        let (v, _) = vectors(b, x, y);
-        b.math(Mf::Normalize, &[v])
-    });
+    let by_vector = mix("  %9: vec4<f32> = compose %1, %1, %2, %2\n");
+    assert_eq!(run(by_vector, 0.5, 2.0), [1.25, 1.25, -4.0, 7.5]);
+    let normalized = program_of(
+        &format!(
+            "{vectors}  %9: f32 = dot %7, %7
+  %10: f32 = fsqrt %9
+  %11: vec4<f32> = splat %10
+  %12: vec4<f32> = fdiv %7, %11
+"
+        ),
+        12,
+    );
     let length = 8.5f64.sqrt() as f32;
     assert_eq!(
-        run(normalized),
+        run(normalized, 0.5, 2.0),
         [0.5 / length, 2.0 / length, 2.0 / length, 0.5 / length]
     );
-    let signs = program_of(|b, x, y| {
-        let zero = b.lit_f(0.0);
-        let minus_x = b.unary(naga::UnaryOperator::Negate, x);
-        let parts = [x, minus_x, zero, y].map(|v| b.math(Mf::Sign, &[v]));
-        b.compose(&parts)
-    });
-    assert_eq!(run(signs), [1.0, -1.0, 0.0, 1.0]);
+    let signs = program_of(
+        "  %3: f32 = f32(0.0)
+  %4: f32 = fneg %1
+  %5: f32 = fsign %1
+  %6: f32 = fsign %4
+  %7: f32 = fsign %3
+  %8: f32 = fsign %2
+  %9: vec4<f32> = compose %5, %6, %7, %8
+",
+        9,
+    );
+    assert_eq!(run(signs, 0.5, 2.0), [1.0, -1.0, 0.0, 1.0]);
     // any and all of v < w = (true, false, false, true); NaN from 0 / 0, infinity from x / 0
-    let relational = program_of(|b, x, y| {
-        let (v, w) = vectors(b, x, y);
-        let less = b.binary(naga::BinaryOperator::Less, v, w);
-        let relation = |b: &mut Builder, fun, argument: Val| {
-            let e = b.app(naga::Expression::Relational {
-                fun,
-                argument: argument.expr,
-            });
-            val(e, Kind::B, Width::One)
-        };
-        let zero = b.lit_f(0.0);
-        let nan = b.binary(naga::BinaryOperator::Divide, zero, zero);
-        let infinity = b.binary(naga::BinaryOperator::Divide, x, zero);
-        let tests = [
-            relation(b, Rf::Any, less),
-            relation(b, Rf::All, less),
-            relation(b, Rf::IsNan, nan),
-            relation(b, Rf::IsInf, infinity),
-        ];
-        let (one, none) = (b.lit_f(1.0), b.lit_f(0.0));
-        let parts = tests.map(|t| b.select(t, one, none));
-        b.compose(&parts)
-    });
-    assert_eq!(run(relational), [1.0, 0.0, 1.0, 1.0]);
+    let relational = program_of(
+        &format!(
+            "{vectors}  %9: vec4<bool> = fcmp.lt %7, %8
+  %10: bool = any %9
+  %11: bool = all %9
+  %12: f32 = f32(0.0)
+  %13: f32 = fdiv %12, %12
+  %14: f32 = fdiv %1, %12
+  %15: bool = isnan %13
+  %16: bool = isinf %14
+  %17: f32 = f32(1.0)
+  %18: f32 = select %10, %17, %12
+  %19: f32 = select %11, %17, %12
+  %20: f32 = select %15, %17, %12
+  %21: f32 = select %16, %17, %12
+  %22: vec4<f32> = compose %18, %19, %20, %21
+"
+        ),
+        22,
+    );
+    assert_eq!(run(relational, 0.5, 2.0), [1.0, 0.0, 1.0, 1.0]);
 }
 
-/// `pow` (in double precision, rounded once) and the conversion of a boolean to a float and to an integer.
+/// `pow` (in double precision, rounded once) and a boolean made a float and an integer, as the IR writes it (a select
+/// of one or zero: the IR converts numbers only).
 #[test]
 fn pow_and_the_conversion_of_booleans() {
-    let program = program_of(|b, x, y| {
-        let power = b.math(naga::MathFunction::Pow, &[y, x]);
-        let below = b.binary(naga::BinaryOperator::Less, x, y);
-        let above = b.binary(naga::BinaryOperator::Less, y, x);
-        let as_float = |b: &mut Builder, v: Val| b.convert(v, Kind::F);
-        let (one, zero) = (as_float(b, below), as_float(b, above));
-        let as_int = b.convert(below, Kind::U);
-        let as_int = b.convert(as_int, Kind::F);
-        b.compose(&[power, one, zero, as_int])
-    });
-    let shader = ProgramShader::new(program).unwrap();
-    let out = lanes(
-        shader
-            .execute(&[bits([0.5, 2.0, 0.0, 0.0])], &[], &mut Unused)
-            .unwrap()
-            .outputs[0],
+    let program = program_of(
+        "  %3: f32 = fpow %2, %1
+  %4: bool = fcmp.lt %1, %2
+  %5: bool = fcmp.lt %2, %1
+  %6: f32 = f32(1.0)
+  %7: f32 = f32(0.0)
+  %8: f32 = select %4, %6, %7
+  %9: f32 = select %5, %6, %7
+  %10: u32 = u32(1)
+  %11: u32 = u32(0)
+  %12: u32 = select %4, %10, %11
+  %13: f32 = convert.saturate %12
+  %14: vec4<f32> = compose %3, %8, %9, %13
+",
+        14,
     );
-    assert_eq!(out, [2.0f64.powf(0.5) as f32, 1.0, 0.0, 1.0]);
+    assert_eq!(run(program, 0.5, 2.0), [2.0f64.powf(0.5) as f32, 1.0, 0.0, 1.0]);
 }

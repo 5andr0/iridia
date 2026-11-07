@@ -1,7 +1,10 @@
 #![allow(clippy::unwrap_used)]
 //! A mesh program built by hand: a thread group of 32 that sets its counts (4 vertices, 2 triangles), writes the position of
-//! the vertex its group index names and the indices of the first triangle. It validates, is written as WGSL with the mesh
-//! stage's attributes, and the executor runs it to the meshlets its thread groups wrote.
+//! the vertex its group index names and the indices of the first triangle. In the naga form it validates and is written
+//! as WGSL with the mesh stage's attributes; on the IR (written as text) it validates and the executor runs it to the
+//! meshlets its thread groups wrote.
+mod support;
+
 use iridia::build::Builder;
 use iridia::{
     Conventions, D3dModes, Interface, Label, MeshFacts, MeshTopology, Program, Provenance, ScalarType,
@@ -179,9 +182,41 @@ fn nothing(_: iridia_exec::Sample) -> Result<[f32; 4], String> {
     Err("no sampling in this program".into())
 }
 
+/// The program on the IR, setting `vertices` vertices and writing the first triangle's indices.
+fn mesh_ir(vertices: u32, triangle: [u32; 3]) -> iridia_ir::Program {
+    let [i0, i1, i2] = triangle;
+    let text = format!(
+        "iridia-ir 1
+fn main {{
+  %0: u32 = u32({vertices})
+  %1: u32 = u32(2)
+  mesh counts %0, %1
+  %2: u32 = input 0.x
+  %3: u32 = u32(3)
+  %4: u32 = and %2, %3
+  %5: f32 = f32(1.0)
+  store vertex %4 1.x = %5
+  %6: u32 = u32(0)
+  %7: vec3<u32> = vec3<u32>({i0}, {i1}, {i2})
+  store indices %6 = %7
+  return
+}}
+"
+    );
+    let mut p = support::unchecked(
+        support::function(&text),
+        interface(),
+        ShaderFormat::Dxil,
+        "ms_6_5",
+    );
+    p.workgroup = Some([32, 1, 1]);
+    iridia_ir::validate(&p).unwrap_or_else(|e| panic!("{e:?}"));
+    p
+}
+
 #[test]
 fn the_executor_runs_each_thread_group_to_its_meshlet() {
-    let shader = MeshShader::new(mesh()).unwrap();
+    let shader = MeshShader::from_ir(&mesh_ir(4, [0, 1, 2])).unwrap();
     assert_eq!(shader.group_size(), [32, 1, 1]);
     assert_eq!(shader.outputs().collect::<Vec<_>>(), ["COLOR0", "SV_Position0"]);
     let meshlets = shader
@@ -199,16 +234,16 @@ fn the_executor_runs_each_thread_group_to_its_meshlet() {
 
 #[test]
 fn a_count_past_the_declared_most_or_an_index_past_the_counted_vertices_is_an_error_of_the_run() {
-    let run = |p: Program| {
-        MeshShader::new(p)
+    let run = |p: iridia_ir::Program| {
+        MeshShader::from_ir(&p)
             .unwrap()
             .draw(&Default::default(), &mut nothing, [1, 1, 1], 32)
             .unwrap_err()
             .to_string()
     };
-    let e = run(mesh_with(5, [0, 1, 2]));
+    let e = run(mesh_ir(5, [0, 1, 2]));
     assert!(e.contains("5 vertices, past the 4 it declares"), "{e}");
-    let e = run(mesh_with(3, [0, 1, 3]));
+    let e = run(mesh_ir(3, [0, 1, 3]));
     assert!(e.contains("names vertex 3, past the 3 the group set"), "{e}");
 }
 

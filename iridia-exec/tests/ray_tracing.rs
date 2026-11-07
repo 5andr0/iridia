@@ -1,8 +1,11 @@
 #![allow(clippy::unwrap_used)]
 //! Ray tracing programs built by hand: a closest-hit program that writes the hit distance into its payload, and a ray
-//! generation program that traces a ray. They validate against the function the interface says (the ray's system values
-//! then pointers to the payload and the attributes), the pipeline's operations are functions without a body, and the
-//! WGSL writer and the executor refuse them by name.
+//! generation program that traces a ray. In the naga form they validate against the function the interface says (the
+//! ray's system values then pointers to the payload and the attributes), the pipeline's operations are functions without
+//! a body, and the WGSL writer refuses them by name. On the IR (written as text) they validate, the IR's WGSL refuses
+//! them by name, and the executor refuses them as entry points and compiles them as the functions the pipeline runs.
+mod support;
+
 use iridia::build::{Builder, Kind, Width};
 use iridia::{
     Conventions, D3dBinding, D3dClass, D3dModes, Interface, Label, Program, Provenance, Resource, ResourceId,
@@ -66,8 +69,8 @@ fn payload(b: &mut Builder) -> Handle<Type> {
 }
 
 /// `main(SV_RayTCurrent0, payload, attributes)`: `payload.m0 = SV_RayTCurrent0`.
-fn closest_hit() -> Program {
-    let interface = Interface {
+fn closest_hit_interface() -> Interface {
+    Interface {
         stage: Stage::ClosestHit,
         inputs: vec![system_input(
             "SV_RayTCurrent",
@@ -78,7 +81,11 @@ fn closest_hit() -> Program {
         outputs: Vec::new(),
         resources: Vec::new(),
         facts: StageFacts::None,
-    };
+    }
+}
+
+fn closest_hit() -> Program {
+    let interface = closest_hit_interface();
     let sigs = iridia::stage_functions(&interface).unwrap().unwrap();
     let names: Vec<_> = sigs[0].arguments.iter().map(|a| a.name.as_str()).collect();
     assert_eq!(names, ["SV_RayTCurrent0", "payload", "attributes"]);
@@ -111,8 +118,8 @@ fn closest_hit() -> Program {
 }
 
 /// `main()`: a local payload and `trace_ray(...)` with it.
-fn ray_generation() -> Program {
-    let interface = Interface {
+fn ray_generation_interface() -> Interface {
+    Interface {
         stage: Stage::RayGeneration,
         inputs: Vec::new(),
         outputs: Vec::new(),
@@ -133,7 +140,11 @@ fn ray_generation() -> Program {
             },
         }],
         facts: StageFacts::None,
-    };
+    }
+}
+
+fn ray_generation() -> Program {
+    let interface = ray_generation_interface();
     let sigs = iridia::stage_functions(&interface).unwrap().unwrap();
     assert!(sigs[0].arguments.is_empty());
     let mut b = Builder::new();
@@ -278,15 +289,93 @@ fn a_payload_that_is_not_a_pointer_is_a_problem() {
 }
 
 #[test]
-fn a_ray_tracing_program_is_refused_by_name_by_the_writer_and_as_an_entry_point_by_the_executor() {
+fn a_ray_tracing_program_is_refused_by_name_by_the_writer() {
     for p in [closest_hit(), ray_generation()] {
         let wgsl = emit::wgsl(&p).unwrap_err().to_string();
         assert!(wgsl.contains("no WGSL stage"), "{wgsl}");
         let functions = emit::wgsl_functions(&p).unwrap_err().to_string();
         assert!(functions.contains("ray tracing pipeline"), "{functions}");
-        let exec = iridia_exec::Executable::new(&p).err().unwrap().to_string();
-        assert!(exec.contains("ray tracing pipeline"), "{exec}");
-        // its function compiles: the pipeline runs it (the hand-built programs here have no real body to run)
-        let _ = iridia_exec::Executable::function(&p, "main");
+    }
+}
+
+// The same programs on the IR.
+
+/// `main`: the payload's first word is `SV_RayTCurrent0`.
+fn closest_hit_ir() -> iridia_ir::Program {
+    let main = support::function(
+        "iridia-ir 1
+fn main {
+  var payload: [u32; 2] raypayload
+  %0: f32 = input 0.x
+  %1: u32 = bitcast %0
+  %2: u32 = u32(0)
+  payload[%2] = %1 oob.zero
+  return
+}
+",
+    );
+    support::program(
+        main,
+        on_the_ir(closest_hit_interface(), 8),
+        ShaderFormat::Dxil,
+        "lib_6_6",
+    )
+}
+
+/// `main`: a ray from the origin along +y traced into t0 with a payload of its own (a variable of the program's: a ray
+/// generation program is given no payload).
+fn ray_generation_ir() -> iridia_ir::Program {
+    let main = support::function(
+        "iridia-ir 1
+fn main {
+  var payload: [u32; 2]
+  %0: u32 = u32(1)
+  %1: u32 = u32(255)
+  %2: u32 = u32(0)
+  %3: vec3<f32> = vec3<f32>(0.0, 0.0, 0.0)
+  %4: f32 = f32(0.0)
+  %5: vec3<f32> = vec3<f32>(0.0, 1.0, 0.0)
+  %6: f32 = f32(1000.0)
+  trace ray r0 flags %0 mask %1 offset %2 stride %0 miss %2 origin %3 tmin %4 direction %5 tmax %6 payload payload
+  return
+}
+",
+    );
+    support::program(
+        main,
+        on_the_ir(ray_generation_interface(), 0),
+        ShaderFormat::Dxil,
+        "lib_6_6",
+    )
+}
+
+/// `interface` with the facts of a library's ray tracing program the IR checks a program's payload against: the
+/// payload of `payload` bytes, no attributes.
+fn on_the_ir(mut interface: Interface, payload: u32) -> Interface {
+    interface.facts = StageFacts::RayTracing(iridia::RayTracingFacts {
+        export: "main".into(),
+        payload,
+        attributes: 0,
+        subobjects: Vec::new(),
+    });
+    interface
+}
+
+#[test]
+fn a_ray_tracing_program_on_the_ir_is_refused_by_name_by_its_wgsl_and_as_an_entry_point_by_the_executor() {
+    for p in [closest_hit_ir(), ray_generation_ir()] {
+        let wgsl = iridia_naga::wgsl(&p, &iridia_naga::Profile::NAGA)
+            .unwrap_err()
+            .to_string();
+        let refusal = format!("{} program is not lowered yet", p.stage.with_article());
+        assert!(wgsl.contains(&refusal), "{wgsl}");
+        let exec = iridia_exec::Executable::from_ir(&p).err().unwrap().to_string();
+        assert!(
+            exec.contains("compile it with Executable::function_from_ir"),
+            "{exec}"
+        );
+        // its function compiles: the pipeline runs it
+        iridia_exec::Executable::function_from_ir(&p, "main")
+            .unwrap_or_else(|e| panic!("{:?}: {e}", p.stage));
     }
 }
