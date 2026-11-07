@@ -136,6 +136,7 @@ impl Setup {
                 | Stage::Domain
                 | Stage::Geometry
                 | Stage::Mesh
+                | Stage::Amplification
         ) && !interface.stage.is_ray_tracing()
         {
             return Err(error(0, format!("{:?} programs are not lifted", interface.stage)));
@@ -354,10 +355,12 @@ impl Setup {
             interface.facts = StageFacts::VertexWithoutPosition;
         }
         // WebGPU gives a lane number only to a thread group laid out along x
-        let multi_dimensional = interface.stage == Stage::Compute
-            && records::num_threads(m)
-                .map_err(read)?
-                .is_some_and(|[_, y, z]| y != 1 || z != 1);
+        let multi_dimensional = matches!(
+            interface.stage,
+            Stage::Compute | Stage::Mesh | Stage::Amplification
+        ) && records::num_threads(m)
+            .map_err(read)?
+            .is_some_and(|[_, y, z]| y != 1 || z != 1);
         let lane_by_rank = multi_dimensional && system_inputs.remove(&SystemValue::LaneIndex);
         for system in system_inputs {
             if interface.inputs.iter().any(|v| v.system == Some(system)) {

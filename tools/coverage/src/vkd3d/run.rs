@@ -10,6 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use iridia::{Interface, Program, ResourceKind, SystemValue};
+use iridia_exec::amplification::AmplificationShader;
 use iridia_exec::draw::{
     AlphaTest, Compare as DrawCompare, Cull, DepthState, DrawShader, Fog, FogFactor, FogSource, Linkage,
     PointSize, Primitive, Rasterizer, Surface, Viewport,
@@ -1492,29 +1493,47 @@ fn mesh_step(
     if let Some((name, value)) = state.unmodelled.iter().next() {
         return Err(Outcome::NotModelled(format!("the state {name} {value}")));
     }
-    if stages.contains_key("as") {
-        return Err(Outcome::NotModelled(
-            "an amplification program (iridia-dxil does not lift them)".into(),
-        ));
-    }
     let ms_name = stages
         .get("ms")
         .ok_or_else(|| Outcome::NotModelled("a mesh dispatch with no mesh program".into()))?;
     let ps_name = stages
         .get("ps")
         .ok_or_else(|| Outcome::NotModelled("a mesh dispatch with no pixel program".into()))?;
-    let ms = ready(programs, ms_name)?;
     let ps = ready(programs, ps_name)?;
-    let mesh = MeshShader::new(Program::clone(&ms.lifted.program))
-        .map_err(|e| Outcome::Error(ms_name.clone(), e.to_string()))?;
+    // with an amplification program, it and the mesh program run on the IR, which lifts them
+    let lift_ir = |name: &String| -> Result<iridia_ir::Program, Outcome> {
+        let bytes = programs
+            .bytes(name)
+            .map_err(|e| Outcome::Failed(name.clone(), e))?;
+        crate::front::lift_ir(&bytes).map_err(|e| outcome_of(name, e))
+    };
+    let (amplification, mesh) = match stages.get("as") {
+        Some(as_name) => {
+            let a = AmplificationShader::from_ir(&lift_ir(as_name)?)
+                .map_err(|e| Outcome::Error(as_name.clone(), e.to_string()))?;
+            let m = MeshShader::from_ir(&lift_ir(ms_name)?)
+                .map_err(|e| Outcome::Error(ms_name.clone(), e.to_string()))?;
+            (Some((as_name, a)), m)
+        }
+        None => {
+            let ms = ready(programs, ms_name)?;
+            let m = MeshShader::new(Program::clone(&ms.lifted.program))
+                .map_err(|e| Outcome::Error(ms_name.clone(), e.to_string()))?;
+            (None, m)
+        }
+    };
     let psh = match ps.shader(Form::Lifted, false) {
         Some(Ok(shader)) => shader,
         Some(Err(e)) => return Err(Outcome::Error(ps_name.clone(), e.clone())),
         None => return Err(Outcome::Error(ps_name.clone(), "no pixel program".into())),
     };
-    let interfaces = [&ms.lifted.program.interface, psh.interface()];
+    let mut named = vec![(mesh.interface(), ms_name), (psh.interface(), ps_name)];
+    if let Some((as_name, a)) = &amplification {
+        named.push((a.interface(), *as_name));
+    }
+    let interfaces: Vec<&iridia::Interface> = named.iter().map(|(i, _)| *i).collect();
     unknown_read(device, state, &interfaces)?;
-    for (interface, name) in [(interfaces[0], ms_name), (interfaces[1], ps_name)] {
+    for (interface, name) in &named {
         if let Some(why) = unbindable(interface) {
             return Err(Outcome::NotModelled(format!("{name}: {why}")));
         }
@@ -1529,6 +1548,7 @@ fn mesh_step(
     let rows = constant_words(device);
     let mut requests = SlotRequests::new(device, &interfaces).map_err(Outcome::NotModelled)?;
     let stats = mesh_draw(
+        amplification.as_ref().map(|(_, a)| a),
         &mesh,
         psh,
         groups,

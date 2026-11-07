@@ -49,6 +49,9 @@ pub enum Stage {
     /// A mesh program: a thread group that writes the vertices and primitives of one meshlet (see
     /// [`super::StageFacts::Mesh`]); its outputs are the per-vertex varyings of the interface.
     Mesh,
+    /// An amplification (task) program: a thread group that launches mesh thread groups, handing each the words of
+    /// its task payload (see [`super::StageFacts::Amplification`]). It has no varyings.
+    Amplification,
     /// A ray generation program: the start of a ray tracing dispatch, one invocation per dispatched ray position.
     RayGeneration,
     /// An intersection program: tests a ray against a procedural primitive and reports hits.
@@ -63,6 +66,12 @@ pub enum Stage {
     Callable,
 }
 impl Stage {
+    /// Whether a program of this stage runs in thread groups (`numthreads`): a compute, mesh or amplification
+    /// program, whose invocations share workgroup memory and meet at a workgroup barrier.
+    pub fn has_thread_groups(self) -> bool {
+        matches!(self, Self::Compute | Self::Mesh | Self::Amplification)
+    }
+
     /// Whether this is one of the ray tracing pipeline's stages: a program of it is functions that read the ray's
     /// system values and carry a payload, not an entry point (see `iridia::stage_functions`).
     pub fn is_ray_tracing(self) -> bool {

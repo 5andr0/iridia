@@ -910,6 +910,24 @@ impl Op {
         }
     }
 
+    /// The variable the operation reads or changes: a load's, an atomic operation's on a variable.
+    pub fn var(&self) -> Option<VarId> {
+        self.clone().var_mut().copied()
+    }
+
+    /// The variable the operation reads or changes, to change.
+    pub fn var_mut(&mut self) -> Option<&mut VarId> {
+        match self {
+            Op::LoadVar(var)
+            | Op::LoadElement(var, ..)
+            | Op::Atomic {
+                memory: Memory::Var(var, _),
+                ..
+            } => Some(var),
+            _ => None,
+        }
+    }
+
     /// The resources the operation reaches, in operand order.
     pub fn resources(&self) -> Vec<ResourceId> {
         match self {

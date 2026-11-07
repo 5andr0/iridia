@@ -143,8 +143,8 @@ impl Executable {
                     }
                     Words::Elements(values)
                 }
-                // thread-group memory is the run's own
-                GlobalKind::Workgroup(_) => Words::Owned(Vec::new()),
+                // thread-group memory and a task payload are the run's own
+                GlobalKind::Workgroup(_) | GlobalKind::Payload(_) => Words::Owned(Vec::new()),
             });
         }
         Ok(Bound {
@@ -2671,14 +2671,16 @@ impl Executable {
         self.dispatch_elements(bound, backend, buffers, &mut BTreeMap::new(), groups, wave)
     }
 
-    /// Run `groups` thread groups of a mesh program, handing the memory of the output variable (its words, as
-    /// [`Executable::mesh_output`] says) to `after` when each group has finished.
+    /// Run `groups` thread groups of a mesh program, each handed the words of `payload` as its task payload, handing
+    /// the memory of the output variable (its words, as [`Executable::group_output`] says) to `after` when each group
+    /// has finished.
     pub(super) fn dispatch_mesh(
         &self,
         bound: &Bound<'_>,
         backend: &mut dyn Backend,
         groups: [u32; 3],
         wave: u32,
+        payload: &[u32],
         after: &mut GroupHook<'_>,
     ) -> Result<Dispatched, String> {
         self.dispatch_mesh_elements(
@@ -2688,11 +2690,13 @@ impl Executable {
             &mut BTreeMap::new(),
             groups,
             wave,
+            payload,
             after,
         )
     }
 
-    /// [`Executable::dispatch_elements`] for a mesh program: `meshlet` takes the words of the meshlet each thread group
+    /// [`Executable::dispatch_elements`] for a mesh program: each group reads the words of `payload` as its task
+    /// payload (none for a program that reads none), and `meshlet` takes the words of the meshlet each thread group
     /// wrote (its output variable, which [`crate::mesh::MeshShader`] reads) when the group has finished, with the
     /// group's position in the dispatch.
     #[allow(clippy::too_many_arguments)]
@@ -2704,9 +2708,10 @@ impl Executable {
         elements: &mut BTreeMap<(ResourceId, u32), Vec<u32>>,
         groups: [u32; 3],
         wave: u32,
+        payload: &[u32],
         meshlet: &mut GroupHook<'_>,
     ) -> Result<Dispatched, String> {
-        let (global, _) = self.mesh_output.ok_or("not a mesh program")?;
+        let (global, _) = self.group_output.ok_or("not a mesh program")?;
         self.dispatch_groups(
             bound,
             backend,
@@ -2714,7 +2719,35 @@ impl Executable {
             elements,
             groups,
             wave,
+            payload,
             Some((global, meshlet)),
+        )
+    }
+
+    /// [`Executable::dispatch_elements`] for an amplification program: `launch` takes the words of the launch each
+    /// thread group made (which [`crate::amplification::AmplificationShader`] reads) when the group has finished,
+    /// with the group's position in the dispatch.
+    #[allow(clippy::too_many_arguments)]
+    pub fn dispatch_amplification_elements(
+        &self,
+        bound: &Bound<'_>,
+        backend: &mut dyn Backend,
+        buffers: &mut BTreeMap<ResourceId, Vec<u32>>,
+        elements: &mut BTreeMap<(ResourceId, u32), Vec<u32>>,
+        groups: [u32; 3],
+        wave: u32,
+        launch: &mut GroupHook<'_>,
+    ) -> Result<Dispatched, String> {
+        let (global, _) = self.group_output.ok_or("not an amplification program")?;
+        self.dispatch_groups(
+            bound,
+            backend,
+            buffers,
+            elements,
+            groups,
+            wave,
+            &[],
+            Some((global, launch)),
         )
     }
 
@@ -2729,11 +2762,12 @@ impl Executable {
         groups: [u32; 3],
         wave: u32,
     ) -> Result<Dispatched, String> {
-        self.dispatch_groups(bound, backend, buffers, elements, groups, wave, None)
+        self.dispatch_groups(bound, backend, buffers, elements, groups, wave, &[], None)
     }
 
     /// Run `groups` thread groups in the order of the dispatch (x, then y, then z), each with as many lanes as the
-    /// executor's widths need; `after` takes a global's words when each group has finished.
+    /// executor's widths need and `payload` the words of its task payload; `after` takes a global's words when each
+    /// group has finished.
     #[allow(clippy::too_many_arguments)]
     fn dispatch_groups(
         &self,
@@ -2743,19 +2777,38 @@ impl Executable {
         elements: &mut BTreeMap<(ResourceId, u32), Vec<u32>>,
         groups: [u32; 3],
         wave: u32,
+        payload: &[u32],
         after: Option<(usize, &mut GroupHook<'_>)>,
     ) -> Result<Dispatched, String> {
         let size = self.workgroup.ok_or("not a compute program")?;
         if wave == 0 {
             return Err("a wave of no lanes".into());
         }
+        for g in &self.globals {
+            if let GlobalKind::Payload(words) = g.kind
+                && payload.len() != words as usize
+            {
+                return Err(if payload.is_empty() {
+                    "a mesh program that reads a task payload, run without one".into()
+                } else {
+                    format!(
+                        "a task payload of {} words handed to a program that reads {words}",
+                        payload.len()
+                    )
+                });
+            }
+        }
         let ids = (0..groups[2])
             .flat_map(move |z| (0..groups[1]).flat_map(move |y| (0..groups[0]).map(move |x| [x, y, z])));
         match group_lanes(size)? {
             0 => Err("a thread group of no invocations".into()),
-            1..=64 => self.groups::<64>(bound, backend, buffers, elements, ids, size, wave, after),
-            65..=256 => self.groups::<256>(bound, backend, buffers, elements, ids, size, wave, after),
-            257..=1024 => self.groups::<1024>(bound, backend, buffers, elements, ids, size, wave, after),
+            1..=64 => self.groups::<64>(bound, backend, buffers, elements, ids, size, wave, payload, after),
+            65..=256 => {
+                self.groups::<256>(bound, backend, buffers, elements, ids, size, wave, payload, after)
+            }
+            257..=1024 => {
+                self.groups::<1024>(bound, backend, buffers, elements, ids, size, wave, payload, after)
+            }
             _ => Err("a thread group of more than 1024 invocations".into()),
         }
     }
@@ -2770,15 +2823,17 @@ impl Executable {
         ids: impl Iterator<Item = [u32; 3]>,
         size: [u32; 3],
         wave: u32,
+        payload: &[u32],
         mut after: Option<(usize, &mut GroupHook<'_>)>,
     ) -> Result<Dispatched, String> {
         let lanes = group_lanes(size)? as usize;
-        // the buffers move into the run, and back whatever happens
+        // the buffers move into the run, and back whatever happens; the task payload is every group's
         let store: Vec<Option<Vec<u32>>> = self
             .globals
             .iter()
             .map(|g| match g.kind {
                 GlobalKind::Storage(id) => buffers.remove(&id),
+                GlobalKind::Payload(_) => Some(payload.to_vec()),
                 _ => None,
             })
             .collect();

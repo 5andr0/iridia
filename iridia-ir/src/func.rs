@@ -44,6 +44,10 @@ pub enum Space {
     Private,
     /// The invocations of a compute workgroup share it (D3D's group shared memory); it starts as zero.
     Workgroup,
+    /// A mesh program's task payload: the words the amplification program's `DispatchMesh` handed the thread group,
+    /// laid out as Direct3D lays out the payload's structure (as C does: each field at its natural alignment, a bool
+    /// four bytes). `u32` elements, read alone.
+    Payload,
 }
 
 /// A variable: a source register until `promote` turns its loads and stores into values, or an array (a source's
@@ -153,6 +157,15 @@ pub enum Node {
         /// Its vertices.
         indices: ValueId,
     },
+    /// An amplification program launches thread groups of the mesh program, handing each the words of a variable as
+    /// its task payload (Direct3D's `DispatchMesh`). It is a barrier of the workgroup that every invocation reaches
+    /// once; the values that count are the thread group's first invocation's, and an invocation does nothing after it.
+    DispatchMesh {
+        /// The thread groups along x, y and z (`vec3<u32>`).
+        groups: ValueId,
+        /// The task payload: `u32` elements, as many as the facts' payload bytes fill.
+        payload: VarId,
+    },
     /// A multi-way choice on an integer (`u32` or `i32`, by its bits): the case whose values hold it, else the default.
     /// Each region ends in a yield of the results' values or an exit; none falls into the next.
     Switch {
@@ -217,6 +230,7 @@ impl Node {
             Node::SetMeshCounts { vertices, primitives } => alloc::vec![*vertices, *primitives],
             Node::StoreVertex { vertex, value, .. } => alloc::vec![*vertex, *value],
             Node::StoreIndices { primitive, indices } => alloc::vec![*primitive, *indices],
+            Node::DispatchMesh { groups, .. } => alloc::vec![*groups],
             Node::StoreBuffer {
                 resource,
                 address,
@@ -250,6 +264,7 @@ impl Node {
             Node::SetMeshCounts { vertices, primitives } => alloc::vec![vertices, primitives],
             Node::StoreVertex { vertex, value, .. } => alloc::vec![vertex, value],
             Node::StoreIndices { primitive, indices } => alloc::vec![primitive, indices],
+            Node::DispatchMesh { groups, .. } => alloc::vec![groups],
             Node::StoreBuffer {
                 resource,
                 address,
@@ -270,6 +285,19 @@ impl Node {
         }
     }
 
+    /// The variables the node itself names (a store's, a mesh launch's payload; not its regions' nor its values'), to
+    /// change.
+    pub fn vars_mut(&mut self) -> Vec<&mut VarId> {
+        match self {
+            Node::StoreVar(var, _)
+            | Node::StoreElement(var, ..)
+            | Node::DispatchMesh { payload: var, .. } => {
+                alloc::vec![var]
+            }
+            _ => Vec::new(),
+        }
+    }
+
     /// Whether the node changes state other than a variable or an output (memory, the pipeline): it stays where it is.
     pub fn has_effect(&self) -> bool {
         matches!(
@@ -282,6 +310,7 @@ impl Node {
                 | Node::SetMeshCounts { .. }
                 | Node::StoreVertex { .. }
                 | Node::StoreIndices { .. }
+                | Node::DispatchMesh { .. }
         )
     }
 

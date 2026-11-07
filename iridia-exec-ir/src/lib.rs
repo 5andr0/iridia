@@ -1022,8 +1022,9 @@ impl Machine<'_, '_> {
             | Node::Cut(_)
             | Node::SetMeshCounts { .. }
             | Node::StoreVertex { .. }
-            | Node::StoreIndices { .. } => {
-                return Err("a buffer, image or patch store, a barrier, a vertex emit or a meshlet store is not run here: iridia-exec runs it".into());
+            | Node::StoreIndices { .. }
+            | Node::DispatchMesh { .. } => {
+                return Err("a buffer, image or patch store, a barrier, a vertex emit, a meshlet store or a mesh launch is not run here: iridia-exec runs it".into());
             }
             Node::Demote => self.demoted = true,
             Node::StoreOutput(..) if self.demoted => {}

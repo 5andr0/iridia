@@ -91,8 +91,8 @@ fn geometry_facts_of(state: records::GeometryState) -> Result<iridia::GeometryFa
     })
 }
 
-/// What a mesh program's entry point states, mapped: the most vertices and primitives it writes and what its primitives
-/// are. A payload read from a task program is refused by name.
+/// What a mesh program's entry point states, mapped: the most vertices and primitives it writes, what its primitives
+/// are and the bytes of the task payload it reads.
 fn mesh_facts(m: &Module) -> Result<iridia::MeshFacts> {
     mesh_facts_of(records::mesh_state(m).map_err(read)?)
 }
@@ -100,15 +100,6 @@ fn mesh_facts(m: &Module) -> Result<iridia::MeshFacts> {
 /// [`mesh_facts`] of the state the entry point stated.
 fn mesh_facts_of(state: records::MeshState) -> Result<iridia::MeshFacts> {
     use iridia::{MeshFacts, MeshTopology};
-    let payload = state.payload;
-    if payload != 0 {
-        return Err(error(
-            0,
-            format!(
-                "a mesh program that reads a task payload of {payload} bytes (amplification programs are not lifted)"
-            ),
-        ));
-    }
     Ok(MeshFacts {
         topology: match state.topology {
             1 => MeshTopology::Line,
@@ -124,6 +115,25 @@ fn mesh_facts_of(state: records::MeshState) -> Result<iridia::MeshFacts> {
             "a mesh program's output primitives",
             state.max_primitives,
             MAX_MESH_OUTPUT,
+        )?,
+        payload: within(
+            "a mesh program's task payload",
+            state.payload,
+            iridia::MAX_TASK_PAYLOAD,
+        )?,
+    })
+}
+
+/// What an amplification program's entry point states, mapped: the bytes of its task payload.
+fn amplification_facts(m: &Module) -> Result<iridia::AmplificationFacts> {
+    let payload = records::amplification_payload_size(m)
+        .map_err(read)?
+        .ok_or_else(|| error(0, "an amplification program that states no task payload"))?;
+    Ok(iridia::AmplificationFacts {
+        payload: within(
+            "an amplification program's task payload",
+            payload,
+            iridia::MAX_TASK_PAYLOAD,
         )?,
     })
 }
@@ -716,7 +726,7 @@ pub fn reflection(chunks: &[Chunk<'_>], program: &Module, named: Option<&Module>
         11 => Stage::Miss,
         12 => Stage::Callable,
         13 => Stage::Mesh,
-        14 => return Err(error(0, "amplification shader programs are not lifted")),
+        14 => Stage::Amplification,
         kind => return Err(error(0, format!("program kind {kind} is not mapped"))),
     };
     let source = named.unwrap_or(program);
@@ -827,6 +837,7 @@ pub fn reflection(chunks: &[Chunk<'_>], program: &Module, named: Option<&Module>
         }
         Stage::Geometry => StageFacts::Geometry(geometry_facts(program)?),
         Stage::Mesh => StageFacts::Mesh(mesh_facts(program)?),
+        Stage::Amplification => StageFacts::Amplification(amplification_facts(program)?),
         stage if stage.is_ray_tracing() => {
             let function = records::entry(program).map_err(read)?;
             let export = program

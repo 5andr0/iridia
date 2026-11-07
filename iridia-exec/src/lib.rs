@@ -75,6 +75,7 @@ pub use views::{Absent, Image, View, Views};
 
 use iridia::Interface;
 
+pub mod amplification;
 mod compile;
 mod flat;
 pub mod geometry;

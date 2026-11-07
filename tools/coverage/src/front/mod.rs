@@ -128,6 +128,24 @@ pub fn lift(bytes: &[u8]) -> Result<(Lifted, Option<d3d9::Stateful>), Stop> {
     ))
 }
 
+/// A DXIL program lifted onto the IR ([`iridia_dxil::ir`]) and structured, as `iridia-exec` runs it: what an
+/// amplification program and the mesh program it launches run as, which the naga-path lift does not take.
+pub fn lift_ir(bytes: &[u8]) -> Result<iridia_ir::Program, Stop> {
+    if Bytecode::of(bytes) != Bytecode::Dxil {
+        return Err(Stop::Refused(
+            "an amplification pipeline's program that is not DXIL".into(),
+        ));
+    }
+    let mut p = iridia_dxil::ir::lift(bytes).map_err(|e| Stop::Refused(e.to_string()))?;
+    for f in std::iter::once(&mut p.entry).chain(p.patch.as_mut()) {
+        if matches!(f.body, iridia_ir::Body::Cfg(_)) {
+            iridia_passes::structurize(f).map_err(Stop::Failed)?;
+            iridia_passes::break_flags(f).map_err(Stop::Failed)?;
+        }
+    }
+    Ok(p)
+}
+
 /// A program lifted and made runnable.
 #[derive(Debug)]
 pub struct Ready {

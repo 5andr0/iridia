@@ -19,6 +19,16 @@ const DOUBLE_FIXTURES: [&str; 1] = ["structured_tail.dxil"];
 /// (the IR lift takes them: tests/ir_warp.rs). The refusal is the outcome asserted, not a skipped file.
 const SIXTEEN_BIT_LANE_FIXTURES: [&str; 1] = ["buffer_lanes16.dxil"];
 
+/// Fixtures of an amplification pipeline (an amplification program, a mesh program that reads its task payload), which
+/// this lifter refuses by name (the IR lift takes them: tests/amplification.rs). The refusal is the outcome asserted.
+const AMPLIFICATION_FIXTURES: [&str; 5] = [
+    "amplification.dxil",
+    "amplification_mesh.dxil",
+    "payload_halves.dxil",
+    "payload_layout.dxil",
+    "payload_layout_mesh.dxil",
+];
+
 /// Fixtures that are a library of several programs, whose programs are the per-export fixtures beside them.
 const WHOLE_LIBRARIES: [&str; 1] = ["ray_subobjects.dxil"];
 
@@ -43,6 +53,15 @@ fn every_fixture_lifts() {
                 Err(e) if e.to_string().contains("not exactly one entry point") => {}
                 other => failures.push(format!(
                     "{name}: expected the refusal of a whole library, got {other:?}"
+                )),
+            }
+            continue;
+        }
+        if AMPLIFICATION_FIXTURES.contains(&name.as_str()) {
+            match lift(&fixture(name)) {
+                Err(e) if e.to_string().contains("amplification programs are not lifted") => {}
+                other => failures.push(format!(
+                    "{name}: expected the refusal of an amplification pipeline, got {other:?}"
                 )),
             }
             continue;

@@ -210,6 +210,11 @@ impl Builder {
         self.current.nodes.push(Node::Cut(stream));
     }
 
+    /// Launch `groups` thread groups of the mesh program, handing each the words of `payload`.
+    pub fn dispatch_mesh(&mut self, groups: ValueId, payload: VarId) {
+        self.current.nodes.push(Node::DispatchMesh { groups, payload });
+    }
+
     /// Set the counts of a mesh program's meshlet.
     pub fn set_mesh_counts(&mut self, vertices: ValueId, primitives: ValueId) {
         self.current

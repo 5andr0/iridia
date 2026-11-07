@@ -409,15 +409,16 @@ impl Lift<'_> {
             }
             LlvmOp::Alloca { ty, .. } => {
                 let ty = *ty;
-                let var = self.memory_var("local", ty, Space::Private, Vec::new())?;
                 let v = result
                     .map(|r| r.0)
                     .ok_or_else(|| crate::error(self.at, "an alloca of no result"))?;
+                let bytes = self.payload_roots.contains(&v);
+                let var = self.memory_var("local", ty, Space::Private, Vec::new(), bytes)?;
                 self.define(
                     v,
                     Lv::Pointer(Pointer {
                         var,
-                        word: 0,
+                        at: 0,
                         index: None,
                     }),
                 )
@@ -969,16 +970,30 @@ impl Lift<'_> {
         })
     }
 
-    /// A variable of the 32-bit words of a value of type `ty`, in `space`, starting as `init` (words).
-    fn memory_var(
+    /// A variable of the 32-bit words of a value of type `ty`, in `space`, starting as `init` (words): each value of
+    /// 32 bits or fewer in a word of its own, or with `bytes` laid out in bytes as the module's datalayout lays the
+    /// type out (a task payload).
+    pub(crate) fn memory_var(
         &mut self,
         name: &str,
         ty: TypeId,
         space: Space,
         init: Vec<u32>,
+        bytes: bool,
     ) -> Result<iridia_ir::VarId> {
-        let words = self.words_of(ty)?;
+        let words = if bytes {
+            if !init.is_empty() {
+                return self.refuse("a task payload with a start");
+            }
+            let (_, size) = self.byte_layout(ty)?;
+            size.div_ceil(4)
+        } else {
+            self.words_of(ty)?
+        };
         let id = iridia_ir::VarId(u32::try_from(self.g.vars.len()).unwrap_or(u32::MAX));
+        if bytes {
+            self.bytes.insert(id);
+        }
         self.g.vars.push(Var {
             name: format!("{name}{}", id.0),
             ty: Type::U32,
@@ -992,7 +1007,14 @@ impl Lift<'_> {
     /// The module's memory the program reaches: thread-group variables (address space 3) and constant tables, each a
     /// variable of words; made where the function is first entered.
     pub(crate) fn declare_memory(&mut self) -> Result<()> {
-        let mut globals = std::collections::BTreeSet::new();
+        self.payload_roots = self.payload_roots();
+        // a payload global DispatchMesh alone reaches (the program never writes it) is memory too
+        let mut globals: std::collections::BTreeSet<ValueId> = self
+            .payload_roots
+            .iter()
+            .copied()
+            .filter(|&v| v < self.f.first)
+            .collect();
         for inst in &self.f.instructions {
             let pointers: Vec<ValueId> = match &inst.op {
                 LlvmOp::Load { pointer, .. } | LlvmOp::Store { pointer, .. } => vec![*pointer],
@@ -1035,7 +1057,8 @@ impl Lift<'_> {
                     ));
                 }
             };
-            let var = self.memory_var("g", value_ty, space, init)?;
+            let bytes = self.payload_roots.contains(&g);
+            let var = self.memory_var("g", value_ty, space, init, bytes)?;
             self.memory.insert(g, var);
         }
         Ok(())
@@ -1126,14 +1149,23 @@ impl Lift<'_> {
         match self.memory.get(&g) {
             Some(&var) => Ok(Lv::Pointer(Pointer {
                 var,
-                word: 0,
+                at: 0,
                 index: None,
             })),
             None => self.refuse(format!("the module variable {}", self.m.name(g).unwrap_or("?"))),
         }
     }
 
-    /// `getelementptr base, indices`: the word it reaches, from the base's.
+    /// The size of a value of LLVM type `ty` in variable `var`'s unit: words, or bytes in a byte-laid one.
+    fn size_in(&self, var: iridia_ir::VarId, ty: TypeId) -> Result<u32> {
+        if self.bytes.contains(&var) {
+            Ok(self.byte_layout(ty)?.1)
+        } else {
+            self.words_of(ty)
+        }
+    }
+
+    /// `getelementptr base, indices`: where it reaches, from the base's.
     fn gep(&mut self, base: ValueId, indices: &[ValueId]) -> Result<Lv> {
         let p = match self.get(base)? {
             Lv::Pointer(p) => p,
@@ -1150,21 +1182,26 @@ impl Lift<'_> {
         for (k, &index) in indices.iter().enumerate() {
             // the first index steps over the pointee itself; the rest step into it
             let (stride, next) = if k == 0 {
-                (self.words_of(ty)?, ty)
+                (self.size_in(p.var, ty)?, ty)
             } else {
                 match self.type_at(ty)?.clone() {
-                    LlvmType::Array(_, e) | LlvmType::Vector(_, e) => (self.words_of(e)?, e),
-                    LlvmType::Struct { elements, .. } => {
+                    LlvmType::Array(_, e) | LlvmType::Vector(_, e) => (self.size_in(p.var, e)?, e),
+                    LlvmType::Struct { elements, packed, .. } => {
                         let Some(field) = const_int(self.m, self.f, index) else {
                             return self.refuse("a structure field picked at a computed index");
                         };
                         let field =
                             usize::try_from(field).map_err(|_| crate::error(self.at, "a negative field"))?;
-                        let mut before = 0u32;
-                        for &e in elements.iter().take(field) {
-                            before = before.saturating_add(self.words_of(e)?);
-                        }
-                        out.word = out.word.saturating_add(before);
+                        let before = if self.bytes.contains(&p.var) {
+                            self.field_offset(&elements, packed, field)?
+                        } else {
+                            let mut before = 0u32;
+                            for &e in elements.iter().take(field) {
+                                before = before.saturating_add(self.words_of(e)?);
+                            }
+                            before
+                        };
+                        out.at = out.at.saturating_add(before);
                         ty = *elements
                             .get(field)
                             .ok_or_else(|| crate::error(self.at, "a field past the structure"))?;
@@ -1176,7 +1213,7 @@ impl Lift<'_> {
             match const_int(self.m, self.f, index) {
                 Some(c) => {
                     let c = u32::try_from(c).map_err(|_| crate::error(self.at, "a negative fixed index"))?;
-                    out.word = out.word.saturating_add(c.saturating_mul(stride));
+                    out.at = out.at.saturating_add(c.saturating_mul(stride));
                 }
                 None => {
                     let i = self.uint(index)?;
@@ -1199,9 +1236,9 @@ impl Lift<'_> {
         Ok(Lv::Pointer(out))
     }
 
-    /// The word index (`u32`) of a pointer's word plus `k`.
+    /// The word index (`u32`) of a word-laid pointer's word plus `k`.
     fn word_index(&mut self, p: Pointer, k: u32) -> IrValue {
-        let fixed = self.u32_lit(p.word.saturating_add(k));
+        let fixed = self.u32_lit(p.at.saturating_add(k));
         match p.index {
             None => fixed,
             Some(i) => self.binary(Type::U32, Binary::IAdd, i, fixed),
@@ -1223,6 +1260,9 @@ impl Lift<'_> {
     }
 
     fn load_at(&mut self, p: Pointer, ty: TypeId) -> Result<Lv> {
+        if self.bytes.contains(&p.var) {
+            return self.load_bytes(p, ty);
+        }
         if let LlvmType::Struct { .. } | LlvmType::Array(_, _) = self.type_at(ty)? {
             let elements: Vec<TypeId> = match self.type_at(ty)?.clone() {
                 LlvmType::Struct { elements, .. } => elements,
@@ -1233,7 +1273,7 @@ impl Lift<'_> {
             let mut at = p;
             for e in elements {
                 items.push(self.load_at(at, e)?);
-                at.word = at.word.saturating_add(self.words_of(e)?);
+                at.at = at.at.saturating_add(self.words_of(e)?);
             }
             return Ok(Lv::Agg(items));
         }
@@ -1253,7 +1293,7 @@ impl Lift<'_> {
     }
 
     /// The value of type `t` whose bits are `words` in order.
-    fn compose_words(&mut self, words: &[IrValue], t: Type) -> Result<IrValue> {
+    pub(super) fn compose_words(&mut self, words: &[IrValue], t: Type) -> Result<IrValue> {
         let bits = match words {
             [one] => *one,
             _ => {
@@ -1279,7 +1319,7 @@ impl Lift<'_> {
     }
 
     /// The 32-bit words of a value, in order.
-    fn split_words(&mut self, x: IrValue) -> Result<Vec<IrValue>> {
+    pub(super) fn split_words(&mut self, x: IrValue) -> Result<Vec<IrValue>> {
         let t = self
             .g
             .ty(x)
@@ -1314,6 +1354,12 @@ impl Lift<'_> {
             _ => return self.refuse("a store through something that is not a pointer"),
         };
         let lv = self.get(value)?;
+        if self.bytes.contains(&p.var) {
+            let ty = self
+                .type_of(value)
+                .ok_or_else(|| crate::error(self.at, "a store of a value of no type"))?;
+            return self.store_bytes(p, lv, ty);
+        }
         self.store_at(p, lv)
     }
 
@@ -1333,7 +1379,7 @@ impl Lift<'_> {
                 for item in items {
                     let width = self.lv_words(&item)?;
                     self.store_at(at, item)?;
-                    at.word = at.word.saturating_add(width);
+                    at.at = at.at.saturating_add(width);
                 }
                 Ok(())
             }
@@ -1381,7 +1427,11 @@ impl Lift<'_> {
             Some(c) => Some(self.uint(c)?),
             None => None,
         };
-        let index = self.word_index(p, 0);
+        let index = if self.bytes.contains(&p.var) {
+            self.byte_word(p, 0)
+        } else {
+            self.word_index(p, 0)
+        };
         Ok(self.g.value(
             Type::U32,
             Op::Atomic {

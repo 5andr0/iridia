@@ -364,8 +364,8 @@ impl MeshTopology {
     }
 }
 
-/// What a mesh program states: what its primitives are and the most vertices and primitives it writes. Its thread group
-/// size is the entry point's, as a compute program's is.
+/// What a mesh program states: what its primitives are, the most vertices and primitives it writes and the task payload
+/// it reads. Its thread group size is the entry point's, as a compute program's is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize)]
 pub struct MeshFacts {
     /// What the primitives are.
@@ -374,7 +374,22 @@ pub struct MeshFacts {
     pub max_vertices: u32,
     /// The most primitives the program writes (`Interface::verify` accepts 1 to 256).
     pub max_primitives: u32,
+    /// The bytes of the task payload it reads from the amplification program that launches it; 0 where it reads none
+    /// (`Interface::verify` accepts up to 16,384, a multiple of 4).
+    pub payload: u32,
 }
+
+/// What an amplification program states: the task payload it hands to the mesh thread groups it launches. Its thread
+/// group size is the entry point's, as a compute program's is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize)]
+pub struct AmplificationFacts {
+    /// The bytes of its task payload (`Interface::verify` accepts 4 to 16,384, a multiple of 4: Direct3D requires a
+    /// payload, even of a program that writes none).
+    pub payload: u32,
+}
+
+/// The most bytes of a task payload, Direct3D's.
+pub const MAX_TASK_PAYLOAD: u32 = 16384;
 
 /// What a hit group runs for the geometry it is bound to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
@@ -489,6 +504,8 @@ pub enum StageFacts {
     RayTracing(RayTracingFacts),
     /// A mesh program.
     Mesh(MeshFacts),
+    /// An amplification program.
+    Amplification(AmplificationFacts),
 }
 
 /// What a program exposes: its stage, the varyings it takes and gives, and the resources it binds.
@@ -562,9 +579,25 @@ impl Interface {
                         m.max_vertices, m.max_primitives
                     ));
                 }
+                if m.payload > MAX_TASK_PAYLOAD || m.payload % 4 != 0 {
+                    return Err(format!(
+                        "a mesh program reading a task payload of {} bytes",
+                        m.payload
+                    ));
+                }
                 Ok(())
             }
             (Stage::Mesh, _) => Err("a mesh program without its facts".into()),
+            (Stage::Amplification, StageFacts::Amplification(a)) => {
+                if !(4..=MAX_TASK_PAYLOAD).contains(&a.payload) || a.payload % 4 != 0 {
+                    return Err(format!(
+                        "an amplification program of a task payload of {} bytes",
+                        a.payload
+                    ));
+                }
+                Ok(())
+            }
+            (Stage::Amplification, _) => Err("an amplification program without its facts".into()),
             (stage, StageFacts::RayTracing(r)) if stage.is_ray_tracing() => {
                 if r.export.is_empty() {
                     return Err(format!("a {stage:?} program that names no export"));

@@ -157,6 +157,10 @@ fn lift_program(container: &[u8], bound: &iridia::BoundSizes) -> Result<Program>
     let mut functions = vec![entry];
     functions.extend(patch_constant);
     let mut setup = setup::Setup::new(&chunks, &module, &functions)?;
+    if setup.interface.stage == Stage::Amplification {
+        // naga's module has no task payload to hand a mesh program; the IR lift takes them (`crate::ir`)
+        return Err(error(0, "amplification programs are not lifted"));
+    }
     bound
         .apply(&mut setup.interface)
         .map_err(|why| error(0, format!("bound sizes: {why}")))?;

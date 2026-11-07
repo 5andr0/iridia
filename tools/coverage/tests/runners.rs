@@ -56,11 +56,10 @@ fn the_offload_resource_array_tests_bind_every_element() {
 }
 
 /// The offloader's mesh pipelines (a mesh and a pixel program, `DispatchGroupCount` groups, its default rasterizer
-/// state) and multisampled targets (`SampleCount`, resolved before the read back) draw and reach the image comparison.
-/// The comparison itself needs a checkout of offload-golden-images, which the suite does not copy: the coverage job
-/// holds it, making the table (`docs/coverage`, where these four pass) with the checkout and failing where it differs.
-/// The amplification pipeline is refused, iridia-dxil not lifting amplification programs, and the stencil one is not
-/// modelled.
+/// state; the amplification one's amplification and mesh programs on the IR) and multisampled targets (`SampleCount`,
+/// resolved before the read back) draw and reach the image comparison. The comparison itself needs a checkout of
+/// offload-golden-images, which the suite does not copy: the coverage job holds it, making the table (`docs/coverage`)
+/// with the checkout and failing where it differs. The stencil pipeline is not modelled.
 #[test]
 fn the_offload_mesh_and_multisampled_pipelines_draw_to_their_image_comparisons() {
     let outcomes = offload_outcomes(&[
@@ -73,14 +72,10 @@ fn the_offload_mesh_and_multisampled_pipelines_draw_to_their_image_comparisons()
     ]);
     for (test, outcome) in &outcomes {
         let want = match test.as_str() {
-            "Graphics/MeshShaders/SimpleAmplification.test" => "refused: ",
             "Graphics/MeshShaders/StencilState.test" => "not-modelled: a stencil test",
             _ => "not-modelled: no checkout of offload-golden-images",
         };
         assert!(outcome.starts_with(want), "{test}: {outcome}");
-        if want == "refused: " {
-            assert!(outcome.contains("amplification"), "{test}: {outcome}");
-        }
     }
 }
 
@@ -579,10 +574,12 @@ fn a_multisampled_target_is_drawn_and_read_by_its_samples() {
 /// A mesh dispatch runs the mesh program's thread groups and draws the primitives they emit with the pixel program,
 /// held to vkd3d's expected values: mesh.shader_test's sections without an amplification program (lines 35, 66, 101
 /// and 143: the output counts the first thread sets, vertices and indices written by several threads, and each
-/// coordinate by a thread of its own). Refused by name: the pixel program reading primitive outputs (line 205, a
-/// `winbug(amd)` probe the case file keeps as a driver's bug), since iridia-dxil does not lift per-primitive outputs,
-/// and the sections with an amplification program (lines 262 to 1440: payloads of each layout and size), since it does
-/// not lift amplification programs.
+/// coordinate by a thread of its own), and those with one, its program and the mesh program on the IR (lines 262,
+/// 322, 395 and 462: a payload of one field, a colour handed over, the first thread's `DispatchMesh` counting with
+/// every thread's write before its barrier, and a payload the two programs declare as different structures). Refused
+/// by name: the pixel program reading primitive outputs (line 205, a `winbug(amd)` probe the case file keeps as a
+/// driver's bug), since the IR carries no per-primitive outputs, and the pixel program of the payloads of each layout
+/// and size (line 1440), which reads an input at a computed row.
 #[test]
 fn a_mesh_dispatch_draws_the_primitives_its_program_emits() {
     let text = read_text(&suite("vkd3d/dxil.json.gz")).expect("the vkd3d case file");
@@ -598,9 +595,9 @@ fn a_mesh_dispatch_draws_the_primitives_its_program_emits() {
     for r in &runs {
         for p in &r.probes {
             let (class, why) = match p.line {
-                ..205 => ("pass", ""),
                 205 => ("refused", "per-primitive outputs"),
-                _ => ("not modelled", "amplification"),
+                1440 => ("refused", "an input read at a computed row or column"),
+                _ => ("pass", ""),
             };
             assert_eq!(
                 p.outcome.class(),

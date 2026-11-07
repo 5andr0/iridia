@@ -927,6 +927,15 @@ impl<'a> Parser<'a> {
                 indices: self.value_id(v)?,
             }));
         }
+        if let Some(rest) = line.strip_prefix("dispatch mesh ") {
+            let Some((groups, payload)) = rest.split_once(", ") else {
+                return self.fail("a mesh launch without its payload");
+            };
+            return Ok(Some(Node::DispatchMesh {
+                groups: self.value_id(groups)?,
+                payload: self.var(payload)?,
+            }));
+        }
         if let Some(rest) = line.strip_prefix("mesh counts ") {
             let Some((vertices, primitives)) = rest.split_once(", ") else {
                 return self.fail("mesh counts without both counts");
@@ -1239,9 +1248,10 @@ pub fn parse(text: &str) -> core::result::Result<Function, TextError> {
             Some((t, init)) => (t, init.strip_suffix('}')),
             None => (t, None),
         };
-        let (t, space) = match t.strip_suffix(" workgroup") {
-            Some(t) => (t, Space::Workgroup),
-            None => (t, Space::Private),
+        let (t, space) = match (t.strip_suffix(" workgroup"), t.strip_suffix(" payload")) {
+            (Some(t), _) => (t, Space::Workgroup),
+            (_, Some(t)) => (t, Space::Payload),
+            _ => (t, Space::Private),
         };
         let (ty, len) = match t.strip_prefix('[').and_then(|x| x.strip_suffix(']')) {
             Some(inner) => {

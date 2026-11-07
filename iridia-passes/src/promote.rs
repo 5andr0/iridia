@@ -326,17 +326,13 @@ fn renumber(f: &mut Function, r: &mut Region, keep: &[Option<VarId>]) {
         }
     };
     for n in &mut r.nodes {
-        match n {
-            Node::Value(v) => match f.values.get_mut(v.0 as usize).map(|d| &mut d.op) {
-                Some(Op::LoadVar(var) | Op::LoadElement(var, ..))
-                | Some(Op::Atomic {
-                    memory: Memory::Var(var, _),
-                    ..
-                }) => new(var),
-                _ => {}
-            },
-            Node::StoreVar(var, _) | Node::StoreElement(var, ..) => new(var),
-            _ => {}
+        if let Node::Value(v) = n
+            && let Some(var) = f.values.get_mut(v.0 as usize).and_then(|d| d.op.var_mut())
+        {
+            new(var);
+        }
+        for var in n.vars_mut() {
+            new(var);
         }
         for inner in n.regions_mut() {
             renumber(f, inner, keep);

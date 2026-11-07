@@ -48,6 +48,7 @@ fn interface() -> Interface {
             topology: MeshTopology::Triangle,
             max_vertices: 4,
             max_primitives: 2,
+            payload: 0,
         }),
     }
 }
@@ -63,6 +64,7 @@ fn mesh_with(vertices: u32, triangle: [u32; 3]) -> Program {
         topology: MeshTopology::Triangle,
         max_vertices: 4,
         max_primitives: 2,
+        payload: 0,
     };
     let io = entry_io(&interface).unwrap();
     assert!(io.results.is_empty());
@@ -225,6 +227,7 @@ fn a_mesh_program_without_its_facts_or_with_none_to_write_is_refused() {
         topology: MeshTopology::Line,
         max_vertices: 300,
         max_primitives: 1,
+        payload: 0,
     });
     assert!(p.interface.verify().unwrap_err().contains("300 vertices"));
 }

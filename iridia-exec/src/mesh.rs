@@ -9,6 +9,7 @@
 //! and a count past the most the program declares, or an index past the vertices it counted, is an error of the run:
 //! D3D leaves both undefined.
 
+use super::amplification::Launch;
 use super::geometry::Vertex;
 use super::stage::{Bindings, Constants};
 use super::{Executable, error};
@@ -76,7 +77,7 @@ impl MeshShader {
             ));
         }
         let (_, words) = executable
-            .mesh_output
+            .group_output
             .ok_or_else(|| error("a mesh program without its output variable"))?;
         let shader = Self {
             bindings: Bindings::new(&interface).map_err(error)?,
@@ -147,15 +148,54 @@ impl MeshShader {
         groups: [u32; 3],
         wave: u32,
     ) -> Result<Vec<Meshlet>, Error> {
+        self.run(constants, sampler, groups, wave, &[])
+    }
+
+    /// Run the thread groups of an amplification program's launch, each handed its task payload, and return the
+    /// meshlet each wrote, as [`MeshShader::draw`] does. The amplification program's payload must be as large as the
+    /// mesh program's (Direct3D's runtime requires it).
+    pub fn draw_launch(
+        &self,
+        constants: &Constants,
+        sampler: &mut dyn Sampler,
+        launch: &Launch,
+        wave: u32,
+    ) -> Result<Vec<Meshlet>, Error> {
+        let words = self.facts.payload.div_ceil(4) as usize;
+        if launch.payload.len() != words {
+            return Err(error(format!(
+                "a launch of {} payload words, the mesh program's payload is {} bytes",
+                launch.payload.len(),
+                self.facts.payload
+            )));
+        }
+        self.run(constants, sampler, launch.groups, wave, &launch.payload)
+    }
+
+    fn run(
+        &self,
+        constants: &Constants,
+        sampler: &mut dyn Sampler,
+        groups: [u32; 3],
+        wave: u32,
+        payload: &[u32],
+    ) -> Result<Vec<Meshlet>, Error> {
         let bound = self.bindings.bind(&self.executable, constants).map_err(error)?;
         let mut backend = self.bindings.backend(sampler);
         let layout = self.layout();
         let mut meshlets = Vec::new();
         self.executable
-            .dispatch_mesh(&bound, &mut backend, groups, wave, &mut |group, words| {
-                meshlets.push(self.read(&layout, group, words)?);
-                Ok(())
-            })
+            .dispatch_mesh(
+                &bound,
+                &mut backend,
+                groups,
+                wave,
+                payload,
+                &mut |group, words| {
+                    meshlets.push(self.read(&layout, group, words)?);
+                    Ok(())
+                },
+            )
             .map_err(error)?;
         Ok(meshlets)
     }

@@ -1,5 +1,7 @@
 # lifted fixtures of iridia-dxil
 # versions lifter=10 program=4
+amplification.dxil	refused	DXIL at bit 0: amplification programs are not lifted
+amplification_mesh.dxil	refused	DXIL at bit 12070: a mesh program that reads a task payload (amplification programs are not lifted)
 arrays.66.dxil	lifted	6f1dc3bcd4a1ab83f855c3132276ab328a8cbe4a51cffb61a3f33183a45a1755
 arrays.dxil	lifted	f0560d6870a27811ea7033f6307b7b9f2dd81589c5c0f31146ba009db0aac7d0
 arrays.od.dxil	lifted	0ef3b19d1d800f49527829c3d0f4c555fd7c14951f69aada17fc95728f390620
@@ -55,6 +57,9 @@ mesh.66.dxil	lifted	2ff4da4b8744ae6f4b68593ea4c31dc221235d126ac787c89fc19f667f58
 mesh.dxil	lifted	ee70bbb9104756a9693b28dc4b418decc1e5964e59c160a10e4a6a0e9a321d98
 mesh.od.dxil	lifted	1973d8505e062743fdc1da42f2293d343e0ef1628e3626f3c4c8e5f3e46c3e1e
 ops.dxil	lifted	08bd9f83f1503b76ab45251a7b723b11fc947e8737e6118b1b2085d8e0844cd5
+payload_halves.dxil	refused	DXIL at bit 0: amplification programs are not lifted
+payload_layout.dxil	refused	DXIL at bit 0: amplification programs are not lifted
+payload_layout_mesh.dxil	refused	DXIL at bit 12332: a mesh program that reads a task payload (amplification programs are not lifted)
 pixel_ops.66.dxil	lifted	1e2c00216ed3876e586244fd3a9c913c94a42a45b9b80360e5e86132f68ab053
 pixel_ops.dxil	lifted	8e1ea84f24eb6d9dd2e0f7cd621a6e1a7ddbe739ab3f23253a95a8b2d149596a
 pixel_ops.od.dxil	lifted	254bc3ec74818ce9f9ca9808ee96cad0653f1e747f85f6b04c3fc0ca6b97d379

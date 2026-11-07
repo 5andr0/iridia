@@ -2069,6 +2069,9 @@ impl Lower<'_> {
             Node::SetMeshCounts { .. } | Node::StoreVertex { .. } | Node::StoreIndices { .. } => {
                 return Err(err("a mesh program's meshlet is not lowered yet"));
             }
+            Node::DispatchMesh { .. } => {
+                return Err(err("an amplification program's mesh launch is not lowered yet"));
+            }
             Node::If {
                 cond,
                 accept,
@@ -2408,6 +2411,9 @@ pub fn module(program: &Program, plan: &BindingPlan) -> Result<naga::Module, Err
         }
     }
     for (n, var) in f.vars.iter().enumerate() {
+        if var.space == iridia_ir::Space::Payload {
+            return Err(err("a mesh program's task payload is not lowered yet"));
+        }
         let workgroup = var.space == iridia_ir::Space::Workgroup;
         // a variable an atomic reaches is made of atomic words, which WGSL has in workgroup memory only
         let atomic = u32::try_from(n)

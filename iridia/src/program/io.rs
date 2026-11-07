@@ -108,10 +108,16 @@ fn builtin(stage: Stage, output: bool, system: SystemValue) -> Option<naga::Buil
         (Stage::Pixel, false, PrimitiveIndex) => naga::BuiltIn::PrimitiveIndex,
         (Stage::Pixel, false, SampleIndex) => naga::BuiltIn::SampleIndex,
         (Stage::Pixel, _, Coverage) => naga::BuiltIn::SampleMask,
-        (Stage::Compute | Stage::Mesh, false, GroupId) => naga::BuiltIn::WorkGroupId,
-        (Stage::Compute | Stage::Mesh, false, GroupThreadId) => naga::BuiltIn::LocalInvocationId,
-        (Stage::Compute | Stage::Mesh, false, DispatchThreadId) => naga::BuiltIn::GlobalInvocationId,
-        (Stage::Compute | Stage::Mesh, false, GroupIndex) => naga::BuiltIn::LocalInvocationIndex,
+        (Stage::Compute | Stage::Mesh | Stage::Amplification, false, GroupId) => naga::BuiltIn::WorkGroupId,
+        (Stage::Compute | Stage::Mesh | Stage::Amplification, false, GroupThreadId) => {
+            naga::BuiltIn::LocalInvocationId
+        }
+        (Stage::Compute | Stage::Mesh | Stage::Amplification, false, DispatchThreadId) => {
+            naga::BuiltIn::GlobalInvocationId
+        }
+        (Stage::Compute | Stage::Mesh | Stage::Amplification, false, GroupIndex) => {
+            naga::BuiltIn::LocalInvocationIndex
+        }
         (Stage::Compute | Stage::Pixel, false, LaneIndex) => naga::BuiltIn::SubgroupInvocationId,
         (Stage::Compute | Stage::Pixel, false, LaneCount) => naga::BuiltIn::SubgroupSize,
         // naga has no conservative-depth variants: the depth hints are not carried
@@ -385,9 +391,9 @@ pub fn mesh_vertex_io(interface: &Interface) -> Result<Vec<IoItem>, String> {
 /// system value no stage binding exists for).
 pub fn entry_io(interface: &Interface) -> Result<EntryIo, String> {
     let stage = interface.stage;
-    // a mesh program takes a compute program's ids and returns nothing: what it writes is in the module's output
-    // variable, a member of its vertex type for each output varying (see [`mesh_vertex_io`])
-    if stage == Stage::Mesh {
+    // a mesh or amplification program takes a compute program's ids and returns nothing: what a mesh program writes is
+    // in the module's output variable, a member of its vertex type for each output varying (see [`mesh_vertex_io`])
+    if matches!(stage, Stage::Mesh | Stage::Amplification) {
         let mut ids = interface.clone();
         ids.stage = Stage::Compute;
         ids.outputs.clear();

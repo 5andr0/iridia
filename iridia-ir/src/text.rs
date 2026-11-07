@@ -198,15 +198,17 @@ fn barrier(b: &Barrier) -> String {
     out
 }
 
-/// A variable's declaration after `var `: `name: T`, an array `name: [T; n]`, in workgroup memory `... workgroup`,
-/// with a start `... = {T(..), ...}`.
+/// A variable's declaration after `var `: `name: T`, an array `name: [T; n]`, in workgroup memory `... workgroup`, a
+/// task payload `... payload`, with a start `... = {T(..), ...}`.
 fn declaration(out: &mut String, v: &Var) {
     let _ = match v.len {
         None => write!(out, "{}: {}", v.name, v.ty),
         Some(n) => write!(out, "{}: [{}; {n}]", v.name, v.ty),
     };
-    if v.space == Space::Workgroup {
-        out.push_str(" workgroup");
+    match v.space {
+        Space::Private => {}
+        Space::Workgroup => out.push_str(" workgroup"),
+        Space::Payload => out.push_str(" payload"),
     }
     if !v.init.is_empty() {
         out.push_str(" = {");
@@ -550,6 +552,15 @@ impl Printer<'_> {
             Node::StoreIndices { primitive, indices } => {
                 self.indent();
                 let _ = writeln!(self.out, "store indices %{} = %{}", primitive.0, indices.0);
+            }
+            Node::DispatchMesh { groups, payload } => {
+                self.indent();
+                let name = self
+                    .f
+                    .vars
+                    .get(payload.0 as usize)
+                    .map_or("?", |d| d.name.as_str());
+                let _ = writeln!(self.out, "dispatch mesh %{}, {name}", groups.0);
             }
             Node::Switch {
                 label,

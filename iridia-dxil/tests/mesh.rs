@@ -22,6 +22,7 @@ fn a_mesh_program_is_a_mesh_entry_point_with_its_facts() {
                 topology: MeshTopology::Triangle,
                 max_vertices: 4,
                 max_primitives: 2,
+                payload: 0,
             }),
             "{name}"
         );

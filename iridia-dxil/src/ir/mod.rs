@@ -16,6 +16,7 @@
 
 mod dxop;
 mod mesh;
+mod payload;
 mod resources;
 mod stages;
 mod values;
@@ -85,13 +86,14 @@ pub fn lift_with(container: &[u8], bound: &iridia::BoundSizes) -> Result<Program
             | Stage::Domain
             | Stage::Geometry
             | Stage::Mesh
+            | Stage::Amplification
     ) {
         return Err(error(
             0,
             format!("a {stage:?} program is not lifted onto the IR yet"),
         ));
     }
-    let workgroup = if matches!(stage, Stage::Compute | Stage::Mesh) {
+    let workgroup = if stage.has_thread_groups() {
         Some(
             reflection::num_threads(&module)
                 .map_err(read)?
@@ -162,19 +164,18 @@ pub(crate) enum Lv {
     /// A resource handle: the interface resource it names, and for an element of an array of resources the element
     /// (from the range's first register) the program picked.
     Handle(Res),
-    /// A pointer into a variable of 32-bit words: the variable and the word it reaches (a fixed word, or a `u32`
-    /// value).
+    /// A pointer into a variable: the variable and where in it the pointer reaches.
     Pointer(Pointer),
     /// A pointer into dxc's no-op marker globals (`dx.nothing`): a load of it is zero and a store does nothing.
     Nothing,
 }
 
-/// Where a pointer reaches: a word of a variable.
+/// Where a pointer reaches in a variable: a fixed offset plus, where the pointer was computed, a `u32` value; in words,
+/// or in bytes in a variable a task payload lives in (see [`payload`]).
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Pointer {
     pub var: VarId,
-    /// The word: a fixed one plus, where the pointer was computed, a `u32` value.
-    pub word: u32,
+    pub at: u32,
     pub index: Option<IrValue>,
 }
 
@@ -247,6 +248,12 @@ pub(crate) struct Lift<'m> {
     params: Vec<Vec<(ValueId, IrValue)>>,
     /// The variable of each `alloca` and module global the program reaches as memory.
     memory: BTreeMap<ValueId, VarId>,
+    /// The allocas and module globals an amplification program hands to `DispatchMesh`, and the variables laid out
+    /// in bytes: those, and a mesh program's task payload.
+    payload_roots: BTreeSet<ValueId>,
+    bytes: BTreeSet<VarId>,
+    /// A mesh program's task payload, made where `GetMeshPayload` first reads it.
+    mesh_payload: Option<VarId>,
     /// What the lift approximates or assumes, each once.
     pub(crate) notes: BTreeSet<String>,
     /// The bit offset of the instruction being lifted, for refusals.
@@ -276,6 +283,9 @@ impl<'m> Lift<'m> {
             llvm_blocks: Vec::new(),
             params: Vec::new(),
             memory: BTreeMap::new(),
+            payload_roots: BTreeSet::new(),
+            bytes: BTreeSet::new(),
+            mesh_payload: None,
             notes: BTreeSet::new(),
             at: 0,
             lane: None,

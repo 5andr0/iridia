@@ -594,6 +594,9 @@ pub(super) enum GlobalKind {
     StorageArray(ResourceId, u32),
     /// Thread-group memory of this many words, zero at the start of every group.
     Workgroup(u32),
+    /// A mesh program's task payload of this many words: what the launching amplification group handed every group
+    /// of its launch.
+    Payload(u32),
 }
 #[derive(Clone, Debug)]
 pub(super) struct GlobalDesc {
@@ -626,10 +629,11 @@ pub struct Executable {
     pub(super) globals: Vec<GlobalDesc>,
     /// Whether 32-bit denormals are flushed to zero (the program's D3D modes).
     pub(super) flush_denormals: bool,
-    /// The thread group of a compute or mesh program.
+    /// The thread group of a compute, mesh or amplification program.
     pub(super) workgroup: Option<[u32; 3]>,
-    /// A mesh program's output variable: its index among the globals and its words.
-    pub(super) mesh_output: Option<(usize, u32)>,
+    /// The thread-group memory a group leaves for the draw when it has finished, its index among the globals and its
+    /// words: a mesh program's meshlet (its output variable), an amplification program's launch.
+    pub(super) group_output: Option<(usize, u32)>,
     /// Per entry argument, the built-in it carries.
     pub(super) builtins: Vec<Option<naga::BuiltIn>>,
     /// The type of each register an [`Op::Ir`] reads or writes, by register (empty for a program compiled from a naga

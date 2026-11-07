@@ -9,6 +9,7 @@
 //! output carries reads 0. The vertices between stages are one register per varying, in the order of the program's
 //! interface, each varying's lanes from the first (the form `iridia_exec`'s stage drivers take and give).
 use iridia::{Interface, SystemValue, TessTopology, Varying};
+use iridia_exec::amplification::AmplificationShader;
 use iridia_exec::draw::{Corners, DrawStats, Primitive, Rasterizer, ShadedDraw, Surface};
 use iridia_exec::geometry::{GeometryShader, Topology, Vertex};
 use iridia_exec::mesh::MeshShader;
@@ -247,12 +248,13 @@ impl Stages<'_> {
     }
 }
 
-/// A mesh dispatch (`DispatchMesh`, no amplification program): `ms` runs `groups` thread groups, each writing a
-/// meshlet, and `ps` runs over the meshlets' primitives in the order of the dispatch. A primitive's number
-/// (`SV_PrimitiveID`, which a mesh program writes per primitive where its pixel program reads it) is its place in its
-/// meshlet here.
+/// A mesh dispatch (`DispatchMesh`): `ms` runs `groups` thread groups, each writing a meshlet, or with an amplification
+/// program `amplification` runs `groups` thread groups that launch `ms`'s, and `ps` runs over the meshlets' primitives
+/// in the order of the dispatch. A primitive's number (`SV_PrimitiveID`, which a mesh program writes per primitive
+/// where its pixel program reads it) is its place in its meshlet here.
 #[allow(clippy::too_many_arguments)]
 pub fn mesh_draw(
+    amplification: Option<&AmplificationShader>,
     ms: &MeshShader,
     ps: &ProgramShader,
     groups: [u32; 3],
@@ -263,10 +265,17 @@ pub fn mesh_draw(
     state: &Rasterizer,
     surface: &mut Surface,
 ) -> Result<DrawStats, Stopped> {
-    let constants = constants_of(ms.interface(), rows);
-    let meshlets = ms
-        .draw(&constants, sampler, groups, wave)
-        .map_err(|e| Stopped::Failed("ms", e.to_string()))?;
+    let mut constants = constants_of(ms.interface(), rows);
+    let meshlets = match amplification {
+        Some(a) => {
+            constants.extend(constants_of(a.interface(), rows));
+            a.draw(ms, &constants, sampler, groups, wave)
+                .map_err(|e| Stopped::Failed("as", e.to_string()))?
+        }
+        None => ms
+            .draw(&constants, sampler, groups, wave)
+            .map_err(|e| Stopped::Failed("ms", e.to_string()))?,
+    };
     let mut vertices: Vec<Vertex> = Vec::new();
     let mut primitives = Vec::new();
     for meshlet in meshlets {

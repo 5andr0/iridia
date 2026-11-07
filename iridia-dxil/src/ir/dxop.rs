@@ -312,7 +312,7 @@ impl Lift<'_> {
             }
             97..=99 => self.stream_op(code, args),
             110..=123 | 135 | 136 => self.wave(inst, code, args),
-            168..=173 => self.mesh_op(code, args),
+            168..=173 => self.mesh_op(code, args, inst.result.map(|(v, _)| v)),
             100 => self.pipeline_value(inst, Builtin::GsInstance),
             103 => self.load_output_control_point(inst, args),
             104 => self.load_patch_constant(inst, args),

@@ -1952,7 +1952,7 @@ pub(super) fn compile(
         .zip(&arg_at)
         .filter_map(|(a, at)| a.map(|(off, count, width)| (*at, off, count, width)))
         .collect();
-    let mesh_output = match ep.and_then(|e| e.mesh_info.as_ref()) {
+    let group_output = match ep.and_then(|e| e.mesh_info.as_ref()) {
         Some(info) => {
             let global = *gid_of
                 .get(&info.output_variable.index())
@@ -1981,7 +1981,7 @@ pub(super) fn compile(
         workgroup: ep
             .filter(|_| matches!(p.stage, iridia::Stage::Compute | iridia::Stage::Mesh))
             .map(|e| e.workgroup_size),
-        mesh_output,
+        group_output,
         builtins: f
             .arguments
             .iter()

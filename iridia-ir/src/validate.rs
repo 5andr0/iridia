@@ -6,7 +6,8 @@ use core::fmt;
 
 use crate::{
     AtomicOp, Barrier, Binary, Block, Body, Builtin, End, Function, GatherOffset, LabelId, Level, Memory,
-    Node, Op, Program, Query, Region, Res, Scalar, Terminator, Ternary, Type, Unary, ValueId, Wave, WaveOp,
+    Node, Op, Program, Query, Region, Res, Scalar, Terminator, Ternary, Type, Unary, ValueId, VarId, Wave,
+    WaveOp,
     interface::{
         BufferKind, Interface, Resource, ResourceKind, SampleType, ScalarType, Stage, StageFacts,
         StorageTarget, TextureDim, Value, Varying,
@@ -797,6 +798,12 @@ fn stated(op: &Op, t: Type, f: &Function, interface: &Interface) -> Result<(), S
                 }
                 Memory::Var(x, i) => {
                     let d = var(*x)?;
+                    if d.space == crate::Space::Payload {
+                        return Err(format!(
+                            "an atomic operation on task payload {}, which is read alone",
+                            d.name
+                        ));
+                    }
                     if d.len.is_some() != i.is_some() {
                         return Err(format!("an atomic operation on {} without its element", d.name));
                     }
@@ -846,6 +853,15 @@ impl Checker<'_> {
     }
     fn ty(&self, v: ValueId) -> Option<Type> {
         self.f.ty(v)
+    }
+    /// A store into variable `var`: a task payload is read alone.
+    fn writable(&mut self, var: VarId, value: ValueId) {
+        if let Some(d) = self.f.vars.get(var.0 as usize)
+            && d.space == crate::Space::Payload
+        {
+            let m = format!("a store to task payload {}, which is read alone", d.name);
+            self.problem(Some(value), m);
+        }
     }
     fn uses(&mut self, at: Option<ValueId>, v: ValueId) {
         if !self.visible.get(v.0 as usize).copied().unwrap_or(false) {
@@ -971,6 +987,7 @@ impl Checker<'_> {
             Node::Demote => {}
             Node::StoreVar(var, value) => {
                 self.uses(None, *value);
+                self.writable(*var, *value);
                 match (self.f.vars.get(var.0 as usize), self.ty(*value)) {
                     (Some(d), Some(t)) if d.ty == t => {}
                     (Some(d), Some(t)) => {
@@ -986,6 +1003,7 @@ impl Checker<'_> {
             Node::StoreElement(var, i, value, _) => {
                 self.uses(None, *i);
                 self.uses(None, *value);
+                self.writable(*var, *value);
                 match self.f.vars.get(var.0 as usize) {
                     Some(d) if d.len.is_none() => {
                         let m = format!("an element store to {}, which is not an array", d.name);
@@ -1113,10 +1131,11 @@ impl Checker<'_> {
                 }
             }
             // a storage fence alone orders one invocation's memory operations, which any stage may
-            Node::Barrier(b)
-                if (b.execution || b.workgroup) && !matches!(self.stage, Stage::Compute | Stage::Mesh) =>
-            {
-                self.problem(None, "a workgroup barrier outside a compute or mesh program");
+            Node::Barrier(b) if (b.execution || b.workgroup) && !self.stage.has_thread_groups() => {
+                self.problem(
+                    None,
+                    "a workgroup barrier outside a compute, mesh or amplification program",
+                );
             }
             Node::Barrier(b) if *b == Barrier::default() => self.problem(None, "a barrier of nothing"),
             Node::Barrier(_) => {}
@@ -1124,6 +1143,43 @@ impl Checker<'_> {
                 self.problem(None, "a vertex emitted or a strip cut outside a geometry program");
             }
             Node::Emit(_) | Node::Cut(_) => {}
+            Node::DispatchMesh { .. } if self.stage != Stage::Amplification => {
+                self.problem(None, "a mesh launch outside an amplification program");
+            }
+            Node::DispatchMesh { groups, payload } => {
+                self.uses(None, *groups);
+                if self.ty(*groups) != Some(Type::vector(Scalar::U32, 3)) {
+                    self.problem(
+                        Some(*groups),
+                        "a mesh launch of other thread groups than a vec3<u32>",
+                    );
+                }
+                let bytes = match self.interface.facts {
+                    StageFacts::Amplification(a) => a.payload,
+                    _ => 0,
+                };
+                match self.f.vars.get(payload.0 as usize) {
+                    None => self.problem(
+                        None,
+                        format!("a mesh launch of variable {}, which does not exist", payload.0),
+                    ),
+                    Some(d) if d.space == crate::Space::Payload => {
+                        self.problem(
+                            None,
+                            format!("a mesh launch of {}, a mesh program's task payload", d.name),
+                        );
+                    }
+                    Some(d) if d.ty != Type::U32 || d.len != Some(bytes.div_ceil(4)) => {
+                        let m = format!(
+                            "a mesh launch of {}, not the {} u32 words of the {bytes}-byte payload the facts state",
+                            d.name,
+                            bytes.div_ceil(4)
+                        );
+                        self.problem(None, m);
+                    }
+                    Some(_) => {}
+                }
+            }
             Node::SetMeshCounts { .. } | Node::StoreVertex { .. } | Node::StoreIndices { .. }
                 if self.stage != Stage::Mesh =>
             {
@@ -1580,11 +1636,35 @@ fn check_function(p: &Program, f: &Function, patch: bool, problems: &mut Vec<Pro
         patch,
     };
     for v in &f.vars {
-        if v.space == crate::Space::Workgroup && !matches!(p.stage, Stage::Compute | Stage::Mesh) {
+        if v.space == crate::Space::Workgroup && !p.stage.has_thread_groups() {
             c.problem(
                 None,
-                format!("workgroup variable {} outside a compute or mesh program", v.name),
+                format!(
+                    "workgroup variable {} outside a compute, mesh or amplification program",
+                    v.name
+                ),
             );
+        }
+        if v.space == crate::Space::Payload {
+            let bytes = match p.interface.facts {
+                StageFacts::Mesh(m) => Some(m.payload),
+                _ => None,
+            };
+            match bytes {
+                None => c.problem(None, format!("task payload {} outside a mesh program", v.name)),
+                Some(b) if v.ty != Type::U32 || v.len != Some(b.div_ceil(4)) || b == 0 => c.problem(
+                    None,
+                    format!(
+                        "task payload {} is not the {} u32 words of the {b}-byte payload the facts state",
+                        v.name,
+                        b.div_ceil(4)
+                    ),
+                ),
+                Some(_) if !v.init.is_empty() => {
+                    c.problem(None, format!("task payload {} has a start of its own", v.name));
+                }
+                Some(_) => {}
+            }
         }
         if !v.init.is_empty() && v.init.len() != v.len.map_or(1, |n| n as usize) {
             c.problem(
@@ -1633,18 +1713,19 @@ pub fn validate(p: &Program) -> Result<(), Vec<Problem>> {
         }),
         (None, _) => {}
     }
-    match (p.workgroup, matches!(p.stage, Stage::Compute | Stage::Mesh)) {
+    match (p.workgroup, p.stage.has_thread_groups()) {
         (Some(size), true) if size.contains(&0) => problems.push(Problem {
             value: None,
             message: "a thread group with no invocations along an axis".into(),
         }),
         (None, true) => problems.push(Problem {
             value: None,
-            message: "a compute or mesh program without its thread group".into(),
+            message: "a compute, mesh or amplification program without its thread group".into(),
         }),
         (Some(_), false) => problems.push(Problem {
             value: None,
-            message: "a thread group in a program that is not a compute or mesh program".into(),
+            message: "a thread group in a program that is not a compute, mesh or amplification program"
+                .into(),
         }),
         _ => {}
     }

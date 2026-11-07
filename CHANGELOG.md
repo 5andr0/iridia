@@ -22,6 +22,27 @@
   time (SMB shares refuse many parallel reads, Windows error 1450) while the programs are checked in parallel; the
   programs come in the order the folder walk gave, so every count is the same. The slim set, the Elden Ring and skate.
   corpora and Shaun White's sdb2 are archives in 0.2.6, read on every thread, with the same counts.
+- `iridia-ir`: amplification programs. `Stage::Amplification` with `StageFacts::Amplification` (`AmplificationFacts`:
+  the task payload's bytes; `MeshFacts::payload` the mesh program's, at most `MAX_TASK_PAYLOAD`, 16384);
+  `Node::DispatchMesh` (the mesh thread groups, a `vec3<u32>`, and the variable whose words are the payload: a barrier
+  every invocation reaches once, the first invocation's values counting), in the text form as
+  `dispatch mesh %g, name`; `Space::Payload`, a mesh program's task payload, read alone (`var name: [u32; n] payload`).
+  `Stage::has_thread_groups` names the compute, mesh and amplification stages. `iridia-exec` runs one
+  (`amplification::AmplificationShader`: `launches` gives each thread group's `Launch`, its mesh thread groups and
+  payload words; `draw` runs each launch's mesh thread groups too), and `MeshShader::draw_launch` runs a launch;
+  `Executable::dispatch_amplification_elements` runs one on given memory. Breaking: `dispatch_mesh_elements` takes the
+  payload the mesh program reads (`&[]` for none), and `Space` and `Node` have new variants (a match of every
+  variant needs the new arms).
+  `iridia-naga` refuses both by name.
+- `iridia-dxil::ir` lifts amplification programs and a mesh program's payload: `DispatchMesh`, `GetMeshPayload`, and
+  the payload's memory laid out in bytes as the module's datalayout lays out its structure (each field at its natural
+  alignment, a bool four bytes), so the two programs agree on its bytes whatever structures they declare; a halfword
+  store into a groupshared payload keeps the other half of its word. The coverage runners draw an amplification
+  pipeline (offload's mesh pipelines, vkd3d's `dispatch-mesh`) with the IR's lift of its amplification and mesh
+  programs.
+- `iridia-passes::promote` renumbers every variable a node or operation names among those it keeps: a mesh launch's
+  payload was left at its old number, so a private variable promoted ahead of it left the launch naming another.
+  `Node::vars_mut`, `Op::var` and `Op::var_mut` name them.
 - `iridia-ir`'s `f32tof16` gives the quiet NaN 0x7e00 for every NaN (`iridia-exec-ir`'s definition, the WGSL
   `iridia-naga` writes for it, and `pack2x16float` in `iridia-exec`): the sign and payload of an operation's NaN are
   open in IEEE 754, and two lifts or a pass that orders an operation's operands otherwise made different ones, which

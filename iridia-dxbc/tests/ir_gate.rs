@@ -1702,6 +1702,7 @@ fn dispatch(exe: &Executable, program: &iridia::Program, c: u32) -> Result<Memor
             &mut s.elements,
             GROUPS,
             32,
+            &[],
             &mut |_, words| {
                 meshlets.push(words.to_vec());
                 Ok(())

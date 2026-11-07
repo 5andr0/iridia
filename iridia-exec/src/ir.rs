@@ -55,6 +55,15 @@ struct Emitted {
     strips: u32,
 }
 
+/// An amplification program's launch: a workgroup global in the words [`crate::amplification::AmplificationShader`]
+/// reads, how many invocations reached `DispatchMesh`, the thread groups along x, y and z, then the payload's words.
+#[derive(Clone)]
+struct Launch {
+    global: u32,
+    /// The payload's words.
+    payload: u32,
+}
+
 /// A mesh program's meshlet: a workgroup global in the words [`crate::mesh::MeshShader`] reads, the two counts, then
 /// each vertex's outputs packed, then each primitive's indices.
 #[derive(Clone)]
@@ -160,6 +169,8 @@ struct Cx<'p> {
     emitted: Option<Emitted>,
     /// A mesh program's meshlet.
     meshlet: Option<Meshlet>,
+    /// An amplification program's launch.
+    launch: Option<Launch>,
     /// Per interface output: its first local word and its words.
     outputs: Vec<(u32, u32)>,
     /// The members of the result, in the order of the entry point's results.
@@ -843,6 +854,80 @@ impl Cx<'_> {
         }
     }
 
+    /// `Node::DispatchMesh`: at a barrier each invocation counts itself into the launch's first word, and the first
+    /// invocation (the one that finds it zero: the atomic operations run in lane order) writes the thread groups and
+    /// the payload's words after it; then the invocation ends.
+    fn dispatch_mesh(
+        &mut self,
+        out: &mut Vec<St>,
+        groups: ValueId,
+        payload: ir::VarId,
+    ) -> Result<(), String> {
+        let launch = self
+            .launch
+            .clone()
+            .ok_or("a mesh launch outside an amplification program")?;
+        self.statement(out, St::Barrier)?;
+        let zero = self.literal(Type::U32, [0; 4])?;
+        let one = self.literal(Type::U32, [1, 0, 0, 0])?;
+        let reached = self.fresh(Type::U32)?;
+        self.statement(
+            out,
+            St::AtomicWord {
+                at: WordAt::Element {
+                    loc: Loc::Global(launch.global, 0),
+                    index: zero,
+                    len: 1,
+                },
+                fun: AtomOp::Add,
+                signed: false,
+                value: one,
+                compare: None,
+                result: reached,
+            },
+        )?;
+        let p = self.var(payload)?;
+        let words = p.stride.saturating_mul(p.len);
+        if words != launch.payload {
+            return Err(format!(
+                "a mesh launch of {words} payload words, the facts state {}",
+                launch.payload
+            ));
+        }
+        let mut first = Vec::new();
+        self.statement(
+            &mut first,
+            St::Store {
+                loc: Loc::Global(launch.global, 1),
+                src: groups.0,
+                n: 3,
+            },
+        )?;
+        for k in 0..words {
+            let w = self.fresh(Type::U32)?;
+            let loc = match p.loc {
+                Loc::Local(at) => Loc::Local(at.saturating_add(k)),
+                Loc::Global(g, at) => Loc::Global(g, at.saturating_add(k)),
+                Loc::Elem(..) => return Err("a task payload in an array of buffers".into()),
+            };
+            self.ops.push((w, Op::Load { loc, n: 1 }));
+            self.statement(
+                &mut first,
+                St::Store {
+                    loc: Loc::Global(launch.global, k.saturating_add(4)),
+                    src: w,
+                    n: 1,
+                },
+            )?;
+        }
+        out.push(St::If {
+            c: reached,
+            a: Vec::new(),
+            r: first,
+        });
+        self.ret(out)
+    }
+
     /// Leave the function with the outputs stored so far.
     fn ret(&mut self, out: &mut Vec<St>) -> Result<(), String> {
         let mut members = Vec::with_capacity(self.returned.len());
@@ -1100,6 +1185,7 @@ impl Cx<'_> {
                 )
             }
             Node::StoreOutput(slot, mask, v) => self.store_output(out, *slot, *mask, v.0),
+            Node::DispatchMesh { groups, payload } => self.dispatch_mesh(out, *groups, *payload),
             Node::SetMeshCounts { .. } | Node::StoreVertex { .. } | Node::StoreIndices { .. } => {
                 self.meshlet(out, n)
             }
@@ -1534,6 +1620,7 @@ fn start<'p>(p: &'p ir::Program, f: &'p Function) -> Result<Cx<'p>, String> {
         builtins: Vec::new(),
         emitted: None,
         meshlet: None,
+        launch: None,
         outputs: Vec::new(),
         returned: Vec::new(),
         frames: Vec::new(),
@@ -1556,11 +1643,12 @@ fn start<'p>(p: &'p ir::Program, f: &'p Function) -> Result<Cx<'p>, String> {
     Ok(cx)
 }
 
-/// Compile the entry function of `p`, a program of a stage that is an entry point (vertex, pixel, compute, mesh).
+/// Compile the entry function of `p`, a program of a stage that is an entry point (vertex, pixel, compute, mesh,
+/// amplification).
 pub(crate) fn compile(p: &ir::Program) -> Result<Executable, String> {
     if !matches!(
         p.stage,
-        Stage::Vertex | Stage::Pixel | Stage::Compute | Stage::Mesh
+        Stage::Vertex | Stage::Pixel | Stage::Compute | Stage::Mesh | Stage::Amplification
     ) || p.interface.facts == StageFacts::VertexWithoutPosition
     {
         return Err(format!(
@@ -1856,10 +1944,14 @@ fn finish(
             .ok_or("a variable past the words of memory")?;
         let loc = match var.space {
             ir::Space::Private => Loc::Local(cx.grow(words)?),
-            ir::Space::Workgroup => {
+            ir::Space::Workgroup | ir::Space::Payload => {
                 let g = number(cx.globals.len())?;
                 cx.globals.push(GlobalDesc {
-                    kind: GlobalKind::Workgroup(words),
+                    kind: if var.space == ir::Space::Payload {
+                        GlobalKind::Payload(words)
+                    } else {
+                        GlobalKind::Workgroup(words)
+                    },
                     elem_words: stride,
                 });
                 Loc::Global(g, 0)
@@ -1906,19 +1998,33 @@ fn finish(
             n: 1,
         });
     }
-    // a mesh program's meshlet: thread-group memory, read when the group has finished
-    let mesh_output = if p.stage == Stage::Mesh {
-        let m = Meshlet::of(cx.interface, number(cx.globals.len())?)?;
-        let words = m.words()?;
-        cx.globals.push(GlobalDesc {
-            kind: GlobalKind::Workgroup(words),
-            elem_words: 1,
-        });
-        let global = m.global as usize;
-        cx.meshlet = Some(m);
-        Some((global, words))
-    } else {
-        None
+    // a mesh program's meshlet, an amplification program's launch: thread-group memory, read when the group has
+    // finished
+    let group_output = match (p.stage, &p.interface.facts) {
+        (Stage::Mesh, _) => {
+            let m = Meshlet::of(cx.interface, number(cx.globals.len())?)?;
+            let words = m.words()?;
+            cx.globals.push(GlobalDesc {
+                kind: GlobalKind::Workgroup(words),
+                elem_words: 1,
+            });
+            let global = m.global as usize;
+            cx.meshlet = Some(m);
+            Some((global, words))
+        }
+        (Stage::Amplification, StageFacts::Amplification(a)) => {
+            let payload = a.payload.div_ceil(4);
+            let words = payload.saturating_add(4);
+            let global = number(cx.globals.len())?;
+            cx.globals.push(GlobalDesc {
+                kind: GlobalKind::Workgroup(words),
+                elem_words: 1,
+            });
+            cx.launch = Some(Launch { global, payload });
+            Some((global as usize, words))
+        }
+        (Stage::Amplification, _) => return Err("an amplification program without its facts".into()),
+        _ => None,
     };
     let mut out = prologue;
     cx.region(body, Yield::Return, &mut out)?;
@@ -1937,7 +2043,7 @@ fn finish(
         globals: cx.globals,
         flush_denormals: p.float.f32 == ir::Denormals::Flush,
         workgroup: p.workgroup,
-        mesh_output,
+        group_output,
         builtins: arguments.builtins,
         ir_types: cx.types,
     })

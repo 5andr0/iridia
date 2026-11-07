@@ -7,6 +7,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use iridia::{Interface, Program, ResourceKind as IrKind, SystemValue};
+use iridia_exec::amplification::AmplificationShader;
 use iridia_exec::draw::{
     Compare as DepthCompare, Cull, DepthState, DrawShader, Primitive, Rasterizer, Surface,
     Viewport as DrawViewport,
@@ -1006,29 +1007,54 @@ fn raster(
     Ok(Ok(()))
 }
 
-/// Run a mesh pipeline of a mesh and a pixel program as the offloader's D3D12 mesh pipeline state has it:
-/// `DispatchGroupCount` thread groups of the mesh program, the primitives they write drawn with the pixel program, with
-/// a depth buffer, viewport and target as [`raster`]'s but the default rasterizer state (`CD3DX12_RASTERIZER_DESC`:
-/// back faces culled, clockwise triangles front facing), where the traditional pipeline culls none.
+/// Run a mesh pipeline of an optional amplification, a mesh and a pixel program as the offloader's D3D12 mesh pipeline
+/// state has it: `DispatchGroupCount` thread groups of the mesh program, or of the amplification program that launches
+/// the mesh program's, the primitives they write drawn with the pixel program, with a depth buffer, viewport and
+/// target as [`raster`]'s but the default rasterizer state (`CD3DX12_RASTERIZER_DESC`: back faces culled, clockwise
+/// triangles front facing), where the traditional pipeline culls none. With an amplification program, it and the mesh
+/// program run on the IR ([`crate::front::lift_ir`]).
 fn mesh_raster(
     p: &mut Pipeline,
-    ready: &[(String, Arc<Ready>)],
+    programs: &Programs<'_>,
+    digests: &[String],
     rs: Option<&RootSignature>,
 ) -> Result<Result<(), String>, Stopped> {
     let stage = |s: &str| {
         p.shaders
             .iter()
-            .zip(ready)
+            .zip(digests)
             .find(|(sh, _)| sh.stage == s)
-            .map(|(_, r)| r.clone())
+            .map(|(_, name)| name.clone())
     };
-    if stage("Amplification").is_some() {
-        return Err(not_modelled(
-            "an amplification program (iridia-dxil does not lift them)",
-        ));
-    }
-    let (Some((ms_name, ms)), Some((ps_name, ps))) = (stage("Mesh"), stage("Pixel")) else {
+    let (Some(ms_name), Some(ps_name)) = (stage("Mesh"), stage("Pixel")) else {
         return Err(not_modelled("a mesh pipeline without a mesh and a pixel program"));
+    };
+    let ps = ready(programs, &ps_name)?;
+    let lift_ir = |name: &String| -> Result<iridia_ir::Program, Stopped> {
+        let bytes = programs.bytes(name).map_err(Stopped::NotModelled)?;
+        crate::front::lift_ir(&bytes).map_err(|e| match e {
+            Stop::Refused(m) | Stop::Failed(m) => Stopped::Refused(format!("{name}: {m}")),
+        })
+    };
+    let (amplification, mesh) = match stage("Amplification") {
+        Some(as_name) => {
+            let a = match AmplificationShader::from_ir(&lift_ir(&as_name)?) {
+                Ok(a) => a,
+                Err(e) => return Ok(Err(format!("{as_name}: {e}"))),
+            };
+            let m = match MeshShader::from_ir(&lift_ir(&ms_name)?) {
+                Ok(m) => m,
+                Err(e) => return Ok(Err(format!("{ms_name}: {e}"))),
+            };
+            (Some((as_name, a)), m)
+        }
+        None => {
+            let ms = ready(programs, &ms_name)?;
+            match MeshShader::new(Program::clone(&ms.lifted.program)) {
+                Ok(m) => (None, m),
+                Err(e) => return Ok(Err(format!("{ms_name}: {e}"))),
+            }
+        }
     };
     let RasterTarget {
         name: target,
@@ -1042,24 +1068,25 @@ fn mesh_raster(
         .shader
         .as_ref()
         .map_err(|e| Stopped::Refused(format!("{ps_name}: {e}")))?;
-    for (r, name) in [(&ms, &ms_name), (&ps, &ps_name)] {
-        if let Some(why) = unbindable(&r.lifted.program.interface) {
+    let mut named = vec![(mesh.interface(), &ms_name), (psh.interface(), &ps_name)];
+    if let Some((as_name, a)) = &amplification {
+        named.push((a.interface(), as_name));
+    }
+    for (interface, name) in &named {
+        if let Some(why) = unbindable(interface) {
             return Err(not_modelled(format!("{name}: {why}")));
         }
     }
-    let mesh = match MeshShader::new(Program::clone(&ms.lifted.program)) {
-        Ok(m) => m,
-        Err(e) => return Ok(Err(format!("{ms_name}: {e}"))),
-    };
     let l = layout(p, rs)?;
     let (mut device, constants) = device_of(p, &l)?;
     samplers_in_space_0(&l)?;
     let ps_constants = banks_of(psh, &constants);
     let ps_banks: Vec<(u32, &[[u32; 4]])> = ps_constants.iter().map(|(s, r)| (*s, r.as_slice())).collect();
     let rows = rows_of(&constants);
-    let interfaces = [&ms.lifted.program.interface, psh.interface()];
+    let interfaces: Vec<&iridia::Interface> = named.iter().map(|(i, _)| *i).collect();
     let mut requests = SlotRequests::new(&mut device, &interfaces).map_err(Stopped::NotModelled)?;
     match mesh_draw(
+        amplification.as_ref().map(|(_, a)| a),
         &mesh,
         psh,
         p.dispatch,
@@ -1073,7 +1100,11 @@ fn mesh_raster(
         Ok(_) => {}
         Err(StageStop::NotModelled(m)) => return Err(not_modelled(m)),
         Err(StageStop::Failed(stage, m)) => {
-            let name = if stage == "ms" { &ms_name } else { &ps_name };
+            let name = match (stage, &amplification) {
+                ("as", Some((as_name, _))) => as_name,
+                ("ms", _) => &ms_name,
+                _ => &ps_name,
+            };
             return Ok(Err(format!("{name}: {m}")));
         }
     }
@@ -1293,10 +1324,6 @@ fn offload(
             r
         }
         PipelineKind::MeshShaderRaster => {
-            let mut ready_all = Vec::new();
-            for name in digests {
-                ready_all.push((name.clone(), ready(programs, name)?));
-            }
             let bytes = programs.bytes(&digests[0]).map_err(Stopped::NotModelled)?;
             let rs = rts0::of(&bytes).map_err(Stopped::NotModelled)?;
             stdout.push_str(
@@ -1310,7 +1337,7 @@ Buffers created.
 Mesh Shader Pipeline created.
 ",
             );
-            let r = mesh_raster(&mut p, &ready_all, rs.as_ref())?;
+            let r = mesh_raster(&mut p, programs, digests, rs.as_ref())?;
             stdout.push_str(
                 "Graphics command list created complete.
 ",

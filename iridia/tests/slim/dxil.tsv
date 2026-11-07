@@ -13,9 +13,8 @@
 00a96ec6cd444d6bcddf35d584d09d9d196aaf4e2bb42cf4d8a23699b95209a6	IR	lift: a constant load of other than four N-bit lanes (N-bit and N-bit rows are not lifted)
 00a96ec6cd444d6bcddf35d584d09d9d196aaf4e2bb42cf4d8a23699b95209a6	IR WGSL	not reached
 00c09e64b9f4235653ce6f327ef28182ede1411df837902a660c3e668fb6877b	A	lift: N-bit lanes of a raw or structured buffer are not lifted
-00c9dcb40eb1d7f8ab43f02a7286b44ebf5692d80d584a8c4b05fcfdf02509cd	A	lift: amplification shader programs are not lifted
-00c9dcb40eb1d7f8ab43f02a7286b44ebf5692d80d584a8c4b05fcfdf02509cd	IR	lift: amplification shader programs are not lifted
-00c9dcb40eb1d7f8ab43f02a7286b44ebf5692d80d584a8c4b05fcfdf02509cd	IR WGSL	not reached
+00c9dcb40eb1d7f8ab43f02a7286b44ebf5692d80d584a8c4b05fcfdf02509cd	A	lift: amplification programs are not lifted
+00c9dcb40eb1d7f8ab43f02a7286b44ebf5692d80d584a8c4b05fcfdf02509cd	IR WGSL	lower: a Amplification program is not lowered yet
 00cbef051b12e611462bc9b8ff1a5ff541f9f38a3aaa379adc627348b94a016b	A	lift: a value of type Some(Vector(N, N))
 00cbef051b12e611462bc9b8ff1a5ff541f9f38a3aaa379adc627348b94a016b	IR	lift: a vecN<fN> where a fN is read
 00cbef051b12e611462bc9b8ff1a5ff541f9f38a3aaa379adc627348b94a016b	IR WGSL	not reached
@@ -427,8 +426,8 @@
 158b0354c828182ce31b82a06445abd509d78c1ce8ceacaf625ff1514441ddca	IR	lift: the unplaced output SV_StencilRef
 158b0354c828182ce31b82a06445abd509d78c1ce8ceacaf625ff1514441ddca	IR WGSL	not reached
 159e4f253e521ff8b6d57421ade41349682e785e5afa6e9ddd74d18852429144	A	lift: N-bit lanes of a raw or structured buffer are not lifted
-15bafd9f35cb7681d63b58d2555853c0ab46cff937e2d6f9f7dbd8c7bf536424	A	lift: a mesh program that reads a task payload of N bytes (amplification programs are not lifted)
-15bafd9f35cb7681d63b58d2555853c0ab46cff937e2d6f9f7dbd8c7bf536424	IR	lift: a mesh program that reads a task payload of N bytes (amplification programs are not lifted)
+15bafd9f35cb7681d63b58d2555853c0ab46cff937e2d6f9f7dbd8c7bf536424	A	lift: dx.op.viewID.iN: dx.op N is not lifted
+15bafd9f35cb7681d63b58d2555853c0ab46cff937e2d6f9f7dbd8c7bf536424	IR	lift: dx.op.viewID.iN: dx.op N is not lifted onto the IR yet
 15bafd9f35cb7681d63b58d2555853c0ab46cff937e2d6f9f7dbd8c7bf536424	IR WGSL	not reached
 160c0e50d12a969940558d24bedb6d272f978f273510cc8218ee9c478c96448c	A	lift: a constant load of other than four N-bit lanes (N-bit and N-bit rows are not lifted)
 160c0e50d12a969940558d24bedb6d272f978f273510cc8218ee9c478c96448c	IR	lift: a constant load of other than four N-bit lanes (N-bit and N-bit rows are not lifted)
@@ -466,8 +465,8 @@
 178c4190c73218da3deb55cfe587375816f5e47a66ab3ae85343c0981367df16	A	lift: memory of type Half
 178c4190c73218da3deb55cfe587375816f5e47a66ab3ae85343c0981367df16	IR WGSL	lower: an element of an array of resources is not lowered yet
 178c92071c5de5e74a6010a71e344df2b938d258d3e150b50a181082f7b4d6be	A	lift: N-bit lanes of a raw or structured buffer are not lifted
-179191f7dc6ebcd54335bb4f731b2c55ba9d12d060354977a6a881356580a691	A	lift: a mesh program that reads a task payload of N bytes (amplification programs are not lifted)
-179191f7dc6ebcd54335bb4f731b2c55ba9d12d060354977a6a881356580a691	IR	lift: a mesh program that reads a task payload of N bytes (amplification programs are not lifted)
+179191f7dc6ebcd54335bb4f731b2c55ba9d12d060354977a6a881356580a691	A	lift: a mesh program that reads a task payload (amplification programs are not lifted)
+179191f7dc6ebcd54335bb4f731b2c55ba9d12d060354977a6a881356580a691	IR	lift: a mesh program's per-primitive outputs are not lifted onto the IR yet
 179191f7dc6ebcd54335bb4f731b2c55ba9d12d060354977a6a881356580a691	IR WGSL	not reached
 179bcfdd9490750a178fa056f93d5ff1b6375586593876ddb4ae75c34ce13dc7	A	WGSL read back, validation: error: Function [N] 'main' is invalid    ┌─ wgsl:N:N    │   N │ ╭ fn main(SV_PositionN_: array<vecN<fN>, N>, ARGN_: array<vecN<fN>, N>, ARGN_: array<vecN<fN>, N>, ARGN_: array<vecN<uN>, N>, SV_PrimitiveID: uN, SV_GSInstanceID: uN) -> Out { N │ │     var oN_: vecN<uN>; N │ │     var oN_: vecN<uN>; N │ │     var oN_: vecN<uN>;    · │ N │ │     } N │ │ }    │ ╰─^ naga::ir::Function [N]    │      = The `return` expression None does not match the declared return type Some([N])  
 179bcfdd9490750a178fa056f93d5ff1b6375586593876ddb4ae75c34ce13dc7	IR WGSL	lower: a Geometry program is not lowered yet
@@ -536,9 +535,8 @@
 1a11a4dd4d2780698d84a637e941cee7579b3fecf74a664d7c72c7a6dc979041	IR WGSL	not reached
 1a3bf479c87fc5cf1c5387c1603bd9646a760ad538f8f16dfeff9c05ca87e910	A	lift: N-bit lanes of a raw or structured buffer are not lifted
 1a403dfd40ff4b6335042367ded7725bc716e282e9bfc074f40299a340b8d401	A	lift: memory of type Half
-1a811a0e9a0ff25ec99f9f47d40e2ab2b3e9de6e119ca70a264a92441947b93f	A	lift: amplification shader programs are not lifted
-1a811a0e9a0ff25ec99f9f47d40e2ab2b3e9de6e119ca70a264a92441947b93f	IR	lift: amplification shader programs are not lifted
-1a811a0e9a0ff25ec99f9f47d40e2ab2b3e9de6e119ca70a264a92441947b93f	IR WGSL	not reached
+1a811a0e9a0ff25ec99f9f47d40e2ab2b3e9de6e119ca70a264a92441947b93f	A	lift: amplification programs are not lifted
+1a811a0e9a0ff25ec99f9f47d40e2ab2b3e9de6e119ca70a264a92441947b93f	IR WGSL	lower: a Amplification program is not lowered yet
 1adcf2d3af69c46e0f65471c60bc85724e24b32a22bf89d1201da4e0b6af47ca	A	lift: structured element has no complete member annotations
 1adcf2d3af69c46e0f65471c60bc85724e24b32a22bf89d1201da4e0b6af47ca	IR	lift: structured element has no complete member annotations
 1adcf2d3af69c46e0f65471c60bc85724e24b32a22bf89d1201da4e0b6af47ca	IR WGSL	not reached
@@ -698,9 +696,8 @@
 20adc7bac0accf6ca1e602a7527bbd0734bd785a7604de11935cc4d0775feb01	A	lift: double-precision floats are not lifted
 20cf3695c017ed7fdc94df2d5d65ab0753e0e10e97a530166734391dac3ac110	A	lift: double-precision floats are not lifted
 20d6db8999e73d10d49b70aeb2ce57cc3ed2f791990ba3295020ce3cbf7b602a	A	lift: memory of type Half
-2123b65b22e35535e318e9e34a0fe5703e50d7dbdd3cc0c5f606131fa470b3c5	A	lift: amplification shader programs are not lifted
-2123b65b22e35535e318e9e34a0fe5703e50d7dbdd3cc0c5f606131fa470b3c5	IR	lift: amplification shader programs are not lifted
-2123b65b22e35535e318e9e34a0fe5703e50d7dbdd3cc0c5f606131fa470b3c5	IR WGSL	not reached
+2123b65b22e35535e318e9e34a0fe5703e50d7dbdd3cc0c5f606131fa470b3c5	A	lift: amplification programs are not lifted
+2123b65b22e35535e318e9e34a0fe5703e50d7dbdd3cc0c5f606131fa470b3c5	IR WGSL	lower: a Amplification program is not lowered yet
 214a1c43ebacadc85bd42ed4ef2cf65f814f87ea4b427598cd7534443910da53	A	lift: structured element has no complete member annotations
 214a1c43ebacadc85bd42ed4ef2cf65f814f87ea4b427598cd7534443910da53	IR	lift: structured element has no complete member annotations
 214a1c43ebacadc85bd42ed4ef2cf65f814f87ea4b427598cd7534443910da53	IR WGSL	not reached
@@ -780,8 +777,8 @@
 24e5bd31f9efd95011ee88b9efff86e71e4cdbb017b05f4346990e5fd1aae249	A	lift: a scalar was expected, found Agg([Scalar(Val { expr: [N], kind: U, width: One }), Scalar(Val { expr: [N], kind: U, width: One })])
 24e5bd31f9efd95011ee88b9efff86e71e4cdbb017b05f4346990e5fd1aae249	IR	lift: a N-bit atomic operation is not lifted onto the IR yet
 24e5bd31f9efd95011ee88b9efff86e71e4cdbb017b05f4346990e5fd1aae249	IR WGSL	not reached
-24e7a112b744dca16c636e2375ae51bfd75a4c18a68dbe80066b3ef25e2be714	A	lift: a mesh program that reads a task payload of N bytes (amplification programs are not lifted)
-24e7a112b744dca16c636e2375ae51bfd75a4c18a68dbe80066b3ef25e2be714	IR	lift: a mesh program that reads a task payload of N bytes (amplification programs are not lifted)
+24e7a112b744dca16c636e2375ae51bfd75a4c18a68dbe80066b3ef25e2be714	A	lift: dx.op.viewID.iN: dx.op N is not lifted
+24e7a112b744dca16c636e2375ae51bfd75a4c18a68dbe80066b3ef25e2be714	IR	lift: dx.op.viewID.iN: dx.op N is not lifted onto the IR yet
 24e7a112b744dca16c636e2375ae51bfd75a4c18a68dbe80066b3ef25e2be714	IR WGSL	not reached
 2502301acb5562470322da4b3f17393ac9e4b47ad7ee459fcbb86aded2e2fdfa	A	lift: dx.op.dotNAddPacked.iN: dx.op N is not lifted
 2502301acb5562470322da4b3f17393ac9e4b47ad7ee459fcbb86aded2e2fdfa	IR	lift: dx.op.dotNAddPacked.iN: dx.op N is not lifted onto the IR yet
@@ -1019,8 +1016,8 @@
 2fb2de1243ea52ad8b618e2792646e471249cdbc30e32c1bcdc1ce171656a5b0	A	lift: dx.op.tertiary.iN: dx.op N is not lifted
 2fb2de1243ea52ad8b618e2792646e471249cdbc30e32c1bcdc1ce171656a5b0	IR	lift: dx.op.tertiary.iN: dx.op N is not lifted onto the IR yet
 2fb2de1243ea52ad8b618e2792646e471249cdbc30e32c1bcdc1ce171656a5b0	IR WGSL	not reached
-2fd495a818cd645c1fa9ca276b12096b8889e3673c3db695367a2429336cecc6	A	lift: a mesh program that reads a task payload of N bytes (amplification programs are not lifted)
-2fd495a818cd645c1fa9ca276b12096b8889e3673c3db695367a2429336cecc6	IR	lift: a mesh program that reads a task payload of N bytes (amplification programs are not lifted)
+2fd495a818cd645c1fa9ca276b12096b8889e3673c3db695367a2429336cecc6	A	lift: dx.op.viewID.iN: dx.op N is not lifted
+2fd495a818cd645c1fa9ca276b12096b8889e3673c3db695367a2429336cecc6	IR	lift: dx.op.viewID.iN: dx.op N is not lifted onto the IR yet
 2fd495a818cd645c1fa9ca276b12096b8889e3673c3db695367a2429336cecc6	IR WGSL	not reached
 3003423f08dc77cc99757cbb176869857f5784e06e1bd50f7e993d9bd7382c96	A	lift: memory of type Integer(N)
 3008c89f45b65b17dc5dbb2cc7a3ce2a573ae90f6f82398f0449e1dccc5452a7	A	lift: a constant load of other than four N-bit lanes (N-bit and N-bit rows are not lifted)
@@ -1065,9 +1062,8 @@
 31c8c75607ad811f56f3dea311259a9f286a68efa7485423c0b0d48e178062ae	IR WGSL	not reached
 31d82c227eced5b69e4b250ff8cadf85176edc79291f160ec23ac68cceb6b9c3	A	lift: N-bit lanes of a raw or structured buffer are not lifted
 31e8bf51178ff9fcb66d807b8c3db5a775c3e51d15cad1bc173c1734900656b9	A	lift: N-bit lanes of a raw or structured buffer are not lifted
-31f1a1ad810c86700d5b74958fd657a7bfc2bf77a7ac4b9ab91e1ca5b7e2380f	A	lift: amplification shader programs are not lifted
-31f1a1ad810c86700d5b74958fd657a7bfc2bf77a7ac4b9ab91e1ca5b7e2380f	IR	lift: amplification shader programs are not lifted
-31f1a1ad810c86700d5b74958fd657a7bfc2bf77a7ac4b9ab91e1ca5b7e2380f	IR WGSL	not reached
+31f1a1ad810c86700d5b74958fd657a7bfc2bf77a7ac4b9ab91e1ca5b7e2380f	A	lift: amplification programs are not lifted
+31f1a1ad810c86700d5b74958fd657a7bfc2bf77a7ac4b9ab91e1ca5b7e2380f	IR WGSL	lower: a Amplification program is not lowered yet
 31fd05bc2d67e4b268657e39cbb420809e916fa88dade3d8dc1a06375e40feeb	A	lift: dx.op.checkAccessFullyMapped.iN: dx.op N is not lifted
 31fd05bc2d67e4b268657e39cbb420809e916fa88dade3d8dc1a06375e40feeb	IR	lift: dx.op.checkAccessFullyMapped.iN: dx.op N is not lifted onto the IR yet
 31fd05bc2d67e4b268657e39cbb420809e916fa88dade3d8dc1a06375e40feeb	IR WGSL	not reached
@@ -1093,9 +1089,8 @@
 32f43f774a5697f9f4467037ba08f03f2a276ecc845b8c9e046290890fdf24b9	IR	lift: a constant load of other than four N-bit lanes (N-bit and N-bit rows are not lifted)
 32f43f774a5697f9f4467037ba08f03f2a276ecc845b8c9e046290890fdf24b9	IR WGSL	not reached
 3306bf9b29003ba5762061d43244ddf8791ee845ea2e7903979af6c566106029	A	lift: a scalar was expected, found Agg([Scalar(Val { expr: [N], kind: U, width: One }), Scalar(Val { expr: [N], kind: U, width: One })])
-33272490f0eb1cdb969c09102e9b54cbc0a29b97b4d44a051a145c34e85399aa	A	lift: a mesh program that reads a task payload of N bytes (amplification programs are not lifted)
-33272490f0eb1cdb969c09102e9b54cbc0a29b97b4d44a051a145c34e85399aa	IR	lift: a mesh program that reads a task payload of N bytes (amplification programs are not lifted)
-33272490f0eb1cdb969c09102e9b54cbc0a29b97b4d44a051a145c34e85399aa	IR WGSL	not reached
+33272490f0eb1cdb969c09102e9b54cbc0a29b97b4d44a051a145c34e85399aa	A	lift: a mesh program that writes nothing
+33272490f0eb1cdb969c09102e9b54cbc0a29b97b4d44a051a145c34e85399aa	IR WGSL	lower: a Mesh program is not lowered yet
 333412bc56f77d4231a3863f162319aa64c2f1afd17dc38ffb3d54e7d698a06e	A	lift: TEXCOORDN: signature component type N is not a known value
 333412bc56f77d4231a3863f162319aa64c2f1afd17dc38ffb3d54e7d698a06e	IR	lift: TEXCOORDN: signature component type N is not a known value
 333412bc56f77d4231a3863f162319aa64c2f1afd17dc38ffb3d54e7d698a06e	IR WGSL	not reached
@@ -1154,8 +1149,8 @@
 3660a1c5bf6cabf5ed2cdc56ad8117c31bc6d81af82e5c2fc892df8e702427d8	A	lift: TEXCOORDN: signature component type N is not a known value
 3660a1c5bf6cabf5ed2cdc56ad8117c31bc6d81af82e5c2fc892df8e702427d8	IR	lift: TEXCOORDN: signature component type N is not a known value
 3660a1c5bf6cabf5ed2cdc56ad8117c31bc6d81af82e5c2fc892df8e702427d8	IR WGSL	not reached
-36629c3e2e8662ed5bc9e615217d01f5eb5b52ed067024c27b9e502655276ca7	A	lift: amplification shader programs are not lifted
-36629c3e2e8662ed5bc9e615217d01f5eb5b52ed067024c27b9e502655276ca7	IR	lift: amplification shader programs are not lifted
+36629c3e2e8662ed5bc9e615217d01f5eb5b52ed067024c27b9e502655276ca7	A	lift: amplification programs are not lifted
+36629c3e2e8662ed5bc9e615217d01f5eb5b52ed067024c27b9e502655276ca7	IR	lift: a derivative outside a pixel program is not lifted onto the IR yet
 36629c3e2e8662ed5bc9e615217d01f5eb5b52ed067024c27b9e502655276ca7	IR WGSL	not reached
 3683a3334983e3a86c3e58b56698d46d3b948772faaaac6587ab61c640a4b67c	A	lift: N-bit lanes of a raw or structured buffer are not lifted
 3688b84dd2de62f9a9b6a1c2373dcef8c5c47a58bae807457dd2254469a68eb7	IR WGSL	lower: a read of an element of an array of buffers is not lowered yet
@@ -1225,9 +1220,8 @@
 3a5619249d6b57c684d8605b1a73d7fbb46e74e0bca1266735f7853eb1caf7c8	IR	lift: AN: signature component type N is not a known value
 3a5619249d6b57c684d8605b1a73d7fbb46e74e0bca1266735f7853eb1caf7c8	IR WGSL	not reached
 3a6c3a61b490f34d8f24a1be4490e139a7c9780fd5e77e89a2f0b8c2c7f6f8a3	IR WGSL	lower: a read of an element of an array of buffers is not lowered yet
-3a8ea60996b599467822bc078489d7ee4352db6657680fb80e769db4b04f2f28	A	lift: amplification shader programs are not lifted
-3a8ea60996b599467822bc078489d7ee4352db6657680fb80e769db4b04f2f28	IR	lift: amplification shader programs are not lifted
-3a8ea60996b599467822bc078489d7ee4352db6657680fb80e769db4b04f2f28	IR WGSL	not reached
+3a8ea60996b599467822bc078489d7ee4352db6657680fb80e769db4b04f2f28	A	lift: amplification programs are not lifted
+3a8ea60996b599467822bc078489d7ee4352db6657680fb80e769db4b04f2f28	IR WGSL	lower: a Amplification program is not lowered yet
 3a95f20552e061a740319541c8ed6829abbe25e7b08e856f90d265cbaa5e61a5	IR WGSL	lower: an element of an array of resources is not lowered yet
 3ac70c613f27dc82ac84e51686d47ecbdc91ccd34759160e4c05cb225edb176b	IR WGSL	lower: a Hull program is not lowered yet
 3ad406bbc23df632f8898448cbd60c5a516140b41dda08383f12e744918ae9c1	A	lift: N-bit lanes of a raw or structured buffer are not lifted
@@ -1466,8 +1460,8 @@
 460dbbeedf3617f2c69d360e5e6b39d38f991f540d979c6762d09f18bd73da97	A	lift: TEXCOORDN: signature component type N is not a known value
 460dbbeedf3617f2c69d360e5e6b39d38f991f540d979c6762d09f18bd73da97	IR	lift: TEXCOORDN: signature component type N is not a known value
 460dbbeedf3617f2c69d360e5e6b39d38f991f540d979c6762d09f18bd73da97	IR WGSL	not reached
-462cd56c2877e0b1d5b1cf57b6f029e3f94f9b1078e5a400a76f066f0c4a42f7	A	lift: amplification shader programs are not lifted
-462cd56c2877e0b1d5b1cf57b6f029e3f94f9b1078e5a400a76f066f0c4a42f7	IR	lift: amplification shader programs are not lifted
+462cd56c2877e0b1d5b1cf57b6f029e3f94f9b1078e5a400a76f066f0c4a42f7	A	lift: amplification programs are not lifted
+462cd56c2877e0b1d5b1cf57b6f029e3f94f9b1078e5a400a76f066f0c4a42f7	IR	lift: DispatchMesh of a payload that is not a whole variable
 462cd56c2877e0b1d5b1cf57b6f029e3f94f9b1078e5a400a76f066f0c4a42f7	IR WGSL	not reached
 463186d260970f6ec16f28353bc2c4c61193272fbf3fed5e620883d78c13fed2	A	lift: memory of type Half
 463186d260970f6ec16f28353bc2c4c61193272fbf3fed5e620883d78c13fed2	IR WGSL	lower: an element of an array of resources is not lowered yet
@@ -1521,8 +1515,8 @@
 486099d680441893bb1dff703f00ca8a05f180362d1b0a9aeb86a50a72ea3631	IR	lift: MyTB: DxilResourceKind N is not mapped
 486099d680441893bb1dff703f00ca8a05f180362d1b0a9aeb86a50a72ea3631	IR WGSL	not reached
 48893d559d1df98ff3f3c8496e1ef5a726a51da6c1754dbb7db46fa94a133017	A	lift: N-bit lanes of a raw or structured buffer are not lifted
-488c71ba944139fa0efe463ae1bd7cdd67d07fe01a7b5ee7805fcb76b032a67c	A	lift: a mesh program that reads a task payload of N bytes (amplification programs are not lifted)
-488c71ba944139fa0efe463ae1bd7cdd67d07fe01a7b5ee7805fcb76b032a67c	IR	lift: a mesh program that reads a task payload of N bytes (amplification programs are not lifted)
+488c71ba944139fa0efe463ae1bd7cdd67d07fe01a7b5ee7805fcb76b032a67c	A	lift: dx.op.viewID.iN: dx.op N is not lifted
+488c71ba944139fa0efe463ae1bd7cdd67d07fe01a7b5ee7805fcb76b032a67c	IR	lift: dx.op.viewID.iN: dx.op N is not lifted onto the IR yet
 488c71ba944139fa0efe463ae1bd7cdd67d07fe01a7b5ee7805fcb76b032a67c	IR WGSL	not reached
 48b6c3f8d2b07c03282be671ca66a8824d20c5bc69c9f27fa7a68b5b40f8eff9	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 48b6e7a898cc8f10482e49d1001110f4b5f02579f9217f956daf9b776c5689eb	A	lift: a constant load of other than four N-bit lanes (N-bit and N-bit rows are not lifted)
@@ -1814,8 +1808,8 @@
 58772f5d9e3b5ee293095d0b18c27c30d07bb3a2104654c5945a99feaf008489	A	lift: a constant load of other than four N-bit lanes (N-bit and N-bit rows are not lifted)
 58772f5d9e3b5ee293095d0b18c27c30d07bb3a2104654c5945a99feaf008489	IR	lift: a constant load of other than four N-bit lanes (N-bit and N-bit rows are not lifted)
 58772f5d9e3b5ee293095d0b18c27c30d07bb3a2104654c5945a99feaf008489	IR WGSL	not reached
-588e0eeaa1522ccbc11289615eacead74e4676419feec14323d56de200991f62	A	lift: a mesh program that reads a task payload of N bytes (amplification programs are not lifted)
-588e0eeaa1522ccbc11289615eacead74e4676419feec14323d56de200991f62	IR	lift: a mesh program that reads a task payload of N bytes (amplification programs are not lifted)
+588e0eeaa1522ccbc11289615eacead74e4676419feec14323d56de200991f62	A	lift: dx.op.viewID.iN: dx.op N is not lifted
+588e0eeaa1522ccbc11289615eacead74e4676419feec14323d56de200991f62	IR	lift: dx.op.viewID.iN: dx.op N is not lifted onto the IR yet
 588e0eeaa1522ccbc11289615eacead74e4676419feec14323d56de200991f62	IR WGSL	not reached
 589b881ff576fde1bcb606a768f481063cf9e602f371cf3fe805934fea9ad626	A	lift: a constant load of other than four N-bit lanes (N-bit and N-bit rows are not lifted)
 589b881ff576fde1bcb606a768f481063cf9e602f371cf3fe805934fea9ad626	IR	lift: a constant load of other than four N-bit lanes (N-bit and N-bit rows are not lifted)
@@ -1937,8 +1931,8 @@
 5ddc92e9d6d01e896068af863516fb7660d6146db6e6d91dc3d273692121ff8a	A	lift: dx.op.rawBufferVectorLoad.vNfN: dx.op N is not lifted
 5ddc92e9d6d01e896068af863516fb7660d6146db6e6d91dc3d273692121ff8a	IR	lift: dx.op.rawBufferVectorLoad.vNfN: dx.op N is not lifted onto the IR yet
 5ddc92e9d6d01e896068af863516fb7660d6146db6e6d91dc3d273692121ff8a	IR WGSL	not reached
-5df8eb0e87478a47ab3c710ef33d26308838367ec320906f906a8d3ab00ee941	A	lift: a mesh program that reads a task payload of N bytes (amplification programs are not lifted)
-5df8eb0e87478a47ab3c710ef33d26308838367ec320906f906a8d3ab00ee941	IR	lift: a mesh program that reads a task payload of N bytes (amplification programs are not lifted)
+5df8eb0e87478a47ab3c710ef33d26308838367ec320906f906a8d3ab00ee941	A	lift: a mesh program that reads a task payload (amplification programs are not lifted)
+5df8eb0e87478a47ab3c710ef33d26308838367ec320906f906a8d3ab00ee941	IR	lift: dx.op.viewID.iN: dx.op N is not lifted onto the IR yet
 5df8eb0e87478a47ab3c710ef33d26308838367ec320906f906a8d3ab00ee941	IR WGSL	not reached
 5dfbb9edada3f40ed76b48a4c5a27ac535c283eda369739e134b9ce411699d88	A	lift: dx.op.textureGatherRaw.iN: dx.op N is not lifted
 5dfbb9edada3f40ed76b48a4c5a27ac535c283eda369739e134b9ce411699d88	IR	lift: dx.op.textureGatherRaw.iN: dx.op N is not lifted onto the IR yet
@@ -2064,9 +2058,8 @@
 6334e2aceff8ba76670e8fd08fc357a37e68a8e83dce2bcdfcd1deecc2db79f4	IR	lift: dx.entryPoints: expected exactly one entry point with a function, found N
 6334e2aceff8ba76670e8fd08fc357a37e68a8e83dce2bcdfcd1deecc2db79f4	IR WGSL	not reached
 634311b3b461cd863796cb0133605b246c42120e5e3183aa0cbbe877ed1fcb5e	A	lift: N-bit lanes of a raw or structured buffer are not lifted
-634484ce338740e8076818a69d480c4c1077a57a9bf310746a1c6f88ecf96dc6	A	lift: a mesh program that reads a task payload of N bytes (amplification programs are not lifted)
-634484ce338740e8076818a69d480c4c1077a57a9bf310746a1c6f88ecf96dc6	IR	lift: a mesh program that reads a task payload of N bytes (amplification programs are not lifted)
-634484ce338740e8076818a69d480c4c1077a57a9bf310746a1c6f88ecf96dc6	IR WGSL	not reached
+634484ce338740e8076818a69d480c4c1077a57a9bf310746a1c6f88ecf96dc6	A	lift: a mesh program that reads a task payload (amplification programs are not lifted)
+634484ce338740e8076818a69d480c4c1077a57a9bf310746a1c6f88ecf96dc6	IR WGSL	lower: a Mesh program is not lowered yet
 635a82a437c93a2746b11b00430c54675d8f0cdaccfd5b602cc55943ebd334b3	IR WGSL	lower: a read of an element of an array of buffers is not lowered yet
 636bc1f94d053ae2a0f5b4c0d4ed9c982065a20e369cd236b564f46a274f9cab	A	lift: TEXCOORDN: signature component type N is not a known value
 636bc1f94d053ae2a0f5b4c0d4ed9c982065a20e369cd236b564f46a274f9cab	IR	lift: TEXCOORDN: signature component type N is not a known value
@@ -2536,9 +2529,8 @@
 7c7af31047a38bc067d2bc7c2e8734d560174fe77b1cd3d2f71a5895d76f30cd	IR	lift: dx.entryPoints: expected exactly one entry point with a function, found N
 7c7af31047a38bc067d2bc7c2e8734d560174fe77b1cd3d2f71a5895d76f30cd	IR WGSL	not reached
 7c87ae6f060c3c914441e6ec6a5b8d7790700636617f7d2581886ff4b623fbeb	IR WGSL	lower: an element of an array of resources is not lowered yet
-7ca1532ba7e912aad18c0c912b357957768d3108c419a88826046afb3a1e9c28	A	lift: amplification shader programs are not lifted
-7ca1532ba7e912aad18c0c912b357957768d3108c419a88826046afb3a1e9c28	IR	lift: amplification shader programs are not lifted
-7ca1532ba7e912aad18c0c912b357957768d3108c419a88826046afb3a1e9c28	IR WGSL	not reached
+7ca1532ba7e912aad18c0c912b357957768d3108c419a88826046afb3a1e9c28	A	lift: amplification programs are not lifted
+7ca1532ba7e912aad18c0c912b357957768d3108c419a88826046afb3a1e9c28	IR WGSL	lower: a Amplification program is not lowered yet
 7ca21a64ff1e804ea3e7715386fefdd96a0606ea5bd382fe7dace8973e7a67fe	A	lift: N-bit lanes of a raw or structured buffer are not lifted
 7ca21a64ff1e804ea3e7715386fefdd96a0606ea5bd382fe7dace8973e7a67fe	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 7cb2b870da7d633e0e2dead32845b4b8dff8148733bd7985f68aed8e421922fd	A	lift: dx.entryPoints: expected exactly one entry point with a function, found N
@@ -3253,9 +3245,8 @@
 9ce57b1d98914592b19eb0869fbc500a90c57e703610c04c8021d55ebf1b632c	IR	lift: TEXCOORDN: signature component type N is not a known value
 9ce57b1d98914592b19eb0869fbc500a90c57e703610c04c8021d55ebf1b632c	IR WGSL	not reached
 9cf0669590d44347388040df99236306d26d672b8327ad50ea0be0b99155677a	A	lift: a scalar was expected, found Agg([Scalar(Val { expr: [N], kind: U, width: One }), Scalar(Val { expr: [N], kind: U, width: One })])
-9d070b59246ff689ae5d1a5658ab8c3b791aef54007c76131d952194f9e1308b	A	lift: amplification shader programs are not lifted
-9d070b59246ff689ae5d1a5658ab8c3b791aef54007c76131d952194f9e1308b	IR	lift: amplification shader programs are not lifted
-9d070b59246ff689ae5d1a5658ab8c3b791aef54007c76131d952194f9e1308b	IR WGSL	not reached
+9d070b59246ff689ae5d1a5658ab8c3b791aef54007c76131d952194f9e1308b	A	lift: amplification programs are not lifted
+9d070b59246ff689ae5d1a5658ab8c3b791aef54007c76131d952194f9e1308b	IR WGSL	lower: a Amplification program is not lowered yet
 9d4bd161c71eba7a2611bd9866b52d3cfdc9690619d990196a2445e6b96a115d	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 9d58aff942d9242ed210caf74b59cdf6d6968caf47adbdb275607b809d77538d	A	lift: memory of type Half
 9d67b59d80136f67824bc0e16923b294c9a6381edaca5e8b2c1d6153612b6a15	A	lift: memory of type Integer(N)
@@ -3522,8 +3513,8 @@ ab1e8396694f2f99dcc64ed43d02596f8ea911d86771f79ba9251a05f154cecc	IR WGSL	lower: 
 ab2e3daf009f8d3eb98f418091da486e9a4e22dc5dcf430fdc37e44db3f3826e	A	lift: N-bit lanes of a raw or structured buffer are not lifted
 ab9255ca6e4c7c6b9e03bf0124674f0a78556c6b060618daf1b43a39af950cea	A	lift: double-precision floats are not lifted
 abadb542c9fc562cea0c8107404c39c9434ed00dd54720351dafea69184e46d5	A	lift: a scalar was expected, found Agg([Scalar(Val { expr: [N], kind: U, width: One }), Scalar(Val { expr: [N], kind: U, width: One })])
-ac0322f8f09a08596f14a97c47ef38e86716d044ec55a9eec43e5b4d0ee0e379	A	lift: a mesh program that reads a task payload of N bytes (amplification programs are not lifted)
-ac0322f8f09a08596f14a97c47ef38e86716d044ec55a9eec43e5b4d0ee0e379	IR	lift: a mesh program that reads a task payload of N bytes (amplification programs are not lifted)
+ac0322f8f09a08596f14a97c47ef38e86716d044ec55a9eec43e5b4d0ee0e379	A	lift: dx.op.viewID.iN: dx.op N is not lifted
+ac0322f8f09a08596f14a97c47ef38e86716d044ec55a9eec43e5b4d0ee0e379	IR	lift: dx.op.viewID.iN: dx.op N is not lifted onto the IR yet
 ac0322f8f09a08596f14a97c47ef38e86716d044ec55a9eec43e5b4d0ee0e379	IR WGSL	not reached
 ac0da994a76c777d1cd45cf34b4ffdaf5427ae2f6db5008919a7a693ba5222dd	A	lift: N-bit lanes of a raw or structured buffer are not lifted
 ac1dc5e75eb7cc6734e9397a0a475cf92b06ee328100842254b9801052603b0c	A	lift: a constant load of other than four N-bit lanes (N-bit and N-bit rows are not lifted)
@@ -4033,9 +4024,8 @@ c5d823e0f77d4e564db46c710b61b38a023cec7f1b94bc643a95b8e561a3387c	IR WGSL	lower: 
 c5d9decc78396f056ef0077961eeae3e7b29b09142e4e86e95bbe58fe0bb8e2e	A	lift: memory of type Integer(N)
 c5eecbfb58df588d5656d1fa36172e64cb63a44f2070e88a961cdd0ba36936fb	A	lift: N-bit lanes of a raw or structured buffer are not lifted
 c609ed50f993780c6989f8309b8a7a4802a402f251c13862ce943513b786dc07	A	lift: double-precision floats are not lifted (dx.op.makeDouble.fN)
-c60af5defdf31d83b18a14558e0b74b44ab9fb00816ec197cb6e7e8836d45183	A	lift: a mesh program that reads a task payload of N bytes (amplification programs are not lifted)
-c60af5defdf31d83b18a14558e0b74b44ab9fb00816ec197cb6e7e8836d45183	IR	lift: a mesh program that reads a task payload of N bytes (amplification programs are not lifted)
-c60af5defdf31d83b18a14558e0b74b44ab9fb00816ec197cb6e7e8836d45183	IR WGSL	not reached
+c60af5defdf31d83b18a14558e0b74b44ab9fb00816ec197cb6e7e8836d45183	A	lift: a mesh program that reads a task payload (amplification programs are not lifted)
+c60af5defdf31d83b18a14558e0b74b44ab9fb00816ec197cb6e7e8836d45183	IR WGSL	lower: a Mesh program is not lowered yet
 c665992927c98141253b596b6c37f2e665cd46760e1e4bf177f0de03e94826d8	A	lift: memory of type Half
 c665992927c98141253b596b6c37f2e665cd46760e1e4bf177f0de03e94826d8	IR WGSL	lower: an element of an array of resources is not lowered yet
 c6666aaeed1b82f2567b4c29f6a51e2bed84eef31f7b7fd641d872655f0c76c0	A	lift: a scalar was expected, found Agg([Scalar(Val { expr: [N], kind: U, width: One }), Scalar(Val { expr: [N], kind: U, width: One })])
@@ -4043,8 +4033,8 @@ c6666aaeed1b82f2567b4c29f6a51e2bed84eef31f7b7fd641d872655f0c76c0	IR	lift: a N-bi
 c6666aaeed1b82f2567b4c29f6a51e2bed84eef31f7b7fd641d872655f0c76c0	IR WGSL	not reached
 c68d4f19c59b1b049a888d9b1783abed536bf204a7e3cd8f111781c114eb21b3	A	lift: N-bit lanes of a raw or structured buffer are not lifted
 c6b9e6db8c39c5abc3853f62e123ec58d361169d7a0f157e235afe05fcbb3f83	A	lift: N-bit lanes of a raw or structured buffer are not lifted
-c6c0de8aff04fffb19f27ca4e19ca62b70aea2b3a74fe79a38623fa6cbe32738	A	lift: a mesh program that reads a task payload of N bytes (amplification programs are not lifted)
-c6c0de8aff04fffb19f27ca4e19ca62b70aea2b3a74fe79a38623fa6cbe32738	IR	lift: a mesh program that reads a task payload of N bytes (amplification programs are not lifted)
+c6c0de8aff04fffb19f27ca4e19ca62b70aea2b3a74fe79a38623fa6cbe32738	A	lift: clip_distances: a vertex output that is not a value
+c6c0de8aff04fffb19f27ca4e19ca62b70aea2b3a74fe79a38623fa6cbe32738	IR	lift: a mesh program's per-primitive outputs are not lifted onto the IR yet
 c6c0de8aff04fffb19f27ca4e19ca62b70aea2b3a74fe79a38623fa6cbe32738	IR WGSL	not reached
 c6d8917575e67be4e7bd9163c7654a723fc1d90b8f0b74fdce3567ec5d122f52	A	lift: dx.op.checkAccessFullyMapped.iN: dx.op N is not lifted
 c6d8917575e67be4e7bd9163c7654a723fc1d90b8f0b74fdce3567ec5d122f52	IR	lift: dx.op.checkAccessFullyMapped.iN: dx.op N is not lifted onto the IR yet
@@ -4121,8 +4111,8 @@ cad7087eacbccb1d405223f0930d96b5eca2a49ef8679cf18adf9302a948640a	A	lift: N-bit l
 cade779d4f898bb6bd122d70f1183fe2c03458c1085cefdaaecde24b75acea46	A	lift: TEXCOORDN: signature component type N is not a known value
 cade779d4f898bb6bd122d70f1183fe2c03458c1085cefdaaecde24b75acea46	IR	lift: TEXCOORDN: signature component type N is not a known value
 cade779d4f898bb6bd122d70f1183fe2c03458c1085cefdaaecde24b75acea46	IR WGSL	not reached
-cb0afe966575dfe9013eab47ea6c23921a0d57809311c5814f2ea75645e842f3	A	lift: a mesh program that reads a task payload of N bytes (amplification programs are not lifted)
-cb0afe966575dfe9013eab47ea6c23921a0d57809311c5814f2ea75645e842f3	IR	lift: a mesh program that reads a task payload of N bytes (amplification programs are not lifted)
+cb0afe966575dfe9013eab47ea6c23921a0d57809311c5814f2ea75645e842f3	A	lift: dx.op.viewID.iN: dx.op N is not lifted
+cb0afe966575dfe9013eab47ea6c23921a0d57809311c5814f2ea75645e842f3	IR	lift: dx.op.viewID.iN: dx.op N is not lifted onto the IR yet
 cb0afe966575dfe9013eab47ea6c23921a0d57809311c5814f2ea75645e842f3	IR WGSL	not reached
 cb10562db9dd664e976dd61785388b7c74a243ae3540bad76a8b5f8fde752497	A	lift: double-precision floats are not lifted
 cb10562db9dd664e976dd61785388b7c74a243ae3540bad76a8b5f8fde752497	IR	lift: a fN where a fN is read
@@ -4223,8 +4213,8 @@ cfc36ce73518d710db8b9bbf86927f6b519e66d8a6dbcb1ef604ef7e56b47a6c	A	lift: N-bit l
 cfc3b8c43ab9ee72729aca01951efa59edbd0132056a0cb04841432d8f67615a	A	lift: feedbackMinMip: DxilResourceKind N is not mapped
 cfc3b8c43ab9ee72729aca01951efa59edbd0132056a0cb04841432d8f67615a	IR	lift: feedbackMinMip: DxilResourceKind N is not mapped
 cfc3b8c43ab9ee72729aca01951efa59edbd0132056a0cb04841432d8f67615a	IR WGSL	not reached
-cfcc912e7ba77a852a7e329501567c296164b86eee3df446162a9f6d33cfa4c0	A	lift: amplification shader programs are not lifted
-cfcc912e7ba77a852a7e329501567c296164b86eee3df446162a9f6d33cfa4c0	IR	lift: amplification shader programs are not lifted
+cfcc912e7ba77a852a7e329501567c296164b86eee3df446162a9f6d33cfa4c0	A	lift: amplification programs are not lifted
+cfcc912e7ba77a852a7e329501567c296164b86eee3df446162a9f6d33cfa4c0	IR	validate: Problem { value: Some(ValueId(N)), message: "an implicit-level sample outside a pixel program" }
 cfcc912e7ba77a852a7e329501567c296164b86eee3df446162a9f6d33cfa4c0	IR WGSL	not reached
 cfea86079015434764e817893d53f02d36496bb4ff75452a870a40c1152c5c00	A	lift: a sample offset that is not constant
 cfea86079015434764e817893d53f02d36496bb4ff75452a870a40c1152c5c00	IR	lift: a sample offset that is not constant
@@ -4640,9 +4630,8 @@ e7f7fad156a7d7b3946d453be3cc69190812728852dd2852cd8cb42bed54181c	A	lift: N-bit l
 e81c50dd0d8dffec623ad1c8a32ca1f45ace6a52f7a275b7f90165a2b6cc601e	A	lift: a scalar was expected, found Agg([Scalar(Val { expr: [N], kind: U, width: One }), Scalar(Val { expr: [N], kind: U, width: One })])
 e81c50dd0d8dffec623ad1c8a32ca1f45ace6a52f7a275b7f90165a2b6cc601e	IR	lift: a N-bit atomic operation is not lifted onto the IR yet
 e81c50dd0d8dffec623ad1c8a32ca1f45ace6a52f7a275b7f90165a2b6cc601e	IR WGSL	not reached
-e8407b909248db041b9316ff234aff3e7fb5a36f8cfbf016c24658f71b96ee95	A	lift: amplification shader programs are not lifted
-e8407b909248db041b9316ff234aff3e7fb5a36f8cfbf016c24658f71b96ee95	IR	lift: amplification shader programs are not lifted
-e8407b909248db041b9316ff234aff3e7fb5a36f8cfbf016c24658f71b96ee95	IR WGSL	not reached
+e8407b909248db041b9316ff234aff3e7fb5a36f8cfbf016c24658f71b96ee95	A	lift: amplification programs are not lifted
+e8407b909248db041b9316ff234aff3e7fb5a36f8cfbf016c24658f71b96ee95	IR WGSL	lower: a Amplification program is not lowered yet
 e840cbace73a6ffb34e95f7f069a95ff49e950ab3499dce56a1d41378c943961	A	validate: module: Entry point main at Vertex is invalid: Uses operations forbidden at this stage
 e840cbace73a6ffb34e95f7f069a95ff49e950ab3499dce56a1d41378c943961	IR WGSL	lower: a read of an element of an array of buffers is not lowered yet
 e88e1eb17645c148c19fad7d5b6c293c9159b3cf99ca68d984af7002deb944e3	A	lift: double-precision floats are not lifted
@@ -4798,8 +4787,8 @@ ef948c3c157c751bd44010b59d03956fa0c52bf9fb86e74d390f06a38933816e	A	lift: a scala
 efa8aeb8476916deab90172f19a2fc089ddf6be12169e5851c12ad6a9edb832a	A	lift: N-bit lanes of a raw or structured buffer are not lifted
 efe8ef7e5c5b1cef0d92052dea5714628174fc073800a70952eec4021d028a81	A	lift: double-precision floats are not lifted (dx.op.splitDouble.fN)
 effbe70f80acfcbf82f81a93724e194e9f01713e18b6014fdc62765bd7ea5cd9	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-effc51bd4ca8c1ad8b49384a7d02b14e3f12950e0b2a2f1659a1c3b2f6ab9181	A	lift: amplification shader programs are not lifted
-effc51bd4ca8c1ad8b49384a7d02b14e3f12950e0b2a2f1659a1c3b2f6ab9181	IR	lift: amplification shader programs are not lifted
+effc51bd4ca8c1ad8b49384a7d02b14e3f12950e0b2a2f1659a1c3b2f6ab9181	A	lift: amplification programs are not lifted
+effc51bd4ca8c1ad8b49384a7d02b14e3f12950e0b2a2f1659a1c3b2f6ab9181	IR	lift: dx.op.isHelperLane.iN: dx.op N is not lifted onto the IR yet
 effc51bd4ca8c1ad8b49384a7d02b14e3f12950e0b2a2f1659a1c3b2f6ab9181	IR WGSL	not reached
 f0095e1cd7dc49872c43f5b21e27cff0f9184743126c0d2e43f1661e6a9bd448	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 f01e4b21a284b658fec6f3415a0a61b732473d487e63cc8075cf22dea842c118	IR WGSL	lower: resource N (ResourceDescriptorHeap) has no DND register
