@@ -41,8 +41,8 @@ use dxil_reader::reflection;
 /// The lifter's name in a program's provenance.
 pub const LIFTER: &str = "iridia-dxil-ir";
 
-/// Increment when the same bytecode lifts differently.
-pub const LIFTER_VERSION: u32 = 1;
+/// Increment when the same bytecode lifts differently (`tests/versions.rs` holds the IR lift's fixtures to it).
+pub const LIFTER_VERSION: u32 = 2;
 
 /// Lift a DXIL container's entry function onto the IR: a vertex, pixel, compute, hull, domain, geometry, mesh,
 /// amplification or ray tracing program (a library of one export). What the lift does not carry is an `Err` naming the

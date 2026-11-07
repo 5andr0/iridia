@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `iridia-dxbc`, `iridia-dxil`: the IR lifts have version gates, as the older lifts and `iridia-d3d9-ir` do: what
+  `ir::lift` makes of each committed fixture is hashed with `iridia_ir::gate` under the IR lifter's `LIFTER_VERSION` in
+  `tests/ir-lifted.hashes`, so a change to what the IR lift makes of a bytecode fails its tests until the version is
+  bumped. The IR lifts had changed since their versions were set (ray tracing, the switch arguments above, and more),
+  so the versions go up: `iridia_dxil::ir::LIFTER_VERSION` 1 -> 2, `iridia_dxbc::ir::LIFTER_VERSION` 2 -> 3. A cache
+  keyed by those versions drops what the earlier lifts made.
 - `iridia-dxil`: a switch several of whose cases (or a case and the default, or both ways of a branch) go to one
   block gives that block one set of arguments. dxc writes the block's phi with an entry per edge, the same value on
   each (`phi [7.0, %0]` three times); the IR lift made each edge's arguments afresh, so a constant became three

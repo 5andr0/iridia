@@ -30,8 +30,8 @@ use dxbc_reader::decode::{Declared, Decoded, Register, decode};
 /// The lifter's name in a program's provenance.
 pub const LIFTER: &str = "iridia-dxbc-ir";
 
-/// Increment when the same bytecode lifts differently.
-pub const LIFTER_VERSION: u32 = 2;
+/// Increment when the same bytecode lifts differently (`tests/versions.rs` holds the IR lift's fixtures to it).
+pub const LIFTER_VERSION: u32 = 3;
 
 /// Lift a DXBC container's program onto the IR. What the lift does not carry is an `Err` naming the word and why.
 pub fn lift(bytes: &[u8]) -> Result<Program> {
