@@ -355,15 +355,31 @@ impl Primitive {
     }
 }
 
+/// For each lane of a pixel input, the output lane of the same component: as far past the output's first lane as the
+/// input lane is past the input's, where the output has it. A varying's components are matched by place, not by
+/// count, so a Direct3D 9 input declared `v0.xw` reads the output's x and w, not its x and y.
+fn component_lanes(from: &[u8], to: &[u8]) -> Vec<Option<u8>> {
+    let (Some(&from_first), Some(&to_first)) = (from.first(), to.first()) else {
+        return vec![None; to.len()];
+    };
+    to.iter()
+        .map(|&t| {
+            let lane = from_first.checked_add(t.checked_sub(to_first)?)?;
+            from.contains(&lane).then_some(lane)
+        })
+        .collect()
+}
+
 /// Where a pixel program input comes from.
 #[derive(Clone, Debug)]
 enum Source {
-    /// A vertex program output: its register and lanes, the pixel input's register and lanes, the interpolation,
-    /// whether it is a texture coordinate (`TEXCOORD`), which a point sprite replaces, and whether it is a colour
-    /// (`COLOR`), which Direct3D 9's flat shade mode makes flat.
+    /// A vertex program output: its register and, for each of the pixel input's lanes, the output lane it reads
+    /// ([`component_lanes`]; none where the output has no such component); the pixel input's register and lanes, the
+    /// interpolation, whether it is a texture coordinate (`TEXCOORD`), which a point sprite replaces, and whether it
+    /// is a colour (`COLOR`), which Direct3D 9's flat shade mode makes flat.
     Varying {
         from_register: usize,
-        from_lanes: Vec<u8>,
+        from_lanes: Vec<Option<u8>>,
         to_register: usize,
         to_lanes: Vec<u8>,
         mode: InterpMode,
@@ -610,7 +626,7 @@ impl<'a> Raster<'a> {
                         let (from_register, from_lanes) = from(at, out)?;
                         sources.push(Source::Varying {
                             from_register,
-                            from_lanes,
+                            from_lanes: vec![from_lanes.first().copied()],
                             to_register: register,
                             to_lanes: vec![lane],
                             mode: InterpMode::Flat,
@@ -676,6 +692,7 @@ impl<'a> Raster<'a> {
                     ))
                 })?;
             let (from_register, from_lanes) = from(at, out)?;
+            let from_lanes = component_lanes(&from_lanes, &to_lanes);
             let mode = match v.interp {
                 Some(i) => i.mode,
                 None if v.value.scalar == iridia::ScalarType::Float => InterpMode::Perspective,
@@ -1043,7 +1060,9 @@ impl<'a> Raster<'a> {
                             put(into, *to_register, *to as usize, lane.to_bits());
                             continue;
                         }
-                        let Some(from) = from_lanes.get(k) else { continue };
+                        let Some(Some(from)) = from_lanes.get(k) else {
+                            continue;
+                        };
                         let clamped = *colour && state.clamp_colours;
                         let word = |v: &Shaded| {
                             let w = v

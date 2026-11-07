@@ -371,3 +371,10 @@ fn shader_model_2_clamps_colours_between_the_stages() {
     );
     assert_selected_pass(&runs);
 }
+
+/// A pixel input reads the output lanes of its own components: a Direct3D 9 input declared `v0.xw` (interface-packing,
+/// the signature mask not contiguous) reads COLOR's x and w, where pairing lanes by count read its x and y.
+#[test]
+fn a_pixel_input_reads_the_lanes_of_its_components() {
+    assert_selected_pass(&vkd3d_runs("vkd3d/d3d9.json.gz", "interface-packing.shader_test"));
+}
