@@ -7,6 +7,9 @@
 //!
 //! Needs the WARP oracle program with the `d3d12rt` case form (the configured `Tool::Warp`) and the scratch folder. The
 //! scenes and rays are made from fixed seeds.
+//! WARP has returned different hits for identical cases. Run it twice, and only when it disagrees with itself run
+//! a third time: report each unstable ray and compare its two agreeing answers with the executor. No pair agreeing
+//! is a failure, as is any stable WARP answer that differs from the executor. Words after a miss are not written.
 mod inputs;
 
 use inputs::{Tool, own_scratch, program};
@@ -327,39 +330,66 @@ fn gate(fixture_name: &str, procedural: bool) {
         cases.push((name, rays));
     }
     let cases_file = scratch.join(format!("{fixture_name}.cases.txt"));
-    let out_file = scratch.join(format!("{fixture_name}.warp.jsonl"));
     std::fs::write(&cases_file, text).unwrap();
     let _oracle = inputs::warp_exclusive();
-    let run = warp
-        .command()
-        .path_arg(&cases_file)
-        .path_arg(&out_file)
-        .output_within(inputs::WARP_LIMIT)
-        .unwrap_or_else(|e| panic!("{e}"));
-    assert!(
-        run.status.success(),
-        "warp: {}",
-        String::from_utf8_lossy(&run.stderr)
-    );
-
-    let (mut hits, mut misses, mut mismatches) = (0, 0, Vec::new());
-    for line in std::fs::read_to_string(&out_file).unwrap().lines() {
-        let v: serde_json::Value = serde_json::from_str(line).unwrap();
-        let name = v["case"].as_str().unwrap().to_owned();
-        if let Some(e) = v["error"].as_str() {
-            mismatches.push(format!("{name}: WARP error {e}"));
-            continue;
+    let run_warp = |attempt| {
+        let out_file = scratch.join(format!("{fixture_name}.warp-{attempt}.jsonl"));
+        let run = warp
+            .command()
+            .path_arg(&cases_file)
+            .path_arg(&out_file)
+            .output_within(inputs::WARP_LIMIT)
+            .unwrap_or_else(|e| panic!("{e}"));
+        assert!(
+            run.status.success(),
+            "warp run {attempt}: {}",
+            String::from_utf8_lossy(&run.stderr)
+        );
+        let mut answers = BTreeMap::new();
+        for line in std::fs::read_to_string(&out_file).unwrap().lines() {
+            let v: serde_json::Value = serde_json::from_str(line).unwrap();
+            let name = v["case"].as_str().unwrap().to_owned();
+            assert!(v["error"].is_null(), "{name}: WARP error {}", v["error"]);
+            let mut words: Vec<u32> = v["words"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|w| u32::from_str_radix(w.as_str().unwrap(), 16).unwrap())
+                .collect();
+            assert_eq!(words.len(), 640, "{name}: WARP word count");
+            for hit in words.chunks_exact_mut(10) {
+                if hit[0] == 0 {
+                    hit[1..].fill(0);
+                }
+            }
+            assert!(answers.insert(name.clone(), words).is_none(), "duplicate {name}");
         }
-        let theirs: Vec<u32> = v["words"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|w| u32::from_str_radix(w.as_str().unwrap(), 16).unwrap())
-            .collect();
-        let mine = &ours[&name];
-        let rays = &cases.iter().find(|c| c.0 == name).unwrap().1;
+        assert!(answers.keys().eq(ours.keys()), "WARP case names differ");
+        answers
+    };
+    let first = run_warp(1);
+    let second = run_warp(2);
+    let third = (first != second).then(|| run_warp(3));
+    let (mut hits, mut misses, mut unstable, mut mismatches) = (0, 0, 0, Vec::new());
+    for (name, theirs) in &first {
+        let mine = &ours[name];
+        let rays = &cases.iter().find(|c| &c.0 == name).unwrap().1;
         for i in 0..64 {
-            let (a, b) = (&mine[10 * i..10 * i + 10], &theirs[10 * i..10 * i + 10]);
+            let range = 10 * i..10 * i + 10;
+            let a = &mine[range.clone()];
+            let mut b = &theirs[range.clone()];
+            let repeat = &second[name][range.clone()];
+            if b != repeat {
+                unstable += 1;
+                let last = &third.as_ref().unwrap()[name][range];
+                println!("WARP SELF-DISAGREEMENT {name} ray {i}: {b:08x?}, {repeat:08x?}, {last:08x?}");
+                if last == b || last == repeat {
+                    b = last;
+                } else {
+                    mismatches.push(format!("{name} ray {i}: no two WARP runs agree"));
+                    continue;
+                }
+            }
             if a[0] != b[0] {
                 let (o, d, f, m) = &rays[i];
                 mismatches.push(format!(
@@ -390,7 +420,7 @@ fn gate(fixture_name: &str, procedural: bool) {
         }
     }
     println!(
-        "{fixture_name}: {} rays: {hits} hits and {misses} misses agree with WARP, {} differ",
+        "{fixture_name}: {} rays: {hits} hits and {misses} misses agree with WARP, {} differ; {unstable} WARP self-disagreements",
         12 * 64,
         mismatches.len()
     );
