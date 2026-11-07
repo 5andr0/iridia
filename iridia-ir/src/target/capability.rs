@@ -37,6 +37,8 @@ pub enum Capability {
     /// An element of an array of resources of the class that an invocation picks as its own (Direct3D's
     /// `NonUniformResourceIndex`).
     BindingArrayNonUniform(ArrayClass),
+    /// An atomic operation on a storage image's texel (naga's image atomics; WGSL has none).
+    TextureAtomic,
 }
 
 /// What an array of resources is of, as targets tell their binding arrays apart.
@@ -227,6 +229,29 @@ pub fn requirements(program: &Program) -> Vec<Requirement> {
             need(
                 Capability::BindingArray(class),
                 format!("resource {} is an array of {what}", r.provenance.name),
+            );
+        }
+    }
+    for (n, v) in f.values.iter().enumerate() {
+        let Op::Atomic {
+            memory: Memory::Image(r, _),
+            ..
+        } = v.op
+        else {
+            continue;
+        };
+        if let Some(resource) = program.interface.resources.iter().find(|x| x.id == r.id)
+            && let ResourceKind::Storage {
+                target: StorageTarget::Image { .. },
+                ..
+            } = resource.kind
+        {
+            need(
+                Capability::TextureAtomic,
+                format!(
+                    "value %{n} is an atomic of storage image {}",
+                    resource.provenance.name
+                ),
             );
         }
     }

@@ -5,9 +5,9 @@
 use iridia_ir::{
     FloatEnv, Program, Provenance,
     interface::{
-        D3dBinding, D3dClass, Interface, Label, Resource, ResourceId, ResourceKind, ResourceProvenance,
-        SampleType, ScalarType, ShaderFormat, Stage, StageFacts, StateParam, SystemValue, TextureDim, Value,
-        Varying, VaryingProvenance,
+        Access, D3dBinding, D3dClass, Interface, Label, Resource, ResourceId, ResourceKind,
+        ResourceProvenance, SampleType, ScalarType, ShaderFormat, Stage, StageFacts, StateParam,
+        StorageTarget, SystemValue, TextureDim, Value, Varying, VaryingProvenance,
     },
 };
 
@@ -340,6 +340,128 @@ fn main {
     assert!(wgsl.contains("textureSampleLevel(t0_[_e3], s0_[_e3], "), "{wgsl}");
     let module = naga::front::wgsl::parse_str(&wgsl).unwrap_or_else(|e| panic!("{e}\n{wgsl}"));
     iridia_naga::validate(&module, &iridia_naga::Profile::NAGA).unwrap_or_else(|e| panic!("{e}\n{wgsl}"));
+}
+
+/// A storage image of `u32` or `i32` texels at register `u0`.
+fn image(sample: SampleType) -> Resource {
+    Resource {
+        id: ResourceId(0),
+        kind: ResourceKind::Storage {
+            target: StorageTarget::Image {
+                dim: TextureDim::D2,
+                arrayed: false,
+                sample,
+            },
+            access: Access::ReadWrite,
+        },
+        count: 1,
+        provenance: ResourceProvenance {
+            name: "img".into(),
+            d3d: Some(D3dBinding {
+                class: D3dClass::UnorderedAccess,
+                register: 0,
+                space: 0,
+            }),
+            ..ResourceProvenance::default()
+        },
+    }
+}
+
+/// A pixel program that changes a texel of `img` by each of `ops` (`atomic.<op>`), reading the old value of none
+/// unless `read` (then the last one's is an output). An atomic is of the texels' type.
+fn texel_atomics(sample: SampleType, ops: &[&str], read: bool) -> Program {
+    let (t, scalar) = if sample == SampleType::Sint {
+        ("i32", ScalarType::Sint)
+    } else {
+        ("u32", ScalarType::Uint)
+    };
+    let mut text = format!(
+        "iridia-ir 1
+fn main {{
+  %0: vec4<f32> = input 0.xyzw
+  %1: vec4<{t}> = bitcast %0
+  %2: vec2<{t}> = %1.xy
+  %3: {t} = %1.z
+"
+    );
+    for (k, op) in ops.iter().enumerate() {
+        text.push_str(&format!(
+            "  %{}: {t} = atomic.{op} image r0, %2 value %3\n",
+            k + 4
+        ));
+    }
+    if read {
+        text.push_str(&format!("  output 0.x = %{}\n", ops.len() + 3));
+    }
+    text.push_str("  return\n}\n");
+    let outputs: &[(ScalarType, u8)] = if read { &[(scalar, 1)] } else { &[] };
+    program(&text, &[F4], outputs, vec![image(sample)])
+}
+
+#[test]
+fn a_texel_atomic_whose_old_value_is_not_read_is_naga_s_image_atomic() {
+    let p = texel_atomics(SampleType::Uint, &["or", "sub", "umax", "xor"], false);
+    let needs: Vec<_> = iridia_naga::requirements(&p)
+        .iter()
+        .map(|r| r.capability)
+        .collect();
+    assert_eq!(needs, [naga::valid::Capabilities::TEXTURE_ATOMIC]);
+    // WGSL has no texel atomics
+    let e = iridia_naga::wgsl(&p, &iridia_naga::Profile::BROWSER).unwrap_err();
+    assert!(
+        e.0.starts_with("browser WGSL cannot carry this program: value %4 is an atomic of storage image img"),
+        "{e}"
+    );
+    let wgsl = iridia_naga::wgsl(&p, &iridia_naga::Profile::NAGA).unwrap();
+    // one texel of an `atomic` image, inside it only; a subtraction is the addition of the negation
+    assert!(
+        wgsl.contains("var u0_: texture_storage_2d<r32uint,atomic>;"),
+        "{wgsl}"
+    );
+    for call in [
+        "textureAtomicOr(u0_, ",
+        "textureAtomicAdd(u0_, ",
+        "textureAtomicMax(u0_, ",
+        "textureAtomicXor(u0_, ",
+    ] {
+        assert!(wgsl.contains(call), "{call}\n{wgsl}");
+    }
+    assert!(wgsl.contains("(0u - "), "{wgsl}");
+    let module = naga::front::wgsl::parse_str(&wgsl).unwrap_or_else(|e| panic!("{e}\n{wgsl}"));
+    iridia_naga::validate(&module, &iridia_naga::Profile::NAGA).unwrap_or_else(|e| panic!("{e}\n{wgsl}"));
+    // a signed image's
+    let p = texel_atomics(SampleType::Sint, &["smin", "add"], false);
+    let wgsl = iridia_naga::wgsl(&p, &iridia_naga::Profile::NAGA).unwrap();
+    assert!(
+        wgsl.contains("var u0_: texture_storage_2d<r32sint,atomic>;"),
+        "{wgsl}"
+    );
+    assert!(wgsl.contains("textureAtomicMin(u0_, "), "{wgsl}");
+    let module = naga::front::wgsl::parse_str(&wgsl).unwrap_or_else(|e| panic!("{e}\n{wgsl}"));
+    iridia_naga::validate(&module, &iridia_naga::Profile::NAGA).unwrap_or_else(|e| panic!("{e}\n{wgsl}"));
+}
+
+#[test]
+fn a_texel_atomic_naga_s_image_atomic_cannot_carry_is_refused_by_name() {
+    let refusal = |sample, ops: &[&str], read| {
+        iridia_naga::wgsl(&texel_atomics(sample, ops, read), &iridia_naga::Profile::NAGA)
+            .unwrap_err()
+            .0
+    };
+    // naga's image atomic gives no old value and takes no exchange
+    assert!(
+        refusal(SampleType::Uint, &["add"], true).contains("a texel atomic whose old value is read"),
+        "{}",
+        refusal(SampleType::Uint, &["add"], true)
+    );
+    let e = refusal(SampleType::Uint, &["exchange"], false);
+    assert!(e.contains("an exchange of a texel has no naga form"), "{e}");
+    // a minimum is of the texels' signedness
+    let e = refusal(SampleType::Uint, &["smin"], false);
+    assert!(
+        e.contains("a SMin of a storage image of Uint texels has no naga form"),
+        "{e}"
+    );
 }
 
 #[test]

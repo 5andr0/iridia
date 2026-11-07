@@ -9,8 +9,8 @@ mod memory;
 use alloc::{format, string::String, vec, vec::Vec};
 
 use iridia_ir::{
-    Axis, Binary, Body, Cmp, End, Fineness, FloatToInt, Function, MinMaxNan, MulZero, Node, OnZero, Op,
-    OutOfBounds, Program, QuadSwap, Region, Res, Rounding, SaturateNan, Scalar, Ternary, Type, Unary,
+    Axis, Binary, Body, Cmp, End, Fineness, FloatToInt, Function, Memory, MinMaxNan, MulZero, Node, OnZero,
+    Op, OutOfBounds, Program, QuadSwap, Region, Res, Rounding, SaturateNan, Scalar, Ternary, Type, Unary,
     ValueId, Wave, WaveOp, WaveScan,
     interface::{
         Access, BufferKind, ResourceId, ResourceKind, SampleType, Stage, StorageTarget, TextureDim, Value,
@@ -156,6 +156,8 @@ struct Lower<'a> {
     func: naga::Function,
     /// The expression of each value, once it is computed.
     values: Vec<Option<Handle<E>>>,
+    /// Whether each value is read (by [`read_values`]).
+    read: Vec<bool>,
     /// The global of each resource.
     globals: Vec<(ResourceId, Handle<GlobalVariable>)>,
     /// The argument of each input slot, and the value it carries (a built-in's own type).
@@ -1960,10 +1962,21 @@ impl Lower<'_> {
     }
     fn node(&mut self, n: &Node) -> Result<(), Error> {
         match n {
-            Node::Value(v) => {
-                let h = self.op(*v)?;
-                self.set(*v, h)?;
-            }
+            // a storage image's texel atomic whose old value nothing reads: naga's image atomic, which gives none
+            Node::Value(v) => match self.f.value(*v).map(|d| &d.op) {
+                Some(&Op::Atomic {
+                    memory: Memory::Image(r, coord),
+                    op,
+                    value,
+                    compare: None,
+                }) if !self.typed_buffer(r.id)? && !self.read.get(v.0 as usize).copied().unwrap_or(true) => {
+                    self.image_atomic(r, coord, op, value)?;
+                }
+                _ => {
+                    let h = self.op(*v)?;
+                    self.set(*v, h)?;
+                }
+            },
             // WGSL's `discard` is a demotion: the invocation goes on as a helper
             Node::Demote => self.statement(Statement::Kill)?,
             Node::StoreVar(var, x) => {
@@ -2155,6 +2168,35 @@ impl Lower<'_> {
     }
 }
 
+/// Whether each value of `f`, whose body is `body`, is read where the body places it: by an operation a node places,
+/// by a node, or by a region's end (a value no node places is not lowered, so what it reads is not read).
+fn read_values(f: &Function, body: &Region) -> Vec<bool> {
+    fn region(f: &Function, r: &Region, read: &mut [bool]) {
+        let mut mark = |v: ValueId| {
+            if let Some(slot) = read.get_mut(v.0 as usize) {
+                *slot = true;
+            }
+        };
+        for n in &r.nodes {
+            if let Node::Value(v) = n
+                && let Some(d) = f.value(*v)
+            {
+                d.op.operands().into_iter().for_each(&mut mark);
+            }
+            n.values().into_iter().for_each(&mut mark);
+        }
+        if let Some(End::Yield(vs) | End::Br(_, vs) | End::Continue(_, vs)) = &r.end {
+            vs.iter().copied().for_each(&mut mark);
+        }
+        for inner in r.nodes.iter().flat_map(Node::regions) {
+            region(f, inner, read);
+        }
+    }
+    let mut read = vec![false; f.values.len()];
+    region(f, body, &mut read);
+    read
+}
+
 /// Whether every output store is at the top level of a body whose only return is its end.
 fn direct(body: &Region) -> bool {
     fn nested(r: &Region) -> bool {
@@ -2207,6 +2249,7 @@ pub fn module(program: &Program, plan: &BindingPlan) -> Result<naga::Module, Err
         module: naga::Module::default(),
         func: naga::Function::default(),
         values: vec![None; f.values.len()],
+        read: read_values(f, body),
         globals: Vec::new(),
         arguments: vec![None; program.interface.inputs.len()],
         vars: Vec::new(),
@@ -2616,14 +2659,15 @@ impl Lower<'_> {
             (SampleType::Uint, false) => naga::StorageFormat::Rgba32Uint,
             (SampleType::Float, false) => naga::StorageFormat::Rgba32Float,
         };
-        let mut access = match access {
+        // an image an atomic reaches is WGSL's `atomic` access, which loads and stores too
+        let access = match access {
+            _ if atomic => {
+                naga::StorageAccess::ATOMIC | naga::StorageAccess::LOAD | naga::StorageAccess::STORE
+            }
             Access::Read => naga::StorageAccess::LOAD,
             Access::Write => naga::StorageAccess::STORE,
             Access::ReadWrite => naga::StorageAccess::LOAD | naga::StorageAccess::STORE,
         };
-        if atomic {
-            access |= naga::StorageAccess::ATOMIC;
-        }
         let dim = match dim {
             TextureDim::D1 => ImageDimension::D1,
             TextureDim::D2 => ImageDimension::D2,

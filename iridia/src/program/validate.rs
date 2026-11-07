@@ -577,11 +577,15 @@ fn resources(p: &Program, problems: &mut Vec<Problem>) {
                                 && access == naga::StorageAccess::LOAD | naga::StorageAccess::STORE))
                             && buffer_fits(&p.module, inner, *kind)
                     }
+                    // an image atomics reach may load and store besides: WGSL's `atomic` access is all three
                     StorageTarget::Image { dim, arrayed, .. } => {
                         space == AddressSpace::Handle
                             && matches!(inner, TypeInner::Image { dim: d, arrayed: a, class: ImageClass::Storage { access, .. } }
                                 if *d == texture_dim(*dim) && *a == *arrayed
-                                    && access.difference(naga::StorageAccess::ATOMIC) == want)
+                                    && (access.difference(naga::StorageAccess::ATOMIC) == want
+                                        || *access == naga::StorageAccess::ATOMIC
+                                            | naga::StorageAccess::LOAD
+                                            | naga::StorageAccess::STORE))
                     }
                 }
             }

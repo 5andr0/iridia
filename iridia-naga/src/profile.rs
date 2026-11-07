@@ -53,6 +53,7 @@ impl Profile {
             .union(Capabilities::CLIP_DISTANCES)
             .union(Capabilities::SUBGROUP)
             .union(Capabilities::SUBGROUP_VERTEX_STAGE)
+            .union(Capabilities::TEXTURE_ATOMIC)
             .union(BINDING_ARRAYS),
         bindings: Bindings::D3d,
         directives: Directives::Naga,
@@ -61,9 +62,9 @@ impl Profile {
     /// WebGPU's core WGSL: per-sample shading (`sample_index`, `@interpolate(..., sample)`) and cube array textures
     /// are core; `f16` (`shader-f16`), `primitive_index` (`primitive-index`) and the subgroup operations
     /// (`subgroups`, `Capabilities::SUBGROUP`) are optional device features a consumer adds with [`Profile::with`]
-    /// when its device has them; WGSL has no 64-bit or 16-bit integers, no `f64` and no arrays of resources (naga's
-    /// binding arrays, `enable wgpu_binding_array;` in its dialect). Resources bind inside WebGPU's
-    /// default limits, and the WGSL states the standard's directives.
+    /// when its device has them; WGSL has no 64-bit or 16-bit integers, no `f64`, no arrays of resources (naga's
+    /// binding arrays, `enable wgpu_binding_array;` in its dialect) and no texel atomics (naga's `textureAtomic*`).
+    /// Resources bind inside WebGPU's default limits, and the WGSL states the standard's directives.
     pub const BROWSER: Profile = Profile {
         name: "browser WGSL",
         capabilities: Capabilities::MULTISAMPLED_SHADING.union(Capabilities::CUBE_ARRAY_TEXTURES),
@@ -121,6 +122,7 @@ fn capability(c: Capability) -> Capabilities {
             ArrayClass::Buffers => Capabilities::STORAGE_BUFFER_BINDING_ARRAY,
             ArrayClass::StorageImages => Capabilities::STORAGE_TEXTURE_BINDING_ARRAY,
         },
+        Capability::TextureAtomic => Capabilities::TEXTURE_ATOMIC,
         Capability::BindingArrayNonUniform(class) => match class {
             ArrayClass::TexturesAndSamplers => {
                 Capabilities::TEXTURE_AND_SAMPLER_BINDING_ARRAY_NON_UNIFORM_INDEXING

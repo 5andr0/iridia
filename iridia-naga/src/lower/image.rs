@@ -1,4 +1,4 @@
-//! Textures and storage images: samples, gathers, texel loads and stores, and queries.
+//! Textures and storage images: samples, gathers, texel loads, stores and atomics, and queries.
 //!
 //! A texel load or store outside the image (its coordinate past the size of its level, a level, layer or sample it does
 //! not have) reads zero and writes nothing, as the IR states; WGSL leaves such an access to the implementation, so each
@@ -8,12 +8,12 @@
 use alloc::{format, vec::Vec};
 
 use iridia_ir::{
-    GatherOffset, Level, Res, Scalar, Type, ValueId,
+    AtomicOp, GatherOffset, Level, Res, Scalar, Type, ValueId,
     interface::{ResourceKind, SampleType, StorageTarget, TextureDim},
 };
 use naga::{
-    BinaryOperator as Bo, Block, Expression as E, Handle, ImageQuery, MathFunction as Mf, RelationalFunction,
-    SampleLevel, ScalarKind, Statement, SwizzleComponent,
+    AtomicFunction, BinaryOperator as Bo, Block, Expression as E, Handle, ImageQuery, MathFunction as Mf,
+    RelationalFunction, SampleLevel, ScalarKind, Statement, SwizzleComponent,
 };
 
 use super::{Lower, component, err, size};
@@ -472,6 +472,78 @@ impl Lower<'_> {
             coordinate: a.coordinate,
             array_index: a.array_index,
             value,
+        })?;
+        let accept = self.close()?;
+        self.statement(Statement::If {
+            condition: a.inside,
+            accept,
+            reject: Block::new(),
+        })
+    }
+
+    /// `Op::Atomic` of a storage image's texel whose old value nothing reads: naga's image atomic (`textureAtomic*`),
+    /// where the texel is inside the image (outside it the IR's changes nothing). naga's image atomic takes no exchange:
+    /// one is refused by name. A subtraction is an addition of the negation (the same bits); a minimum or maximum is of
+    /// the image's texels' signedness, so one of the other signedness is refused by name.
+    pub(super) fn image_atomic(
+        &mut self,
+        r: Res,
+        coord: ValueId,
+        op: AtomicOp,
+        value: ValueId,
+    ) -> Result<(), Error> {
+        let shape = self.shape(r)?;
+        if !shape.storage {
+            return Err(err("an atomic of a texture that is not a storage image"));
+        }
+        let signed = shape.sample == SampleType::Sint;
+        let fun = match op {
+            AtomicOp::Add | AtomicOp::Sub => AtomicFunction::Add,
+            AtomicOp::And => AtomicFunction::And,
+            AtomicOp::Or => AtomicFunction::InclusiveOr,
+            AtomicOp::Xor => AtomicFunction::ExclusiveOr,
+            AtomicOp::SMin if signed => AtomicFunction::Min,
+            AtomicOp::SMax if signed => AtomicFunction::Max,
+            AtomicOp::UMin if !signed => AtomicFunction::Min,
+            AtomicOp::UMax if !signed => AtomicFunction::Max,
+            AtomicOp::Exchange | AtomicOp::CompareExchange => {
+                return Err(err(
+                    "an exchange of a texel has no naga form: naga's image atomic takes no exchange",
+                ));
+            }
+            other => {
+                return Err(err(format!(
+                    "a {other:?} of a storage image of {:?} texels has no naga form: an image's minimum and maximum \
+                     are of its texels' signedness",
+                    shape.sample
+                )));
+            }
+        };
+        let a = self.texel_address(r, shape, coord, None, None, [0; 3])?;
+        let (kind, word) = if signed {
+            (ScalarKind::Sint, Scalar::I32)
+        } else {
+            (ScalarKind::Uint, Scalar::U32)
+        };
+        let x = self.get(value)?;
+        let x = if super::naga_scalar(self.vty(value)?.scalar)?.kind == kind {
+            x
+        } else {
+            self.bitcast(x, kind)
+        };
+        let x = if op == AtomicOp::Sub {
+            let zero = self.literal_bits(word, 0)?;
+            self.binary(Bo::Subtract, zero, x)
+        } else {
+            x
+        };
+        self.open();
+        self.statement(Statement::ImageAtomic {
+            image: a.image,
+            coordinate: a.coordinate,
+            array_index: a.array_index,
+            fun,
+            value: x,
         })?;
         let accept = self.close()?;
         self.statement(Statement::If {

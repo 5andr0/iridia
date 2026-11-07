@@ -37,6 +37,16 @@
   text it was). Behaviour: a pixel program's lane index and lane count are carried as `u32` (the built-ins' type) by
   `iridia-naga` too, and `iridia`'s refusal of a used clip or cull distance outside a vertex program's outputs reads
   "a clip or cull distance as a Pixel input has no built-in", as `iridia-naga`'s did.
+- `iridia-naga` lowers an atomic of a storage image's texel whose old value nothing reads: naga's image atomic
+  (`textureAtomicAdd` and the others) on an `r32uint` or `r32sint` image of WGSL's `atomic` access, where the texel
+  is inside the image. A subtraction is the addition of the negation; a minimum or maximum is of the texels'
+  signedness. It was refused ("an atomic of an image is not lowered yet"). What naga 30's image atomic cannot carry is
+  refused by name: an atomic whose old value is read, a compare-exchange, an exchange (naga's WGSL reads
+  `textureAtomic*` as statements, of no value and no exchange), and a minimum or maximum of the other signedness.
+  `Profile::NAGA` has `TEXTURE_ATOMIC`; `Profile::BROWSER` refuses such a program by name (WGSL has no texel
+  atomics): the requirement is `iridia_ir::target::Capability::TextureAtomic` (breaking: a new variant). The DXBC and DXIL `image_atomics` fixtures lowered and run on naga's executor agree with their naga lift.
+  `iridia`'s program validator takes a storage image of WGSL's `atomic` access (atomic, load and store) for one an
+  atomic reaches, whatever else the program does with it.
 - `iridia-naga` lowers arrays of resources: an array of textures, samplers, storage images, constant buffers or
   buffers (a `Resource` whose `count` is not 1, sized or unbounded) is a naga binding array (`binding_array<T, N>`, or
   `binding_array<T>` unbounded; a buffer's element is a structure of its one member), and an element of one (`Res`
