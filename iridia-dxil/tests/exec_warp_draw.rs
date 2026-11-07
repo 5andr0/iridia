@@ -457,6 +457,7 @@ fn state_of(c: &DrawCase) -> Rasterizer {
         point_sprite: false,
         flat_colours: false,
         clamp_colours: false,
+        fog: None,
     }
 }
 

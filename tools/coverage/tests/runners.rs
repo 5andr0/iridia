@@ -454,3 +454,21 @@ fn a_direct3d_9_draw_specialises_its_programs_by_the_texture_stage_state() {
         assert!(lines.contains(&line), "the probe at line {line} is selected");
     }
 }
+
+/// Direct3D 9's fog, as vkd3d-shader applies it: vertex fog from the vertex program's coordinate, and table fog,
+/// linear, exp and exp2, from the position's z with an orthographic projection and its w otherwise (fog.shader_test).
+#[test]
+fn direct3d_9_fogs_the_first_target_by_its_mode_and_source() {
+    let runs = vkd3d_runs("vkd3d/d3d9.json.gz", "fog.shader_test");
+    assert_selected_pass(&runs);
+    // vertex fog, linear, exp and exp2 from z, and linear from w
+    let lines: Vec<u64> = runs
+        .iter()
+        .flat_map(|r| &r.probes)
+        .filter(|p| p.selected)
+        .map(|p| p.line)
+        .collect();
+    for line in [69, 76, 83, 90, 148] {
+        assert!(lines.contains(&line), "the probe at line {line} is selected");
+    }
+}

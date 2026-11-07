@@ -85,7 +85,8 @@
 //! - **Pixels.** In 2 x 2 quads aligned to even pixels, uncovered lanes run as helpers (their inputs extrapolated) so
 //!   derivatives and implicit levels of detail are the quad's; a helper writes nothing. A discarded pixel writes
 //!   nothing, and neither does one that fails Direct3D 9's alpha test ([`Rasterizer::alpha_test`]), which compares
-//!   the alpha of the program's first target with the reference, or one whose sample the sample mask leaves out. The
+//!   the alpha of the program's first target with the reference, or one whose sample the sample mask leaves out. Direct3D
+//!   9's fog ([`Rasterizer::fog`]) then moves the first target's colour toward the fog colour. The
 //!   depth test runs after the pixel program (its result is the same: a pixel that fails writes nothing); a pixel
 //!   that passes writes every target lane the program writes and, when the state writes depth, its depth. Primitives are drawn in order, so a later one overwrites an earlier one where both pass.
 use crate::geometry::Topology;
@@ -204,6 +205,88 @@ pub struct Rasterizer {
     /// Direct3D 9's shader models 1 and 2: a vertex program's colour outputs (`COLOR`, its `oD#` registers) reach the
     /// pixel program clamped to [0, 1] (NaN to 0), each vertex's value before it is interpolated.
     pub clamp_colours: bool,
+    /// Direct3D 9's fog (`D3DRS_FOGENABLE`); `None`: none.
+    pub fog: Option<Fog>,
+}
+
+/// Direct3D 9's fog, as vkd3d-shader applies it (`vsir_program_insert_vertex_fog` and `insert_fragment_fog`): a fog
+/// coordinate from the vertex program's outputs ([`FogSource`]), interpolated perspective-correct, gives a factor
+/// ([`FogFactor`]), and a pixel that passes the alpha test writes its first target as
+/// `(colour - fog colour) * saturate(factor) + fog colour`, every lane.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Fog {
+    /// The fog colour (`D3DRS_FOGCOLOR`).
+    pub colour: [f32; 4],
+    /// Where the coordinate comes from.
+    pub source: FogSource,
+    /// The factor the coordinate gives.
+    pub factor: FogFactor,
+}
+
+/// Where Direct3D 9's fog coordinate comes from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FogSource {
+    /// The vertex program's `FOG` output, or where it writes none its specular colour's (`COLOR1`) alpha: vertex fog
+    /// (`D3DRS_FOGTABLEMODE` `D3DFOG_NONE`).
+    Output,
+    /// The clip-space position's z: table fog with an orthographic projection.
+    Z,
+    /// The clip-space position's w: table fog with any other projection.
+    W,
+}
+
+/// The factor Direct3D 9's fog coordinate `c` gives (`D3DRS_FOGTABLEMODE`), in 32-bit floats as vkd3d-shader works it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum FogFactor {
+    /// `c` itself: vertex fog.
+    Coordinate,
+    /// `(end - c) / (end - start)` (`D3DFOG_LINEAR`, `D3DRS_FOGSTART` and `D3DRS_FOGEND`).
+    Linear {
+        /// Where the fog starts.
+        start: f32,
+        /// Where it is whole.
+        end: f32,
+    },
+    /// `e^(-c * density)` (`D3DFOG_EXP`, `D3DRS_FOGDENSITY`).
+    Exp {
+        /// The density.
+        density: f32,
+    },
+    /// `e^(-(c * density)^2)` (`D3DFOG_EXP2`).
+    Exp2 {
+        /// The density.
+        density: f32,
+    },
+}
+
+impl FogFactor {
+    /// The factor of the coordinate `c`, before it is saturated.
+    pub fn of(self, c: f32) -> f32 {
+        use std::f32::consts::LOG2_E;
+        match self {
+            FogFactor::Coordinate => c,
+            FogFactor::Linear { start, end } => (end - c) * (1.0 / (end - start)),
+            FogFactor::Exp { density } => (-(density * LOG2_E * c)).exp2(),
+            FogFactor::Exp2 { density } => {
+                let x = density * LOG2_E.sqrt() * c;
+                (-(x * x)).exp2()
+            }
+        }
+    }
+}
+
+impl Fog {
+    /// `colour` fogged by the coordinate `c`.
+    fn apply(&self, colour: [u32; 4], c: f32) -> [u32; 4] {
+        let f = self.factor.of(c);
+        // saturate, NaN to 0
+        let f = if f > 0.0 { f.min(1.0) } else { 0.0 };
+        let mut out = colour;
+        for (lane, fog) in out.iter_mut().zip(self.colour) {
+            *lane = ((f32::from_bits(*lane) - fog) * f + fog).to_bits();
+        }
+        out
+    }
 }
 
 /// Direct3D 9's point size: `D3DRS_POINTSIZE`, which a vertex program's `PSIZE` output replaces, held to
@@ -465,6 +548,9 @@ struct RasterValues {
     point_size: Option<(usize, u8)>,
     target_index: Option<(usize, u8)>,
     viewport_index: Option<(usize, u8)>,
+    /// Direct3D 9's fog coordinate output (`FOG`), and the specular colour's alpha (`COLOR1.w`) that stands for it.
+    fog: Option<(usize, u8)>,
+    specular_alpha: Option<(usize, u8)>,
 }
 
 impl RasterValues {
@@ -482,6 +568,15 @@ impl RasterValues {
                 Some(SystemValue::ViewportArrayIndex) => Some(&mut d.viewport_index),
                 None if out.label.name.eq_ignore_ascii_case("PSIZE") && out.label.index == 0 => {
                     Some(&mut d.point_size)
+                }
+                None if out.label.name.eq_ignore_ascii_case("FOG") && out.label.index == 0 => {
+                    Some(&mut d.fog)
+                }
+                None if out.label.name.eq_ignore_ascii_case("COLOR") && out.label.index == 1 => {
+                    let (register, lanes) = from(at, out)?;
+                    // the alpha: the fourth of the lanes the output holds
+                    d.specular_alpha = lanes.get(3).map(|&lane| (register, lane));
+                    continue;
                 }
                 _ => continue,
             };
@@ -519,6 +614,7 @@ impl RasterValues {
             point_size: self.point_size.as_ref().map(word),
             target_index: self.target_index.as_ref().map_or(0, bits),
             viewport_index: self.viewport_index.as_ref().map_or(0, bits),
+            fog: self.fog.or(self.specular_alpha).as_ref().map(word),
             outputs,
         }
     }
@@ -544,6 +640,8 @@ struct Shaded {
     point_size: Option<f32>,
     target_index: u32,
     viewport_index: u32,
+    /// Direct3D 9's fog coordinate output, or the specular alpha that stands for it.
+    fog: Option<f32>,
 }
 
 /// A vertex in the rasterizer: its clip-space position and its weights on the drawn primitive's vertices in clip space
@@ -953,16 +1051,21 @@ impl<'a> Raster<'a> {
                 let lanes = [(qx, qy), (qx1, qy), (qx, qy1), (qx1, qy1)];
                 let mut covered = [false; 4];
                 let mut depths = [0f32; 4];
-                for (((&(px, py), covered), depth), lane_input) in lanes
+                let mut fogs = [0f32; 4];
+                for ((((&(px, py), covered), depth), fog), lane_input) in lanes
                     .iter()
                     .zip(covered.iter_mut())
                     .zip(depths.iter_mut())
+                    .zip(fogs.iter_mut())
                     .zip(lane_inputs.iter_mut())
                 {
                     // the pixel program reads the depth as interpolated; the depth test and write take it clamped
                     let f = cover.fragment(px, py);
                     *covered = f.covered && px < w && py < h;
                     *depth = f.depth.clamp(depth_range.0, depth_range.1);
+                    if let Some(state_fog) = state.fog.filter(|_| *covered) {
+                        *fog = fog_coordinate(state_fog.source, drawn, &f)?;
+                    }
                     let centre = [px as f32 + 0.5, py as f32 + 0.5];
                     self.inputs_at(drawn, &f, centre, *covered, state, lane_input);
                 }
@@ -977,7 +1080,8 @@ impl<'a> Raster<'a> {
                     input3.as_slice(),
                 ];
                 let quad: [Execution; 4] = self.pixel.execute_quad(inputs, buffers, sampler)?;
-                for (((e, &covered), &(px, py)), &depth) in quad.iter().zip(&covered).zip(&lanes).zip(&depths)
+                for ((((e, &covered), &(px, py)), &depth), &fog_at) in
+                    quad.iter().zip(&covered).zip(&lanes).zip(&depths).zip(&fogs)
                 {
                     if !covered {
                         continue;
@@ -998,6 +1102,12 @@ impl<'a> Raster<'a> {
                         stats.masked = stats.masked.saturating_add(1);
                         continue;
                     }
+                    let mut outputs = std::borrow::Cow::Borrowed(&e.outputs);
+                    if let Some(fog) = &state.fog
+                        && let Some(first) = outputs.to_mut().first_mut()
+                    {
+                        *first = fog.apply(*first, fog_at);
+                    }
                     // the pixel is inside the surface: the bounds are clamped to its width and height
                     let at = usize::try_from(slice.saturating_add(py.saturating_mul(w)).saturating_add(px))
                         .map_err(|_| error(format!("pixel ({px}, {py}) is outside the surface")))?;
@@ -1016,7 +1126,7 @@ impl<'a> Raster<'a> {
                     for (register, target) in surface.targets.iter_mut().enumerate() {
                         let Some(target) = target else { continue };
                         let mask = e.output_masks.get(register).copied().unwrap_or(0);
-                        let value = e.outputs.get(register).copied().unwrap_or([0; 4]);
+                        let value = outputs.get(register).copied().unwrap_or([0; 4]);
                         let texel = target.get_mut(at).ok_or_else(|| {
                             error(format!("pixel ({px}, {py}) is outside target {register}"))
                         })?;
@@ -1136,6 +1246,26 @@ impl<'a> Raster<'a> {
             }
         }
     }
+}
+
+/// Direct3D 9's fog coordinate at a pixel `f` of the primitive `drawn`: its vertices' values from `source`, interpolated
+/// perspective-correct (a point's is its vertex's).
+fn fog_coordinate(source: FogSource, drawn: Drawn<'_>, f: &Fragment) -> Result<f32, Error> {
+    let value = |v: &Shaded| match source {
+        FogSource::Output => v.fog.ok_or_else(|| {
+            error("vertex fog reads the vertex program's FOG output or specular alpha, and it writes neither")
+        }),
+        FogSource::Z => Ok(v.position[2]),
+        FogSource::W => Ok(v.position[3]),
+    };
+    if let [only] = drawn.original {
+        return value(only);
+    }
+    let mut c = 0f64;
+    for (weight, vertex) in f.perspective.iter().zip(drawn.original) {
+        c += weight * f64::from(value(vertex)?);
+    }
+    Ok(crate::narrow(c))
 }
 
 /// The w of each of a primitive's vertices, for its screen weights (1 past its last, which weighs nothing).

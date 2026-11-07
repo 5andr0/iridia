@@ -11,8 +11,8 @@ use std::sync::Arc;
 
 use iridia::{Interface, Program, ResourceKind, SystemValue};
 use iridia_exec::draw::{
-    AlphaTest, Compare as DrawCompare, Cull, DepthState, DrawShader, Linkage, PointSize, Primitive,
-    Rasterizer, Surface, Viewport,
+    AlphaTest, Compare as DrawCompare, Cull, DepthState, DrawShader, Fog, FogFactor, FogSource, Linkage,
+    PointSize, Primitive, Rasterizer, Surface, Viewport,
 };
 use iridia_exec::geometry::{GeometryShader, Topology};
 use iridia_exec::tessellation::TessellationShader;
@@ -189,6 +189,8 @@ struct State {
     flat: bool,
     /// The Direct3D 9 texture stages that divide their coordinate by its last lane (`D3DTTFF_PROJECTED`).
     projected: BTreeSet<u32>,
+    /// Direct3D 9's fog.
+    fog: FogState,
     viewports: BTreeMap<u32, [f32; 4]>,
     sample_mask: Option<u32>,
     /// The fixed-function state set that this runner does not model, by name.
@@ -233,6 +235,106 @@ fn alpha_test_of(value: &serde_json::Value) -> Result<AlphaTest, String> {
         }
     };
     Ok(AlphaTest { compare, reference })
+}
+
+/// Direct3D 9's fog as vkd3d's runner keeps it (shader_runner.c): each `fog` line sets the mode and what it names,
+/// the rest kept from the lines before (from start 0, end 1, density 1, an orthographic projection not set).
+#[derive(Clone, Debug)]
+struct FogState {
+    /// `disable`, `none`, `linear`, `exp` or `exp2`.
+    mode: String,
+    ortho: bool,
+    start: f32,
+    end: f32,
+    density: f32,
+    /// `fog-colour`, as the d3d9 runner sets `D3DRS_FOGCOLOR`: a `D3DCOLOR`, each lane `lane * 255` cut to a byte.
+    colour: [f32; 4],
+}
+
+impl Default for FogState {
+    fn default() -> Self {
+        FogState {
+            mode: "disable".into(),
+            ortho: false,
+            start: 0.0,
+            end: 1.0,
+            density: 1.0,
+            colour: [0.0; 4],
+        }
+    }
+}
+
+impl FogState {
+    /// vkd3d's `fog <mode> [ortho | non-ortho] [<start> <end> | <density>]` (`{mode, ortho, start, end, density}`).
+    fn set(&mut self, value: &serde_json::Value) -> Result<(), String> {
+        let shown = || format!("the fog {value}");
+        let mode = value
+            .get("mode")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(shown)?;
+        if !["disable", "none", "linear", "exp", "exp2"].contains(&mode) {
+            return Err(shown());
+        }
+        self.mode = mode.to_owned();
+        if let Some(ortho) = value.get("ortho") {
+            self.ortho = ortho.as_bool().ok_or_else(shown)?;
+        }
+        for (name, into) in [
+            ("start", &mut self.start),
+            ("end", &mut self.end),
+            ("density", &mut self.density),
+        ] {
+            if let Some(v) = value.get(name) {
+                *into = float_bits(v).ok_or_else(shown)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// vkd3d's `fog-colour <r> <g> <b> <a>` (the lanes' bits).
+    fn set_colour(&mut self, value: &serde_json::Value) -> Result<(), String> {
+        let shown = || format!("the fog colour {value}");
+        for (k, into) in self.colour.iter_mut().enumerate() {
+            let lane = value.get(k).and_then(float_bits).ok_or_else(shown)?;
+            // C's float to uint8_t conversion: truncated
+            *into = (lane * 255.0).clamp(0.0, 255.0).trunc() / 255.0;
+        }
+        Ok(())
+    }
+
+    /// The draw's fog: vertex fog for `none` (the vertex program's coordinate), table fog from the position's z with
+    /// an orthographic projection and its w otherwise, as vkd3d's runners choose the source.
+    fn fog(&self) -> Option<Fog> {
+        let table = if self.ortho { FogSource::Z } else { FogSource::W };
+        let (source, factor) = match self.mode.as_str() {
+            "none" => (FogSource::Output, FogFactor::Coordinate),
+            "linear" => (
+                table,
+                FogFactor::Linear {
+                    start: self.start,
+                    end: self.end,
+                },
+            ),
+            "exp" => (
+                table,
+                FogFactor::Exp {
+                    density: self.density,
+                },
+            ),
+            "exp2" => (
+                table,
+                FogFactor::Exp2 {
+                    density: self.density,
+                },
+            ),
+            _ => return None,
+        };
+        Some(Fog {
+            colour: self.colour,
+            source,
+            factor,
+        })
+    }
 }
 
 /// vkd3d's `point-size <size> <min> <max>` (`[size, min, max]`).
@@ -723,9 +825,22 @@ fn run_as(programs: &Programs<'_>, run: &Run, flushed: bool) -> RunResult {
                                 state.unmodelled.insert(name.clone(), e);
                             }
                         },
-                        "fog" if value.get("mode").and_then(|m| m.as_str()) == Some("disable") => {
-                            state.unmodelled.remove(name);
-                        }
+                        "fog" => match state.fog.set(value) {
+                            Ok(()) => {
+                                state.unmodelled.remove(name);
+                            }
+                            Err(e) => {
+                                state.unmodelled.insert(name.clone(), e);
+                            }
+                        },
+                        "fog_colour" => match state.fog.set_colour(value) {
+                            Ok(()) => {
+                                state.unmodelled.remove(name);
+                            }
+                            Err(e) => {
+                                state.unmodelled.insert(name.clone(), e);
+                            }
+                        },
                         _ => {
                             state.unmodelled.insert(name.clone(), value.to_string());
                         }
@@ -1331,6 +1446,7 @@ fn draw_step(
         flat_colours: d3d9 && state.flat,
         // shader models 1 and 2 pass colours through registers of [0, 1] (`oD#`), 3 through general ones
         clamp_colours: d3d9 && shader_model(&vs.lifted.program.provenance.target).is_some_and(|m| m < 3),
+        fog: state.fog.fog().filter(|_| d3d9),
     };
     let vs_constants = constant_rows(vsh, device);
     let ps_constants = constant_rows(psh, device);
@@ -1532,5 +1648,20 @@ mod tests {
         // it mends none
         let mut kept = probes_of(&[Outcome::Pass, fail()]);
         assert!(!adopt_flushed(&mut kept, probes_of(&[Outcome::Pass, fail()])));
+    }
+
+    /// The d3d9 runner sets the fog colour as a `D3DCOLOR` (`d3d_color_from_vec4`): each lane times 255, cut to a byte.
+    #[test]
+    fn the_fog_colour_is_a_byte_a_lane() {
+        let mut fog = FogState::default();
+        let bits = |x: f32| serde_json::Value::from(x.to_bits());
+        fog.set_colour(&serde_json::Value::Array(vec![
+            bits(0.5),
+            bits(1.0),
+            bits(0.0),
+            bits(0.999),
+        ]))
+        .unwrap();
+        assert_eq!(fog.colour, [127.0 / 255.0, 1.0, 0.0, 254.0 / 255.0]);
     }
 }

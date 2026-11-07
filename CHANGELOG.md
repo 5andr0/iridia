@@ -90,6 +90,10 @@
   (`Linkage::Direct3D9`), where a pixel input no output writes reads 0 as a texture coordinate and, before shader
   model 3, white as a colour; `DrawShader::new` keeps the strict linkage, which refuses it. A pixel input lane reads
   the output lane of its component, where an input whose mask starts past x read the output's lanes from x.
+  `Rasterizer::fog` takes Direct3D 9's fog as vkd3d-shader applies it (`Fog`): a coordinate from the vertex
+  program's `FOG` output (or its specular alpha) or the position's z or w, interpolated perspective-correct, gives a
+  factor (`FogFactor`: the coordinate, linear, exp, exp2), and a pixel that passes the alpha test writes its first
+  target as `(colour - fog colour) * saturate(factor) + fog colour`.
 - `iridia-dxil`: a boolean converts to a float as 1 or 0 (`uitofp`) and -1 or 0 (`sitofp`), where it converted its
   all-ones word; and extended to a 16-bit integer (`zext`, `sext`), it is cut to the 16 bits. An array of read-write
   views keeps a counter per element, the element's word at its index (`counter_of`, documented in `iridia-ir`). A
