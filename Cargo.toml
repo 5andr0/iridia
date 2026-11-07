@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["iridia", "iridia-d3d9", "iridia-d3d9-ir", "iridia-dxbc", "iridia-dxil", "iridia-exec", "iridia-exec-ir", "iridia-interface", "iridia-ir", "iridia-mojo", "iridia-naga", "iridia-passes", "iridia-wgsl", "tools/coverage"]
+members = ["iridia", "iridia-analysis", "iridia-d3d9", "iridia-d3d9-ir", "iridia-dxbc", "iridia-dxil", "iridia-exec", "iridia-exec-ir", "iridia-interface", "iridia-ir", "iridia-mojo", "iridia-naga", "iridia-passes", "iridia-wgsl", "tools/coverage"]
 
 [workspace.package]
 version = "0.6.0"
@@ -17,6 +17,7 @@ dxcontainer = "0.12.0"
 dxil-reader = "0.12.0"
 half = { version = "=2.7.1", default-features = false }
 iridia = { version = "0.6.0", path = "iridia" }
+iridia-analysis = { version = "0.6.0", path = "iridia-analysis" }
 iridia-d3d9 = { path = "iridia-d3d9" }
 iridia-d3d9-ir = { version = "0.6.0", path = "iridia-d3d9-ir" }
 iridia-exec-ir = { version = "0.6.0", path = "iridia-exec-ir" }

@@ -1,0 +1,229 @@
+# Each fixtures program's answers of the analyses on the IR (tests/oracle.rs): program, then a hash of what reaches each output lane and the discard and the constant words read, or why it has none.
+iridia/alpha_reference_control_only.dxbc	02e49e07009b5827	agree	steps completed=1, max=0, exhausted=0
+iridia/alpha_reference_control_only.dxil	02e49e07009b5827	agree	steps completed=1, max=2, exhausted=0
+iridia/alpha_reference_coordinate_only.dxbc	e6234dc933d15946	agree	steps completed=1, max=0, exhausted=0
+iridia/alpha_reference_coordinate_only.dxil	e6234dc933d15946	agree	steps completed=1, max=2, exhausted=0
+iridia/alpha_reference_direct.dxbc	7b6dfe48a9cc080e	agree	steps completed=1, max=0, exhausted=0
+iridia/alpha_reference_direct.dxil	7b6dfe48a9cc080e	agree	steps completed=1, max=2, exhausted=0
+iridia/alpha_reference_dithered.dxbc	a2a366c0c7e7ae9c	agree	steps completed=1, max=0, exhausted=0
+iridia/alpha_reference_dithered.dxil	a2a366c0c7e7ae9c	agree	steps completed=1, max=2, exhausted=0
+iridia/alpha_reference_product.dxbc	545a321e1b828f52	agree	steps completed=1, max=0, exhausted=0
+iridia/alpha_reference_product.dxil	545a321e1b828f52	agree	steps completed=1, max=2, exhausted=0
+iridia/alpha_reference_same_source.dxbc	bab6f4da392a95da	agree	steps completed=1, max=0, exhausted=0
+iridia/alpha_reference_same_source.dxil	bab6f4da392a95da	agree	steps completed=1, max=2, exhausted=0
+iridia/alpha_reference_shared_scale.dxbc	b08a562553a0729c	agree	steps completed=1, max=0, exhausted=0
+iridia/alpha_reference_shared_scale.dxil	b08a562553a0729c	agree	steps completed=1, max=2, exhausted=0
+iridia/alpha_reference_transformed.dxbc	47dbd8ff7847c67c	agree	steps completed=1, max=0, exhausted=0
+iridia/alpha_reference_transformed.dxil	bf2128b4455134d0	agree	steps completed=1, max=2, exhausted=0
+iridia/alpha_reference_unrelated.dxbc	1afbbb42fb454f0e	agree	steps completed=1, max=0, exhausted=0
+iridia/alpha_reference_unrelated.dxil	1afbbb42fb454f0e	agree	steps completed=1, max=2, exhausted=0
+iridia/alpha_reference_unwritten.dxbc	615b6830b98ad155	agree	steps completed=1, max=0, exhausted=0
+iridia/alpha_reference_unwritten.dxil	615b6830b98ad155	agree	steps completed=1, max=2, exhausted=0
+iridia/alpha_reference_unwritten_dither.dxbc	c1546a809ffeaa77	agree	steps completed=1, max=0, exhausted=0
+iridia/alpha_reference_unwritten_dither.dxil	c1546a809ffeaa77	agree	steps completed=1, max=2, exhausted=0
+iridia/blend_kinds.dxbc	e59046a80d33e110	agree	steps completed=1, max=0, exhausted=0
+iridia/blend_over.dxbc	5e4193f700705281	agree	steps completed=1, max=0, exhausted=0
+iridia/compute_basic.dxil	ac92696cc5a76c40	execution not compared: a buffer, image or patch store, a barrier, a vertex emit, a meshlet store or a mesh launch is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia/flow_blend.dxbc	2c3b1adfb282274c	agree	steps completed=1, max=0, exhausted=0
+iridia/flow_blend.dxil	2c3b1adfb282274c	agree	steps completed=1, max=1, exhausted=0
+iridia/flow_carried.dxbc	47733d2f85633773	agree	steps completed=1, max=1, exhausted=0
+iridia/flow_carried.dxil	47733d2f85633773	agree	steps completed=1, max=3, exhausted=0
+iridia/flow_control.dxbc	3c9efeedbf5f464e	agree	steps completed=1, max=0, exhausted=0
+iridia/flow_control.dxil	3c9efeedbf5f464e	agree	steps completed=1, max=4, exhausted=0
+iridia/flow_coordinate.dxbc	6c97595fa5ebb2c7	agree	steps completed=1, max=0, exhausted=0
+iridia/flow_coordinate.dxil	6c97595fa5ebb2c7	agree	steps completed=1, max=1, exhausted=0
+iridia/flow_kinds.dxbc	bea886408cb3b763	agree	steps completed=1, max=0, exhausted=0
+iridia/flow_kinds.dxil	bea886408cb3b763	agree	steps completed=1, max=1, exhausted=0
+iridia/flow_never.dxbc	04295b1d99e35587	agree	steps completed=1, max=0, exhausted=0
+iridia/flow_never.dxil	04295b1d99e35587	agree	steps completed=1, max=1, exhausted=0
+iridia/flow_value.dxbc	b5d079a6a3ba8bb8	agree	steps completed=1, max=0, exhausted=0
+iridia/flow_value.dxil	b5d079a6a3ba8bb8	agree	steps completed=1, max=1, exhausted=0
+iridia/heap.dxil	2fcf47963ce863c0	execution not compared: a sample of an element of an array of resources is not run here	differ: words read: IR adds some; nothing dropped	steps completed=0, max=0, exhausted=0
+iridia/layered_billboard_vs.dxbc	84f8eb4ee8543986	agree	steps completed=1, max=0, exhausted=0
+iridia/layered_cloth_blend_vs.dxbc	ea7193a091c51106	agree	steps completed=1, max=0, exhausted=0
+iridia/layered_cloth_blend_vs.dxil	ea7193a091c51106	agree	steps completed=1, max=3, exhausted=0
+iridia/layered_skin_vs.dxbc	951044451a9cd7d5	agree	steps completed=1, max=0, exhausted=0
+iridia/modes.dxbc	48d427614f6560d1	agree	steps completed=1, max=0, exhausted=0
+iridia/output_stores.dxil	a67634aa3cdec434	agree	steps completed=1, max=1, exhausted=0
+iridia/output_uses_opaque.dxbc	b8a8c5ce595a4ed3	agree	steps completed=1, max=0, exhausted=0
+iridia/output_uses_opaque.dxil	b8a8c5ce595a4ed3	agree	steps completed=1, max=1, exhausted=0
+iridia/output_uses_tested.dxbc	95541a2e09642489	agree	steps completed=1, max=0, exhausted=0
+iridia/output_uses_tested.dxil	95541a2e09642489	agree	steps completed=1, max=2, exhausted=0
+iridia/output_uses_unrelated.dxbc	f7352ea06e9d59e4	agree	steps completed=1, max=0, exhausted=0
+iridia/output_uses_unrelated.dxil	f7352ea06e9d59e4	agree	steps completed=1, max=2, exhausted=0
+iridia/resource_arrays.66.dxil	bc09cbc69f0e61ff	execution not compared: a sample of an element of an array of resources is not run here	differ: output: IR adds a word, words read: IR adds some; nothing dropped (added sources not run: a sample of an element of an array of resources is not run here)	steps completed=0, max=0, exhausted=0
+iridia/resource_arrays.dxil	bc09cbc69f0e61ff	execution not compared: a sample of an element of an array of resources is not run here	differ: output: IR adds a word, words read: IR adds some; nothing dropped (added sources not run: a sample of an element of an array of resources is not run here)	steps completed=0, max=0, exhausted=0
+iridia/sampler_heap.dxil	591eaabc04240bec	execution not compared: lane 0: a sample of an element of an array of resources is not run here	differ: output: IR adds a word, words read: IR adds some; nothing dropped (added sources not run: lane N: a sample of an element of an array of resources is not run here)	steps completed=0, max=0, exhausted=0
+iridia/single_uv_vs.dxbc	d446ea47fe7ae692	agree	steps completed=1, max=0, exhausted=0
+iridia/specialise_integer.dxbc	2c6f38fc1235422e	agree	steps completed=1, max=0, exhausted=0
+iridia/specialise_integer.dxil	2c6f38fc1235422e	agree	steps completed=1, max=1, exhausted=0
+iridia/specialise_root.dxbc	08c4c741e5796151	agree	steps completed=1, max=0, exhausted=0
+iridia/specialise_root.dxil	08c4c741e5796151	agree	steps completed=1, max=1, exhausted=0
+iridia/specialise_word.dxbc	88d96d6e7c621c16	agree	steps completed=1, max=0, exhausted=0
+iridia/specialise_word.dxil	88d96d6e7c621c16	agree	steps completed=1, max=1, exhausted=0
+iridia/tables_vs.dxil	c4ffff4c11725b0b	execution not compared: resource 0 is not a constant buffer	agree	steps completed=0, max=0, exhausted=0
+iridia/tessellation.ds.dxbc	e67a53e59152adfe	execution not compared: a stage builtin is not run here: iridia-exec runs it	differ: output: IR drops an input; dropped sources not run (a stage builtin is not run here: iridia-exec runs it)	steps completed=0, max=0, exhausted=0
+iridia/tessellation.ds.dxil	e67a53e59152adfe	execution not compared: a patch constant read is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia/tessellation.hs.dxbc	003f23cc566f7905	execution not compared: a stage builtin is not run here: iridia-exec runs it	differ: output: IR drops an input; dropped sources not run (a stage builtin is not run here: iridia-exec runs it)	steps completed=0, max=0, exhausted=0
+iridia/tessellation.hs.dxil	003f23cc566f7905	execution not compared: a stage builtin is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia/tessellation.vs.dxbc	5c6a557d26eca229	agree	steps completed=1, max=0, exhausted=0
+iridia/tessellation.vs.dxil	5c6a557d26eca229	agree	steps completed=1, max=1, exhausted=0
+iridia/vertex.66.dxil	619c571b592320ac	agree	steps completed=1, max=1, exhausted=0
+iridia/vertex.dxil	619c571b592320ac	agree	steps completed=1, max=1, exhausted=0
+iridia/vertex.od.dxil	619c571b592320ac	agree	steps completed=1, max=1, exhausted=0
+iridia-dxbc/bindings_sm51.cs.dxbc	2713546e82ecc5b7	execution not compared: a texel load is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxbc/bound_palette_vs.dxbc	9a0c31c06782b355	agree	steps completed=1, max=0, exhausted=0
+iridia-dxbc/compute_basic.dxbc	ac92696cc5a76c40	execution not compared: a buffer, image or patch store, a barrier, a vertex emit, a meshlet store or a mesh launch is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxbc/compute_basic.od.dxbc	ac92696cc5a76c40	execution not compared: a buffer, image or patch store, a barrier, a vertex emit, a meshlet store or a mesh launch is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxbc/gather_cmp_green.dxbc	51739ec3d1002667	execution not compared: a gather is not run here: iridia-exec runs it	not lifted: older lift: DXBC at word N: gatherN_c: a gather of lane N of a depth texture	steps completed=0, max=0, exhausted=0
+iridia-dxbc/geometry.dxbc	refused: a geometry program's emitted vertices are not followed	both refuse	steps completed=0, max=0, exhausted=0
+iridia-dxbc/geometry.od.dxbc	refused: a geometry program's emitted vertices are not followed	both refuse	steps completed=0, max=0, exhausted=0
+iridia-dxbc/hull_phases.hs.dxbc	06fa57d8bf8c9237	execution not compared: a stage builtin is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxbc/hull_unwritten.ds.dxbc	99d42090b1895449	execution not compared: a stage builtin is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxbc/hull_unwritten.gs.dxbc	refused: a geometry program's emitted vertices are not followed	both refuse	steps completed=0, max=0, exhausted=0
+iridia-dxbc/hull_unwritten.hs.dxbc	06fa57d8bf8c9237	execution not compared: a stage builtin is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxbc/hull_unwritten.vs.dxbc	74ee3919786c123c	agree	steps completed=1, max=0, exhausted=0
+iridia-dxbc/image_atomic_results.dxbc	51a43bef6d8e59ab	execution not compared: an atomic is not run here: iridia-exec runs it	older refuses: expression N is a statement's result the walk has not reached	steps completed=0, max=0, exhausted=0
+iridia-dxbc/image_atomic_results.od.dxbc	51a43bef6d8e59ab	execution not compared: an atomic is not run here: iridia-exec runs it	older refuses: expression N is a statement's result the walk has not reached	steps completed=0, max=0, exhausted=0
+iridia-dxbc/image_atomics.dxbc	51a43bef6d8e59ab	execution not compared: an atomic is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxbc/image_atomics.od.dxbc	51a43bef6d8e59ab	execution not compared: an atomic is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxbc/min16_patch.ds.dxbc	9132664721f924ef	execution not compared: a stage builtin is not run here: iridia-exec runs it	differ: output: IR drops an input; dropped sources not run (a stage builtin is not run here: iridia-exec runs it)	steps completed=0, max=0, exhausted=0
+iridia-dxbc/min16_patch.hs.dxbc	9132664721f924ef	execution not compared: a stage builtin is not run here: iridia-exec runs it	differ: output: IR drops an input; dropped sources not run (a stage builtin is not run here: iridia-exec runs it)	steps completed=0, max=0, exhausted=0
+iridia-dxbc/min16_patch.plain.ds.dxbc	9132664721f924ef	execution not compared: a stage builtin is not run here: iridia-exec runs it	differ: output: IR drops an input; dropped sources not run (a stage builtin is not run here: iridia-exec runs it)	steps completed=0, max=0, exhausted=0
+iridia-dxbc/min16_patch.plain.hs.dxbc	9132664721f924ef	execution not compared: a stage builtin is not run here: iridia-exec runs it	differ: output: IR drops an input; dropped sources not run (a stage builtin is not run here: iridia-exec runs it)	steps completed=0, max=0, exhausted=0
+iridia-dxbc/modes.dxbc	48d427614f6560d1	agree	steps completed=1, max=0, exhausted=0
+iridia-dxbc/reflection_sm4.alike.dxbc	not lifted	not lifted: IR lift: DXBC at word N: reflection: DXBC at word N: N constant buffers named A::C: their declarations do not tell which binding takes which layout	steps completed=0, max=0, exhausted=0
+iridia-dxbc/reflection_sm4.dxbc	afcecdfd03b5306c	agree	steps completed=1, max=0, exhausted=0
+iridia-dxbc/reflection_sm4.swapped.dxbc	9c73fd588b28a9e0	agree	steps completed=1, max=0, exhausted=0
+iridia-dxbc/reflection_sm51.ps51.dxbc	a0450b7999974ce9	execution not compared: lane 0: a sample of an element of an array of resources is not run here	agree	steps completed=0, max=0, exhausted=0
+iridia-dxbc/sample_count.dxbc	not lifted	not lifted: IR lift: DXBC at word N: sample_info: the sample count of the rasterizer is the pipeline's, not the program's	steps completed=0, max=0, exhausted=0
+iridia-dxbc/structured_layout.dxbc	ce05c6c029e76d94	execution not compared: resource 2 is not a constant buffer	agree	steps completed=0, max=0, exhausted=0
+iridia-dxbc/structured_tail.dxbc	ce05c6c029e76d94	execution not compared: resource 1 is not a constant buffer	not lifted: older lift: DXBC at word N: double precision is enabled (global flag): doubles are not lifted	steps completed=0, max=0, exhausted=0
+iridia-dxbc/tessellation.ds.dxbc	e67a53e59152adfe	execution not compared: a stage builtin is not run here: iridia-exec runs it	differ: output: IR drops an input; dropped sources not run (a stage builtin is not run here: iridia-exec runs it)	steps completed=0, max=0, exhausted=0
+iridia-dxbc/tessellation.ds.od.dxbc	e67a53e59152adfe	execution not compared: a stage builtin is not run here: iridia-exec runs it	differ: output: IR drops an input; dropped sources not run (a stage builtin is not run here: iridia-exec runs it)	steps completed=0, max=0, exhausted=0
+iridia-dxbc/tessellation.hs.dxbc	003f23cc566f7905	execution not compared: a stage builtin is not run here: iridia-exec runs it	differ: output: IR drops an input; dropped sources not run (a stage builtin is not run here: iridia-exec runs it)	steps completed=0, max=0, exhausted=0
+iridia-dxbc/tessellation.hs.od.dxbc	003f23cc566f7905	execution not compared: a stage builtin is not run here: iridia-exec runs it	differ: output: IR drops an input; dropped sources not run (a stage builtin is not run here: iridia-exec runs it)	steps completed=0, max=0, exhausted=0
+iridia-dxbc/tessellation.vs.dxbc	5c6a557d26eca229	agree	steps completed=1, max=0, exhausted=0
+iridia-dxbc/tessellation.vs.od.dxbc	5c6a557d26eca229	agree	steps completed=1, max=0, exhausted=0
+iridia-dxil/amplification.dxil	51a43bef6d8e59ab	execution not compared: a buffer, image or patch store, a barrier, a vertex emit, a meshlet store or a mesh launch is not run here: iridia-exec runs it	not lifted: older lift: DXIL at bit N: amplification programs are not lifted	steps completed=0, max=0, exhausted=0
+iridia-dxil/amplification_mesh.dxil	51a43bef6d8e59ab	execution not compared: a buffer, image or patch store, a barrier, a vertex emit, a meshlet store or a mesh launch is not run here: iridia-exec runs it	not lifted: older lift: DXIL at bit N: a mesh program that reads a task payload (amplification programs are not lifted)	steps completed=0, max=0, exhausted=0
+iridia-dxil/arrays.66.dxil	1bb70d53dbf2003b	agree	steps completed=1, max=6, exhausted=0
+iridia-dxil/arrays.dxil	1bb70d53dbf2003b	agree	steps completed=1, max=6, exhausted=0
+iridia-dxil/arrays.od.dxil	1bb70d53dbf2003b	agree	steps completed=1, max=12, exhausted=0
+iridia-dxil/bits.66.dxil	1a8581cf492d79a1	agree	steps completed=1, max=1, exhausted=0
+iridia-dxil/bits.dxil	1a8581cf492d79a1	agree	steps completed=1, max=1, exhausted=0
+iridia-dxil/bits.od.dxil	1a8581cf492d79a1	agree	steps completed=1, max=1, exhausted=0
+iridia-dxil/blend.dxil	ed2d2d86046f8475	agree	steps completed=1, max=1, exhausted=0
+iridia-dxil/bound_palette_vs.dxil	9a0c31c06782b355	agree	steps completed=1, max=1, exhausted=0
+iridia-dxil/buffer_arrays.66.dxil	ac92696cc5a76c40	execution not compared: a resource query is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/buffer_arrays.dxil	ac92696cc5a76c40	execution not compared: a resource query is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/buffer_arrays.od.dxil	ac92696cc5a76c40	execution not compared: a resource query is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/buffer_lanes16.dxil	51a43bef6d8e59ab	execution not compared: resource 0 is not a constant buffer	not lifted: older lift: DXIL at bit N: N-bit lanes of a raw or structured buffer are not lifted	steps completed=0, max=0, exhausted=0
+iridia-dxil/compute_basic.66.dxil	ac92696cc5a76c40	execution not compared: a buffer, image or patch store, a barrier, a vertex emit, a meshlet store or a mesh launch is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/compute_basic.dxil	ac92696cc5a76c40	execution not compared: a buffer, image or patch store, a barrier, a vertex emit, a meshlet store or a mesh launch is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/compute_basic.od.dxil	ac92696cc5a76c40	execution not compared: a buffer, image or patch store, a barrier, a vertex emit, a meshlet store or a mesh launch is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/draw_colour.dxil	a60460510d77276b	agree	steps completed=1, max=1, exhausted=0
+iridia-dxil/draw_coverage.dxil	8d3bc862362e548b	agree	steps completed=1, max=1, exhausted=0
+iridia-dxil/draw_derivatives.dxil	4d51d554d10f44e7	agree	steps completed=1, max=1, exhausted=0
+iridia-dxil/draw_discard.dxil	0e2b54ebe51797e6	agree	steps completed=1, max=2, exhausted=0
+iridia-dxil/draw_position.dxil	40856cb2bdcb6835	agree	steps completed=1, max=1, exhausted=0
+iridia-dxil/draw_primitive.dxil	14144a12bc48d011	agree	steps completed=1, max=1, exhausted=0
+iridia-dxil/draw_texture.dxil	6c97595fa5ebb2c7	agree	steps completed=1, max=1, exhausted=0
+iridia-dxil/draw_vs.dxil	1605df5d22dfff5a	agree	steps completed=1, max=1, exhausted=0
+iridia-dxil/draw_vs_distances.dxil	6819f5b9c6049b5b	agree	steps completed=1, max=1, exhausted=0
+iridia-dxil/flow.66.dxil	6f6959e506b1a42f	execution not compared: the run is killed	agree	steps completed=1, max=12, exhausted=0
+iridia-dxil/flow.dxil	6f6959e506b1a42f	execution not compared: the run is killed	agree	steps completed=1, max=12, exhausted=0
+iridia-dxil/flow.od.dxil	878e31a4946b2c0b	execution not compared: the run is killed	agree	steps completed=1, max=18, exhausted=0
+iridia-dxil/gather_cmp_green.dxil	51739ec3d1002667	execution not compared: a gather is not run here: iridia-exec runs it	not lifted: older lift: DXIL at bit N: a gather of lane N of a depth texture	steps completed=0, max=0, exhausted=0
+iridia-dxil/geometry.66.dxil	refused: a geometry program's emitted vertices are not followed	both refuse	steps completed=0, max=0, exhausted=0
+iridia-dxil/geometry.dxil	refused: a geometry program's emitted vertices are not followed	both refuse	steps completed=0, max=0, exhausted=0
+iridia-dxil/geometry.od.dxil	refused: a geometry program's emitted vertices are not followed	both refuse	steps completed=0, max=0, exhausted=0
+iridia-dxil/half_ops.dxil	669f90d70ae3e6d2	agree	steps completed=1, max=1, exhausted=0
+iridia-dxil/half_ops.od.dxil	669f90d70ae3e6d2	agree	steps completed=1, max=1, exhausted=0
+iridia-dxil/heap.dxil	2fcf47963ce863c0	execution not compared: a sample of an element of an array of resources is not run here	differ: words read: IR adds some; nothing dropped	steps completed=0, max=0, exhausted=0
+iridia-dxil/heap.od.dxil	2fcf47963ce863c0	execution not compared: a sample of an element of an array of resources is not run here	differ: words read: IR adds some; nothing dropped	steps completed=0, max=0, exhausted=0
+iridia-dxil/image_array_store.dxil	51a43bef6d8e59ab	execution not compared: a buffer, image or patch store, a barrier, a vertex emit, a meshlet store or a mesh launch is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/image_array_store.od.dxil	51a43bef6d8e59ab	execution not compared: a buffer, image or patch store, a barrier, a vertex emit, a meshlet store or a mesh launch is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/image_arrays.66.dxil	51a43bef6d8e59ab	execution not compared: a buffer, image or patch store, a barrier, a vertex emit, a meshlet store or a mesh launch is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/image_arrays.dxil	51a43bef6d8e59ab	execution not compared: a buffer, image or patch store, a barrier, a vertex emit, a meshlet store or a mesh launch is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/image_arrays.od.dxil	51a43bef6d8e59ab	execution not compared: a buffer, image or patch store, a barrier, a vertex emit, a meshlet store or a mesh launch is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/image_atomic_results.66.dxil	51a43bef6d8e59ab	execution not compared: an atomic is not run here: iridia-exec runs it	older refuses: expression N is a statement's result the walk has not reached	steps completed=0, max=0, exhausted=0
+iridia-dxil/image_atomic_results.dxil	51a43bef6d8e59ab	execution not compared: an atomic is not run here: iridia-exec runs it	older refuses: expression N is a statement's result the walk has not reached	steps completed=0, max=0, exhausted=0
+iridia-dxil/image_atomic_results.od.dxil	51a43bef6d8e59ab	execution not compared: an atomic is not run here: iridia-exec runs it	older refuses: expression N is a statement's result the walk has not reached	steps completed=0, max=0, exhausted=0
+iridia-dxil/image_atomics.66.dxil	51a43bef6d8e59ab	execution not compared: an atomic is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/image_atomics.dxil	51a43bef6d8e59ab	execution not compared: an atomic is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/image_atomics.od.dxil	51a43bef6d8e59ab	execution not compared: an atomic is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/lane_2d.66.dxil	51a43bef6d8e59ab	execution not compared: a wave operation is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/lane_2d.dxil	51a43bef6d8e59ab	execution not compared: a wave operation is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/lane_2d.od.dxil	51a43bef6d8e59ab	execution not compared: a wave operation is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/loops.66.dxil	626b674c76472f18	differ: output: IR adds a word, words read: IR adds some; nothing dropped (every added source changed its lane in a run: the older answers miss them)	steps completed=7, max=39, exhausted=0
+iridia-dxil/loops.dxil	626b674c76472f18	differ: output: IR adds a word, words read: IR adds some; nothing dropped (every added source changed its lane in a run: the older answers miss them)	steps completed=7, max=39, exhausted=0
+iridia-dxil/loops.od.dxil	626b674c76472f18	differ: output: IR adds a word, words read: IR adds some; nothing dropped (every added source changed its lane in a run: the older answers miss them)	steps completed=7, max=75, exhausted=0
+iridia-dxil/mesh.66.dxil	ac92696cc5a76c40	execution not compared: a buffer, image or patch store, a barrier, a vertex emit, a meshlet store or a mesh launch is not run here: iridia-exec runs it	differ: words read: IR adds some; nothing dropped	steps completed=0, max=0, exhausted=0
+iridia-dxil/mesh.dxil	ac92696cc5a76c40	execution not compared: a buffer, image or patch store, a barrier, a vertex emit, a meshlet store or a mesh launch is not run here: iridia-exec runs it	differ: words read: IR adds some; nothing dropped	steps completed=0, max=0, exhausted=0
+iridia-dxil/mesh.od.dxil	ac92696cc5a76c40	execution not compared: a buffer, image or patch store, a barrier, a vertex emit, a meshlet store or a mesh launch is not run here: iridia-exec runs it	differ: words read: IR adds some; nothing dropped	steps completed=0, max=0, exhausted=0
+iridia-dxil/ops.dxil	a6f3642e7464a47c	agree	steps completed=1, max=2, exhausted=0
+iridia-dxil/payload_halves.dxil	51a43bef6d8e59ab	execution not compared: an atomic is not run here: iridia-exec runs it	not lifted: older lift: DXIL at bit N: amplification programs are not lifted	steps completed=0, max=0, exhausted=0
+iridia-dxil/payload_layout.dxil	51a43bef6d8e59ab	execution not compared: a buffer, image or patch store, a barrier, a vertex emit, a meshlet store or a mesh launch is not run here: iridia-exec runs it	not lifted: older lift: DXIL at bit N: amplification programs are not lifted	steps completed=0, max=0, exhausted=0
+iridia-dxil/payload_layout_mesh.dxil	51a43bef6d8e59ab	execution not compared: a buffer, image or patch store, a barrier, a vertex emit, a meshlet store or a mesh launch is not run here: iridia-exec runs it	not lifted: older lift: DXIL at bit N: a mesh program that reads a task payload (amplification programs are not lifted)	steps completed=0, max=0, exhausted=0
+iridia-dxil/pixel_ops.66.dxil	5b6a2822b92d7e8a	execution not compared: a texel load is not run here: iridia-exec runs it	differ: output: an input via Value -> Coordinate; nothing dropped	steps completed=0, max=0, exhausted=0
+iridia-dxil/pixel_ops.dxil	5b6a2822b92d7e8a	execution not compared: a texel load is not run here: iridia-exec runs it	differ: output: an input via Value -> Coordinate; nothing dropped	steps completed=0, max=0, exhausted=0
+iridia-dxil/pixel_ops.od.dxil	5b6a2822b92d7e8a	execution not compared: a texel load is not run here: iridia-exec runs it	differ: output: an input via Value -> Coordinate; nothing dropped	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_query_grid.dxil	not lifted	not lifted: IR lift: DXIL at bit N: dx.op.allocateRayQuery: dx.op N is not lifted onto the IR yet	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_query_hits.dxil	not lifted	not lifted: IR lift: DXIL at bit N: dx.op.allocateRayQuery: dx.op N is not lifted onto the IR yet	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_query_hits.od.dxil	not lifted	not lifted: IR lift: DXIL at bit N: dx.op.allocateRayQuery: dx.op N is not lifted onto the IR yet	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_query_matrices.dxil	not lifted	not lifted: IR lift: DXIL at bit N: dx.op.allocateRayQuery: dx.op N is not lifted onto the IR yet	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_query_procedural.dxil	not lifted	not lifted: IR lift: DXIL at bit N: dx.op.allocateRayQuery: dx.op N is not lifted onto the IR yet	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_query_state.dxil	not lifted	not lifted: IR lift: DXIL at bit N: dx.op.allocateRayQuery: dx.op N is not lifted onto the IR yet	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_query_state.od.dxil	not lifted	not lifted: IR lift: DXIL at bit N: dx.op.allocateRayQuery: dx.op N is not lifted onto the IR yet	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_subobjects.any_hit.dxil	refused: an AnyHit program's payload is not followed	both refuse	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_subobjects.closest_hit.dxil	refused: a ClosestHit program's payload is not followed	both refuse	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_subobjects.dxil	not lifted	not lifted: IR lift: DXIL at bit N: dx.entryPoints: expected exactly one entry point with a function, found N	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_subobjects.intersection.dxil	refused: an Intersection program's payload is not followed	both refuse	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_subobjects.miss.dxil	refused: a Miss program's payload is not followed	both refuse	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_tracing.any_hit.dxil	refused: an AnyHit program's payload is not followed	both refuse	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_tracing.any_hit.od.dxil	refused: an AnyHit program's payload is not followed	both refuse	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_tracing.callable.dxil	refused: a Callable program's payload is not followed	both refuse	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_tracing.callable.od.dxil	refused: a Callable program's payload is not followed	both refuse	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_tracing.closest_hit.dxil	refused: a ClosestHit program's payload is not followed	both refuse	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_tracing.closest_hit.od.dxil	refused: a ClosestHit program's payload is not followed	both refuse	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_tracing.intersection.dxil	refused: an Intersection program's payload is not followed	both refuse	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_tracing.intersection.od.dxil	refused: an Intersection program's payload is not followed	both refuse	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_tracing.miss.dxil	refused: a Miss program's payload is not followed	both refuse	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_tracing.miss.od.dxil	refused: a Miss program's payload is not followed	both refuse	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_tracing.raygen.dxil	refused: a RayGeneration program's payload is not followed	both refuse	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_tracing.raygen.od.dxil	refused: a RayGeneration program's payload is not followed	both refuse	steps completed=0, max=0, exhausted=0
+iridia-dxil/resource_arrays.66.dxil	bc09cbc69f0e61ff	execution not compared: a sample of an element of an array of resources is not run here	differ: output: IR adds a word, words read: IR adds some; nothing dropped (added sources not run: a sample of an element of an array of resources is not run here)	steps completed=0, max=0, exhausted=0
+iridia-dxil/resource_arrays.dxil	bc09cbc69f0e61ff	execution not compared: a sample of an element of an array of resources is not run here	differ: output: IR adds a word, words read: IR adds some; nothing dropped (added sources not run: a sample of an element of an array of resources is not run here)	steps completed=0, max=0, exhausted=0
+iridia-dxil/resource_arrays.od.dxil	bc09cbc69f0e61ff	execution not compared: a sample of an element of an array of resources is not run here	differ: output: IR adds a word, words read: IR adds some; nothing dropped (added sources not run: a sample of an element of an array of resources is not run here)	steps completed=0, max=0, exhausted=0
+iridia-dxil/resources.66.dxil	87c6b77a0a9fc780	execution not compared: resource 0 is not a constant buffer	differ: output: IR adds a texel, output: a word via Value -> Coordinate; nothing dropped (added sources not run: resource N is not a constant buffer)	steps completed=0, max=0, exhausted=0
+iridia-dxil/resources.dxil	87c6b77a0a9fc780	execution not compared: resource 0 is not a constant buffer	differ: output: IR adds a texel, output: a word via Value -> Coordinate; nothing dropped (added sources not run: resource N is not a constant buffer)	steps completed=0, max=0, exhausted=0
+iridia-dxil/resources.od.dxil	87c6b77a0a9fc780	execution not compared: resource 0 is not a constant buffer	differ: output: IR adds a texel, output: a word via Value -> Coordinate; nothing dropped (added sources not run: resource N is not a constant buffer)	steps completed=0, max=0, exhausted=0
+iridia-dxil/sample_count.dxil	not lifted	not lifted: IR lift: DXIL at bit N: the sample count of the rasterizer is the pipeline's, not the program's	steps completed=0, max=0, exhausted=0
+iridia-dxil/structured_layout.dxil	ce05c6c029e76d94	execution not compared: resource 1 is not a constant buffer	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/structured_tail.dxil	ce05c6c029e76d94	execution not compared: resource 0 is not a constant buffer	not lifted: older lift: DXIL at bit N: double-precision floats are not lifted (dx.op.makeDouble.fN)	steps completed=0, max=0, exhausted=0
+iridia-dxil/switch.66.dxil	f6ee2052470e900b	differ: output: IR drops a word; each dropped source kept its lane in every run	steps completed=13, max=31, exhausted=0
+iridia-dxil/switch.dxil	f6ee2052470e900b	differ: output: IR drops a word; each dropped source kept its lane in every run	steps completed=13, max=31, exhausted=0
+iridia-dxil/switch.od.dxil	f6ee2052470e900b	differ: output: IR drops a word; each dropped source kept its lane in every run	steps completed=13, max=32, exhausted=0
+iridia-dxil/switch_shared.dxil	9a9453ebe3ecc2ac	agree	steps completed=1, max=3, exhausted=0
+iridia-dxil/tessellation.ds.dxil	e67a53e59152adfe	execution not compared: a patch constant read is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/tessellation.ds.od.dxil	e67a53e59152adfe	execution not compared: a patch constant read is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/tessellation.hs.dxil	003f23cc566f7905	execution not compared: a stage builtin is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/tessellation.hs.od.dxil	003f23cc566f7905	execution not compared: a stage builtin is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/tessellation.vs.dxil	5c6a557d26eca229	agree	steps completed=1, max=1, exhausted=0
+iridia-dxil/tessellation.vs.od.dxil	5c6a557d26eca229	agree	steps completed=1, max=1, exhausted=0
+iridia-dxil/textures.66.dxil	14b7afd6248ae9c2	execution not compared: lane 0: a gather is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/textures.dxil	14b7afd6248ae9c2	execution not compared: lane 0: a gather is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/textures.od.dxil	14b7afd6248ae9c2	execution not compared: lane 0: a gather is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/uav_counter.66.dxil	51a43bef6d8e59ab	execution not compared: a buffer counter is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/uav_counter.dxil	51a43bef6d8e59ab	execution not compared: a buffer counter is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/uav_counter.od.dxil	51a43bef6d8e59ab	execution not compared: a buffer counter is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/vertex.66.dxil	619c571b592320ac	agree	steps completed=1, max=1, exhausted=0
+iridia-dxil/vertex.dxil	619c571b592320ac	agree	steps completed=1, max=1, exhausted=0
+iridia-dxil/vertex.od.dxil	619c571b592320ac	agree	steps completed=1, max=1, exhausted=0
+iridia-dxil/waves.66.dxil	51a43bef6d8e59ab	execution not compared: a buffer, image or patch store, a barrier, a vertex emit, a meshlet store or a mesh launch is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/waves.dxil	51a43bef6d8e59ab	execution not compared: a buffer, image or patch store, a barrier, a vertex emit, a meshlet store or a mesh launch is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/waves.od.dxil	51a43bef6d8e59ab	execution not compared: a buffer, image or patch store, a barrier, a vertex emit, a meshlet store or a mesh launch is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/wide_ints.66.dxil	9b288b60117d99f4	execution not compared: a buffer, image or patch store, a barrier, a vertex emit, a meshlet store or a mesh launch is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/wide_ints.dxil	9b288b60117d99f4	execution not compared: a buffer, image or patch store, a barrier, a vertex emit, a meshlet store or a mesh launch is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0
+iridia-dxil/wide_ints.od.dxil	9b288b60117d99f4	execution not compared: a buffer, image or patch store, a barrier, a vertex emit, a meshlet store or a mesh launch is not run here: iridia-exec runs it	agree	steps completed=0, max=0, exhausted=0

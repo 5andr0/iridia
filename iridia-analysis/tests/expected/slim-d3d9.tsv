@@ -1,0 +1,558 @@
+# Each slim-d3d9 program's answers of the analyses on the IR (tests/oracle.rs): program, then a hash of what reaches each output lane and the discard and the constant words read, or why it has none.
+programs/d3d9/00178c375d2c4124674e57a1eed6726e14b8af750df205c5ec9818ce50ac4062.d3d9	51a43bef6d8e59ab	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/003089fea619f095199fe5f38146602855a2129163aca8813dc8ce756e90c5c2.d3d9	not lifted	not lifted: IR lift: DNDN at word N: register type N, index N outside the vs_N_N banks	steps completed=0, max=0, exhausted=0
+programs/d3d9/0050bd0ce3c6d793b129684594987ed6bf064de0490ccc46a078f14775f7e2d8.d3d9	91006645be2cd791	not lifted: older lift: DNDN at word N: opcode N REP outside the supported SMN subset	steps completed=1, max=19, exhausted=0
+programs/d3d9/009dd0c6ef3d646c71a205fd989943b6cc227fa42b9dc05ea22dba7742e5b7cf.d3d9	89d744fdad9f6054	not lifted: older lift: DNDN at word N: opcode N DEFI outside the supported SMN subset	steps completed=1, max=256, exhausted=0
+programs/d3d9/00cc0d2efdbfcb4ccab257df55779afc0df30fc1d80f8515bcf6db5e67143641.d3d9	51a43bef6d8e59ab	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/01b209129fdfca715883e8fef93001f75e3fd441d1abd7896584eb563e3db005.d3d9	1b593ad8f514ae66	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/035755bae2ce244edc510c541071e60d1d02594266b4b94c17294a72fdb73b0f.d3d9	not lifted	not lifted: IR lift: DNDN at word N: undeclared input vN	steps completed=0, max=0, exhausted=0
+programs/d3d9/03616155f5cb2aac8557a78846590ce4beed72002a4f46dd18ff45438dcd0a0d.d3d9	1e8c36070d750f7a	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/0370780937db6b5a8727691fe6341a9e2c5944bd6e15e66488f39d4f25942895.d3d9	d32e6054c0904747	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/03a2884a51ec8591dca805807390a2391c0b2e47316fe87de1855098033cc3fd.d3d9	48a1b15e7239def6	not lifted: older lift: DNDN at word N: version vs_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/03dad89fe3ce20e66c3202dc9d326fda9874357a51638abefa67d17e686f6a42.d3d9	9d8be1a59d3b3688	not lifted: older lift: DNDN at word N: version vs_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/03f336aa93e69cd9ca99de759696cfdd75dcb8c3a544b293be2a413bae6803a2.d3d9	5a0d01e1c985117c	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/03fecbbff7a9e3cddb029c30a378f6ded9d936b3b032b8d48162d464d8fb5d00.d3d9	not lifted	not lifted: IR lift: DNDN at word N: CTAB fN: an allocation of N registers ends inside an element of Array { element: Matrix { scalar: Float, rows: N, columns: N, major: Column, stride: N }, count: N, stride: N }	steps completed=0, max=0, exhausted=0
+programs/d3d9/0424a8c8d7c547e411317603143c3dcc286654e8673ff8723d4a110016e04d06.d3d9	fca80bbf0752617c	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/0428cae9e1510d266bdb268d1142153d6a1882ead6f56604958ac2c4f97b0cc5.d3d9	ce05c6c029e76d94	not lifted: older lift: DNDN at word N: CTAB v: non-float/structured/empty type Type { class: N, kind: N, rows: N, columns: N, elements: N, members: [] }	steps completed=1, max=0, exhausted=0
+programs/d3d9/043af0b46a1b97f39c64d1c66624455993f20a215dc40acc65debd139d601808.d3d9	ce05c6c029e76d94	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/044965d7b5df0e7ecb22cc68437239747fe818f9b78a3c9c13284ab3ceccff24.d3d9	8ebee293d68b803a	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/04a21edab320f97b944a54f3e0081b35c9e1acd0c2a393a87d039bba657d6f52.d3d9	7ff618e24bdd9655	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/04d70b63aac7eef0b27007d7619899b4e7c3df800630c9f7c201490e7c355d6b.d3d9	64c0e358c47cca84	not lifted: older lift: DNDN at word N: version vs_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/0504d8ba8fb3f84912c8c5ff0e33a44048c713fe37e425c48a356ca7e5327c89.d3d9	72f7f70ac66e43d5	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/051bc852b38fbbd1985ecc9257eb08a8f34465992116bb55f637e4505b9791a1.d3d9	f0527e31957854b8	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/056204e6926d59f8c0642db1e42aa4e3565202a0b4809a0e45350d4590d1636b.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/05c850c4f226e450fb36b42418bb56a266acbfa19842ae62bcc4e659ca0a6e8a.d3d9	5a0d01e1c985117c	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/05cb42c045d763697b8baaf5ee369dd8ccdcd3bf02b5d3ac08d3eb6988d9b5d2.d3d9	c82cc757034ec6cd	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/05e06e57793c1eca75fd28c908bac5d9556d9dd6b4ed508250d2cdef4bb01c74.d3d9	not lifted	not lifted: IR lift: DNDN at word N: pN is read before setp writes it	steps completed=0, max=0, exhausted=0
+programs/d3d9/06546bda2516311aa9aba40aa63e57f1d2d06f8035f538bf9454ca3ca113f600.d3d9	f5afc8095e2b53d4	not lifted: older lift: DNDN at word N: CTAB a: non-float/structured/empty type Type { class: N, kind: N, rows: N, columns: N, elements: N, members: [] }	steps completed=1, max=0, exhausted=0
+programs/d3d9/06741d311b389ac5ba81b45c42540ca266bca8a6ef1fe712665d11535ce45bb3.d3d9	69a41055a47b7754	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/06d363fc722a7b11ef16e07fe7096fccfdb74c27966e63890858e2dad49b7691.d3d9	not lifted	not lifted: IR lift: DNDN at word N: register type N, index N outside the vs_N_N banks	steps completed=0, max=0, exhausted=0
+programs/d3d9/072508aa73f0a7e2f3a7828679f3a297fd6bbddf9a1e10806165a1cc4668ec3c.d3d9	3128dd024f59ed28	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/073641ebb63a67f0bbc009db5a8ac560d9e013adf4a2c6e790d2d6f129d17e48.d3d9	09ed3dac4573fd01	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/078427c694ac5169c3c78a45cd214a0b0dc4a736578ceded03e948cfb2d24d4e.d3d9	not lifted	not lifted: IR lift: DNDN at word N: CTAB ran: an allocation of N registers ends inside an element of Array { element: Array { element: Scalar(Sint), count: N, stride: N }, count: N, stride: N }	steps completed=0, max=0, exhausted=0
+programs/d3d9/07e8c817f4a7d8ff20a1c33c25127ce6224297d481afd7e7011f73106db5c0da.d3d9	51739ec3d1002667	not lifted: older lift: DNDN at word N: opcode N TEXLDD outside the supported SMN subset	steps completed=1, max=0, exhausted=0
+programs/d3d9/0803f7d7169e93790517c5feb93cf0c98a3d4af91c5d4abddec752a5201c2a32.d3d9	b3e350d9bee1253c	not lifted: older lift: DNDN at word N: version vs_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=8, exhausted=0
+programs/d3d9/0832613147876a56b0971ad801f911e08b408bd3244e516c94cabf5201c883b8.d3d9	not lifted	not lifted: IR lift: DNDN at word N: version token NxffffNfe is not a DirectND N vertex (Nxfffe) or pixel (Nxffff) program of version N.N to N.N	steps completed=0, max=0, exhausted=0
+programs/d3d9/086279825a7da414c53b78adf2f73d55c0461068162623af6c65b8e8387e5d96.d3d9	not lifted	not lifted: IR lift: DNDN at word N: a relative constant before any mova wrote aN	steps completed=0, max=0, exhausted=0
+programs/d3d9/089b78af1562e6c9385e796a5f6a17b54ff57a1067b62e3910c08102c454375a.d3d9	ad5b4b66db998fdf	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/089c3c3e1ebce2d73b248530e3526cdb6d54c08a274ad5cf31764c843c1dc783.d3d9	e6de59b002bf64a7	not lifted: older lift: DNDN at word N: opcode N REP outside the supported SMN subset	steps completed=1, max=8, exhausted=0
+programs/d3d9/08f65b47bf381cdd3ab75a6d5e70a5c4119a2ed20d4c8dff21ec53cfef2f9706.d3d9	63316ae794b78905	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/097cef7a956b554a097a40e2487d2f60e216d689d29776140b040fdb6f4e0507.d3d9	85c0b98035ce65f4	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/098ebb1eb287c48afa478da8520dff4106aa24d3f7822bf52d51464553df4386.d3d9	5c0d98bf0d9bd3a1	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/0a501f65b9d57cffdca54c3bd354dcfc354386445a22c49507af7b890f4e96d5.d3d9	not lifted	not lifted: IR lift: DNDN at word N: pN is read before setp writes it	steps completed=0, max=0, exhausted=0
+programs/d3d9/0b07487a8439ec40e39e97ded7cde8fc4c24ce96f70b8ae1ec9659a60127cce3.d3d9	46d75660d2c77f89	not lifted: older lift: DNDN at word N: opcode N REP outside the supported SMN subset	steps completed=1, max=5, exhausted=0
+programs/d3d9/0b7af3b617bbd9061ea9709938bf229f3d0aee440b7ba826bb2c07bdd76da725.d3d9	e7122fc2c8820f68	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/0bfa5434af5bd4da3ee31e8b53c73f3e886689c18fa77b65775a060c1a457968.d3d9	ce05c6c029e76d94	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/0c00fda7c4c5b93ccabedbcedc30391b7f61695b38cabaaf6352c30bfe92c98a.d3d9	not lifted	not lifted: IR lift: DNDN at word N: register type N, index N outside the ps_N_N banks	steps completed=0, max=0, exhausted=0
+programs/d3d9/0c102136aaae85dd5b4c6966dcace4b19e444a399c2c16378ddde82a967b9aeb.d3d9	1b593ad8f514ae66	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/0c930cb4bfa3ee317a11f80f0766b75320d49706eda5f13ad48f1d1c4250c86b.d3d9	not lifted	not lifted: IR lift: DNDN at word N: undeclared input tN	steps completed=0, max=0, exhausted=0
+programs/d3d9/0cae6233b5efa8891cbbe8029fe7715272ebf7ef646c650e32788c82c393857d.d3d9	4e16b8d92e13c9d5	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/0cc3390cd1b14cfe4e6422c4b73510cbf2957bdd972f6a6923ac57053a26fecc.d3d9	9a73ddd0e4694fd0	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/0cc7f0d46b428f8e8fe8bbd9d37a983ba55561ad1e507a465ab09b572f9120ba.d3d9	5a0d01e1c985117c	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/0cfd40f9649303092d768648dbeecf62ae14793d9eeae18ce6da9a973e5b2c36.d3d9	e088254ae16d75bd	not lifted: older lift: DNDN at word N: register type N, index N outside the supported Pixel SMN banks	steps completed=1, max=0, exhausted=0
+programs/d3d9/0db07244fdb4408c2ddac64df8a54ef31b93c933850f92b247e705add4480929.d3d9	6cee7e2299949fec	not lifted: older lift: DNDN at word N: opcode N TEXLDL outside the supported SMN subset	steps completed=1, max=0, exhausted=0
+programs/d3d9/0e7223fb16bff77af21b9c4f3384b4e4dbd05c4ca07098c7ea9163d1790e98fc.d3d9	eee49b7940de3118	not lifted: older lift: DNDN at word N: version vs_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/0e7867c689d31d45357d1d29c157df4ce220f67cf8f23782be1a4e8dec215be7.d3d9	83b0a36fc806c373	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/0e890eb87f8caf5699a3bd69f31c0db3f36248f9bc57d844b3b4ddd145b99bf0.d3d9	f76d649aa31f9d94	not lifted: older lift: DNDN at word N: version vs_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/0ea5424dd43ee307eaba2232553673f153b517958eec9b2c542442b2b3a10d7c.d3d9	c0ed9b080fd85e58	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/0ecd6c725d6905eae8c3cb0470907c68df342e4c88e44f42e454da013ea2f451.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/0f51331935a95bcf092cc29c6f9a397e43b6ef9d46bd08c153b487f74692dc08.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/0f5deeb8605e60b10700942aaa6d6d257b5a05134518342f00f2bf62540528fe.d3d9	5a37590c3cf86961	not lifted: older lift: DNDN at word N: CTAB a: non-float/structured/empty type Type { class: N, kind: N, rows: N, columns: N, elements: N, members: [] }	steps completed=1, max=0, exhausted=0
+programs/d3d9/0f635ae76179b5b0e3bc902dcb52432c7518a1d8abcd92caf1a423458f229581.d3d9	6b55740dc53e6fdb	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/0fa1910bbe4510883b25c768909cbb20c3b7e8fd8a872a2723745eea6c882f6d.d3d9	51a43bef6d8e59ab	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/1072a93265283133378cd55c9797c068194462491f6cca012c1e98ba8e1c2cf8.d3d9	fcae5e4ddd381da0	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/10c2b79ee58399be17f1cedc907aa8e31685d808dc009950a0efcb9d96f0448f.d3d9	2f10bf80abeb41b8	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/10c85b34941d0d09caabb1f3fac647e8146f50475010b9c71b2e11c660c887ba.d3d9	32d3613a0d90d688	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/10dc398641a270522da674447ba4e7ee61abe7d36f03b771a62341048fd344fe.d3d9	79563b5c4ff8d3f6	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/12815037b9035912fd2eb5bab724768a9b194eb235743204d9e798f4fe294fef.d3d9	21851e1305f30ce7	not lifted: older lift: DNDN at word N: opcode N DEFI outside the supported SMN subset	steps completed=1, max=1, exhausted=0
+programs/d3d9/128d3af63d80b4ea253bbeae89172463cffae233feb44f5e265d02c4fabf9ada.d3d9	d8528d5cf2cb321d	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/145d963876082b5a7c006b6e3cbeb4f421015d514058d36b9e5d7b04bae5ffe6.d3d9	e0bbade2e991ed13	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/14ba792489429690ad1d2b05507d564bf7dda12b7ced68e945095e34920ca82d.d3d9	not lifted	not lifted: IR lift: DNDN at word N: missing END	steps completed=0, max=0, exhausted=0
+programs/d3d9/152fa1fbc026cc1c3972fce47531eb0e96f961f68ee8fac9f66787abc3c9e692.d3d9	d738e04d1932d0f4	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/16299de24ff651e474a0a1a77a08e3a320cde04cc64b345aabf4911d28d76e4e.d3d9	4c79c65424925b74	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/16cd4332a0cd4b7f6901f862c79d4051598c294ce0e037f3c90ce767e37e7da8.d3d9	7aed241ebf24e973	not lifted: older lift: DNDN at word N: CTAB sam: sampler array or type Type { class: N, kind: N, rows: N, columns: N, elements: N, members: [] }	steps completed=1, max=0, exhausted=0
+programs/d3d9/16dd741a97a56a0c4ba4e5ca03a3fd3be7b1470ee209f61578c0295ee53fa645.d3d9	not lifted	not lifted: IR lift: DNDN at word N: vertex program has no declared POSITIONN clip output	steps completed=0, max=0, exhausted=0
+programs/d3d9/17706655cc2c217dda7a3afe2d6c95372ab52df82ec4889e88fbb49bee876043.d3d9	795d06fdd156ae8c	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/177795811b8565d676e975cb67b40caef6040e123c76fb206930d758714aaafe.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/17b19a8fea780c50a7fc05617fce4fb36b5b0a3898c4b2f03c071098bb89d197.d3d9	038e01a583bb3253	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/17b9fcec856c52cc86f8fd3e173971aa10d524f6c64962f6e53e2b95fef5d4ea.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/17cf966d9c6d50fbb6804073619335a456d3d085a587d15afa4dcfca89ea0ba8.d3d9	7ff51e36f4e96f13	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/17d903fe71408145ecc2afc35466443bf2f6c6721f34062f85efc986e1f235ae.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/1897e34f851134e20a59ec5bc90b71e91230cc710526a04e07ab9d7c8d3a14f8.d3d9	ee784852c347f33a	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/19757631dde784566b3df120e90b3abcc09db4edb060d4727254db149540d63f.d3d9	not lifted	not lifted: IR lift: DNDN at word N: vertex program never writes oPos	steps completed=0, max=0, exhausted=0
+programs/d3d9/19f69a7236d4adcba9ce32f0788ffddde6a64222befae42ff3635daaf6af7d74.d3d9	51a43bef6d8e59ab	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/1a8682b92691ac784e519c231c7d2d5b9d1f30bd1ec782d6f6ff61cb26acde61.d3d9	51a43bef6d8e59ab	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/1bad643673acf051939aefef84fcab2cda37f28222d2a9441f0d2fd291af3078.d3d9	c05c9f76ef747b3f	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/1cfa0adf3b4886a626f8238d8c305f5ac12c4090cfd56345f049e8fb7a0e7d18.d3d9	ce05c6c029e76d94	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/1e6deb90892dd42d92490995c16c93de3079d1b9eb22be84c8bc4f0a23401f7a.d3d9	ec067f5948de2940	not lifted: older lift: DNDN at word N: version vs_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/1eff74a8b3e208c34ba4169656586b56e931d2568b99336d1d8c449a2ce56b9d.d3d9	not lifted	not lifted: IR lift: DNDN at word N: undeclared input tN	steps completed=0, max=0, exhausted=0
+programs/d3d9/1f036e0e19ab684d7a38884397445a6d45b06d35590df1f33b13221de7ea6244.d3d9	269cad1b55b3cb6a	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/21c1cfc0a8c2f96989695bf649fdfdfb54451575058b33cfb95a33d47e9728f7.d3d9	e084df3d6cb42aee	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/226cf2568f00cf212c1adbdf0ab6266702859ad4b5880548f94e8f075d6e46ef.d3d9	75683c71c472992c	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/22bc7575a350a3930b839047ea0188d82385557dd55825739bb8ab00ed1f9900.d3d9	1b4db701dcdb25d7	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/241e1229201c82c02d0f87d8c96f12ad3e0b8766c0cf2b5d473f3bb292f5a0d1.d3d9	51a43bef6d8e59ab	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/242d9e9a9f11925102c518454e9f01de53284fdb18dfdf008e43e6c014391472.d3d9	9a4c50e47b963420	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/25522748014b650510f3684d77287a6c5c9158e5f55012ea919b3dfa851a93e2.d3d9	c0d49a6ebabc1d8c	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/256954ddc9583ca0b9d37ab012f329bdfc6b6659e1cbb02c6e628ff758fa5ad3.d3d9	cc10ec75b06bf7bd	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/25782da568f84259220cb594a349f1cd6f1926eed8a6d8e9999b320cb7361109.d3d9	7fc6f928748cd30f	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/25f0c129cdda36b0f004b0618c894e61f29f1963ba3ac035fc41318243fa9a2b.d3d9	f5a32cf949e143cf	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/25f423c385678a62f739206c3bce9c8b9f5fe04ce095d4a73c122fde214a99a5.d3d9	0c2c93335b3516e0	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/25f6ea0dc36c0db6ae6bf566530ecd3be73c8831bd6ebae4c3c8a379d49d208d.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/26f001a41d698c41c9625b87b61fe3533dd3300affceff03e30d6286b731e592.d3d9	ddabda49b3254c84	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/26f8a7cd79b16ccd77210f23bde7cec97a9836ba9bde2925001bf9db1d2de9c0.d3d9	not lifted	not lifted: IR lift: DNDN at word N: undeclared input vN	steps completed=0, max=0, exhausted=0
+programs/d3d9/26f8c9232f42c643f08b12edda0937e67830036f4bbf73c9b0fcb4f3597b4319.d3d9	not lifted	not lifted: IR lift: DNDN at word N: undeclared input vFace	steps completed=0, max=0, exhausted=0
+programs/d3d9/279d67d9620611f7831408faa4465878c9ecf01b711a5cc26fe1fa4bb7197c33.d3d9	6cee7e2299949fec	not lifted: older lift: DNDN at word N: opcode N TEXLDL outside the supported SMN subset	steps completed=1, max=0, exhausted=0
+programs/d3d9/281a760f642f7733938f90bffd61a46ad14ec0e6172f393fd929c9cfa1eba7bd.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized output rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/284c8cfa9c3142ed27d3e8124fe7c9f7b807e9d20ad666e9e73f7a9b81bfe3de.d3d9	74ee3919786c123c	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/2857f2d33789ab50628adcd95f5b432a45588230dd410c8082080efa3e6a5208.d3d9	not lifted	not lifted: IR lift: DNDN at word N: sincos requires replicate scalar swizzles	steps completed=0, max=0, exhausted=0
+programs/d3d9/28e938d9906ef93b2758f73359cec25e944ad1fd90435d9295f4280580e85f65.d3d9	4586467237949fe1	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/290b8658da1880b30bfccd6587a8e108754d81f9b0c6a1c1254c8f8486089c2e.d3d9	3fc895a03be04d48	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/2960bd07b2a41a33024933dedee729e46dc4978ba3b7a0419b2ef3001f6feaaf.d3d9	not lifted	not lifted: IR lift: DNDN at word N: undeclared input vN	steps completed=0, max=0, exhausted=0
+programs/d3d9/29939d5616f83f0abb9dc950e386b770df59fc71c5c6146e65b36db4e0c70826.d3d9	d398e0df2b3cff8c	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/299691c1edb5c092d3b60eb5ab0f86c12a0d88e7e3b01d949eb98702112771bb.d3d9	3bb9254131b80964	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/2b3c6e919825c690d95fd08c745749bca040ac29fe776c08f4aac38e74229467.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/2b9f8ec4d0d544b5dfdf7e7f3203a6015016bec80914bce65fbade2026be8c57.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized output oN	steps completed=0, max=0, exhausted=0
+programs/d3d9/2c4ae70c794b67286d92bd997186f4202dd9c6a1b463dd4e874507a06b07eae0.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/2d11b75ccd6b5b340b4ed7bd7579a10f099f408f2b947205960ef2b1155d893d.d3d9	966e06bbd0c766fb	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/2dae2c013c8757a072cb35cb070d8994ba720d7d991b94e699f5c1f545cce738.d3d9	64e9ff3344f8e87e	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/2db86fcd4b19027bff3140f96048558c9e124dee3945c4a35a29b33eefcd2e14.d3d9	4624ea1af9f9ecec	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/2e1750d84b61740fe143efb748595c61f03bee5dab4027aa115ee9b85a225bc9.d3d9	51a43bef6d8e59ab	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/2e584a9886ab7966aabec2c80ab6b61575518a530f0c628f8ab005ca8838051d.d3d9	1f7d3b8e1167d00a	not lifted: older lift: DNDN at word N: version vs_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/2e84a719787a311456cd448d79dd2afc8a0cc1ee2236edc4732fb9aa3079e8ca.d3d9	bdefa62425601da8	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/2e99720f5bce544c15481be91e792ddf973c8599655b084db355a8ff1909dd4a.d3d9	95fa018161ea6e6d	not lifted: older lift: DNDN at word N: version vs_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/2ebce4d73bbcd6d58ff704bffa6f086889106722332e76a87c464a569cfe10f6.d3d9	70a5e83de6f8dd08	not lifted: older lift: DNDN at word N: opcode N TEXLDD outside the supported SMN subset	steps completed=1, max=0, exhausted=0
+programs/d3d9/2f262920f785a0bd71a5689d2af0b43220c6bf2402bbe3567a99a16ea94bff6d.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/2f625b743d778b29bfd2d173e5b3724b188c18823c5628afcb6cab17412d3b5b.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/2f9f37b860553bf7fbc4ac1ba31fa74301cbc3d079fbdfa1f95ae73a2a32cfea.d3d9	9253a21c3cc085a6	not lifted: older lift: DNDN at word N: version vs_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/303478ff4018337a5e01acd91925a71350a9ec35ca53a87f8736590d72e910af.d3d9	d8e648ba3952b3fa	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/305419a1e76f254f246320aa8a20eb26c5c3048344400096526f579137d541a7.d3d9	a1f7616b27de1535	not lifted: older lift: DNDN at word N: instruction controls/predication/coissue NxN	steps completed=1, max=0, exhausted=0
+programs/d3d9/30584972b64d4f14aed0ef060d4c20e0ba78b9dd91daba046e49302f24436cec.d3d9	2ea43b4a7e3ace9e	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/3088b625a7e23188aa2c4935c1aa4f251b7e4b571adc51c58375782b203cd572.d3d9	06fa57d8bf8c9237	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/308c9ba8e6f1fed5332c2a7d6cd3d346df4f35e0ee21a6f0ba8896bdc5b0f25e.d3d9	8abc086349a39d83	not lifted: older lift: DNDN at word N: version vs_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/31923f1584af14987ac4619bb04b37ac4f0f19563ea826c890858ac5b5745391.d3d9	1f50235a4338cb78	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/31ef721c0017992530f633c0f474978f0414d22815961e03a0d3af915eaf740b.d3d9	not lifted	not lifted: IR lift: DNDN at word N: undeclared input vN	steps completed=0, max=0, exhausted=0
+programs/d3d9/31f8d5a86368f61c06ab18322cddfa439999cb8f46f8c62f9d92c19e69161388.d3d9	e7a9c6c63566c598	not lifted: older lift: DNDN at word N: CTAB a: non-float/structured/empty type Type { class: N, kind: N, rows: N, columns: N, elements: N, members: [] }	steps completed=1, max=0, exhausted=0
+programs/d3d9/32c5077abe9a473bda67fde0bdd35371479ca8af5af0f80418fdd19f046b17c5.d3d9	aa7efe685a0e8360	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/3318cc899f82de37076e64faf95c9bdf46c34c60d851c8c5afc95f218eaa7b4a.d3d9	6feff3dc803cd06c	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/335c5acfe2a27d31cfd2ccd1765c3c8714f2de46a791b61367e5baa9eb2a4a40.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/337e0377e4d7e06391b96bb7cd7ccd8dedadc221007e20fb6af20b095b0bc530.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized output rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/33bcdb1ccf02ef0b7c310c510526798231c97b7a629c96f0ae2e21d1776de63f.d3d9	06fa57d8bf8c9237	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/3473ab78cb9171ef4cbab8f967ff75a068e50bb7647baa150dab12ca526e8d7f.d3d9	8f4349ab7a2a637e	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/34b3b70699d4b8daf782e77f58db59d9eafabdb2b8c6ee0baf68cad7544112fd.d3d9	978d83a924de37d3	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/363eae1357be18b13f16dc4ed25d90a039d3ea9c8b94e1c41263a4d162836614.d3d9	7ff618e24bdd9655	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/3718002c6f820fc9118aba3da551f8a086f18f39b65479323114ae90c86feb0e.d3d9	00acf4a867abd666	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/373964d7efaf339963fd08691d4a700e9372be6697fc6abfc562db0f8c397140.d3d9	100b88b94588088b	not lifted: older lift: DNDN at word N: register type N, index N outside the supported Pixel SMN banks	steps completed=1, max=0, exhausted=0
+programs/d3d9/37a2885deaf8fcbb07f2e5d7275c2e33b132cd2977babf08b739479a14462f10.d3d9	db0ba42784767126	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/380a6c3e37367affc2d7cce52c8949644a1aff68dd33a5077a8bba7dbb0de6e2.d3d9	ce05c6c029e76d94	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/381529dfd5377d69eefee39e2eea5db80be3984863b0ef76eea4d16e83d46f3e.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/3865f7a296849c1e4c393dff178df2eb635d71fa89097e0d04b7648d83508dc4.d3d9	14e53767ba6b9b85	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/386b4939482ed7ebc0c325a6d1259951f1d1f5762d64e12e3070c30129399103.d3d9	600011bc2ae01083	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/387111f9b49db51f5deb831d3fa787fe86c1f0cd7c79694637c23ffaf0112797.d3d9	9e5e9cc03348b77d	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/38937d78921448185e25f5705131b76dd3b5d1dcb2e8f7b08a4cfcac99b67398.d3d9	4e084ef57aa7dc59	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/38c0064005eb7325c88e650c877db3633003690d3a51aad8217a1371b45336ad.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized output rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/39997a056d83d6d786b27e288423b852d0e4dc0c6df5516b1a584a818c355898.d3d9	057fcbc515744e92	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/39cddc35d923e8ee2a5f1798d71017e3403e708e54f647c0bb53335824351be9.d3d9	51a43bef6d8e59ab	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/3a680a6e1bd5fb9737d2581c69eb21317fbd3a1ad5c2cf60a599c3a0d0b1caa4.d3d9	e08eda62b80692b5	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/3a89b86d56d78502298ad6ce2ff3870a5584f469bf51ceb468c25d91938939a3.d3d9	0c1e30fb78092a03	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/3aebb2cb0b3bbdda660f2794f8f979d8ced85c95524fa738f2258765c81a5449.d3d9	53c32df4258181a4	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/3b8ec99a17ea15601ba54ac084eb683085104690636d495eab6836ea80b6d547.d3d9	not lifted	not lifted: IR lift: DNDN at word N: missing END	steps completed=0, max=0, exhausted=0
+programs/d3d9/3bbb5424f072e6b7076b104ca7dc5e3c86781bc5c60b4c763bb27d67feeeb840.d3d9	f4f778680b58dfb8	execution not compared: the run is killed	not lifted: older lift: DNDN at word N: register type N, index N outside the supported Pixel SMN banks	steps completed=1, max=0, exhausted=0
+programs/d3d9/3c1fc2676c1849e5a4312b951ef94da8ce2b2019a2bbbf8fedeae7768c54d24a.d3d9	a3fd4186184ed2a3	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/3e369733dca39dbed73c80d8a97d47101403762ad29c8e1fd29e9f2e547b9bc2.d3d9	2dae103a4f248fb8	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/3e5625f2f0df8850a263a5b72e20d5518bb4855e21c7a774900d2ceee46df4bb.d3d9	a9f0cee8256b6588	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/3e608d8d005525255523972f6ed2f307053ece6c1dab009a0d9c047a1b7c32f9.d3d9	not lifted	not lifted: IR lift: DNDN at word N: vertex program never writes oPos	steps completed=0, max=0, exhausted=0
+programs/d3d9/3e7557fb0dcfe1369a8bc7bbba9b374643147446f6b3946e9047b715f63aa994.d3d9	06fa57d8bf8c9237	not lifted: older lift: DNDN at word N: version vs_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/3eaf1d553451b12bf833af881439a9099cb8720837ba34fad085af20f0250227.d3d9	60d96f01f5877dd2	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/3ef2008188cae2f0a871c24931a773db67f2e8d9351864c6e483b35d3eccae9a.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/3f51e803674b8f02904b57ac3eaa2591a6350f0db675cce5d04285a026ef470a.d3d9	ae4d41e683d28362	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/3f63afa8a69d504e4500e07c9bb5f132236447747b77aadf62e6b6c8d0c34253.d3d9	a3630a6dc123f710	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/3f931a528fbd3502520bbed2d1759535d78cdcc63d140ea77e6dbc47a02cf940.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized output rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/3fd7a78f6dd1783120558389341ddd62e80f4b290d3178405e8b3db2d6da6d3c.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized tN	steps completed=0, max=0, exhausted=0
+programs/d3d9/3fe2d3e80db1452072def07148993c5125cb23549721c1f5d475436904fcaaea.d3d9	ce05c6c029e76d94	not lifted: older lift: DNDN at word N: CTAB v: non-float/structured/empty type Type { class: N, kind: N, rows: N, columns: N, elements: N, members: [] }	steps completed=1, max=0, exhausted=0
+programs/d3d9/3feeae6de522ae682daedbca4ce1b1a8c603a6b32fa50f6edb7fe730a5363802.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/416d91477048dc0e23b71a8f7964faba68ffd040b97168b9ef675ef50d119d42.d3d9	3bb9254131b80964	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/427e5b5a6a6616b6967809ab95cded207167f65f2d693f767c04b67eca419c63.d3d9	2d549799a4c605e5	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/42884e73bf1b78ed6a8f9550a866d3f0f1f0901fd6c9f311a48a60b01c40be81.d3d9	7727cebe440b007b	not lifted: older lift: DNDN at word N: version vs_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/42abd567e020c60134737d5b991dba0390cff06180d3460907687226f239f98d.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/438f9d99e996e930897cbad94691d5c868d791d2761942c014661135de95ec73.d3d9	not lifted	not lifted: IR lift: DNDN at word N: aL read outside a loop	steps completed=0, max=0, exhausted=0
+programs/d3d9/43d93bf84a157c9d3c99e1ddddc09cceabb09e145a1508f64d460e21536de913.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/44353f4315b0b278d0b2ea5369d6be7469d10179da58a80a0306dbd6a17335ba.d3d9	e7a9c6c63566c598	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/450c6f76144f11020a19683e5b1ef8365ccffb390a7f5d55effb6a6df41e0195.d3d9	ba1f62ef3b22288a	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/45b877c93d04a0cf53c312ccfe4dd5f804f82c853bdfb67972323582465d7580.d3d9	554917059cb06c63	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/45be28094c81f50131824aaa248a0f26276b56fdff4f8e0635041ab2355b13ca.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/460f66564ae752e9141368df71d376dab37f1fbc0f9cb61be066c14ced6ab37b.d3d9	f76d649aa31f9d94	not lifted: older lift: DNDN at word N: version vs_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/4704e09e314e0e0b0930182e04f63bc91fe0b58b4b283371b4c83c309bd8d10d.d3d9	1fb17579527851b0	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/476ebd4d7422ced11d1234ed1d1d028f0d20fceaf3ddb71739d2065618773329.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized output rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/47951220e9183b8b789935dfa8f8fd61cebb4129f130a0a6069e70d784b88dec.d3d9	3ee3b70b073a4472	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/48b28b303ca6f5ee8076747146aea474185921a5aeddfd5f8419673860d26eaa.d3d9	07b35d66a37ece8e	not lifted: older lift: DNDN at word N: opcode N REP outside the supported SMN subset	steps completed=1, max=5, exhausted=0
+programs/d3d9/4a2931a8cb88c67f1714b158efa4eb0fbd8947ca8810c9f2ff322e3988734cd1.d3d9	0380a6026b9ae7ba	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/4ae10f805c4fd3fa8ce43c2ca5490b60924eae1db44f2718dab54fa14522f34d.d3d9	4586467237949fe1	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/4b490254d5754086915bba2dddd93592f6bb98a8f58729bf0830623e04328611.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized output rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/4b5c1bf3488fb83d809b6f2fb25e0444e5267cef6e2df402bebd8ebcd397bbb9.d3d9	e19ceb35d45e8603	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/4b67ac0b552ebf69ae40c3915f3d8709a1157b9cc3244ba140e9f840211156aa.d3d9	4c37780c6bb163f6	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/4bc61d88c0c82772193a9e6cbfe90084daab3fbce6b96f977bd4238b36118b87.d3d9	78a7aca5e5a72075	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/4bcbbdaf087c39b6278326eaa4c6b7d7726ffd662557e11c84e9c0ef520cae95.d3d9	not lifted	not lifted: IR lift: DNDN at word N: vertex program never writes oPos	steps completed=0, max=0, exhausted=0
+programs/d3d9/4c34ba1f615eb9a4a763bf8779cb45acb2b6aa4f1db9053e03de3fe7c39d5d86.d3d9	cbab9a4e56c4fb4e	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/4c70aa03d2aa1bde308906d0758547c4c1b509eadf168e3940c7a0c972bea4c5.d3d9	not lifted	not lifted: IR lift: DNDN at word N: register type N, index N outside the ps_N_N banks	steps completed=0, max=0, exhausted=0
+programs/d3d9/4c9e0045d077875a7c89e79a0114dbf5a00d948d7b8a0615485234baac78b1b4.d3d9	51e74848506afdf2	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/4ca277db1f4eb274efba2c56b9330789093f7190c194af59816c6b219b7dd6ec.d3d9	not lifted	not lifted: IR lift: DNDN at word N: undeclared sampler sN	steps completed=0, max=0, exhausted=0
+programs/d3d9/4cab44a44d845c646e8d9cb7b93b823611128b834ac84854a89e627f8b09c996.d3d9	14f5a07427f3f4a5	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/4cddd38d9ebe7053b889d3a5542b5461b19279ccf9d4c31bdadc18128d1139f9.d3d9	51a43bef6d8e59ab	not lifted: older lift: DNDN at word N: version vs_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/4cf7a77096719ae4894de8aa8dadb7e19b325525138db3630e4b68e384a7f27e.d3d9	6ba8a16ae65cda66	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/4dfecd714cc666f68386d5bb7994bd2cd96fb4309109f999e97d5a5a40971bf2.d3d9	d7cc12cdc62cfa2c	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/4e2ba1b8999ecc88427d3e707a01e97afb714a483805ea705d91953f844918bd.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/4eec5a5c525676c1f657c1469ed1af49dc1a7193f8beb466eadf17a462fad7cf.d3d9	da9c9422f4aed6e2	not lifted: older lift: DNDN at word N: version vs_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/4fc6a24cd9fb7b86c835e0ebb3e6908275b76396d20b586b1944f03ce58bd244.d3d9	15a01b0aabb72c13	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/501c3bd1532bd753be0f2548b95d37da1674faf45b02f3c207afb20d66d7114f.d3d9	d86713c078ab0b18	not lifted: older lift: DNDN at word N: version vs_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/504c81098d43f4b07c75e59769e51b8940129007278525d8aeeb943b04c73fd7.d3d9	86681152a024c1e4	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/5056a9c0889de60da4ff1490d62be49ce196ace5316312995b0ec91b1a136e78.d3d9	57157c916e651657	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/5112a4bd085c4f880722805d08ca800d0e8c3c88ab0dac4abd22a308d6c64d62.d3d9	5a0d01e1c985117c	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/511a508294ac4975abbc207aa23b4e4506150f17f8825bc9e9442244ef89f7b6.d3d9	51a43bef6d8e59ab	not lifted: older lift: DNDN at word N: version ps_N_x: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/5142b18bb7d4f0cf7e1a4874a0e4b89cf7ffd238257dab41a62389865b1f2a03.d3d9	18cd5f20281fdd3b	not lifted: older lift: DNDN at word N: version vs_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/518b1f8ca952332d5e071b03a044231fc740d35e322603ecd149810cd3726efe.d3d9	1bf9e75e751f51d4	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/51e763ce9c71e818cdedda3dc9cc79bfd515687844b5a4b352fa7d015a1485d8.d3d9	e714d915da5fda15	not lifted: older lift: DNDN at word N: opcode N DEFI outside the supported SMN subset	steps completed=1, max=1, exhausted=0
+programs/d3d9/5221fbdc6ee0eb949cf4f0e1b206f5629fba8611c8dafb109c3e7b89186dbbbb.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized output rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/523a6b230308f732df1cc8ecdc1549fc8ae5880463c3307fb4bdd124137384fd.d3d9	9165fe35d84288ee	not lifted: older lift: DNDN at word N: CTAB i: non-float/structured/empty type Type { class: N, kind: N, rows: N, columns: N, elements: N, members: [] }	steps completed=1, max=0, exhausted=0
+programs/d3d9/5241df34f3d10be28935b22e47f2bfc9e6972c126f7a4a41f2065eb64eeb1979.d3d9	8ca4241895d6be2c	not lifted: older lift: DNDN at word N: instruction controls/predication/coissue NxN	steps completed=1, max=0, exhausted=0
+programs/d3d9/524cd00423ccec3b66d90d57a1945835040443827b10475fa0a7ade92a19dca7.d3d9	c2691a7152584f68	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/528b696503459d839f25053933000f4d438dde266add918758629eb03761cb02.d3d9	5a0d01e1c985117c	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/5355ef61a41a71cdfca49c10fee4971c4cb6136c570ed38eab34e23ba920ac7c.d3d9	51a43bef6d8e59ab	not lifted: older lift: DNDN at word N: version ps_N_x: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/53cafed32e5306efaa017038c5f16979c113e659bda6128bd94d803391947f20.d3d9	24157d9e8490ecf7	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/54b18add942d58a49657b9968c9905c2159dfbcaf9afc79fd6ccf87560eedc57.d3d9	1b593ad8f514ae66	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/54ce9da69f9abc214fb515f46153df8dde1aea9453fda304e872280840065edc.d3d9	c5d9b9bdf7e7c55b	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/551df292c996bf0ea7737ff0f317b7d7c485e18f53431854abd73ae95cd02205.d3d9	4586467237949fe1	not lifted: older lift: DNDN at word N: CTAB v: non-float/structured/empty type Type { class: N, kind: N, rows: N, columns: N, elements: N, members: [] }	steps completed=1, max=0, exhausted=0
+programs/d3d9/5613341ed17635537547981930ee0fa2866fc2612197b26de576164be3ccb6f8.d3d9	5a0d01e1c985117c	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/5680318c2ba3ddb7a248f323c512db4b31df79b00227f03beecd81cd9733815d.d3d9	5a0d01e1c985117c	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/586e33a230372a46aea6cf64beb7048919f19b279fcc85fac20c06eba45a7c99.d3d9	4b264c20faa81907	not lifted: older lift: DNDN at word N: version vs_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/58f0495abadc7eb2df968c36e65c84a0b4cbe74e44b983bf91b2af1a452c7106.d3d9	5b1ed6fb3b289cf0	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/591945c529da994de3d161c012f6b1da25ea6658b09fdd857a7276d0022d7bd4.d3d9	b9c74d213d7af97e	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/5a08c3f13f12f46eeba5cdec552819e3bf0b7c51d179f70bdb032d4d3ca27bf3.d3d9	not lifted	not lifted: IR lift: DNDN at word N: undeclared input vPos	steps completed=0, max=0, exhausted=0
+programs/d3d9/5a7a499f8748045ce2cf5aebd3e981640c50c30077649b2ee0530f4c4f66619d.d3d9	bf9e3feccfab1c72	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/5adb343e1b333a2222cd3033cdf0cf583f75f7b15531ca33aea286b6eefd1517.d3d9	5a0d01e1c985117c	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/5c3d962e5c242364b28ed5116f2425f998bc392b1eadfe07e0d2ad87b051f2ec.d3d9	06fa57d8bf8c9237	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/5c4783b4da3d390f361e6771956ae50c03c56948914026e6025a75c5118ccea6.d3d9	8818645d3f195a5b	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/5c4a0d01328b98b31409986d9de964cd749800b3b0d9cba7e55b0b79eede0d5d.d3d9	not lifted	not lifted: IR lift: DNDN at word N: vertex program never writes oPos	steps completed=0, max=0, exhausted=0
+programs/d3d9/5db5fc4d2b63314c38c8cdca7a6fbd50118bc2cf388ed6d9717aa8587b92256f.d3d9	a93927d3b7cfedd9	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/5dca37b4e53fc3280804cef1e6af70545a91edf0fb5ad8601e09cd7530999696.d3d9	038e01a583bb3253	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/5df809e1c0eec70735c9c2c52237652210ad13c4c3697bd0e7b14d501a1edcab.d3d9	d07c54018e7ba51c	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/5e112dfdd741d4ffa6eed099fd2b1aae164850badbfb45135be39cb9cbb6c4d7.d3d9	6dcb4d5c773df1ed	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/5f57499f59574827af419052d9524ab4becf6b0c05ef4b7ab066704378fe21b7.d3d9	5a0d01e1c985117c	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/5fd7ac979855be87287e632b8b016ac1ee4699a5b5aa7eb1056009017c051e67.d3d9	d12c4be1f4201384	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/6047d2f69cae1d58dbfd56d50338603493c6b8b728a67b33d21e1834205c2284.d3d9	f754008796274d7d	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/60ae4a0a7786be31818ccb51e1ebf18e756c0d21ea11c1cf7012fbaef65dfe7f.d3d9	68fe0ab377649bc2	not lifted: older lift: DNDN at word N: version vs_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/60bf63cbd26a2354c6a3a0ce331a97892985eec1cd5cf0068ce6d1f4b7554c54.d3d9	26678b0cb820d996	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/613e0853715de2f693f62df4d16b4ebca996142f5c9599e1fc85a1b92c592696.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized output rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/618d311e82525df452b1452abaa97827960277f2308e78cc2d6c205b522794bd.d3d9	cf117abeed2e92a2	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/61af7ac9c83657f479ff1b1e94d0c777fb4d84d9d417f33e90e8abb55cdb5a7a.d3d9	not lifted	not lifted: IR lift: DNDN at word N: register type N, index N outside the vs_N_N banks	steps completed=0, max=0, exhausted=0
+programs/d3d9/6301ec58b043103c726b1ad67957f63f2b4fd54d613b387ae555c2aac600a145.d3d9	ac2820e83dc498ee	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/6330be87935af474235176d514e911d785c6cd7fee0ecbe35fdc65f7992baecb.d3d9	not lifted	not lifted: IR lift: DNDN at word N: TEX source N is not a sampler	steps completed=0, max=0, exhausted=0
+programs/d3d9/635fa26d9ed6aad825963bae8604876cded622d37baf717d9932e3dc83acc166.d3d9	db0ba42784767126	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/63bb3e7fcc14574c74c072216fd4b0c1a6e44d6f0986365213ee11c7f47a9ef3.d3d9	882072be62bedd03	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/63c0c898ed74d76138a0967caa66e7121c46a84ed33421ae4d1ac2da41997bac.d3d9	cf3df7315172a0b5	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/63f549f0b3b761ab28f77b7d884ad4d6e95fad0b9da86dfbe8d581746dfb0585.d3d9	1b8d4048dc8e4ba0	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/649aa6d08586ee5f4f8af16f4ebff8ccac4c523676dc5935d3d88c3744c047f4.d3d9	af9a17d5ce48a4ac	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/650f83537999398489a79d2b5ff263e4ddfa0fe76f7fdee4db2c93e2e4931b2a.d3d9	4a019cbb1793cfcc	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/65c8af49890e0d2b851fe9dd9e5341defefe41618a1e691a3b0569da3d269711.d3d9	06fa57d8bf8c9237	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/666758222ae11fb053014e33a1c4f62aabec27a7d048738bcb2781ae8e7e13ef.d3d9	4954cb24647de7c3	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/67d9b52ac83527093af2168eb81a980d137c261c273a7c1f523355b571b780cf.d3d9	not lifted	not lifted: IR lift: DNDN at word N: a relative constant before any mova wrote aN	steps completed=0, max=0, exhausted=0
+programs/d3d9/68982bb6788d3d60077b81cf1f4aa310a6af5171e77a996a92ef30f8508e8f6c.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized output rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/69b2b55ea4416fedbf7364699e5bfb8325fc1a7d0d1665aafdadbfdfb68e08b6.d3d9	2ee35418df07ecd6	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/6aa2ed190cab8069b808368ae688b4a48edbc7666948dc2e9feb1f18fac110b8.d3d9	e7a9c6c63566c598	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/6b127cf8f363472b499eb4a933d98e97c84b333d439bc27b16b768651805ef32.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/6b6af3a3e8bd6bc8df51fcfbb7e21194c1f274f3238fe065cff4e5b23b5b43a8.d3d9	889e032b9bb25be3	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/6b7a521c96fb3da4fbe4d0a132f8055b393aba5a770c5da317729fdcc6087452.d3d9	not lifted	not lifted: IR lift: DNDN at word N: opcode N is not a DirectND N instruction	steps completed=0, max=0, exhausted=0
+programs/d3d9/6c7d1221093cbd8f93d5a3771a96b477d37d334b0640ec2ce1f5ea8ef1953073.d3d9	e6164b0b616db7f0	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/6d3b32597f74081c1a20f8cefc37360994a1843a2321ed3f15168ee7d608d95a.d3d9	1b4db701dcdb25d7	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/6da805a5c4e254b0c3ab880b52819fa490038c1553973b2e62e26623928243ad.d3d9	0ba56f737589a0f6	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/6de36aa5eda9de6f81d3974ac7e56f6eb0be9712145c9f582f74ed73441b52c2.d3d9	3bb9254131b80964	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/6df33ecfeab5f9ff478f836c83baf6db97bf10c79da8be966dde95fd8fa91a2d.d3d9	06fa57d8bf8c9237	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/6e15bcaa6f86f00ef19f0d55382aa80796259958eea619cdef60a5314310f237.d3d9	cf8b60f018e4a7ca	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/6f2d3fa064c010a29d148247f3922eb9a21a3fcef9ffebc1574cb8d491df9fbe.d3d9	c90271efb41eb8cc	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/6f8c16767e02d441e2889bbd9efed28e79c488d58990b5e6c2b19ff7ab35aa80.d3d9	024e126117f988bb	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/701dcb5f0849ab3aab161766393847c4690c887123f05d3bd47bb18fa646825e.d3d9	d087360a0b518bf2	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/71238255868fb826fa8f738f5c00e48cefb0d7747c1b0165736958addd25e2dc.d3d9	e13ea12d7c691725	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/7186058282e5b2669cf33bb55b69a026b7fb3dff5f3db6e2ac3526b1b7b22704.d3d9	9c96a45266632248	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/72e7ec6baf0fd5fc1c3795bdbc7f0a64f5301473d9eb8f8c39c93b8acd54b5c4.d3d9	not lifted	not lifted: IR lift: DNDN at word N: relative address token with a modifier or a swizzle that does not replicate one lane	steps completed=0, max=0, exhausted=0
+programs/d3d9/73c89a75ac3cd684fd5cd528896fabad4d94e439547af0990f34de5c3ca213fb.d3d9	5aa2b611495cbd61	not lifted: older lift: DNDN at word N: version vs_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/74059f548728be686ac6f02225e5bc7648e9abc8881d244eff8941ef95758de1.d3d9	ce05c6c029e76d94	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/74e0417142bce871d5b68f4e1490b10f411af9b1a72196936d0ae915022950c1.d3d9	not lifted	not lifted: IR lift: DNDN at word N: duplicate or modified sampler declaration	steps completed=0, max=0, exhausted=0
+programs/d3d9/7545235a9b42e02aa8e2699476b237a381192396f579b0265dd4557c0c83e6d9.d3d9	24d75052c6739efe	not lifted: older lift: DNDN at word N: register type N, index N outside the supported Pixel SMN banks	steps completed=1, max=0, exhausted=0
+programs/d3d9/759554e58d11a71126ceebc9dc8b49105e54fe41749552b2fcc8fd6d807de9d9.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized output rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/75edbe0a7a8a27f1032ea861dbcf02d5598d62f5702bd047e401dec122e7ca36.d3d9	6ee46b984ccbd446	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/763103e6c290bdcce94d13eb56dc2ef815a9becce725c898750b83a801550a9d.d3d9	2016379e84bc5a3b	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/76d572dbb4a756cf445b1944cc26419eeeab71229c51b2c764fe8d6ee5be332e.d3d9	4442ebbf5553f096	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/7705d5bc64bf6f180783eaff1a7d1df03e84c7a19f9588ea3810e9e306cf0e7d.d3d9	6a3616b5b9f7250a	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/770795e4c55cc0bb0478a8a0fa210950286606d6ad4490509da6d2d6d6802c6b.d3d9	4a019cbb1793cfcc	not lifted: older lift: DNDN at word N: CTAB s+t: sampler array or type Type { class: N, kind: N, rows: N, columns: N, elements: N, members: [] }	steps completed=1, max=0, exhausted=0
+programs/d3d9/77c573d453e4e97276e335fab4259be109e4bf0f600ddbaf2e24003a46d5e23b.d3d9	1b593ad8f514ae66	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/791965ad71dbb32885c8074cbc3884b55fa6e94ddcbc66ecd1cc47241e453915.d3d9	0fc3b46d75b5451e	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/79e07a339bc55de9e6042db5ed03b77ad94b3863073a3a1ac6081f3f614f42bb.d3d9	2ea10a175935d2a5	not lifted: older lift: DNDN at word N: opcode N IF outside the supported SMN subset	steps completed=1, max=3, exhausted=0
+programs/d3d9/7a1109156997c9d87ded67ad4d3f3ebef7a39a2b7f552407c62840bdc991ccbb.d3d9	36c637c35344c3aa	not lifted: older lift: DNDN at word N: vertex output usage outside the subset (N to N, PSIZE not supported)	steps completed=1, max=0, exhausted=0
+programs/d3d9/7a581cf7591d7274b49c89a653244c92f72540711848b8f3190d2b0ed5d4e200.d3d9	fef67253bb2a0074	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/7af6358c0d3d9d9c3993e199332099bf7cdc1e36c61e8b3a15e76ed33660c991.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/7b672f837bbb1c961084363324d42e7731ef009284c9eb3b72d55c2fc5a8306d.d3d9	not lifted	not lifted: IR lift: DNDN at word N: undeclared input vN	steps completed=0, max=0, exhausted=0
+programs/d3d9/7c4a15e6acdab1e790b2a92bff12ccc9e29c99b4d99486b229cde3bb0111ec45.d3d9	51a43bef6d8e59ab	not lifted: older lift: DNDN at word N: version ps_N_x: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/7dc912092f3ff3b48410c0a195b8b9aa0653d897d1c6149c6047fd44e01bc183.d3d9	fca886c673f9604e	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/7e3d0d2ce11eacfa8fd5317f97587ead30bca096a2b8c1faca1da20370ff97ee.d3d9	3bb9254131b80964	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/7e8946334b7ea13df655b1034822972aa5a6966fd200eb938d5f85e2377ba5af.d3d9	f007f67cf6bf8300	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/7edd16910c281beedd6460f0643f9c2f6ca3ce0329ff316fed4de53d71717e00.d3d9	5f8508d1655c7052	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/7fa70f9e38c53073fb6816a744acf517a0d40e85522f321036386647b89e8a55.d3d9	not lifted	not lifted: IR lift: DNDN at word N: a relative constant before any mova wrote aN	steps completed=0, max=0, exhausted=0
+programs/d3d9/801c80babcfe54f49e70bd9f79e863a354e411d8c3f057ce7f66f1f2faa556be.d3d9	06fa57d8bf8c9237	not lifted: older lift: DNDN at word N: version vs_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/801e84d40a19fd43aa24cd2d40a0245a0507df80ebb4fab529355cd2cd84099a.d3d9	f19480f74c86cc4e	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/80cd798fdf61f9d73b074d3440d75ef9961954c013c7d4f1496cb8eef5265660.d3d9	b9cc94932eb8cd55	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/80f9482aee371a1f6f1e00d25ade566965ed882e76a0b015c970798cedc379ee.d3d9	afed66bb5d703c91	not lifted: older lift: DNDN at word N: version vs_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/8154cce706d2d95e7394ccb0ffa8408e73d34950fef333b6f67443ca4722c2a7.d3d9	e6f64afe8518411a	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/8191dc31ed8ea86b6c04675cec30878ffb238568c62abee8a776d060f4266d7c.d3d9	4070eb7a4079e3d5	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/81d3e22bf167c150cd7cd6f9c2d139964e7020c74a44c97995ab0e7c9cca561f.d3d9	4e084ef57aa7dc59	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/82173fce9eb84a281930fc2a89d9af6d0bf973031c6fec6a8dd4b94d2941616a.d3d9	a9b7a9e3d1573ddb	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/82aa732c080afea52ca07337a0d5409c9971c22a3fa569b2417cac7a024755f8.d3d9	not lifted	not lifted: IR lift: DNDN at word N: undeclared input vN	steps completed=0, max=0, exhausted=0
+programs/d3d9/834d5b1bddf9cacb6f33266e76c35a9f915b40e155f12f5ded89ec1deb3ee58e.d3d9	bfa4b8dff9f0ea23	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/83a1512c8b7d4a72f979a978ae0c7ad095c44189c40206207795f5146d399df7.d3d9	d4215ecb8d5d08ed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/83f9e9770a662b2a18f3b16e82c4ec7b555b3b1275d4d6d7dbc65be9613db137.d3d9	88aeb5cf495a4e67	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/853d69d16c672cc026195876fd666b1cb402295b2157b52ac4ed56b741b4ae60.d3d9	fcae5e4ddd381da0	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/863cd0dd645928cc7b448057ddd0276cd39680c0504401ec6f08cc0291fa0507.d3d9	063d13944c742c23	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/867dd40b329112723f99db49202cd742ea01102d15a23ae8379799b15bbe1356.d3d9	3bf1be356944a67c	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/86932cfe02cb48cbedce7104a7fc27223adcfa457205625596621e4395adeb50.d3d9	e0bbade2e991ed13	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/86b8d5ef25cd9dbbac0c92e6a868fcf405801b44411bde7560e3df7177788285.d3d9	not lifted	not lifted: IR lift: DNDN at word N: pN is read before setp writes it	steps completed=0, max=0, exhausted=0
+programs/d3d9/86b9b878fb8439da16e8be0aafdfb711874efd7a598ab99743f3f7834d01750b.d3d9	1fb17579527851b0	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/88a547558c078ae7cf4c48e1db1b6827bbb352e3e148db78624b1cef79fb83ce.d3d9	not lifted	not lifted: IR lift: DNDN at word N: undeclared input vN	steps completed=0, max=0, exhausted=0
+programs/d3d9/88f3733740fd7bbc0579ed0d54638f1d4c73d4b067af036a5a834b623889eaa8.d3d9	21894f19edd148e8	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/895c82e74d7c7ffe04b62ba5eca8c25b041e90c31bf2338c799810e6f5238b20.d3d9	not lifted	not lifted: IR lift: DNDN at word N: instruction's operand span extends past its stated length (it ends at word N)	steps completed=0, max=0, exhausted=0
+programs/d3d9/89b4ccd02d11df0d258d345882689e6282b377b0a912f0d9a93ede85533df5a2.d3d9	13037230a7554785	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/89bf0de45466db1b51bcf792f019dd9ef4cac192898b86986440e0a7a387d94c.d3d9	51a43bef6d8e59ab	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/8a5100e5e1f27156ccc0b48a863c6606d9d54920b48a3d5c5bee3aa9d4ea8f97.d3d9	34db075375979bae	not lifted: older lift: DNDN at word N: vertex output usage outside the subset (N to N, PSIZE not supported)	steps completed=1, max=0, exhausted=0
+programs/d3d9/8a5b949cf410a58a242420f4d52fa74365661d1569f3701e0d9918a81a76b83c.d3d9	ce05c6c029e76d94	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/8a92ca83909d0527abf2b929179b2045d6518f5e253b6bda7b4a9f26eec2f57c.d3d9	85c8ec678ff7e2c6	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/8abcd10a46945e818b18f15b0a0de5bbcfa3be9b9e8580716aeafb6d83209ab4.d3d9	e8d925ab295da9af	not lifted: older lift: DNDN at word N: opcode N TEXLDL outside the supported SMN subset	steps completed=1, max=0, exhausted=0
+programs/d3d9/8afb308ea235ef8bb9f7fa62f383dfbe7a83dcc31d3dd25723cfb9d3025fe6c6.d3d9	db0ba42784767126	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/8b4ac76797e2b42601d4fbe2f3b5445b2e2b0a2d5cfdd598113303b1073c647f.d3d9	68fe0ab377649bc2	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/8b5761f0341dcfdf10c07d39dfcd9acb78f523ed3f72a231dcd68d0548a4c9de.d3d9	not lifted	not lifted: IR lift: DNDN at word N: write to undeclared vertex output lanes Nxf of oN, which declares NxN	steps completed=0, max=0, exhausted=0
+programs/d3d9/8c207a607db6ae8ae8e55a0d39c5090d759cf2391194928172aef584e5a17bea.d3d9	not lifted	not lifted: IR lift: DNDN at word N: source modifier N (XNNegate), which ps_N_N does not have	steps completed=0, max=0, exhausted=0
+programs/d3d9/8c6fa80586b1066c19fcdda5392c8b0342daba6295d08166a7af82e971af0d0a.d3d9	3eb2ba45869df267	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/8c990d09692f44b9b17e1016a6863a8a2f3c02ab5fd9c4282b88c841ecb391ff.d3d9	not lifted	not lifted: IR lift: DNDN at word N: pN is read before setp writes it	steps completed=0, max=0, exhausted=0
+programs/d3d9/8cb94b91127febf72b2ddd699620a7a0df2607d1bb65ba3bea95e3e13e961b9e.d3d9	ce05c6c029e76d94	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/8da99f6e8f9da1e219a18cc3d3096e2fe5f9fe2ae29d4f99b875ba89e49eb1fe.d3d9	cdc100241ee1a082	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/8de79c0bb2793d5e5e57292c5a9faebde73d6124bda69f317b986c1575bcd918.d3d9	854fbefcf7be4069	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/8e56fa9a70d694d9e39c9caf80f81988743d26adefded5902c048210db1ed97c.d3d9	cd98d6b6029ad2fd	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/8f4d130c33da13cdabbc82841bd1440e94c655aed53b8f8e9d88575222a527e6.d3d9	not lifted	not lifted: IR lift: DNDN at word N: undeclared input vN	steps completed=0, max=0, exhausted=0
+programs/d3d9/8f59e1592e9775c2708a601a79e24cb14c37bf081f85e4a9ca47787f8fac927c.d3d9	cc2446793584afdc	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/9027ad9502ce57a705903b8bee5fb8bc7d74779ddbd8a22ed79b26db33f50b05.d3d9	06fa57d8bf8c9237	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/903e2ba46cd380d4098f5f9f984bcce7f813a844acf32b3424011d1ea48d821e.d3d9	eee49b7940de3118	not lifted: older lift: DNDN at word N: version vs_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/911aa9e8e6a458cd74056df86e0c6dfda9a497bdeff45c0e65f271023a79244e.d3d9	5a0d01e1c985117c	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/93a846111757320a6c1fd9f5b2a608cfb8ac14c83aa21138f1ce05446de33fd6.d3d9	ce05c6c029e76d94	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/9418de4ca8692ae073ba178bba4681b4e5ab2be4a8c3a34a54f282aea4d30e8a.d3d9	d264c3362f4eaf1e	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/94b6936e96fb9dbf02f693e25326d884d3b1d46f91a5fbe9a8004bd5738077e8.d3d9	not lifted	not lifted: IR lift: DNDN at word N: vertex program never writes oPos	steps completed=0, max=0, exhausted=0
+programs/d3d9/952420f60ad3e118a8fa95b18587d6b85382038ebdab63d72d439b79fe1a9cfa.d3d9	not lifted	not lifted: IR lift: DNDN at word N: undeclared input vN	steps completed=0, max=0, exhausted=0
+programs/d3d9/9535835ac9b12578c8ae97dac37505b93b8a1664640e1f8fb12e3930a9bb7c3b.d3d9	69396210f91ec228	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/976aba4684beeb0ec71b70634f5c599f302f9c1c81becb76f2e60d31f09ee238.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized output rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/976e4e14aa5e793b00152ba0a202d3aaf29384273a3231b5bd2a39a108eed41c.d3d9	e66b550f90a04a6c	not lifted: older lift: DNDN at word N: version vs_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/9770134a806631c1640dc884a0a5e957ec8d046fb1b786c707010ab59722e2cc.d3d9	not lifted	not lifted: IR lift: DNDN at word N: defb (opcode N) is a vertex instruction, not one of ps_N_N	steps completed=0, max=0, exhausted=0
+programs/d3d9/98133b248854b0359e733907996d091b01fc55e944b541c14b0e756d3c2c84e6.d3d9	5bab2e4c5efa8e7c	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/98bacafb9981a6b9f52002dd113a66295aa44cc313c7894f2477ec6bf8f95f03.d3d9	69a41055a47b7754	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/9900424bc20d514ba35dfd8f8b529e07a66539e8267896869980014419e716cb.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized output rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/99306220b22b2a19989e972c9dd68a7eaf99a59ae96de855c94d8734a84b6ebd.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized output rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/99477b81b97414979cf84d91f3fb1e795714cbd7e91f6427b8a74d4ffdcc3dfc.d3d9	5a0d01e1c985117c	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/998c0ed99025ebb5ca2f345f75f498f38b7661f00f2946edbdeeb52106421b01.d3d9	a8ad49675592df00	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/99a9c9dd7325fcb4f75af447a0868735014e42d839cf9434eab387f2d77aeccc.d3d9	63fd4154bd77cc01	not lifted: older lift: DNDN at word N: opcode N REP outside the supported SMN subset	steps completed=1, max=5, exhausted=0
+programs/d3d9/99b4242c91cc34c1f12a4ebb57edb9a7408258efd519b286aeced6c0c55ded04.d3d9	e7a9c6c63566c598	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/99cbd2afc358181aa15f46239b2b0b31e4346d98f2cc33ca524c28b78bcc20e9.d3d9	d0fabcce0f19b9e2	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/9a1a68bfc4a2300b892a58f06516c4fa8e6dd045a4da6c54f4173c87c8bfe833.d3d9	2cbb433cd19eabc2	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/9a456d4361ca6eacd75e8a3259b720f81ef8993e9b27d354c2d5accaf590af96.d3d9	5a0d01e1c985117c	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/9b014dcbaa51faf110f6822117cd20fff19f135cf471fe58c3fd17c46ac48f5a.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/9b14d1bc766bdb392541adb2ccc364cab71f903c8a478b04f6225868142bdc73.d3d9	not lifted	not lifted: IR lift: DNDN at word N: vs_N_N: no DirectND N runtime takes it	steps completed=0, max=0, exhausted=0
+programs/d3d9/9b2cd469b26d38f1c8419d8a4abae6abf2b547fc1f886cb3877d51c5aca01850.d3d9	06fa57d8bf8c9237	not lifted: older lift: DNDN at word N: opcode N DSY outside the supported SMN subset	steps completed=1, max=0, exhausted=0
+programs/d3d9/9b2dc4596894dd878b450277ce13ee83ad0093e775f01b3649363102ceab8457.d3d9	not lifted	not lifted: IR lift: DNDN at word N: sincos requires replicate scalar swizzles	steps completed=0, max=0, exhausted=0
+programs/d3d9/9bf9a9a57eff31b54bcd02ec0a9f8e7fca562ef42b83b9184226215edb206be3.d3d9	not lifted	not lifted: IR lift: DNDN at word N: register type N, index N outside the vs_N_N banks	steps completed=0, max=0, exhausted=0
+programs/d3d9/9c67041c8aeb7bf4b4c9abb6339071c0b9964af1ed915db5700f1917970a7410.d3d9	7ff51e36f4e96f13	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/9ce0c661b5802a24d492eb75070d8aa84f911cbdae42471f64977a6a408b1511.d3d9	1756cae69baaaa00	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/9d4f7b4a0f2f561ce48fe5cbe1f03851f7a1c6dbb440d4286d39b09f043935e9.d3d9	888dad4d85556cef	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/9e01c67176c7e36924225ddbf3f0510ebdc37198abcc4e9d1cd91242f9467f44.d3d9	06fa57d8bf8c9237	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/9e42b34a606ac608d72a4eefe176ea8cceff2eecb9f7e8e073b56446759a48ce.d3d9	661cb46a8555f508	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/9e4e380905375e6ff6865c1fe4a9dbc94bad555f3f742ea1fa5278311354eb8b.d3d9	3a5eef012067bf87	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/9f6261d7372973b88694cedc754a6c5ece35ab9bb5ca057445b19e43e73765f0.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/a01a7d426466cbc1a1869c78b84d581fd560b43396c78da45f816ae12e497a5b.d3d9	9c3c95ff19e573ad	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/a105150f60820d78d00e4a8dd643a3ef39997f0a4e9ca298543f6509ac8221cd.d3d9	bb4e60ec3b7b9a1b	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/a154d33c68b18e4902f04e7c606a9eff640d9c1136114f97009b09ca1174cc72.d3d9	cb6f143242818e08	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/a20ef2df4fed91e2cbeacc9d20329edad52b91844e9ff46f312357613d464bf4.d3d9	310a2df5a26ed856	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/a23481230c67a7fb254fe396a5d618b7bfbe555fa1b148e34869ea6e5fb8ee85.d3d9	74767f3e52911805	not lifted: older lift: DNDN at word N: CTAB i: non-float/structured/empty type Type { class: N, kind: N, rows: N, columns: N, elements: N, members: [] }	steps completed=1, max=0, exhausted=0
+programs/d3d9/a2e41783507134be3f998a6e697f2dc950e9b824ffda64a32dfdc2e6ca6312fd.d3d9	not lifted	not lifted: IR lift: DNDN at word N: instruction token NxN sets reserved bit N or N	steps completed=0, max=0, exhausted=0
+programs/d3d9/a3c9a1187699a4ef03658cc245e51285d40c329867cdf483435526cea5786daf.d3d9	53eb8d63c0b9861c	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/a3e251f5368002235bd4a9be4e1e8bc7f0a364bcfd8cd346e3191175fb283e52.d3d9	ce05c6c029e76d94	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/a40a38be5baace089d5a729662037d06be36f116f944024c5834613f8f5b2dfa.d3d9	02620e358a06088e	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/a4e7cd0509b46a364bf1c3a61a14aa06bd137c5cb7720727db892dc87fe48f3d.d3d9	6c6e5cdb1ceaa585	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/a5e96f0f3545093982d7fbdeb85badf56179d99f31236d2319f88442d02e8c0f.d3d9	3bb9254131b80964	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/a671c333b5688691db04817b2f6270864420a5479a8606da961513960999ffe5.d3d9	02df45c338d1a9c7	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/a764002730bebfab25fe516294046fb4e29e16650a4bb888e607d0dd730f191c.d3d9	5a0d01e1c985117c	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/a7beedd211dc664a367d5b94a96e916fb7541eefecfad7b10ca8756763c2461d.d3d9	966e06bbd0c766fb	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/a7dd759941c50514f5b28c1862085b8deec9f8097acf5f78b2c0b0c176581f6f.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/a85bd6e07c456b0f2556698878959517142bb5a7c0438831bf641db19e0dac8a.d3d9	e0250f6048039043	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/a9893d78d6ef2ce8257f7b9d01cbacf6793e3671329cd17ec565082e0e548605.d3d9	0bb733f44664e6d6	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/a99129c4936e52c16e33ed1e61e19fdc4c667faa6c4a67fa7b40b3bc52337e49.d3d9	not lifted	not lifted: IR lift: DNDN at word N: duplicate or modified sampler declaration	steps completed=0, max=0, exhausted=0
+programs/d3d9/a9f23d35303c2bc3dbf266270e7f675ea34dc02678c96f09df1f6815cfa3cc70.d3d9	51a43bef6d8e59ab	not lifted: older lift: DNDN at word N: version ps_N_x: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/ab61b3ea3cd7d76392754fbe43dcb441091e34f55ae5ae6b4be498a542e92fc2.d3d9	73b9c390da414b3f	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/abd1d36464166268f40c9a8473a764abcbf1ab9c068ce82ae1e8a2a8574b6bca.d3d9	b006c2000f8c5447	not lifted: older lift: DNDN at word N: register type N, index N outside the supported Pixel SMN banks	steps completed=1, max=0, exhausted=0
+programs/d3d9/abf62b9ad69affb824b0696d08f218fa52d86fe9bbe4a2f999dd56a395ddd1cb.d3d9	not lifted	not lifted: IR lift: DNDN at word N: pN is read before setp writes it	steps completed=0, max=0, exhausted=0
+programs/d3d9/ac0078c59a5ad4e1cb5f63ba698c222917fa0da1a60a217fe2695857a6e2a7a5.d3d9	8d4f13df75945585	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/aca9286b5bca6fcaccc27e6b6d4942e1098a1afad92f6047b49d55d4f2b43463.d3d9	5a0d01e1c985117c	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/ace44621f0bacedf27ed18667c1602f6610231a17bf9df320ef9aeda277e2af2.d3d9	ce05c6c029e76d94	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/ad446c48616c138bf428818d529cb558753350b5a1b617b4e8b9c90aabb18ee4.d3d9	ce05c6c029e76d94	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/ada5af0ca01ed25ae7b8310542cd52586f701d3c95e07cd8e93b2b6cb68dd16b.d3d9	c3580091f6a9f303	not lifted: older lift: DNDN at word N: version vs_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/ade98b606e90e5e19680a2138ae384884f577b694c52923fa02bd8dac7cb3761.d3d9	not lifted	not lifted: IR lift: DNDN at word N: ps_N_sw: the software versions are not lifted	steps completed=0, max=0, exhausted=0
+programs/d3d9/aeecd0184aa839cca16d95074df1ea8d7cf530fcb90e7545c4796913cf417422.d3d9	not lifted	not lifted: IR lift: DNDN at word N: vertex program never writes oPos	steps completed=0, max=0, exhausted=0
+programs/d3d9/afe07a76b658729e0fc2804fca6aa6b4b486dad828952ed27fa12e147306c149.d3d9	63fd4154bd77cc01	not lifted: older lift: DNDN at word N: opcode N REP outside the supported SMN subset	steps completed=1, max=5, exhausted=0
+programs/d3d9/b05a8ff6ebb08e3b4b04da9bbf3640b85ffed50c892e9ac77bca4255950f272d.d3d9	c7287be32556a9f9	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/b07ebcf0ad38510aaa02f13ddc662b568b2558e472f2da94024ff8ac66eec238.d3d9	cedb27e3378399a3	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/b09f358243dcfc1845849f62fe408fac340b9c51fcbf8f73998ae0841060e0af.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized output rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/b1f8713c54f8b16827a90245d922af1baf86f80ca5ad7b613e003b435d0811fc.d3d9	5a0d01e1c985117c	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/b2a36399906af54e8c6ba0c3c764161038475e0997fe2309c9bbb8509f97c821.d3d9	06fa57d8bf8c9237	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/b3667695145db35900b8f88af1d3c6c7c64725c73978c2f382d3487df15149e9.d3d9	51a43bef6d8e59ab	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/b41c532f8bde8482f2767f28670227dad54b498d8b1a2054ec1e7e686a34587d.d3d9	34a54296e03b2d39	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/b4846a103cd82f23bbec008736311c7a4114f5e64822dd9a2f83abf2a9558613.d3d9	3d39b9446dd941db	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/b5efa1e69cf79517f360160f3d07299ffe2b18fc713b59748f0e57f66c16b2df.d3d9	3bb9254131b80964	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/b6f0552dd297c94f78ccf13db5a32d86b9bfa131113fb6c2ef18416d7ce4aacb.d3d9	f06c0cecf1ef6d72	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/b79d3ba3a4e5caefb6ea0ee6ad6ed1612864b5fd7a4d292a0846f879d00293d4.d3d9	8a14e9da06e1e104	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/b80c2112c31678504e2f4885f8c55ba12a0d0e12fd4681efba10ff2ff5ccd265.d3d9	88323fdaa46d125a	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/b870eff76211398c89295d4e22c70e61bf2f82d357306099b62b914e691df77a.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized output rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/b87d182105d6b585621b8339ffe58b4c968a7ba29b12d5ad0035e540f72d11b3.d3d9	3eb2ba45869df267	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/b884bef48586ea501437235ae4666256735db5fb497de9d189af17fee37a429d.d3d9	f5afc8095e2b53d4	not lifted: older lift: DNDN at word N: CTAB a: non-float/structured/empty type Type { class: N, kind: N, rows: N, columns: N, elements: N, members: [] }	steps completed=1, max=0, exhausted=0
+programs/d3d9/b8c4e6eff61f8010f54257a12677ae55f1a903f005189489d344123c5cdfa9b0.d3d9	087d2a4f41477ba6	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/b8ce7b775d88cf3e5fe07ebadb2d71d3302e5c7c51161a07e2884fdcad5d282c.d3d9	not lifted	not lifted: IR lift: DNDN at word N: instruction/comment span of N words extends past the stream's N words	steps completed=0, max=0, exhausted=0
+programs/d3d9/bc0f43883096af3fa6478f791e9bcb5249961d725615a23b45e0c2f422b00967.d3d9	not lifted	not lifted: IR lift: DNDN at word N: undeclared sampler sN	steps completed=0, max=0, exhausted=0
+programs/d3d9/bd26eb460ff47eb0cce5d28c46410a5a9668c766f9b6f15239671637d55f7197.d3d9	51739ec3d1002667	not lifted: older lift: DNDN at word N: opcode N TEXLDL outside the supported SMN subset	steps completed=1, max=0, exhausted=0
+programs/d3d9/bdc3aa80a0d7faf39eda45fc474304cf952b3fd984a3aa81d655c449556ae1d1.d3d9	not lifted	not lifted: IR lift: DNDN at word N: call of lN, which is not defined	steps completed=0, max=0, exhausted=0
+programs/d3d9/bef74977db0a8e6d1c31de463215f7664cc5fac9efff56524170325b72f05dd1.d3d9	23677c8a392668fe	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/bf9c57d398021528f5ed49a8600149460f728496518ca560ead3dc8bc9489033.d3d9	dd3608dc4192e9bb	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/bfa9edb742b9e8a54b7d03f4ec7905a9d717d79a048247f1164a1091b277283e.d3d9	not lifted	not lifted: IR lift: DNDN at word N: instruction/comment span of N words extends past the stream's N words	steps completed=0, max=0, exhausted=0
+programs/d3d9/bfe256ac846229fcf496f3110e57ea08143f89e46923b8c05c28504efc01d80e.d3d9	3eb2ba45869df267	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/c056fba78e5db46914cdb32c73b40195dbdfc6fe5aea2b9628310b7ed150fbf2.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized output rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/c0f6d97b8b76ea88aedcd6bd23afa7c7f51417d23106a142495742adfb562478.d3d9	ce05c6c029e76d94	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/c126984308da3c0933c46d8aed1143383e3ecf6ab1caf27fdeb8ceddd9140f1b.d3d9	840c952e84d80c94	not lifted: older lift: DNDN at word N: version vs_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/c1c088603ddc038252a65cc144be17956369e1d6104aa5f737288dfc54f357b7.d3d9	f1d3958df73aca65	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/c2bc1c05ec1d95d07685ff67f908bcf9674feecd2f088036825cc0a092375f6f.d3d9	9c6667bf8f54f64b	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/c38b4bbb8c4b5b7078dd1b414256017ec62aec63f0c4f0a3ebe5a78df2ae55f4.d3d9	51e74848506afdf2	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/c44de59cd791bc970ff64adf52045feeb91b8ad340064b47cdca91326d813276.d3d9	51a43bef6d8e59ab	not lifted: older lift: DNDN at word N: version ps_N_x: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/c4eeff56ea8f2eba67d32b2862dfe46a684afa10c3277f8a924e51c43bed19c5.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized tN	steps completed=0, max=0, exhausted=0
+programs/d3d9/c59fd8cd97b6760b951d50e3a0acefa216778fdaa162b5b7c5dc06f4fb73c2fd.d3d9	ed4b85c4daa4cb9c	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/c5ce854f0a6ae7de7dabf69f4bcfae7a492ac3e15bb08f053d402c28df427b89.d3d9	d087360a0b518bf2	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/c5de637d8b479ec5848bda17d1a5bfa48a3dfe0634400e7d56a04ca56aa0c06e.d3d9	da9c9422f4aed6e2	not lifted: older lift: DNDN at word N: version vs_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/c5df81b5e09e5b84045fcf1dcaed6600375f129125566a3768a7887bcfde2cd7.d3d9	not lifted	not lifted: IR lift: DNDN at word N: aL read outside a loop	steps completed=0, max=0, exhausted=0
+programs/d3d9/c62abcc6595a06c8c29897c583495adc97ee5035d79ca076d3a00f43ca9a6ac2.d3d9	c2691a7152584f68	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/c6a04289dc683738e27599f77b7dab139316790a144449cd4578f3670c88c35e.d3d9	e7a9c6c63566c598	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/c70158b92fae545953db28fb4465697683727234423c8cdbc920c49502f59e50.d3d9	3cf7091477035827	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/c7e1d61a0c30a5ecf10e7c3affe2462828d7ae156580b3673247d886fc10c70d.d3d9	da54ed01e7e31af3	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/c85a8ae15d72f430c9e6ef2024d32292e25cc23ecb183be7454281ab7c19317e.d3d9	not lifted	not lifted: IR lift: DNDN at word N: a relative constant before any mova wrote aN	steps completed=0, max=0, exhausted=0
+programs/d3d9/c9113bcf953d764eabe06d1869812993908fb6e5a2f82db388dead011d4537d1.d3d9	not lifted	not lifted: IR lift: DNDN at word N: a relative constant before any mova wrote aN	steps completed=0, max=0, exhausted=0
+programs/d3d9/c91d93cbcc00f03206f55dd56a29ef3f178446d15faf06f4c097f358866f3e01.d3d9	78a7aca5e5a72075	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/c9c43259919035b0c900ffcc6050da9648e45db96acd73e7812f34869d3d7294.d3d9	8af4e88881390d2a	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/c9cb15cb2b082307010316d40e2615a1a837171c862097dfe576de4cf1263cd5.d3d9	5a0d01e1c985117c	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/c9e6c893daba028b2411634489f90e44c23951f29c8ec43df23f1e5f211dab17.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/ca1e6efc6f937f9ebae2f9033c71cf5d835ada9995f3115d24998670969371c2.d3d9	6aced1b50e124f3d	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/ca8b8647d824643c64a4b10a00014400de041ad22b4a8c2d15b7f1f38cf97858.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/ca937178aeb1abe9882aa41d28f6f043dda5addd27d4cead4cbbaf53174a4713.d3d9	78a7aca5e5a72075	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/caf6ce2dfb04b5fa4707dcfcc097c15bbb10c163f95eac2389f981054f333b2f.d3d9	ce05c6c029e76d94	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/cb53f88745c76673ca2e6b3f3218db93ebd309afdeed734a10c4453c332ee705.d3d9	5a0d01e1c985117c	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/cb58a94dbf874081e18ca40ef0fe92405c3aef9cb5e7f393c5ee6353e84d522e.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized output rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/cbb5c8c92672e78252accc246c2cc4c8b9ce976aa8aab4d9a6ab693605fa0ab9.d3d9	a052abb88025621d	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/cbcf58c31fb9ce0e301b1f3beab2aade9564506ea22e0a45616b7080f29af4ab.d3d9	8b8b50f533562de9	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/cbe6d0d3e9025331730a2b2008f74f647f2bb8f73235802efe21f6d0d5f0a9ac.d3d9	9f00f8744f0f1e99	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/cc0e395ac14bd66729b0aeb67d2b3e380c6f99de1509a55afba5f7c5a7662c41.d3d9	ba1425bcad426f7a	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/cc4596b55823329b415b1eb83387db61a5e0abb832a053df00f78073b69a4249.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized output rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/cc57e25be9d000f5212483f2fa0b4f6a97cdbeb4ea21ab3bd9b004cb82063774.d3d9	not lifted	not lifted: IR lift: DNDN at word N: register type N, index N outside the vs_N_N banks	steps completed=0, max=0, exhausted=0
+programs/d3d9/cc7ad0befbc66099d395cba5eef9827d9a31f7f2172b157b6d710cf41bd125f8.d3d9	441c0be1402f57dc	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/cc7e3036bd937c380a4b21b7b85aa0f40c8d9417eb8b3a070b932a676f7fb7ff.d3d9	7f5652d3f3570190	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/cddd09f98b9e2122455b4a1cb6ea685afddf0256b47ed299071bbe389d2e577d.d3d9	d8528d5cf2cb321d	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/ceefc8f37062d402248233606b879cff0686676b31e0517063126943f372203e.d3d9	c2691a7152584f68	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/cf15716e8a5db7ec1569badbdb01f570265971342929e1d4de029b0c5573b7b8.d3d9	5e461145425bea60	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/cf280a9b00baa9da38b7ee07e101fb04792a374376fcafc060c2fc22ab430c03.d3d9	e0bbade2e991ed13	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/cfb12133abb4ba038bc6ff07ad131a70cd2c7ef9c2964017a1e7c1c67c1ee3c8.d3d9	not lifted	not lifted: IR lift: DNDN at word N: oN: uninitialized output lanes NxN	steps completed=0, max=0, exhausted=0
+programs/d3d9/cfddb1622d8905ae8b6e3c4199b9017e32eae0e55a7dbcd109bc9aac6f30c506.d3d9	a2de546a5867b9f5	not lifted: older lift: DNDN at word N: instruction controls/predication/coissue NxN	steps completed=1, max=0, exhausted=0
+programs/d3d9/d00c56f6e922a0c339c1a0ec08c0f12817f3e5806d112e3dcef93b849ca3f68c.d3d9	5aea99910965c2cb	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/d01ef0c2e4ced6ced951351499044b6f218177c20f64ede776135c1edd56145c.d3d9	c2691a7152584f68	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/d1906bf504797b1a17d42d19d3da8a7fa8b4a4c6ee6e18b42dbb708303dbbe7c.d3d9	ce05c6c029e76d94	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/d1dcc32a7cc746c064e31f375ae555ac5b3945870d7f88f11bd6e55e584f11ee.d3d9	52b5d32b2a32c708	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/d27a5dc95e1834ba19975c20ab76e82fb7339b5624ca0a1fb55eb01a5c4d4070.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/d2c3bb09a1cee97c1da5b384a59a41f4c50c0cce074bfc1e2c4f0ddf90e82123.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/d33888bfd0d0849fb1ed32029e0db7e7af667797c78aa057cc8c7d56ad5354b6.d3d9	1f50235a4338cb78	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/d38efeb4128dfa62b1a9c735024deddba3800004f342bbb14de2a4438c04d93d.d3d9	51a43bef6d8e59ab	not lifted: older lift: DNDN at word N: opcode N LOOP outside the supported SMN subset	steps completed=1, max=5, exhausted=0
+programs/d3d9/d41d70b70c5ce27ac88f6a78633e1cb853c0d57009b673148ae18f36ab142218.d3d9	aaf7458ec6c4f1e5	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/d4929fcb01d57361f802b937aa9208063de77493f6f87d996291372ec113d95a.d3d9	not lifted	not lifted: IR lift: DNDN at word N: undeclared input vN	steps completed=0, max=0, exhausted=0
+programs/d3d9/d495675d0ac00fc1c55766f4611987f38eb121e2dbc362f8b6cf7ecb451a962c.d3d9	d7dc848810c4a78d	not lifted: older lift: DNDN at word N: opcode N REP outside the supported SMN subset	steps completed=1, max=1, exhausted=0
+programs/d3d9/d496fb27de1f4c5d4bc4daa340ef0158d0d1ef93e6a7511398c5557e9d56e693.d3d9	4e084ef57aa7dc59	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/d53f2522022d5679f3a342eaca63046a05d9f53f42da8cdb2befe4fd6f55150f.d3d9	50afe4d83d8ae7d3	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/d7f0a9305d4c3b1c732b0aca9d59fe2cc7670393bd5ba06aa66dda5edd5f345d.d3d9	269cad1b55b3cb6a	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/d9971be55749e27463067e5ed6792e2337deb08b7cae2d7e0b5d31bfd0f4e654.d3d9	e088254ae16d75bd	not lifted: older lift: DNDN at word N: register type N, index N outside the supported Pixel SMN banks	steps completed=1, max=0, exhausted=0
+programs/d3d9/da6a45905c251eaaf41008690d10eb9824002fc4a38c65b211f330fde97326c4.d3d9	not lifted	not lifted: IR lift: DNDN at word N: a relative constant before any mova wrote aN	steps completed=0, max=0, exhausted=0
+programs/d3d9/db912b70d5ca1afcdc901afc25a36ccd2655c983aab9dd3e5ad7a6719576dd37.d3d9	5aea99910965c2cb	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/dbd94a805696a447e5682ede7a7bbd4c84bff1f9199ff7d3b30c0005aeef0980.d3d9	f5ee103895d602b8	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/dce8c621584302ba8c8b84da9d9caaf3dc3a054fe86f531ef7be96851513f627.d3d9	7cae66aa95e6929b	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/ddc4e31ca27a3c39b7a9ef764ff78b492a5df35fbbd64ae7383d70d81b491c4a.d3d9	06fa57d8bf8c9237	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/de53cd93cb34efe112eed8be3df5435a058061d0aed9079536bdffeebd1b2335.d3d9	89d744fdad9f6054	not lifted: older lift: DNDN at word N: opcode N DEFI outside the supported SMN subset	steps completed=1, max=2, exhausted=0
+programs/d3d9/de54972b053d299b57985be5632f6c6f8cfb09d91d634ec2ba394ebb76af67c4.d3d9	7eff748658e9d64b	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/de5e648e89f074bd0f8ca34d1d5910ead5519a837312ae034a8f176408ba302d.d3d9	06fa57d8bf8c9237	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/dee3472a02e42f9f1b9049de1080fe0b8d07e08d663ed34e2534c945dc70c479.d3d9	not lifted	not lifted: IR lift: DNDN at word N: pN is read before setp writes it	steps completed=0, max=0, exhausted=0
+programs/d3d9/def135febc7e06cf5da63af593ffc797ae53fe4027ef9daf232c5ed8d4aa2225.d3d9	not lifted	not lifted: IR lift: DNDN at word N: pow requires replicate scalar swizzles	steps completed=0, max=0, exhausted=0
+programs/d3d9/e0069091e32865995581f4aa6e134f09174a93416404f09c5cf1b0c40dce9d6b.d3d9	baecaa0816c5a91a	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/e04c8d0b0a451eb6c29889ff12e57f0cb97ff559654ff1c1bd518245bc61776d.d3d9	ca2c458f880603a8	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/e069ed5e48c37efcac37b3d735908c3772f140ca4aaa8a7c51d413ba15cee6c1.d3d9	019362c2522bbcb0	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/e0bb2d55c413e32450e6adec3ded614dba1a1062ba064160471e14acd8b1a482.d3d9	4f5ed3da751880e7	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/e0dcfb652e3baead6e28c23fda54059372676b3e7b1a1e7a0f723ce45cc62bc4.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/e1ce24a97452044531db5963e45fd46af6aa6a258e45edbd594bf27d5915c109.d3d9	2260779f9d90b294	not lifted: older lift: DNDN at word N: instruction controls/predication/coissue NxN	steps completed=1, max=0, exhausted=0
+programs/d3d9/e1d8922dfb853c600984cd79cac52064f45c80f62f598041d043c70c0ed1edad.d3d9	67c97e87776a45f9	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/e1f80d8eb23675561d5decea157cecb0b88200992d042eaebc80714b16dc9711.d3d9	bd40bbf9d8452f88	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/e27d352f450600945009054ca5093f17b76720b007f03e5e7543f425fa34ae40.d3d9	f8d8f59210362fe0	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/e28aea4e81edd98903ac222fd0c5556d88da312501dc943c295f8590204bce81.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/e2b918227b7b6a147b825ca9aef1bf7e23343d3593cf6437231ecc33f1522b90.d3d9	51739ec3d1002667	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/e2df2953fb66de48f3c06f07a946fee413628ed641031ae15a34cc6f86a9cbf3.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/e2fdd5006caca9c70985afa6ebc71607a61cb278eb2874fc7b8bf7e4c7b6dbe7.d3d9	89d744fdad9f6054	not lifted: older lift: DNDN at word N: instruction controls/predication/coissue NxN	steps completed=1, max=0, exhausted=0
+programs/d3d9/e35c3195743ded21bdda6117c21d28261ffd7638cd293036abb5bdc513d25a0d.d3d9	439cd464a3f5e271	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/e40cc7433837cf1e5eb425b59e6aa414e43282c7a5767dd3ea63a44f5773719b.d3d9	112dd1956688ce7b	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/e53205c4c1fec602b7ccbabaefa4504193a75dce5b24199265d28da0be0fed30.d3d9	not lifted	not lifted: IR lift: DNDN at word N: oN: uninitialized output lanes Nxe	steps completed=0, max=0, exhausted=0
+programs/d3d9/e57c8a2a0d083e63d13657dae3ee12f78cea6cb4a69e2263c1491bf788638e0e.d3d9	d30aed4e5a9bdcb1	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/e69c19bd63c3d8414021609e6513c8ab63604b58a0a3757d587ed7f94a4ccb67.d3d9	ce05c6c029e76d94	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/e728b7ea8ad8812791a0989a58b8617e8fc8ff96d2499088aee421c90be6f9e6.d3d9	c195cf33a9f9f7c4	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/e7afa90694d1a00be9593f31f8f1b7f0d70afd1e295cb3084f3174f13391b242.d3d9	88eaf9c382c46c38	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/e7ebb05222667fc57b0e8a8a66e745a2050fa7a9793e5c7d41f026404c84ebab.d3d9	7664038cc3cfd44e	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/e814364e063efb0565d7e9ffc98aa84aae20695daada26e3a71da467fe4cf3c5.d3d9	1b579aa691257c91	not lifted: older lift: DNDN at word N: register type N, index N outside the supported Pixel SMN banks	steps completed=1, max=0, exhausted=0
+programs/d3d9/e8a2e1982097f0cd2d429b4a4f3c42797846dd5c07e02463dc0c90144e059cdf.d3d9	85200526d62c21e7	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/e942f75fc43f6acbea2902f5a1ef390bf808b65cbaca81a35629774c7e880fe5.d3d9	78a7aca5e5a72075	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/e9bdde262e531a917c70afaa7f2a7089c9db6b431cbd35afaa3c7bcfb36ea80b.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/e9d679a3ffefe793d74dd861fed565bdeb56234817f8578d5d25cbbd45e1e9dc.d3d9	06fa57d8bf8c9237	not lifted: older lift: DNDN at word N: version vs_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/ea368981af784c049acff77ccff23f4581de78262e10ec3b8ad7f210982dd5df.d3d9	c20ff61551a37e1a	not lifted: older lift: DNDN at word N: opcode N REP outside the supported SMN subset	steps completed=1, max=1, exhausted=0
+programs/d3d9/eafdb0e4fb628d2ddc76c739f673798bda636fbb31369d0d5c79451c4f064246.d3d9	51840eae4803befe	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/ecb680b296f5f1a7cc4d95c93be9dbd7ec699579cbd89394d72968e52cde9552.d3d9	not lifted	not lifted: IR lift: DNDN at word N: vertex program never writes oPos	steps completed=0, max=0, exhausted=0
+programs/d3d9/ed1dab7c015e686f4996332efa4f325d041ee9f4857f0adf8b32053462ee7688.d3d9	72c0769ab36d754f	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/ed58ac3389b7adee2d4258a2f17e8e6038ee940836e890634b4731417869e626.d3d9	da888159aabf16e1	not lifted: older lift: DNDN at word N: CTAB s+t: sampler array or type Type { class: N, kind: N, rows: N, columns: N, elements: N, members: [] }	steps completed=1, max=0, exhausted=0
+programs/d3d9/ed58aebd26992bd7ab90a11c1ec9943cf5ab7d234412bb390cd74ce0743716f9.d3d9	ce05c6c029e76d94	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/ed8a50068847ad71673eb6b24d5f097f3a0840c212bea58112ee09d1073acb29.d3d9	d8528d5cf2cb321d	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/eda96fd195f4576d5a771b90d49df98241fc5c0538a5f76082b8486be87148d4.d3d9	ce05c6c029e76d94	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/ee9c4cccd76ae555d143051eff672e0634b1c4062184613102274a8014705ed3.d3d9	e0bbade2e991ed13	not lifted: older lift: DNDN at word N: register type N, index N outside the supported Pixel SMN banks	steps completed=1, max=0, exhausted=0
+programs/d3d9/eeda14b1e6657c72ce25e7a417ba1d45607a7f3eb21a26847d450502f0cbdea4.d3d9	351a3c3c5075a98e	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/ef76c280160083a1da3eec1f7c9d9afe8e3719e9c995ecf99b757f52134117dc.d3d9	6b55740dc53e6fdb	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/f02fadebb6de3762effc9cf8e46b35b7842be56275350d678b869b65877b7b87.d3d9	ff896d6228e18c2e	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/f2d2c5b736badfa767561ec932ac390261e894f50f6c08672ae902baa734a7f9.d3d9	not lifted	not lifted: IR lift: DNDN at word N: vertex program never writes oPos	steps completed=0, max=0, exhausted=0
+programs/d3d9/f2e5b346b8576d2973c31e1762953946f7a33841e7c9b016eebd6205d4ce7cae.d3d9	78a7aca5e5a72075	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/f3cac8f6b7264b5496673af877d57b76fff19624e54c34395177bfc15dcd4d19.d3d9	8249c89688594098	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/f45312b57b6d249a52952f4181d7c2159ac60050e834642ce313481a05429786.d3d9	1244893ddacf83e6	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/f51c2567ae848287b0f938bac089b5533ce55a24af751dbcd1227cb44051768c.d3d9	0ba56f737589a0f6	not lifted: older lift: DNDN at word N: register type N, index N outside the supported Pixel SMN banks	steps completed=1, max=0, exhausted=0
+programs/d3d9/f568afc82ce1f8df7df20d777b13139feb7e940faf2ae9adf38cd114c04d36a4.d3d9	2196475358680ca3	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/f5e74e51a641a20131ac4ca50959e99b1e076909dee78885452cd9ae83ca51c8.d3d9	74d6c25151919519	not lifted: older lift: DNDN at word N: opcode N REP outside the supported SMN subset	steps completed=1, max=2, exhausted=0
+programs/d3d9/f61cab9635e1320392ebc2bea80d041441192c796715c7f22b7aabccb4145047.d3d9	not lifted	not lifted: IR lift: DNDN at word N: vertex program never writes oPos	steps completed=0, max=0, exhausted=0
+programs/d3d9/f6f79d4f379d0bed139503151c578578ce2ff2131c518227541485e7257eed4f.d3d9	24f6cd5b4eb8b7f5	not lifted: older lift: DNDN at word N: version ps_N_N: only ps_N_N and vs_N_N are lifted	steps completed=1, max=0, exhausted=0
+programs/d3d9/f7840423eb5658a5e96c26721c6015c7c4959cd063faf312b6c9557a46d7cb12.d3d9	8c52b2d833c3219e	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/f7ac7415615182f37f6c55bf9d05d35d025a211e57d8389db9b2301d44fb61f3.d3d9	b93e252ad5e820c8	not lifted: older lift: DNDN at word N: opcode N DEFI outside the supported SMN subset	steps completed=1, max=1, exhausted=0
+programs/d3d9/f80c0abb3c01f9b22b8e6dea98905737864ef263e1b69ff540fbaff832e6bd11.d3d9	67a61f8659526801	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/f86714bff303ece13033b64a1f47d4958990d68d471b050ae4a78d268340d484.d3d9	3a65403c6926b0d6	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/f8c69bb2c01c6049c9008f8bf87b1f1a58ee41a203765be2242c6493f83d9f0b.d3d9	65880cb70f3e840f	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/f99a380d0a4992340faed49dfc836891cec6d5b2c3a23fd54074b6b9f3fd80a8.d3d9	0f169a655d04c41c	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/fa5c1ee46a315426a7d5ca7bb4cd6c8d6bc15d338410f6f81bcefd6ce220f7e9.d3d9	9150ee8ff6855348	not lifted: older lift: DNDN at word N: CTAB apple: non-float/structured/empty type Type { class: N, kind: N, rows: N, columns: N, elements: N, members: [TypeMember { name: "a", ty: Type { class: N, kind: N, rows: N, columns: N, elements: N, members: [] } }, TypeMember { name: "b", ty: Type { class: N, kind: N, rows: N, columns: N, elements: N, members: [] } }] }	steps completed=1, max=0, exhausted=0
+programs/d3d9/fa86ff4afeb924e6f1d7cf1b7eb1ea3efa0a50e9d0562f5564bc695d0b8a6c44.d3d9	not lifted	not lifted: IR lift: DNDN at word N: a relative constant before any mova wrote aN	steps completed=0, max=0, exhausted=0
+programs/d3d9/fa9296ba705346440b0c9b504ffbcf5b04f18125151b5a4013b37d989d62b361.d3d9	42c7c134147b50e3	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/fae84a4977eb82b3bb6977ca46ad6c02d2bd723c9e3958b867a6043a5214fbad.d3d9	not lifted	not lifted: IR lift: DNDN at word N: undeclared input vN	steps completed=0, max=0, exhausted=0
+programs/d3d9/fb31ae9c36c7d48d9b21a15cc666a25626514dbb873376806df1239c99e04074.d3d9	dcdd0b0746854dcc	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/fb9d5c4af60d976f01f416a412c64fad49007b38b23b5abb2e907a17fa332a1e.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/fbb501d11e9d742988476e4339d4af4fa7e0a0d6dfb5e824d4514e15963d53ac.d3d9	78a7aca5e5a72075	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/fc5358f5cece2904c2f9696588a9bcf6f47f7ffe9315dc2f72622bda4d0f244a.d3d9	58cdd2ee48e6fcbc	execution not compared: the run is killed	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/fca44bf320e6fb31755db2b54e463c62ebdb7f5f77c0568af985e53330095c4f.d3d9	4e084ef57aa7dc59	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/fca5119b4e2377fafeea24fae1e4cd3a9e50b03b089f9de6c3d9a9866739920e.d3d9	cc7bfba7babb8571	not lifted: older lift: DNDN at word N: instruction controls/predication/coissue NxN	steps completed=1, max=0, exhausted=0
+programs/d3d9/fe4b5b1c2a61e66ca3cab2f4b573eb3131499f1065c4c4a434e91f38c9be8608.d3d9	not lifted	not lifted: IR lift: DNDN at word N: uninitialized rN	steps completed=0, max=0, exhausted=0
+programs/d3d9/ff800a8a7ab67b92ddbb7ad9f636ecd73244970e8a215579428b64ee84b4ef0b.d3d9	7dae0bb67e826cde	agree	steps completed=1, max=0, exhausted=0
+programs/d3d9/ff8d8bc5b042698a5ea9853a9a5143bc55daa0d94ef1d535d5ca125c43649be3.d3d9	ce05c6c029e76d94	agree	steps completed=1, max=0, exhausted=0

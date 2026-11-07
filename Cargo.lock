@@ -277,6 +277,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "iridia-analysis"
+version = "0.6.0"
+dependencies = [
+ "half",
+ "iridia",
+ "iridia-d3d9",
+ "iridia-d3d9-ir",
+ "iridia-dxbc",
+ "iridia-dxil",
+ "iridia-exec-ir",
+ "iridia-ir",
+ "iridia-passes",
+ "primase-testdata",
+ "proptest",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "iridia-coverage"
 version = "0.6.0"
 dependencies = [

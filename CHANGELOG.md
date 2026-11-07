@@ -108,6 +108,25 @@
   zero, as the naga lift does (it refused "output register oN is not declared": the patch function's registers were
   the control points'). `hull_unwritten.hlsl` (fxc) tessellates on the IR as the HLSL says, as the naga lift does, and
   as WARP does.
+- New crate `iridia-analysis` (`no_std` with `alloc`, no `unsafe`): the `iridia` crate's analyses on the IR.
+  - `flow::Values` is the value graph, lane by lane.
+  - `flow::Flow` is what may reach each output lane and the discard, and via what (`Via`).
+  - `flow::VertexDemand` is a vertex and pixel pair's vertex input lanes.
+  - `reads::WordsRead` is the constant words a program's results are made of, and which buffers it reads at a computed
+    index.
+  - Each takes an `iridia_ir::Program` as a lifter gives it; a control flow graph is structured on a copy.
+  - tests/oracle.rs holds them to the `iridia` crate's analyses on the fixtures, the slim set and Elden Ring's corpus,
+    and records the IR's answers in tests/expected.
+  - Property tests run generated programs in `iridia-exec-ir`: changing a source that `Flow` leaves out of a lane never
+    changes that lane, and never changes whether the program discards.
+  - Code after a way out of a construct (a return, a discard, an exit or continue of an enclosing one) runs only where
+    that way was not taken, so `Flow` puts those conditions on what follows.
+  - Nested loops take one walk of each body, with header values installed before the walk and unchanged headers
+    removed afterwards. The oracle bounds the legacy analysis in a subprocess and records an out-of-memory refusal.
+- `iridia-ir`: the operation enums are `PartialOrd` and `Ord`, so a graph can key on them: `Unary`, `Binary`,
+  `Ternary`, `Cmp`, `AtomicOp`, `WaveOp`, `WaveScan`, `QuadSwap`, `Axis`, `Fineness`, `MinMaxNan`, `SaturateNan`,
+  `MulZero`, `OnZero`, `FloatToInt` and `Rounding`.
+
 - `iridia-coverage`: the table names the dx readers' versions as the build takes them (from `Cargo.lock`, where it
   named 0.5.0 after 0.11.0 came in), and every row has a format: a vkd3d run with no program (the compiler refused
   every shader) its runner's, an offload test with no program DXIL's (the suite is read for DirectX with DXC).

@@ -19,7 +19,7 @@ pub struct VarId(pub u32);
 pub struct LabelId(pub u32);
 
 /// What `FMin` and `FMax` give when an operand is NaN.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
 pub enum MinMaxNan {
     /// IEEE 754-2008 minNum/maxNum: one NaN operand gives the other operand; two give NaN (D3D10 and later).
     MinNum,
@@ -30,7 +30,7 @@ pub enum MinMaxNan {
 }
 
 /// What `Saturate` gives for NaN.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
 pub enum SaturateNan {
     /// NaN gives 0 (D3D).
     Zero,
@@ -39,7 +39,7 @@ pub enum SaturateNan {
 }
 
 /// How `FMul` treats a zero operand.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
 pub enum MulZero {
     /// IEEE 754: `0 * inf` is NaN, signs multiply.
     Ieee,
@@ -48,7 +48,7 @@ pub enum MulZero {
 }
 
 /// What an integer division (`UDiv`, `SDiv`) and remainder (`URem`, `SRem`) give for a zero divisor.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
 pub enum OnZero {
     /// All ones (D3D's `udiv`, for quotient and remainder).
     AllOnes,
@@ -59,7 +59,7 @@ pub enum OnZero {
 }
 
 /// How a float becomes an integer, out of range and for NaN.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
 pub enum FloatToInt {
     /// Truncate toward zero, saturate to the integer type's range, NaN gives 0 (D3D's `ftoi`/`ftou`).
     Saturate,
@@ -68,7 +68,7 @@ pub enum FloatToInt {
 }
 
 /// A float rounding to an integral value.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
 pub enum Rounding {
     /// Toward negative infinity.
     Floor,
@@ -83,7 +83,7 @@ pub enum Rounding {
 }
 
 /// The screen axis a derivative is taken along.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
 pub enum Axis {
     /// Along x (`ddx`, `dsx`, `dpdx`).
     X,
@@ -92,7 +92,7 @@ pub enum Axis {
 }
 
 /// Which neighbours a derivative is taken between.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
 pub enum Fineness {
     /// Once per 2x2 quad: every invocation of the quad gets the same difference.
     Coarse,
@@ -103,7 +103,7 @@ pub enum Fineness {
 }
 
 /// A comparison.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
 pub enum Cmp {
     /// Equal (ordered for floats: false with a NaN).
     Eq,
@@ -120,7 +120,7 @@ pub enum Cmp {
 }
 
 /// A one-operand operation; the result has the operand's type unless noted.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
 pub enum Unary {
     /// Float negation (flips the sign bit, NaN included).
     FNeg,
@@ -215,7 +215,7 @@ pub enum Unary {
 }
 
 /// A two-operand operation on operands of one type; the result has their type unless noted.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
 pub enum Binary {
     /// Float addition.
     FAdd,
@@ -288,7 +288,7 @@ pub enum Binary {
 }
 
 /// A three-operand operation.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
 pub enum Ternary {
     /// `a * b + c` rounded once (fused), of floats of one type.
     Fma,
@@ -392,7 +392,7 @@ pub enum Memory {
 }
 
 /// An atomic read-modify-write; each gives the value the memory held before.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
 pub enum AtomicOp {
     /// Wrapping addition.
     Add,
@@ -535,7 +535,7 @@ pub enum Wave {
 }
 
 /// The neighbour a [`Wave::QuadSwap`] reads, by its place in the quad.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
 pub enum QuadSwap {
     /// The invocation beside it, across x.
     X,
@@ -547,7 +547,7 @@ pub enum QuadSwap {
 
 /// The operation of a [`Wave::Collective`]. A minimum or maximum compares as the value's type does (signed for
 /// `i32`); `And`, `Or` and `Xor` take integers, `All` and `Any` bools.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
 pub enum WaveOp {
     /// The sum.
     Add,
@@ -570,7 +570,7 @@ pub enum WaveOp {
 }
 
 /// The invocations whose values a [`Wave::Collective`] takes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
 pub enum WaveScan {
     /// Every active invocation's.
     Reduce,
