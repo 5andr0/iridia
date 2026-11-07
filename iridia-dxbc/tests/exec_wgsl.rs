@@ -7,6 +7,27 @@
 //! inputs stepping along x and y as a rasterizer's do, so its derivatives are the quad's own. Every lane the executor
 //! writes is compared, classed by how far apart (Direct3D leaves `exp`, `log`, `sin`, `cos`, `rsqrt` and `rcp` to a few
 //! ulp): one further apart than 1e-3 relative, a discard on one side only, or a lane the WGSL does not carry fails.
+//! Lanes within 2^-20 of each other where either is below 2^-10 are counted apart as "near zero", not failed: Riders
+//! Republic's programs 2133, 2135 and their kin compute `1 - (a * 0.85 + 0.15)`, which the executor makes 0 and WARP
+//! -2^-26. Not a fused `mad`: DXC folds the constants of that expression written in WGSL, `(1 - 0.15) - a * 0.85`
+//! (`tools/wgsl-run/probes/mad.py`: WARP's words equal that evaluation for 4,096 of 4,096 values of `a`, the unfused
+//! one for 2,621 and `fma` then subtract for 2,317), while the same expression as fxc's `mad` and `add` run on WARP
+//! natively is the executor's bit for bit (`exec_warp.rs`, `a_mad_and_a_packed_quotient_agree_with_warp_bit_for_bit`).
+//! The difference is DXC's fast-math reassociation of the WGSL, which WGSL allows, not a lift.
+//!
+//! A lane further apart than 1e-3 that is `fract(x * c)` for a constant `c` of magnitude 1e3 or more is counted as
+//! "amplified", by source, where the difference implies `x`s no further apart than WGSL lets the operation that rounds
+//! `x` be off by (`wgsl_run::amplified`): Elden Ring's ambient occlusion packs depth as `fract(saturate(a / b) * 65025)`,
+//! where one ulp of the quotient is 1/256 of the lane. WARP's division is correctly rounded (`probes/div.py`: 4,096 of
+//! 4,096 quotients, and `fract(saturate(a / b) * 65025)` apart for none), and the pack's `div_sat`, `mul` and `frc` as
+//! fxc writes them are the executor's bit for bit on WARP; so the quotient differs through its numerator, a sum the
+//! program accumulates (inferred, not isolated: its other lanes differ by up to 1e-5 relative in the same sums, where DXC
+//! may reassociate as above), a few ulp off, which the factor turns into a lane 1/256 or 2/256 off. A lane that only
+//! depends on such a value further down still fails, its line naming the amplification: Unity programs 03688, 03689 and 04137 to 04183 sum value noise of
+//! `fract(sin(dot(p, k)) * 43758.5453)` hashes, and WARP's `sin` of arguments from 269 to 55424 is not correctly
+//! rounded (tools/wgsl-run/probes/sin.py: 0 of 64 correctly rounded, median 9,103 ulp off, at most 296,737), which the
+//! factor turns into hashes more than 1e-3 apart for 64 of 64; WARP running program 03688's own bytecode gives the
+//! WGSL's values, not the executor's.
 //!
 //! Needs `tools.wgsl_run` (and `tools.wgsl_run_dxc`, the `dxcompiler.dll` that compiles the programs that need Shader
 //! Model 6), and a corpus folder. `shader.diff_limit` caps the programs of a corpus.
@@ -14,10 +35,11 @@ mod common;
 mod inputs;
 mod wgsl_run;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use iridia_exec::{Dim, ImageLoad, ImageQuery, ImageSample, PixelShader, ProgramShader, QueryKind, Sampler};
 use iridia_ir::interface::{SampleType, ScalarType, Stage, SystemValue, TextureDim};
+use wgsl_run::amplified::Source;
 use wgsl_run::{Bound, Class, Environment, Harness, Layout};
 
 /// The vectors each program runs on.
@@ -194,8 +216,15 @@ struct Tally {
     unrun: BTreeMap<String, (usize, String)>,
     errors: BTreeMap<String, (usize, String)>,
     lanes: BTreeMap<Class, usize>,
+    /// Per source of an amplified lane: the lanes and the programs.
+    amplified: BTreeMap<Source, (usize, BTreeSet<String>)>,
     by_program: BTreeMap<String, Class>,
     worst: Vec<String>,
+}
+
+/// A program's file name, without its folder.
+fn short(name: &str) -> &str {
+    name.rsplit(['/', '\\']).next().unwrap_or(name)
 }
 
 fn tally(map: &mut BTreeMap<String, (usize, String)>, why: &str, at: &str) {
@@ -296,6 +325,8 @@ fn run_program(harness: &Harness, name: &str, bytes: &[u8], t: &mut Tally) {
         })
         .collect();
     let interface = p.interface.clone();
+    let amplified = wgsl_run::amplified::outputs(&p);
+    let downstream = wgsl_run::amplified::downstream(&p);
     let b = match ProgramShader::from_ir(p) {
         Ok(b) => b,
         Err(e) => {
@@ -317,6 +348,14 @@ fn run_program(harness: &Harness, name: &str, bytes: &[u8], t: &mut Tally) {
         .collect();
     let mut worst = Class::Exact;
     let mut compared = false;
+    // `shader.lanes`: every lane that is not exact, of the programs whose name has this in it
+    let show_lanes = inputs::debug("shader.lanes").is_some_and(|s| name.contains(&s));
+    if show_lanes {
+        println!(
+            "{name}
+{wgsl}"
+        );
+    }
     for c in 0..CASES {
         let lanes = if stage == Stage::Pixel {
             quad(&b, c)
@@ -433,16 +472,37 @@ fn run_program(harness: &Harness, name: &str, bytes: &[u8], t: &mut Tally) {
                         continue;
                     }
                     let float = float_registers.get(&register).copied().unwrap_or(true);
-                    let class = wgsl_run::classify(float, o[lane], h.outputs[&register][lane]);
+                    let warp = h.outputs[&register][lane];
+                    let mut class = wgsl_run::classify(float, o[lane], warp);
+                    if class == Class::Beyond
+                        && let Some(a) = amplified.get(&(register, lane))
+                        && a.explains(o[lane], warp)
+                    {
+                        class = Class::Amplified;
+                        let (lanes, programs) = t.amplified.entry(a.source).or_default();
+                        *lanes += 1;
+                        programs.insert(short(name).to_owned());
+                    }
                     *t.lanes.entry(class).or_default() += 1;
                     worst = worst.max(class);
-                    if class == Class::Beyond && t.worst.len() < SHOWN {
-                        t.worst.push(format!(
-                            "{name} case {c} lane {k} o{register}.{lane}: B {:#010x} ({}) WARP {:#010x} ({})",
+                    if class != Class::Exact && show_lanes {
+                        println!(
+                            "{name} case {c} invocation {k} o{register}.{lane}: {class:?} B {:#010x} ({}) WARP {warp:#010x} ({}), inputs {:x?}",
                             o[lane],
                             f32::from_bits(o[lane]),
-                            h.outputs[&register][lane],
-                            f32::from_bits(h.outputs[&register][lane])
+                            f32::from_bits(warp),
+                            lanes[k].inputs
+                        );
+                    }
+                    if class == Class::Beyond && t.worst.len() < SHOWN {
+                        let below = downstream.get(&(register, lane)).map_or(String::new(), |s| {
+                            format!(", downstream of an amplified {} (no bound to check)", s.name())
+                        });
+                        t.worst.push(format!(
+                            "{name} case {c} lane {k} o{register}.{lane}: B {:#010x} ({}) WARP {warp:#010x} ({}){below}",
+                            o[lane],
+                            f32::from_bits(o[lane]),
+                            f32::from_bits(warp)
                         ));
                     }
                 }
@@ -484,11 +544,19 @@ fn report(title: &str, t: &Tally) {
             println!("  {title} {n:6}  {why}  (e.g. {at})");
         }
     }
+    for (source, (lanes, programs)) in &t.amplified {
+        println!(
+            "  amplified rounding of a {}: {lanes} lanes in {} programs: {}",
+            source.name(),
+            programs.len(),
+            programs.iter().map(String::as_str).collect::<Vec<_>>().join(" ")
+        );
+    }
     let beyond: Vec<&str> = t
         .by_program
         .iter()
         .filter(|(_, c)| **c == Class::Beyond)
-        .map(|(n, _)| n.rsplit(['/', '\\']).next().unwrap_or(n))
+        .map(|(n, _)| short(n))
         .collect();
     if !beyond.is_empty() {
         println!("  programs beyond 1e-3: {}", beyond.join(" "));
@@ -548,6 +616,11 @@ fn corpus_over(corpus: &common::Corpus) {
         }
         for (k, n) in one.lanes {
             *t.lanes.entry(k).or_default() += n;
+        }
+        for (source, (lanes, programs)) in one.amplified {
+            let (n, all) = t.amplified.entry(source).or_default();
+            *n += lanes;
+            all.extend(programs);
         }
         for (mine, theirs) in [
             (&mut t.refused, one.refused),

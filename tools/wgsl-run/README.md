@@ -58,3 +58,11 @@ One JSON object a line on standard input; one reply a line on standard output, i
 - `invocations`: per invocation, in the job's order: whether it returned (a discarded pixel did not) and its results, each member of the entry point's result structure in order (or its one result), as arguments' words are given.
 - `resources`: each writable resource after the run: a storage buffer's words, a storage texture's texels of every layer row by row (a word per lane of its format); an element of a binding array with its `element`.
 - `error`: why the job did not run: naga's front end or validator on the program (with the adapter's capabilities: WARP through wgpu has no `f64`), wgpu's validation, a shader compiler's error, a resource the job lacks, the timeout.
+
+## Probes
+
+`probes/` holds measurements of WARP itself, run through the harness (`python probes/<name>.py <wgsl-run.exe> <dxcompiler.dll>`):
+
+- `sin.py`: WARP's `sin` of 64 arguments from 269 to 55424 against the correctly rounded `f32` sine, and how far apart that leaves `fract(sin(x) * 43758.5453)`, the hash iridia-dxbc's `exec_wgsl` test finds Unity's value noise built on.
+- `div.py`: WARP's `a / b` against the correctly rounded `f32` quotient (all 4,096 equal), and how far apart that leaves `fract(saturate(a / b) * 65025)`, the depth pack Elden Ring's ambient occlusion uses.
+- `mad.py`: which of three `f32` evaluations of `1.0 - (a * 0.85 + 0.15)` WARP's answer through WGSL equals: the unfused one, `fma` then subtract, or DXC's folded `(1 - 0.15) - a * 0.85` (all 4,096 equal that one).

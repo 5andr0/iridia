@@ -869,6 +869,100 @@ fn resinfo_agrees_with_warp() {
     assert!(t.ir_refused.is_empty(), "the IR lift refuses");
 }
 
+/// The arithmetic the WGSL comparison (`exec_wgsl.rs`) finds executed otherwise through naga's WGSL, DXC and WARP: a
+/// `mad` (`1 - (a * 0.85 + 0.15)`, which fxc writes as `mad` and `add`) and a depth packed from a saturated quotient
+/// (`div_sat`, `mul`, `frc`).
+const ARITHMETIC_HLSL: &str = r#"
+#ifdef MAD
+float4 main(float4 p : SV_Position, float4 a : TEXCOORD0) : SV_Target {
+    return 1.0 - (a * 0.85 + 0.15);
+}
+#else
+float4 main(float4 p : SV_Position, float4 v : TEXCOORD0) : SV_Target {
+    float x = saturate(v.x / v.y);
+    return float4(frac(x * 65025.0), frac(x * 255.0), x, 0);
+}
+#endif
+"#;
+
+/// [`ARITHMETIC_HLSL`]'s programs as DXBC against WARP running that DXBC: every lane the same, bit for bit. WARP does
+/// not reassociate `1 - (a * c + d)` into `(1 - d) - a * c` as DXC does for the same expression written in WGSL
+/// (`exec_wgsl.rs`: the other path is the one that differs), and its `div_sat`, `mul` and `frc` are the executor's.
+#[test]
+fn a_mad_and_a_packed_quotient_agree_with_warp_bit_for_bit() {
+    let (Some(fxc), Some(warp)) = (program(Tool::Fxc), program(Tool::Warp)) else {
+        return;
+    };
+    let scratch = inputs::own_scratch("warp-arithmetic");
+    let source = scratch.join("arithmetic.hlsl");
+    std::fs::write(&source, ARITHMETIC_HLSL).unwrap();
+    let compile = |name: &str, defines: &[&str]| -> Vec<u8> {
+        let out = scratch.join(format!("{name}.dxbc"));
+        let mut command = fxc.command();
+        command.args(["/nologo", "/T", "ps_5_0", "/E", "main"]);
+        for d in defines {
+            command.args(["/D", d]);
+        }
+        let compiled = command
+            .arg("/Fo")
+            .path_arg(&out)
+            .path_arg(&source)
+            .output_within(inputs::COMPILE_LIMIT)
+            .unwrap_or_else(|e| panic!("{e}"));
+        assert!(
+            compiled.status.success(),
+            "fxc: {}",
+            String::from_utf8_lossy(&compiled.stderr)
+        );
+        std::fs::read(&out).unwrap()
+    };
+    let names = |bytes: &[u8]| -> Vec<String> {
+        let parts = dxcontainer::chunks(bytes).unwrap();
+        let code = parts
+            .iter()
+            .find(|c| matches!(&c.kind, b"SHDR" | b"SHEX"))
+            .unwrap();
+        let words: Vec<u32> = code
+            .data
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|b| u32::from_le_bytes(*b))
+            .collect();
+        dxbc_reader::decode::decode(&words)
+            .unwrap()
+            .instructions
+            .iter()
+            .map(|i| i.name().to_owned())
+            .collect()
+    };
+    let mad = compile("mad", &["MAD=1"]);
+    let pack = compile("pack", &[]);
+    assert!(
+        names(&mad).contains(&"mad".to_owned()),
+        "fxc's instructions: {:?}",
+        names(&mad)
+    );
+    for op in ["div", "mul", "frc"] {
+        assert!(
+            names(&pack).contains(&op.to_owned()),
+            "fxc's instructions: {:?}",
+            names(&pack)
+        );
+    }
+    let tools = (fxc, warp, scratch);
+    let mut t = Tally::default();
+    for (name, bytes) in [("mad.dxbc", &mad), ("pack.dxbc", &pack)] {
+        run_program(name, bytes, 8, true, &tools, &mut t);
+    }
+    report("arithmetic", &t);
+    assert_eq!(t.selected, 2, "both programs bind");
+    assert!(t.compared >= 8, "{} runs compared", t.compared);
+    let inexact: Vec<_> = t.lanes.iter().filter(|(c, _)| **c != Class::Exact).collect();
+    assert!(inexact.is_empty(), "lanes not bit for bit WARP's: {inexact:?}");
+    assert!(t.errors.is_empty(), "{} programs errored", t.errors.len());
+}
+
 /// Two switches whose cases end with `break`, for [`switches_agree_with_warp_and_a_falling_case_is_refused`] to make
 /// some fall into the next: through an `if` with a `break` of its own, through a loop with one, a chain into the
 /// default and off the end.

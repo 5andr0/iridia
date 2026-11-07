@@ -18,6 +18,8 @@ use iridia_ir::interface::{
 
 use crate::inputs::{self, Tool};
 
+pub mod amplified;
+
 /// How long one job may take, compiles included, before its process is killed.
 const LIMIT: Duration = Duration::from_secs(120);
 
@@ -411,20 +413,30 @@ pub enum Class {
     Ulps4,
     Relative1e5,
     Relative1e3,
+    /// Further apart than 1e-3 relative, but within 2^-20 of each other where either is below 2^-10 in magnitude: a
+    /// cancellation near zero that a contracted `mad` leaves a residue of (Direct3D lets `mad` fuse or not), counted on
+    /// its own so it stays visible.
+    NearZero,
+    /// Further apart than 1e-3 relative, but a lane that is `fract(x * c)` of an amplifying constant, the difference
+    /// within what WGSL lets `x` be off by ([`amplified::Amplified::explains`]); [`classify`] never gives it, a test
+    /// that reads the program's data flow does.
+    Amplified,
     Beyond,
 }
 
-pub const CLASSES: [&str; 6] = [
+pub const CLASSES: [&str; 8] = [
     "exact",
     "both NaN",
     "<= 4 ulp",
     "<= 1e-5",
     "<= 1e-3",
+    "near zero",
+    "amplified",
     "BEYOND 1e-3",
 ];
 
-/// How far apart lanes `a` and `b` are: exact for integers; for floats, a few units in the last place or a relative
-/// distance (Direct3D leaves `exp`, `log`, `sin`, `cos`, `rsqrt` and `rcp` within a few ulp).
+/// How far apart lanes `a` and `b` are: exact for integers; for floats, a few units in the last place, a relative
+/// distance (Direct3D leaves `exp`, `log`, `sin`, `cos`, `rsqrt` and `rcp` within a few ulp), or near zero.
 pub fn classify(float: bool, a: u32, b: u32) -> Class {
     if a == b {
         return Class::Exact;
@@ -452,6 +464,8 @@ pub fn classify(float: bool, a: u32, b: u32) -> Class {
         Class::Relative1e5
     } else if relative <= 1e-3 {
         Class::Relative1e3
+    } else if x.abs().min(y.abs()) < 2f64.powi(-10) && (x - y).abs() <= 2f64.powi(-20) {
+        Class::NearZero
     } else {
         Class::Beyond
     }

@@ -116,6 +116,7 @@ primase_testdata::inputs! {
     debug {
         "vkd3d.limit" => "how many containers of a corpus the vkd3d comparison reads (200 spread evenly by default; `all` reads every one)",
         "shader.diff_limit" => "how many programs of a corpus the WARP comparison runs",
+        "shader.lanes" => "a part of a program's name: the WGSL comparison prints that program's WGSL and every lane that is not exact",
         "shader.warp_all" => "`1` compares every program the WARP oracle can bind",
         "shader.outside" => "a folder of containers outside the configured corpora (walked for every DXBC container in it) that the IR gate and the WARP comparison run",
     }
