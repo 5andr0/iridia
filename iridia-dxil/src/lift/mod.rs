@@ -477,6 +477,12 @@ impl<'m> Lift<'m> {
         }
     }
 
+    /// Whether `ty` is a 16-bit type (`half`, `i16`): two of them share a 32-bit word of a raw or structured buffer,
+    /// which the lifter does not pack, so their loads and stores are refused rather than given a word each.
+    pub(crate) fn is_16_bit(&self, ty: TypeId) -> bool {
+        matches!(self.m.types.get(ty), Some(Type::Half | Type::Integer(16)))
+    }
+
     fn run(&mut self) -> Result<()> {
         let io = self.setup.io.clone();
         let declared = self.b.declare_entry(&io).map_err(|detail| error(0, detail))?;

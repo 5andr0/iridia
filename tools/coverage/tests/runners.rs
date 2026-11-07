@@ -305,3 +305,20 @@ fn a_vector_probe_steps_a_vec4() {
         assert_selected_pass(&runs);
     }
 }
+
+/// iridia-dxil refuses the 16-bit lanes of a raw or structured buffer, which it does not pack two to a word, where it
+/// wrote each as a word of its own (uav-rwstructuredbuffer's `half`/`int16_t` structures at 6.2).
+#[test]
+fn sixteen_bit_lanes_of_a_structured_buffer_are_refused() {
+    let runs = vkd3d_runs("vkd3d/dxil.json.gz", "uav-rwstructuredbuffer.shader_test");
+    let sixteen: Vec<_> = runs.iter().filter(|r| r.model == "6.2" && r.selected()).collect();
+    assert_eq!(sixteen.len(), 1, "the 16-bit structures run at 6.2");
+    for r in sixteen {
+        let why = r.deciding().map(|p| p.outcome.detail()).unwrap_or_default();
+        assert_eq!(r.class(), "refused", "{} {}: {why}", r.runner, r.model);
+        assert!(
+            why.contains("16-bit lanes of a raw or structured buffer"),
+            "{why}"
+        );
+    }
+}

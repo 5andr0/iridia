@@ -1396,6 +1396,9 @@ impl Lift<'_> {
             return self.refuse("a buffer load whose result struct has no lanes");
         };
         let lane_kind = self.kind_of_type(first)?;
+        if !matches!(kind, BufferKind::Typed(_)) && self.is_16_bit(first) {
+            return self.refuse("16-bit lanes of a raw or structured buffer are not lifted");
+        }
         let row = match kind {
             BufferKind::Typed(_) => {
                 let length = Val {

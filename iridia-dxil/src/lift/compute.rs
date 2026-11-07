@@ -143,6 +143,12 @@ impl Lift<'_> {
             return self.refuse("a buffer write with a computed mask");
         };
         let (word, kind) = self.uav_word(resource, self.arg(args, 2)?, self.arg(args, 3)?)?;
+        let first = self.arg(args, 4)?;
+        if !matches!(kind, BufferKind::Typed(_))
+            && self.value_type_id(first).is_some_and(|t| self.is_16_bit(t))
+        {
+            return self.refuse("16-bit lanes of a raw or structured buffer are not lifted");
+        }
         let atomic = self.resources.atomic.get(&resource).copied();
         let mut lanes = Vec::new();
         for lane in 0..4usize {
