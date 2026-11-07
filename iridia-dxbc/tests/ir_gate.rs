@@ -152,7 +152,7 @@ enum Word {
 /// the order they were (the last is what it holds). Each word's sequence is compared, not the order of writes to
 /// different words: Direct3D orders an invocation's writes to a word, and leaves the order between the lanes of a quad
 /// open; a record a program rewrites in place leaves the same last words with a write left out.
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct Written {
     writes: BTreeMap<Word, Vec<u32>>,
 }
@@ -447,28 +447,44 @@ fn run_asking(shader: &ProgramShader, cases: &[common::Case], sampler: &mut Hash
     };
     let mut out = Vec::with_capacity(executions.len());
     for e in executions {
-        let e = e.map_err(|e| e.to_string())?;
-        let outputs = e
-            .outputs
-            .iter()
-            .zip(&e.output_masks)
-            .map(|(o, &m)| {
-                std::array::from_fn(|k| {
-                    if m >> k & 1 != 0 && !e.discarded {
-                        canonical(o[k])
-                    } else {
-                        0
-                    }
-                })
-            })
-            .collect();
-        out.push((outputs, e.output_masks, e.discarded));
+        out.push(invocation(&e.map_err(|e| e.to_string())?));
     }
     Ok((
         out,
         std::mem::take(&mut sampler.written).canonical(),
         std::mem::take(&mut sampler.reads),
     ))
+}
+
+/// What the gate compares of an execution: its written output lanes, each NaN as one pattern (a lane it did not write,
+/// and every lane of a discarded execution, zero), its masks and whether it was discarded.
+fn invocation(e: &iridia_exec::Execution) -> Invocation {
+    let outputs = e
+        .outputs
+        .iter()
+        .zip(&e.output_masks)
+        .map(|(o, &m)| {
+            std::array::from_fn(|k| {
+                if m >> k & 1 != 0 && !e.discarded {
+                    canonical(o[k])
+                } else {
+                    0
+                }
+            })
+        })
+        .collect();
+    (outputs, e.output_masks.clone(), e.discarded)
+}
+
+/// Whether B's run `y` gives what A's run `x` gave: the same invocations and memory and, where `textures`, no texture
+/// request A does not make.
+fn same_run(x: &Run, y: &Run, textures: bool) -> bool {
+    match (x, y) {
+        (Ok((ix, wx, rx)), Ok((iy, wy, ry))) => {
+            ix == iy && wx == wy && (!textures || texture_requests(ry).is_subset(&texture_requests(rx)))
+        }
+        _ => x == y,
+    }
 }
 
 /// A NaN as one bit pattern: two lifts may produce different NaNs.
@@ -541,12 +557,8 @@ fn gate_case(a: &ProgramShader, c: u32, quad: bool, inputs: QuadInputs) -> Vec<c
                 continue;
             }
             for lane in (0..4usize).filter(|l| sig.mask >> l & 1 != 0) {
-                let h = common::mix(hash_words(&[11, c, sig.register, lane as u32]));
-                let dx = (common::unit(h) - 0.5) / 16.0;
-                let dy = (common::unit(common::mix(u64::from(h) ^ 1)) - 0.5) / 16.0;
-                let base = f32::from_bits(lanes[0].inputs[r][lane]);
-                for (k, l) in lanes.iter_mut().enumerate() {
-                    let x = base + dx * (k & 1) as f32 + dy * (k >> 1) as f32;
+                let quad = coherent_quad(f32::from_bits(lanes[0].inputs[r][lane]), c, sig.register, lane);
+                for (l, x) in lanes.iter_mut().zip(quad) {
                     l.inputs[r][lane] = x.to_bits();
                 }
             }
@@ -584,6 +596,15 @@ fn gate_case(a: &ProgramShader, c: u32, quad: bool, inputs: QuadInputs) -> Vec<c
     lanes
 }
 
+/// Lane `lane` of input register `register` across a coherent quad of vector `c` whose first lane holds `base`: the
+/// first lane's plus a step of its own along x and one along y (lanes 0 and 1 the top row).
+fn coherent_quad(base: f32, c: u32, register: u32, lane: usize) -> [f32; 4] {
+    let h = common::mix(hash_words(&[11, c, register, lane as u32]));
+    let dx = (common::unit(h) - 0.5) / 16.0;
+    let dy = (common::unit(common::mix(u64::from(h) ^ 1)) - 0.5) / 16.0;
+    std::array::from_fn(|k| base + dx * (k & 1) as f32 + dy * (k >> 1) as f32)
+}
+
 /// A and B on every vector, and the furthest of the [`QuadInputs`] a quad needed. A quad whose lanes diverge at a
 /// derivative or an implicit-level sample runs again with coherent inputs, then with every lane the first lane's. A
 /// vector A cannot evaluate (a loop past the executor's budget on these inputs, a request the sampler does not
@@ -619,13 +640,7 @@ fn compare(
             continue;
         }
         let y = run(b, c, &case);
-        let same = match (&x, &y) {
-            (Ok((ix, wx, rx)), Ok((iy, wy, ry))) => {
-                ix == iy && wx == wy && (!textures || texture_requests(ry).is_subset(&texture_requests(rx)))
-            }
-            _ => x == y,
-        };
-        if !same {
+        if !same_run(&x, &y, textures) {
             return (
                 Verdict::Differs(format!("case {c}: A {x:x?}\n  but {y:x?}")),
                 furthest,
@@ -1336,75 +1351,6 @@ fn fixture_programs() {
     gate_over("fixtures", &paths, &[]);
 }
 
-/// The compute comparison catches a wrong lift: in each compute fixture the IR program's first integer add made a
-/// subtract, the memory the dispatch leaves differs for at least one.
-#[test]
-fn a_planted_compute_bug_is_caught() {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
-    let mut paths = Vec::new();
-    common::containers(&root, &mut paths);
-    let mut planted = 0;
-    for path in &paths {
-        let bytes = std::fs::read(path).unwrap();
-        let (Ok(old), Ok(mut p)) = (iridia_dxbc::lift(&bytes), iridia_dxbc::ir::lift(&bytes)) else {
-            continue;
-        };
-        if old.interface.stage != Stage::Compute {
-            continue;
-        }
-        let Some(add) = p
-            .entry
-            .values
-            .iter_mut()
-            .find(|v| matches!(v.op, iridia_ir::Op::Binary(iridia_ir::Binary::IAdd, ..)))
-        else {
-            continue;
-        };
-        let iridia_ir::Op::Binary(op, ..) = &mut add.op else {
-            unreachable!()
-        };
-        *op = iridia_ir::Binary::ISub;
-        planted += 1;
-        let mut g = Gate::default();
-        compute(&mut g, &old, p, &path.display().to_string());
-        if !g.differ.is_empty() {
-            return;
-        }
-    }
-    panic!("no planted subtract of {planted} compute programs was caught");
-}
-
-/// The quad runs catch a wrong derivative: with its first derivative taken along the other axis, a program of the
-/// corpus whose derivatives need a quad no longer agrees.
-#[test]
-fn a_planted_derivative_bug_is_caught() {
-    let Some((_, paths)) = common::corpus(Game::Sekiro) else {
-        return;
-    };
-    let mut tried = 0;
-    for path in &paths {
-        let bytes = std::fs::read(path).unwrap();
-        let (Ok(old), Ok(mut p)) = (iridia_dxbc::lift(&bytes), iridia_dxbc::ir::lift(&bytes)) else {
-            continue;
-        };
-        let (Ok(a), Ok(b)) = (ProgramShader::new(old), ProgramShader::from_ir(p.clone())) else {
-            continue;
-        };
-        if !(a.needs_quad() || b.needs_quad()) {
-            continue;
-        }
-        if !swap_derivative_axis(&mut p, 0) {
-            continue;
-        }
-        tried += 1;
-        let planted = ProgramShader::from_ir(p).unwrap();
-        if matches!(compare(&a, &planted, CASES, true).0, Verdict::Differs(_)) {
-            return;
-        }
-    }
-    panic!("no planted derivative of {tried} programs that need a quad was caught");
-}
-
 /// What `b` does on the gate's vectors with coherent quad inputs (a vector it cannot run does nothing, as [`compare`]
 /// skips it).
 #[derive(Clone, Copy)]
@@ -1436,28 +1382,6 @@ fn coherent_runs(b: &ProgramShader) -> CoherentRuns {
     runs
 }
 
-/// The `n`-th derivative of the program's entry, in the order of its values, taken along the other axis; whether it has
-/// one.
-fn swap_derivative_axis(p: &mut iridia_ir::Program, n: usize) -> bool {
-    let Some(axis) = p
-        .entry
-        .values
-        .iter_mut()
-        .filter_map(|v| match &mut v.op {
-            iridia_ir::Op::Unary(iridia_ir::Unary::Derivative(axis, _), _) => Some(axis),
-            _ => None,
-        })
-        .nth(n)
-    else {
-        return false;
-    };
-    *axis = match axis {
-        iridia_ir::Axis::X => iridia_ir::Axis::Y,
-        iridia_ir::Axis::Y => iridia_ir::Axis::X,
-    };
-    true
-}
-
 #[test]
 fn sekiro_programs() {
     gate(Game::Sekiro);
@@ -1481,40 +1405,6 @@ fn outside_programs() {
     let mut paths = Vec::new();
     common::containers(&root, &mut paths);
     gate_over(&root.display().to_string(), &paths, &[]);
-}
-
-/// The gate catches a wrong lift: the IR program's first float add made a subtract no longer agrees.
-#[test]
-fn a_planted_bug_is_caught() {
-    let Some((_, paths)) = common::corpus(Game::Sekiro) else {
-        return;
-    };
-    for path in &paths {
-        let bytes = std::fs::read(path).unwrap();
-        let (Ok(old), Ok(mut p)) = (iridia_dxbc::lift(&bytes), iridia_dxbc::ir::lift(&bytes)) else {
-            continue;
-        };
-        let Some(add) = p
-            .entry
-            .values
-            .iter_mut()
-            .find(|v| matches!(v.op, iridia_ir::Op::Binary(iridia_ir::Binary::FAdd, ..)))
-        else {
-            continue;
-        };
-        let iridia_ir::Op::Binary(op, ..) = &mut add.op else {
-            unreachable!()
-        };
-        *op = iridia_ir::Binary::FSub;
-        let (Ok(a), Ok(b)) = (ProgramShader::new(old), ProgramShader::from_ir(p)) else {
-            continue;
-        };
-        // an add whose result no output reads is no plant: the first program the plant reaches is caught
-        if matches!(compare(&a, &b, CASES, true).0, Verdict::Differs(_)) {
-            return;
-        }
-    }
-    panic!("no planted subtract was caught");
 }
 
 /// One program's two lifts and runs, for a disagreement the gate prints: `IR_GATE_ONE=<container> cargo test -p
@@ -1552,6 +1442,263 @@ fn one() {
         }
         if sa.asked.len() != sb.asked.len() {
             println!("  A made {} requests, B {}", sa.asked.len(), sb.asked.len());
+        }
+    }
+}
+
+/// Properties of the gate's own parts, on generated runs: what its comparison flags and what it leaves, and the
+/// derivatives its coherent quads give.
+mod properties {
+    use super::*;
+    use iridia_exec::Execution;
+    use proptest::prelude::*;
+
+    fn word() -> impl Strategy<Value = Word> {
+        prop_oneof![
+            (0..4u32, 0..16u32).prop_map(|(view, word)| Word::Buffer { view, word }),
+            (0..4u32, 0..4u32, 0..4u32).prop_map(|(view, element, word)| Word::Element {
+                view,
+                element,
+                word,
+                stride: 16
+            }),
+            (0..4u32, 0..4u32, 0..4u32).prop_map(|(view, x, lane)| Word::Texel {
+                view,
+                dim: 2,
+                texel: [x, 0, 0],
+                layer: None,
+                lane
+            }),
+        ]
+    }
+
+    /// Words written, each one to four times, with every NaN as one pattern (as a run leaves them).
+    fn written() -> impl Strategy<Value = Written> {
+        prop::collection::btree_map(word(), prop::collection::vec(any::<u32>(), 1..4), 0..6)
+            .prop_map(|writes| Written { writes }.canonical())
+    }
+
+    /// One to three output registers, each with a mask, of an execution kept or discarded.
+    fn execution() -> impl Strategy<Value = Execution> {
+        (
+            prop::collection::vec((any::<[u32; 4]>(), 0..16u8), 1..4),
+            any::<bool>(),
+        )
+            .prop_map(|(registers, discarded)| Execution {
+                outputs: registers.iter().map(|r| r.0).collect(),
+                output_masks: registers.iter().map(|r| r.1).collect(),
+                discarded,
+                ..Execution::default()
+            })
+    }
+
+    /// One invocation's execution or a quad's four.
+    fn executions() -> impl Strategy<Value = Vec<Execution>> {
+        prop_oneof![
+            prop::collection::vec(execution(), 1),
+            prop::collection::vec(execution(), 4)
+        ]
+    }
+
+    /// Read requests as [`Hashed`] keeps them: a tag (1 to 3 a texture request, 4 to 6 another) and its words.
+    fn reads() -> impl Strategy<Value = Vec<Vec<u32>>> {
+        prop::collection::vec(
+            (1..7u32, prop::collection::vec(0..4u32, 0..3)).prop_map(|(tag, mut words)| {
+                words.insert(0, tag);
+                words
+            }),
+            0..6,
+        )
+    }
+
+    fn run_of(executions: &[Execution], written: Written, reads: Vec<Vec<u32>>) -> Run {
+        Ok((executions.iter().map(invocation).collect(), written, reads))
+    }
+
+    /// A NaN whose payload `bits` chooses, and another of the opposite sign: one NaN for another.
+    fn nans(bits: u32) -> (u32, u32) {
+        (
+            0x7f80_0001 | (bits & 0x003f_ffff),
+            0xffc0_0000 | (bits >> 10 & 0x003f_ffff),
+        )
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(2000))]
+
+        /// A run agrees with itself, with and without its texture requests compared.
+        #[test]
+        fn a_run_agrees_with_itself(e in executions(), w in written(), r in reads(), textures in any::<bool>()) {
+            let (x, y) = (run_of(&e, w.clone(), r.clone()), run_of(&e, w, r));
+            prop_assert!(same_run(&x, &y, textures));
+        }
+
+        /// A written lane of a kept invocation that gives other bits (not one NaN for another) is a difference, in a
+        /// single invocation and in any lane of a quad.
+        #[test]
+        fn a_changed_output_lane_is_flagged(
+            mut e in executions(),
+            pick in any::<(prop::sample::Index, prop::sample::Index, prop::sample::Index)>(),
+            bit in 0..32u32,
+        ) {
+            let i = pick.0.index(e.len());
+            let r = pick.1.index(e[i].outputs.len());
+            let k = pick.2.index(4);
+            e[i].output_masks[r] |= 1 << k;
+            e[i].discarded = false;
+            let mut f = e.clone();
+            f[i].outputs[r][k] ^= 1 << bit;
+            prop_assume!(canonical(e[i].outputs[r][k]) != canonical(f[i].outputs[r][k]));
+            let (x, y) = (run_of(&e, Written::default(), vec![]), run_of(&f, Written::default(), vec![]));
+            prop_assert!(!same_run(&x, &y, true));
+        }
+
+        /// What reaches no target is not compared: a lane the invocation did not write, any lane of a discarded
+        /// invocation, a NaN given for another.
+        #[test]
+        fn what_no_target_takes_is_not_compared(
+            mut e in executions(),
+            pick in any::<(prop::sample::Index, prop::sample::Index, prop::sample::Index)>(),
+            how in 0..3u8,
+            word in any::<u32>(),
+        ) {
+            let i = pick.0.index(e.len());
+            let r = pick.1.index(e[i].outputs.len());
+            let k = pick.2.index(4);
+            let mut f = e.clone();
+            match how {
+                0 => {
+                    e[i].output_masks[r] &= !(1 << k);
+                    f[i].output_masks[r] = e[i].output_masks[r];
+                    f[i].outputs[r][k] = word;
+                }
+                1 => {
+                    e[i].discarded = true;
+                    f[i].discarded = true;
+                    f[i].outputs[r][k] = word;
+                }
+                _ => {
+                    let (one, another) = nans(word);
+                    e[i].outputs[r][k] = one;
+                    f[i].outputs[r][k] = another;
+                }
+            }
+            let (x, y) = (run_of(&e, Written::default(), vec![]), run_of(&f, Written::default(), vec![]));
+            prop_assert!(same_run(&x, &y, true));
+        }
+
+        /// Memory that ends otherwise is a difference: a word given another value (not one NaN for another), a write
+        /// more, a word more.
+        #[test]
+        fn changed_memory_is_flagged(
+            w in written(),
+            at in word(),
+            pick in any::<(prop::sample::Index, prop::sample::Index)>(),
+            how in 0..3u8,
+            value in any::<u32>(),
+        ) {
+            let mut v = w.clone();
+            let key = (!w.writes.is_empty()).then(|| *w.writes.keys().nth(pick.0.index(w.writes.len())).unwrap());
+            match (how, key) {
+                (0, Some(key)) => {
+                    let seq = v.writes.get_mut(&key).unwrap();
+                    let j = pick.1.index(seq.len());
+                    prop_assume!(canonical(seq[j]) != canonical(value));
+                    seq[j] = value;
+                }
+                (1, Some(key)) => v.write(key, value),
+                _ => {
+                    prop_assume!(!w.writes.contains_key(&at));
+                    v.write(at, value);
+                }
+            }
+            let (x, y) = (run_of(&[], w, vec![]), run_of(&[], v.canonical(), vec![]));
+            prop_assert!(!same_run(&x, &y, false));
+        }
+
+        /// One NaN written for another is the same memory.
+        #[test]
+        fn a_nan_written_for_another_is_the_same_memory(at in word(), bits in any::<u32>()) {
+            let (one, another) = nans(bits);
+            let (mut v, mut w) = (Written::default(), Written::default());
+            v.write(at, one);
+            w.write(at, another);
+            let (x, y) = (run_of(&[], v.canonical(), vec![]), run_of(&[], w.canonical(), vec![]));
+            prop_assert!(same_run(&x, &y, false));
+        }
+
+        /// B's texture requests must be among A's: any subset of them (with any other reads) passes, one A does not
+        /// make is a difference; without textures compared, neither matters.
+        #[test]
+        fn texture_requests_must_be_among_the_older_lifts(
+            r in reads(),
+            keep in prop::collection::vec(any::<bool>(), 6),
+            other in reads(),
+            extra in (1..4u32, prop::collection::vec(0..4u32, 0..3)),
+        ) {
+            let x = run_of(&[], Written::default(), r.clone());
+            let mut subset: Vec<Vec<u32>> =
+                r.iter().zip(&keep).filter(|(_, k)| **k).map(|(q, _)| q.clone()).collect();
+            subset.extend(other.into_iter().filter(|q| !matches!(q.first(), Some(1..=3))));
+            prop_assert!(same_run(&x, &run_of(&[], Written::default(), subset.clone()), true));
+            let mut request = extra.1;
+            request.insert(0, extra.0);
+            prop_assume!(!r.contains(&request));
+            subset.push(request);
+            let y = run_of(&[], Written::default(), subset);
+            prop_assert!(!same_run(&x, &y, true));
+            prop_assert!(same_run(&x, &y, false));
+        }
+
+        /// A compute or function run's memory compares every word, each NaN as one: a word changed otherwise is a
+        /// difference, one NaN for another is not.
+        #[test]
+        fn compute_memory_compares_every_word(
+            words in prop::collection::vec(any::<u32>(), 1..16),
+            pick in any::<prop::sample::Index>(),
+            value in any::<u32>(),
+            nan in any::<bool>(),
+        ) {
+            let memory = |words: Vec<u32>| Memory {
+                buffers: BTreeMap::from([(ResourceId(1), words.clone())]),
+                elements: BTreeMap::from([((ResourceId(2), 0), words)]),
+                texels: Texels::new(),
+                counters: BTreeMap::new(),
+            }
+            .canonical();
+            let j = pick.index(words.len());
+            if nan {
+                let (one, another) = nans(value);
+                let (mut was, mut now) = (words.clone(), words);
+                was[j] = one;
+                now[j] = another;
+                prop_assert_eq!(memory(was), memory(now));
+            } else {
+                prop_assume!(canonical(words[j]) != canonical(value));
+                let mut now = words.clone();
+                now[j] = value;
+                prop_assert_ne!(memory(words), memory(now));
+            }
+        }
+
+        /// Each interpolated input lane of a coherent quad, from any first-lane value the gate seeds, steps by
+        /// amounts of different size along x and y, neither zero, in the coarse derivatives and the fine ones: a
+        /// derivative taken along the wrong axis gives another value.
+        #[test]
+        fn coherent_quads_step_differently_along_x_and_y(base in -0.25f32..1.75) {
+            for c in 0..CASES {
+                for register in 0..32 {
+                    for lane in 0..4 {
+                        let q = coherent_quad(base, c, register, lane);
+                        for (x, y) in [(q[1] - q[0], q[2] - q[0]), (q[3] - q[2], q[3] - q[1])] {
+                            prop_assert!(
+                                x != 0.0 && y != 0.0 && x.abs() != y.abs(),
+                                "vector {c}, v{register} lane {lane}, first lane {base}: steps {x} and {y}"
+                            );
+                        }
+                    }
+                }
+            }
         }
     }
 }

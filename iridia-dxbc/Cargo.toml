@@ -26,5 +26,6 @@ serde_json.workspace = true
 iridia-exec.workspace = true
 iridia-dxil.workspace = true
 iridia-passes.workspace = true
+proptest.workspace = true
 [lints]
 workspace = true

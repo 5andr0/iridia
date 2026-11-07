@@ -56,13 +56,8 @@ demotion, `iridia-exec` a helper's later stores too.
 | `ps_3_0_texkill_dsx` | a lane `texkill` discards still gives its value to its neighbours' `dsx` |
 | `ps_2_0_texld_quad` | an implicit-LOD `texld` is asked with the quad's derivatives of its coordinate |
 
-Planted wrong derivatives, each reverted after:
-
-| Planted | Caught by |
-| --- | --- |
-| `dsx` lifted as `dsy` and `dsy` as `dsx` | 2 assembled fixtures (`ps_3_0_dsx_dsy`, `ps_3_0_texkill_dsx`; the sum fixture cannot see it) and 12 vkd3d probes that differ (`ddxddy.shader_test` among them) |
-| a derivative's sign flipped in `iridia-exec-ir` | 3 assembled fixtures and 16 vkd3d probes where the IR and the WGSL disagree |
-| an implicit-LOD footprint's x and y swapped in `iridia-exec-ir` | `ps_2_0_texld_quad`, the IR and the WGSL disagreeing |
+Each derivative's value is checked by the fixtures above and by vkd3d's derivative probes (`ddxddy.shader_test`
+among them), the IR's results against the WGSL's.
 
 ## Rules the instruction reference leaves open
 

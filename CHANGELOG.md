@@ -13,17 +13,21 @@
   takes the comparand first), `imm_atomic_alloc` and `imm_atomic_consume` as counters, thread-group memory as a workgroup
   variable, `sync` as a barrier; Shader Model 5.1 resource ranges as an element of an array resource (`nonuniform`
   kept). Hull, domain and geometry programs lift too (below).
+- `tests/ir_gate.rs`'s planted-bug tests are gone. Property tests (proptest) hold the gate's comparison to generated
+  runs: a written lane that changes, a memory word, a write more or a texture request A does not make is flagged, in
+  one invocation and in any lane of a quad, and in a compute program's memory; what no target takes (a lane not
+  written, a discarded invocation, one NaN for another) is not. Another holds each coherent quad's steps to differ in
+  size along x and y, neither zero, from any first-lane value the gate seeds, in coarse and fine derivatives.
 - `iridia-dxbc/tests/ir_gate.rs`, the gate of the cut-over: every program of the Sekiro, Riders Republic and Unity
   corpora and every fixture lifts both ways and runs in `iridia-exec`, the older lift (A), the IR lift (B) and the IR
   lift after `promote`, `simplify` and `break_flags` (P), on seeded inputs, constants and textures; a pixel program with
   a derivative or an implicit-level sample runs as a 2 x 2 quad, a compute program as two thread groups whose read-write
   buffers, texels and counters are compared after. Every written lane must agree bit for bit (a NaN with any NaN); any
-  other refusal of the IR lift fails it. Planted bugs (an addition made a subtraction in a pixel and a compute program,
-  a derivative's axis swapped) are caught. No difference anywhere: Sekiro, 432 programs, B and P agree on all 432;
-  Riders Republic, 2,443 programs (736 compute, 26 made of functions), B and P agree on all 2,443; Unity, 4,854
-  programs, B and P agree on all 4,854; every fixture A runs. A vector A cannot evaluate is skipped and counted (Riders:
-  238 of its vectors, a loop past the executor's step budget on seeded constants in 235, a quad diverging at an
-  implicit-level sample in 3).
+  other refusal of the IR lift fails it. No difference anywhere: Sekiro, 432 programs, B and P agree on all 432; Riders
+  Republic, 2,443 programs (736 compute, 26 made of functions), B and P agree on all 2,443; Unity, 4,854 programs, B and
+  P agree on all 4,854; every fixture A runs. A vector A cannot evaluate is skipped and counted (Riders: 238 of its
+  vectors, a loop past the executor's step budget on seeded constants in 235, a quad diverging at an implicit-level
+  sample in 3).
 - `iridia-dxbc`: the IR lift takes hull, domain and geometry programs (and a vertex program feeding a tessellator) as
   the functions `iridia::stage_functions` states: a hull program's control-point phase as `main` and its fork and join
   phases, each a loop over its instances, as `patch_constant`; a geometry program's `emit` and `cut` as the IR's `Emit`
