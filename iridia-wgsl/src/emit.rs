@@ -10,7 +10,7 @@ use alloc::{
 
 use iridia_ir::interface::{Resource, ResourceId, ResourceKind, Value};
 use iridia_ir::target::{Binding, BindingPlan, EntryIo};
-use iridia_ir::{Function, Program, Scalar, Type, ValueId, VarId};
+use iridia_ir::{Function, Program, Res, Scalar, Type, ValueId, VarId};
 
 use crate::Error;
 use crate::flow::Construct;
@@ -74,6 +74,8 @@ pub(crate) struct Writer<'a> {
     pub lanes: BTreeMap<u32, Vec<String>>,
     /// The scalar of each lane of each value an `If` arm yielded (set where the arm ends in a yield, taken by the `If`).
     pub gathered: Option<Vec<Vec<String>>>,
+    /// Whether each value is read where the body places it: by an operation a node places, by a node or by a region's end.
+    pub read: Vec<bool>,
     /// Where each lane of each value comes from, for the lanes a variable need not hold.
     pub sites: Sites<'a>,
     /// Per storage (a construct's result or a loop's parameter), the scalar each lane is in place of a variable: a lane the
@@ -210,6 +212,31 @@ impl Writer<'_> {
             .find(|(r, _)| *r == id)
             .map(|(_, n)| n.as_str())
             .ok_or_else(|| err(format!("resource {} has no binding", id.0)))
+    }
+
+    /// The global of resource `r.id` as an operation names it: the global, or for an array of resources (a binding array)
+    /// the element `r.index` picks, element 0 where it names none. An element past the array is undefined, as in Direct3D:
+    /// the index is not clamped (an unbounded array's length is the bound data's, not the program's).
+    pub(crate) fn pick(&self, r: Res) -> R<String> {
+        let g = self.global(r.id)?;
+        if !self.resource(r.id)?.is_array() {
+            return Ok(g.to_string());
+        }
+        Ok(match r.index {
+            None => format!("{g}[0u]"),
+            Some(i) => format!("{g}[{}]", self.index_u32(i)?),
+        })
+    }
+
+    /// The array of a buffer an operation names (its words, elements or constant rows): its global, or for an element of an
+    /// array of buffers the element's one member `data` (a binding array of buffers is one of structures).
+    pub(crate) fn buffer(&self, r: Res) -> R<String> {
+        let picked = self.pick(r)?;
+        Ok(if self.resource(r.id)?.is_array() {
+            format!("{picked}.data")
+        } else {
+            picked
+        })
     }
 
     pub(crate) fn var_name(&self, var: VarId) -> R<&str> {

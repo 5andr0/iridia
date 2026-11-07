@@ -168,12 +168,7 @@ impl Writer<'_> {
                 offset,
             } => self.gather(texture, sampler, coord, component, compare, offset)?,
             Op::LoadTexel { texture, coord, .. } if self.typed_buffer(texture.id)? => {
-                if texture.index.is_some() {
-                    return Err(err(
-                        "a read of an element of an array of buffers is not written yet",
-                    ));
-                }
-                self.load_typed_element(texture.id, coord, t)?
+                self.load_typed_element(texture, coord, t)?
             }
             Op::LoadTexel {
                 texture,
@@ -182,14 +177,7 @@ impl Writer<'_> {
                 sample,
                 offset,
             } => self.load_texel(texture, coord, level, sample, offset, t)?,
-            Op::Query(r, iridia_ir::Query::Elements) => {
-                if r.index.is_some() {
-                    return Err(err(
-                        "a query of an element of an array of buffers is not written yet",
-                    ));
-                }
-                self.elements(r.id)?
-            }
+            Op::Query(r, iridia_ir::Query::Elements) => self.elements(r)?,
             Op::Query(r, q) => self.image_query(r, q, t)?,
             Op::Atomic {
                 memory,
@@ -201,28 +189,16 @@ impl Writer<'_> {
             Op::ReportHit { .. } => {
                 return Err(err("an intersection program's reported hit is not written yet"));
             }
-            Op::Counter(r, op) => {
-                if r.index.is_some() {
-                    return Err(err(
-                        "a counter of an element of an array of buffers is not written yet",
-                    ));
-                }
-                self.counter(r.id, op)?
-            }
+            Op::Counter(r, op) => self.counter(r, op)?,
             Op::LoadBuffer {
                 resource,
                 address,
                 oob,
             } => {
-                if resource.index.is_some() {
-                    return Err(err(
-                        "a read of an element of an array of buffers is not written yet",
-                    ));
-                }
                 if self.words_buffer(resource.id)? {
-                    self.load_words(resource.id, address, t)?
+                    self.load_words(resource, address, t)?
                 } else {
-                    self.load_constants(resource.id, address, oob, t)?
+                    self.load_constants(resource, address, oob, t)?
                 }
             }
             Op::Sample {

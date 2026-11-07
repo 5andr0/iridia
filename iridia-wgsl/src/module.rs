@@ -30,6 +30,12 @@ pub(crate) struct Linked {
     pub value: Option<Value>,
 }
 
+/// The name of the private table of Direct3D's standard sample positions.
+pub(crate) const SAMPLE_POSITIONS: &str = "sample_positions";
+
+/// The rows of Direct3D's standard sample positions, of every standard count (1 + 2 + 4 + 8 + 16).
+pub(crate) const STANDARD_ROWS: u32 = 31;
+
 /// WGSL's text of a texture's type, or why it has none.
 fn texture_type(dim: TextureDim, arrayed: bool, multisampled: bool, sample: SampleType) -> R<String> {
     if multisampled && (arrayed || dim != TextureDim::D2) {
@@ -71,16 +77,28 @@ fn texture_type(dim: TextureDim, arrayed: bool, multisampled: bool, sample: Samp
     })
 }
 
-/// A storage image's type: of 32-bit lanes of its sample type, four of them (`rgba32float`, `rgba32uint`, `rgba32sint`).
-fn storage_image(dim: TextureDim, arrayed: bool, sample: SampleType, access: Access) -> R<String> {
+/// A storage image's type: of 32-bit lanes of its sample type, four of them (`rgba32float`, `rgba32uint`, `rgba32sint`), or
+/// one where an atomic reaches it (`r32uint`, `r32sint`, with WGSL's `atomic` access, which loads and stores too).
+fn storage_image(
+    dim: TextureDim,
+    arrayed: bool,
+    sample: SampleType,
+    access: Access,
+    atomic: bool,
+) -> R<String> {
     if dim == TextureDim::D1 && arrayed {
         return Err(err("a 1D array storage image has no WGSL form"));
     }
-    let format = match sample {
-        SampleType::Sint => "rgba32sint",
-        SampleType::Uint => "rgba32uint",
-        SampleType::Float => "rgba32float",
-        SampleType::Depth => return Err(err("a depth storage image has no WGSL form")),
+    let format = match (sample, atomic) {
+        (SampleType::Sint, true) => "r32sint",
+        (SampleType::Uint, true) => "r32uint",
+        (SampleType::Float, true) => {
+            return Err(err("a storage image of Float texels an atomic reaches"));
+        }
+        (SampleType::Sint, false) => "rgba32sint",
+        (SampleType::Uint, false) => "rgba32uint",
+        (SampleType::Float, false) => "rgba32float",
+        (SampleType::Depth, _) => return Err(err("a depth storage image has no WGSL form")),
     };
     let d = match dim {
         TextureDim::D1 => "1d",
@@ -90,6 +108,7 @@ fn storage_image(dim: TextureDim, arrayed: bool, sample: SampleType, access: Acc
     };
     let array = if arrayed { "_array" } else { "" };
     let access = match access {
+        _ if atomic => "atomic",
         Access::Read => "read",
         Access::Write => "write",
         Access::ReadWrite => "read_write",
@@ -134,7 +153,7 @@ impl<'a> Writer<'a> {
         let linked = link(&io.results)?;
         // the names of the arguments and result members are the labels', made WGSL identifiers
         let mut names = Names::default();
-        for name in ["Out", "main"] {
+        for name in ["Out", "main", SAMPLE_POSITIONS] {
             names.reserve(name);
         }
         for item in io.arguments.iter_mut().chain(io.results.iter_mut()) {
@@ -185,6 +204,7 @@ impl<'a> Writer<'a> {
             lanes: BTreeMap::new(),
             split: BTreeMap::new(),
             gathered: None,
+            read: crate::flow::read_values(f, body),
             sites: crate::origin::Sites::of(f, body),
             forward: BTreeMap::new(),
             outputs: alloc::vec![None; program.interface.outputs.len()],
@@ -267,6 +287,9 @@ impl<'a> Writer<'a> {
         }
         if primitive {
             out.push_str("enable primitive_index;\n");
+        }
+        if self.program.interface.resources.iter().any(Resource::is_array) {
+            out.push_str("enable wgpu_binding_array;\n");
         }
         if self.profile.directives == Directives::Standard
             && iridia_ir::target::requirements(self.program)
@@ -397,14 +420,10 @@ impl<'a> Writer<'a> {
                     target: StorageTarget::Image { dim, arrayed, sample },
                     access,
                 } => {
-                    if self.atomics.resources.contains_key(&r.id) {
-                        return Err(err(format!(
-                            "a storage image of {sample:?} texels an atomic reaches is not written yet"
-                        )));
-                    }
+                    let atomic = self.atomics.resources.contains_key(&r.id);
                     (
                         "var ".to_string(),
-                        storage_image(*dim, *arrayed, *sample, *access)?,
+                        storage_image(*dim, *arrayed, *sample, *access, atomic)?,
                     )
                 }
                 // WGSL has no write-only storage buffer: a buffer the program writes is read-write
@@ -426,6 +445,25 @@ impl<'a> Writer<'a> {
                     self.buffer_type(r.id, *kind)?,
                 ),
                 other => return Err(err(format!("a {other:?} resource is not written yet"))),
+            };
+            // an array of resources is one binding array at its first register (unsized where the program does not size it);
+            // a binding array of buffers is one of structures, each with one member `data`: the buffer's array
+            let ty = if r.is_array() {
+                let element = if space.starts_with("var<") {
+                    let element = self.names.unique(&format!("{name}_element"));
+                    self.decls
+                        .push(format!("struct {element} {{\n    data: {ty},\n}}\n"));
+                    element
+                } else {
+                    ty
+                };
+                if r.count == Resource::UNBOUNDED {
+                    format!("binding_array<{element}>")
+                } else {
+                    format!("binding_array<{element}, {}>", r.count)
+                }
+            } else {
+                ty
             };
             out.push_str(&format!(
                 "@group({}) @binding({}) {space}{name}: {ty};\n",
@@ -491,6 +529,32 @@ impl<'a> Writer<'a> {
         if !self.decls.contains(&decl) {
             self.decls.push(decl);
         }
+    }
+
+    /// Direct3D's standard sample positions, in pixels from the pixel's centre, of every standard count in turn (1, 2, 4, 8 and
+    /// 16 samples: [`STANDARD_ROWS`] rows, count `n`'s from row `n - 1`): a private table, declared once.
+    pub(crate) fn sample_positions(&mut self) -> R<&'static str> {
+        let mut rows = Vec::new();
+        for count in [1u32, 2, 4, 8, 16] {
+            for index in 0..count {
+                let [x, y] = iridia_ir::standard_sample_position(count, index)
+                    .ok_or_else(|| err(format!("no standard position of sample {index} of {count}")))?;
+                let lane = |l: f32| text::literal(Scalar::F32, u64::from(l.to_bits()));
+                rows.push(format!("vec2<f32>({}, {})", lane(x)?, lane(y)?));
+            }
+        }
+        if rows.len() != STANDARD_ROWS as usize {
+            return Err(err(format!("{} standard sample positions", rows.len())));
+        }
+        let ty = format!("array<vec2<f32>, {STANDARD_ROWS}>");
+        let decl = format!(
+            "var<private> {SAMPLE_POSITIONS}: {ty} = {ty}({});\n",
+            rows.join(", ")
+        );
+        if !self.decls.contains(&decl) {
+            self.decls.push(decl);
+        }
+        Ok(SAMPLE_POSITIONS)
     }
 
     /// The variables of the function: the workgroup ones as globals, the private ones as locals at the top of the entry

@@ -21,7 +21,10 @@
   condition, or a vector with one thread-dependent lane, to differ between threads, and a barrier after it is refused. The
   barrier programs of the Elden Ring and Riders Republic corpora are accepted by Tint, apart from four Elden Ring light
   organisers whose counter starts at the thread's index and subtracts it again: uniform by arithmetic, which WGSL's analysis
-  cannot follow.
+  cannot follow. As `iridia-naga`'s `wgsl` does, `Profile::NAGA` writes an array of resources as one binding array (`enable wgpu_binding_array;`,
+  a structure with one member `data` for each array of buffers, an element's counter word n of the resource's packed counter buffer)
+  and a texel atomic whose old value nothing reads as `textureAtomic*` of an `atomic` storage image; Direct3D's standard sample positions
+  are a private table. `Profile::BROWSER` refuses the first two by name, as WebGPU's core has neither.
 - `iridia-dxil`: a switch several of whose cases (or a case and the default, or both ways of a branch) go to one
   block gives that block one set of arguments. dxc writes the block's phi with an entry per edge, the same value on
   each (`phi [7.0, %0]` three times); the IR lift made each edge's arguments afresh, so a constant became three

@@ -5,14 +5,10 @@
 //! checked against the image's own size and clamped into it. A sample's array layer is the coordinate's last lane rounded to
 //! nearest even and taken at least 0, as Direct3D does (WGSL clamps it to the layers there are).
 
-use alloc::{
-    format,
-    string::{String, ToString},
-    vec::Vec,
-};
+use alloc::{format, string::String, vec::Vec};
 
 use iridia_ir::interface::{ResourceKind, SampleType, StorageTarget, TextureDim};
-use iridia_ir::{GatherOffset, Level, Op, Res, Scalar, Type, ValueId};
+use iridia_ir::{AtomicOp, GatherOffset, Level, Op, Res, Scalar, Type, ValueId};
 
 use crate::emit::{R, Writer, all_of};
 use crate::text::{self, err};
@@ -64,9 +60,6 @@ struct TexelAddress {
 
 impl Writer<'_> {
     fn shape(&self, r: Res) -> R<Shape> {
-        if r.index.is_some() {
-            return Err(err("an element of an array of resources is not written yet"));
-        }
         Ok(match *self.kind(r.id)? {
             ResourceKind::Texture {
                 dim,
@@ -95,7 +88,7 @@ impl Writer<'_> {
     }
 
     fn image(&self, r: Res) -> R<String> {
-        Ok(self.global(r.id)?.into())
+        self.pick(r)
     }
 
     /// Lanes `from..from + n` of a vector (one lane as a scalar, all of them as the vector itself).
@@ -199,11 +192,6 @@ impl Writer<'_> {
         if clamp.is_some() {
             return Err(err("a sample with a level clamp has no WGSL form"));
         }
-        if sampler.index.is_some() {
-            return Err(err(
-                "a sample through an element of an array of samplers is not written yet",
-            ));
-        }
         let shape = self.shape(texture)?;
         if matches!(shape.sample, SampleType::Sint | SampleType::Uint) {
             return Err(err("a filtered sample of an integer texture has no WGSL form"));
@@ -244,7 +232,7 @@ impl Writer<'_> {
             _ => {}
         }
         let image = self.image(texture)?;
-        let sampler_name = self.global(sampler.id)?.to_string();
+        let sampler_name = self.pick(sampler)?;
         let leading = [image, sampler_name];
         let mut extra: Vec<String> = Vec::new();
         let fun = match (level, depth_ref) {
@@ -315,11 +303,6 @@ impl Writer<'_> {
         compare: Option<ValueId>,
         offset: GatherOffset,
     ) -> R<String> {
-        if sampler.index.is_some() {
-            return Err(err(
-                "a gather through an element of an array of samplers is not written yet",
-            ));
-        }
         let shape = self.shape(texture)?;
         let offset = match offset {
             GatherOffset::Fixed([0, 0, 0]) => None,
@@ -336,7 +319,7 @@ impl Writer<'_> {
         }
         let (coordinate, array_index) = self.sample_address(shape, coord)?;
         let image = self.image(texture)?;
-        let sampler_name = self.global(sampler.id)?.to_string();
+        let sampler_name = self.pick(sampler)?;
         let mut extra: Vec<String> = Vec::new();
         let (fun, leading) = match (depth, compare) {
             (true, Some(c)) => {
@@ -482,6 +465,74 @@ impl Writer<'_> {
         Ok(())
     }
 
+    /// The position of sample `index` of a multisampled texture in Direct3D's standard pattern for its sample count, from
+    /// [`Writer::sample_positions`]; (0, 0) for an index past its samples or a count with no standard pattern (one other than
+    /// 1, 2, 4, 8 or 16).
+    fn sample_position(&mut self, image: &str, index: ValueId) -> R<String> {
+        let table = self.sample_positions()?;
+        let (index, _) = self.as_u32(index)?;
+        let count = self.tmp(&format!("textureNumSamples({image})"));
+        // a standard count is a power of two of at most 16 (a count of 0 has no sample an index is below)
+        let last = self.tmp(&format!("({count} - 1u)"));
+        let low = self.tmp(&format!("({count} & {last})"));
+        let inside = self.tmp(&format!(
+            "(({low} == 0u) && ({count} <= 16u) && ({index} < {count}))"
+        ));
+        // the count's rows start at row `count - 1`; clamped into the table where it is not inside
+        let row = self.tmp(&format!(
+            "min(({last} + {index}), {}u)",
+            crate::module::STANDARD_ROWS - 1
+        ));
+        Ok(format!("select(vec2<f32>(), {table}[{row}], {inside})"))
+    }
+
+    /// `Op::Atomic` of a storage image's texel whose old value nothing reads: naga's dialect's `textureAtomic*`, where the texel
+    /// is inside the image (outside it the IR's changes nothing). It gives no old value and takes no exchange: one is refused
+    /// by name. A subtraction is an addition of the negation (the same bits); a minimum or maximum is of the image's texels'
+    /// signedness, so one of the other signedness is refused by name.
+    pub(crate) fn image_atomic(&mut self, r: Res, coord: ValueId, op: AtomicOp, value: ValueId) -> R<()> {
+        let shape = self.shape(r)?;
+        if !shape.storage {
+            return Err(err("an atomic of a texture that is not a storage image"));
+        }
+        let signed = shape.sample == SampleType::Sint;
+        let fun = match op {
+            AtomicOp::Add | AtomicOp::Sub => "textureAtomicAdd",
+            AtomicOp::And => "textureAtomicAnd",
+            AtomicOp::Or => "textureAtomicOr",
+            AtomicOp::Xor => "textureAtomicXor",
+            AtomicOp::SMin if signed => "textureAtomicMin",
+            AtomicOp::SMax if signed => "textureAtomicMax",
+            AtomicOp::UMin if !signed => "textureAtomicMin",
+            AtomicOp::UMax if !signed => "textureAtomicMax",
+            AtomicOp::Exchange | AtomicOp::CompareExchange => {
+                return Err(err(
+                    "an exchange of a texel has no naga form: naga's image atomic takes no exchange",
+                ));
+            }
+            other => {
+                return Err(err(format!(
+                    "a {other:?} of a storage image of {:?} texels has no naga form: an image's minimum and maximum are of \
+                     its texels' signedness",
+                    shape.sample
+                )));
+            }
+        };
+        let a = self.texel_address(r, shape, coord, None, None, [0; 3])?;
+        let word = if signed { Scalar::I32 } else { Scalar::U32 };
+        let x = self.bitcast(&self.get(value)?, self.vty(value)?, word)?;
+        let x = if op == AtomicOp::Sub {
+            format!("({} - {x})", text::literal(word, 0)?)
+        } else {
+            x
+        };
+        let mut args = alloc::vec![a.image.clone(), a.coordinate.clone()];
+        args.extend(a.array_index.clone());
+        args.push(x);
+        self.line(&format!("if ({}) {{ {fun}({}); }}", a.inside, args.join(", ")));
+        Ok(())
+    }
+
     /// `Op::Query` of a texture or storage image: its size at a level (zero in every lane at a level it does not have), its
     /// layers, levels or samples.
     pub(crate) fn image_query(&mut self, r: Res, q: iridia_ir::Query, t: Type) -> R<String> {
@@ -514,6 +565,9 @@ impl Writer<'_> {
             iridia_ir::Query::Layers if shape.arrayed => format!("textureNumLayers({image})"),
             iridia_ir::Query::Levels if shape.levels() => format!("textureNumLevels({image})"),
             iridia_ir::Query::Samples if shape.multisampled => format!("textureNumSamples({image})"),
+            iridia_ir::Query::SamplePosition(index) if shape.multisampled => {
+                self.sample_position(&image, index)?
+            }
             other => return Err(err(format!("query {other:?} of a {:?} image", shape.dim))),
         })
     }

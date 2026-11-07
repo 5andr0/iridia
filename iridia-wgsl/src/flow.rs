@@ -5,7 +5,7 @@
 
 use alloc::{format, string::String, vec::Vec};
 
-use iridia_ir::{End, LabelId, Node, Region, Scalar, Type, ValueId};
+use iridia_ir::{End, Function, LabelId, Memory, Node, Op, Region, Scalar, Type, ValueId};
 
 use crate::emit::{R, Writer};
 use crate::text::{self, err};
@@ -405,7 +405,18 @@ impl Writer<'_> {
 
     pub(crate) fn node(&mut self, n: &Node) -> R<()> {
         match n {
-            Node::Value(v) => self.value(*v)?,
+            // a storage image's texel atomic whose old value nothing reads: naga's image atomic, which gives none
+            Node::Value(v) => match self.f.value(*v).map(|d| &d.op) {
+                Some(&Op::Atomic {
+                    memory: Memory::Image(r, coord),
+                    op,
+                    value,
+                    compare: None,
+                }) if !self.typed_buffer(r.id)? && !self.read.get(v.0 as usize).copied().unwrap_or(true) => {
+                    self.image_atomic(r, coord, op, value)?;
+                }
+                _ => self.value(*v)?,
+            },
             // WGSL's `discard` is a demotion: the invocation goes on as a helper
             Node::Demote => self.line("discard;"),
             Node::StoreVar(var, x) => self.store_var(*var, *x)?,
@@ -416,23 +427,13 @@ impl Writer<'_> {
                 address,
                 value,
             } => {
-                if resource.index.is_some() {
-                    return Err(err(
-                        "a write of an element of an array of buffers is not written yet",
-                    ));
-                }
                 if !self.words_buffer(resource.id)? {
                     return Err(err(format!("a buffer write of resource {}", resource.id.0)));
                 }
-                self.store_words(resource.id, *address, *value)?;
+                self.store_words(*resource, *address, *value)?;
             }
             Node::StoreTexel { image, coord, value } if self.typed_buffer(image.id)? => {
-                if image.index.is_some() {
-                    return Err(err(
-                        "a write of an element of an array of buffers is not written yet",
-                    ));
-                }
-                self.store_typed_element(image.id, *coord, *value)?;
+                self.store_typed_element(*image, *coord, *value)?;
             }
             Node::StoreTexel { image, coord, value } => self.store_texel(*image, *coord, *value)?,
             Node::StorePatch(..) => return Err(err("a patch constant store is not written yet")),
@@ -600,4 +601,33 @@ impl Writer<'_> {
         self.line(&format!("return {value};"));
         Ok(())
     }
+}
+
+/// Whether each value of `f`, whose body is `body`, is read where the body places it: by an operation a node places, by a
+/// node, or by a region's end (a value no node places is not written, so what it reads is not read).
+pub(crate) fn read_values(f: &Function, body: &Region) -> Vec<bool> {
+    fn region(f: &Function, r: &Region, read: &mut [bool]) {
+        let mut mark = |v: ValueId| {
+            if let Some(slot) = read.get_mut(v.0 as usize) {
+                *slot = true;
+            }
+        };
+        for n in &r.nodes {
+            if let Node::Value(v) = n
+                && let Some(d) = f.value(*v)
+            {
+                d.op.operands().into_iter().for_each(&mut mark);
+            }
+            n.values().into_iter().for_each(&mut mark);
+        }
+        if let Some(End::Yield(vs) | End::Br(_, vs) | End::Continue(_, vs)) = &r.end {
+            vs.iter().copied().for_each(&mut mark);
+        }
+        for inner in r.nodes.iter().flat_map(Node::regions) {
+            region(f, inner, read);
+        }
+    }
+    let mut read = alloc::vec![false; f.values.len()];
+    region(f, body, &mut read);
+    read
 }

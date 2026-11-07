@@ -17,7 +17,8 @@ use alloc::{
 
 use iridia_ir::interface::{BufferKind, ResourceId, ResourceKind, StorageTarget};
 use iridia_ir::{
-    Address, AtomicOp, Barrier, CounterOp, Function, Memory, Op, OutOfBounds, Scalar, Type, ValueId, VarId,
+    Address, AtomicOp, Barrier, CounterOp, Function, Memory, Op, OutOfBounds, Res, Scalar, Type, ValueId,
+    VarId,
 };
 
 use crate::emit::{R, Writer};
@@ -129,7 +130,7 @@ impl Writer<'_> {
     /// a fixed address may name any 32-bit word (a bank of 32-bit booleans, four to a row); an indexed one whole rows.
     pub(crate) fn load_constants(
         &mut self,
-        resource: ResourceId,
+        resource: Res,
         address: Address,
         oob: OutOfBounds,
         t: Type,
@@ -147,11 +148,16 @@ impl Writer<'_> {
                 "a buffer read of {t} across a row at offset {offset}"
             )));
         }
-        let rows = match self.kind(resource)? {
+        let rows = match self.kind(resource.id)? {
             ResourceKind::ConstantBuffer { layout } => layout.size.div_ceil(16),
-            _ => return Err(err(format!("resource {} is not a constant buffer", resource.0))),
+            _ => {
+                return Err(err(format!(
+                    "resource {} is not a constant buffer",
+                    resource.id.0
+                )));
+            }
         };
-        let bank = self.global(resource)?.to_string();
+        let bank = self.buffer(resource)?;
         let first = offset / 16;
         let (row, inside) = match index {
             None => {
@@ -220,17 +226,17 @@ impl Writer<'_> {
         Ok(format!("({bytes} >> 2u)"))
     }
 
-    /// `arrayLength` of a resource's runtime-sized array.
-    fn length(&mut self, id: ResourceId) -> R<String> {
-        let g = self.global(id)?.to_string();
+    /// `arrayLength` of a buffer's runtime-sized array.
+    fn length(&mut self, r: Res) -> R<String> {
+        let g = self.buffer(r)?;
         Ok(self.tmp(&format!("arrayLength(&{g})")))
     }
 
     /// The place of element `index` (`u32`) of a resource's array, clamped into it, and whether `index` is inside.
-    fn element_of(&mut self, id: ResourceId, index: &str) -> R<(String, String)> {
-        let len = self.length(id)?;
+    fn element_of(&mut self, r: Res, index: &str) -> R<(String, String)> {
+        let len = self.length(r)?;
         let inside = self.tmp(&format!("({index} < {len})"));
-        let g = self.global(id)?.to_string();
+        let g = self.buffer(r)?;
         Ok((format!("{g}[min({index}, ({len} - 1u))]"), inside))
     }
 
@@ -254,7 +260,7 @@ impl Writer<'_> {
 
     /// `LoadBuffer` of a raw or structured buffer: the result's lanes as consecutive words from the byte address, each word
     /// past the end zero.
-    pub(crate) fn load_words(&mut self, id: ResourceId, address: Address, t: Type) -> R<String> {
+    pub(crate) fn load_words(&mut self, r: Res, address: Address, t: Type) -> R<String> {
         if t.scalar.bits() != 32 || t.scalar == Scalar::Bool {
             return Err(err(format!("a buffer read of {t} is not written yet")));
         }
@@ -263,8 +269,8 @@ impl Writer<'_> {
         let mut lanes = Vec::new();
         for k in 0..t.lanes {
             let wk = self.plus(&w, k);
-            let (place, inside) = self.element_of(id, &wk)?;
-            let word = self.word_u32(id, &place);
+            let (place, inside) = self.element_of(r, &wk)?;
+            let word = self.word_u32(r.id, &place);
             lanes.push(format!("select(0u, {word}, {inside})"));
         }
         let bits = match lanes.as_slice() {
@@ -287,13 +293,13 @@ impl Writer<'_> {
     }
 
     /// `StoreBuffer` of a raw or structured buffer: each word inside the buffer takes its lane.
-    pub(crate) fn store_words(&mut self, id: ResourceId, address: Address, value: ValueId) -> R<()> {
+    pub(crate) fn store_words(&mut self, r: Res, address: Address, value: ValueId) -> R<()> {
         let t = self.vty(value)?;
         if t.scalar.bits() != 32 || t.scalar == Scalar::Bool {
             return Err(err(format!("a buffer write of {t} is not written yet")));
         }
         let x = self.get(value)?;
-        let word = self.atomics.resources.get(&id).copied().unwrap_or(Scalar::U32);
+        let word = self.atomics.resources.get(&r.id).copied().unwrap_or(Scalar::U32);
         let bits = self.bitcast(&x, t, word)?;
         let bits = self.tmp(&bits);
         let w = self.word_index(address)?;
@@ -301,8 +307,8 @@ impl Writer<'_> {
         for k in 0..t.lanes {
             let lane = self.lane(&bits, t.with(word), k)?;
             let wk = self.plus(&w, k);
-            let (place, inside) = self.element_of(id, &wk)?;
-            self.store_if(Some(id), &inside, &place, &lane)?;
+            let (place, inside) = self.element_of(r, &wk)?;
+            self.store_if(Some(r.id), &inside, &place, &lane)?;
         }
         Ok(())
     }
@@ -311,38 +317,38 @@ impl Writer<'_> {
 
     /// The place of lane `lane` of element `index` of a typed buffer an atomic reaches (its element clamped into the
     /// buffer), and whether the element is inside it.
-    fn element_word(&mut self, id: ResourceId, index: &str, lane: u8) -> R<(String, String)> {
-        let (element, inside) = self.element_of(id, index)?;
+    fn element_word(&mut self, r: Res, index: &str, lane: u8) -> R<(String, String)> {
+        let (element, inside) = self.element_of(r, index)?;
         Ok((format!("{element}.w{lane}"), inside))
     }
 
     /// `LoadTexel` of a typed buffer: element `coord`'s four lanes in the view's type, zero past the end.
-    pub(crate) fn load_typed_element(&mut self, id: ResourceId, coord: ValueId, t: Type) -> R<String> {
+    pub(crate) fn load_typed_element(&mut self, r: Res, coord: ValueId, t: Type) -> R<String> {
         if t.lanes != 4 || t.scalar.bits() != 32 || t.scalar == Scalar::Bool {
             return Err(err(format!("a typed buffer read of {t}")));
         }
         let index = self.index_u32(coord)?;
         let index = self.tmp(&index);
         let zero = self.konst(Type::U32X4, Scalar::U32, 0)?;
-        let bits = if self.atomics.resources.contains_key(&id) {
+        let bits = if self.atomics.resources.contains_key(&r.id) {
             let mut lanes = Vec::new();
             let mut inside = None;
             for k in 0..4 {
-                let (place, at) = self.element_word(id, &index, k)?;
-                lanes.push(self.word_u32(id, &place));
+                let (place, at) = self.element_word(r, &index, k)?;
+                lanes.push(self.word_u32(r.id, &place));
                 inside = Some(at);
             }
             let inside = inside.ok_or_else(|| err("an element of no lanes"))?;
             format!("select({zero}, vec4<u32>({}), {inside})", lanes.join(", "))
         } else {
-            let (place, inside) = self.element_of(id, &index)?;
+            let (place, inside) = self.element_of(r, &index)?;
             format!("select({zero}, {place}, {inside})")
         };
         self.bitcast(&bits, Type::U32X4, t.scalar)
     }
 
     /// `StoreTexel` of a typed buffer: element `coord` takes the value's four lanes, where it is inside.
-    pub(crate) fn store_typed_element(&mut self, id: ResourceId, coord: ValueId, value: ValueId) -> R<()> {
+    pub(crate) fn store_typed_element(&mut self, r: Res, coord: ValueId, value: ValueId) -> R<()> {
         let t = self.vty(value)?;
         if t.lanes != 4 || t.scalar.bits() != 32 || t.scalar == Scalar::Bool {
             return Err(err(format!("a typed buffer write of {t}")));
@@ -352,26 +358,26 @@ impl Writer<'_> {
         let bits = self.tmp(&bits);
         let index = self.index_u32(coord)?;
         let index = self.tmp(&index);
-        if let Some(&scalar) = self.atomics.resources.get(&id) {
+        if let Some(&scalar) = self.atomics.resources.get(&r.id) {
             for k in 0..4 {
-                let (place, inside) = self.element_word(id, &index, k)?;
+                let (place, inside) = self.element_word(r, &index, k)?;
                 let lane = self.lane(&bits, Type::U32X4, k)?;
                 let lane = if scalar == Scalar::I32 {
                     format!("bitcast<i32>({lane})")
                 } else {
                     lane
                 };
-                self.store_if(Some(id), &inside, &place, &lane)?;
+                self.store_if(Some(r.id), &inside, &place, &lane)?;
             }
             return Ok(());
         }
-        let (place, inside) = self.element_of(id, &index)?;
+        let (place, inside) = self.element_of(r, &index)?;
         self.store_if(None, &inside, &place, &bits)
     }
 
     /// `Query::Elements` of a buffer: its bytes for a raw buffer, its elements for a structured or typed one.
-    pub(crate) fn elements(&mut self, id: ResourceId) -> R<String> {
-        let kind = match self.kind(id)? {
+    pub(crate) fn elements(&mut self, r: Res) -> R<String> {
+        let kind = match self.kind(r.id)? {
             ResourceKind::Buffer(k)
             | ResourceKind::Storage {
                 target: StorageTarget::Buffer(k),
@@ -379,7 +385,7 @@ impl Writer<'_> {
             } => *k,
             other => return Err(err(format!("the elements of a {other:?}"))),
         };
-        let len = self.length(id)?;
+        let len = self.length(r)?;
         Ok(match kind {
             BufferKind::Typed(_) => len,
             BufferKind::Raw => format!("({len} * 4u)"),
@@ -390,17 +396,22 @@ impl Writer<'_> {
 
     // counters
 
-    /// `Op::Counter`: the view's hidden counter incremented (the count before) or decremented (the count after).
-    pub(crate) fn counter(&mut self, id: ResourceId, op: CounterOp) -> R<String> {
+    /// `Op::Counter`: the view's hidden counter incremented (the count before) or decremented (the count after); an
+    /// element of an array of views has a counter of its own, word n of the resource's packed counter buffer.
+    pub(crate) fn counter(&mut self, r: Res, op: CounterOp) -> R<String> {
         let g = self
             .counters
             .iter()
-            .find(|(r, _)| *r == id)
+            .find(|(id, _)| *id == r.id)
             .map(|(_, g)| g.clone())
-            .ok_or_else(|| err(format!("resource {} has no counter", id.0)))?;
+            .ok_or_else(|| err(format!("resource {} has no counter", r.id.0)))?;
+        let at = match r.index {
+            Some(i) => self.index_u32(i)?,
+            None => "0u".to_string(),
+        };
         Ok(match op {
-            CounterOp::Increment => format!("atomicAdd(&{g}[0], 1u)"),
-            CounterOp::Decrement => format!("(atomicSub(&{g}[0], 1u) - 1u)"),
+            CounterOp::Increment => format!("atomicAdd(&{g}[{at}], 1u)"),
+            CounterOp::Decrement => format!("(atomicSub(&{g}[{at}], 1u) - 1u)"),
         })
     }
 
@@ -410,11 +421,6 @@ impl Writer<'_> {
     fn atomic_word(&mut self, memory: Memory) -> R<Word> {
         match memory {
             Memory::Buffer(r, address) => {
-                if r.index.is_some() {
-                    return Err(err(
-                        "an atomic of an element of an array of buffers is not written yet",
-                    ));
-                }
                 if !self.words_buffer(r.id)? {
                     return Err(err(format!("a word atomic of resource {}", r.id.0)));
                 }
@@ -425,7 +431,7 @@ impl Writer<'_> {
                     .ok_or_else(|| err(format!("resource {} has no atomic words", r.id.0)))?;
                 let w = self.word_index(address)?;
                 let w = self.tmp(&w);
-                let (place, inside) = self.element_of(r.id, &w)?;
+                let (place, inside) = self.element_of(r, &w)?;
                 Ok(Word {
                     place,
                     scalar,
@@ -433,11 +439,6 @@ impl Writer<'_> {
                 })
             }
             Memory::Image(r, coord) if self.typed_buffer(r.id)? => {
-                if r.index.is_some() {
-                    return Err(err(
-                        "an atomic of an element of an array of buffers is not written yet",
-                    ));
-                }
                 let scalar = *self
                     .atomics
                     .resources
@@ -445,14 +446,16 @@ impl Writer<'_> {
                     .ok_or_else(|| err(format!("resource {} has no atomic words", r.id.0)))?;
                 let index = self.index_u32(coord)?;
                 let index = self.tmp(&index);
-                let (place, inside) = self.element_word(r.id, &index, 0)?;
+                let (place, inside) = self.element_word(r, &index, 0)?;
                 Ok(Word {
                     place,
                     scalar,
                     inside: Some(inside),
                 })
             }
-            Memory::Image(..) => Err(err("an atomic of an image is not written yet")),
+            Memory::Image(..) => Err(err(
+                "an atomic of a storage image's texel whose old value is read has no naga form: naga's image atomic gives none",
+            )),
             Memory::Var(var, index) => {
                 let scalar = *self
                     .atomics

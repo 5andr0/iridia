@@ -6,9 +6,11 @@
 use iridia_ir::{
     FloatEnv, Program, Provenance,
     interface::{
-        Interface, Label, Resource, ResourceId, ResourceKind, ResourceProvenance, ScalarType, ShaderFormat,
-        Stage, StageFacts, StateParam, SystemValue, Value, Varying, VaryingProvenance,
+        Access, D3dBinding, D3dClass, Interface, Label, Resource, ResourceId, ResourceKind,
+        ResourceProvenance, SampleType, ScalarType, ShaderFormat, Stage, StageFacts, StateParam,
+        StorageTarget, SystemValue, TextureDim, Value, Varying, VaryingProvenance,
     },
+    target::ArrayClass,
 };
 use iridia_wgsl::{Capabilities, Capability, Profile};
 
@@ -91,8 +93,40 @@ fn naga_capabilities(profile: &Profile) -> naga::valid::Capabilities {
         (Capability::ClipDistances, C::CLIP_DISTANCES),
         (Capability::Subgroup, C::SUBGROUP),
         (Capability::SubgroupVertexStage, C::SUBGROUP_VERTEX_STAGE),
+        (Capability::TextureAtomic, C::TEXTURE_ATOMIC),
     ]
     .into_iter()
+    .chain(
+        [
+            (
+                ArrayClass::TexturesAndSamplers,
+                C::TEXTURE_AND_SAMPLER_BINDING_ARRAY,
+                C::TEXTURE_AND_SAMPLER_BINDING_ARRAY_NON_UNIFORM_INDEXING,
+            ),
+            (
+                ArrayClass::ConstantBuffers,
+                C::BUFFER_BINDING_ARRAY,
+                C::BUFFER_BINDING_ARRAY_NON_UNIFORM_INDEXING,
+            ),
+            (
+                ArrayClass::Buffers,
+                C::STORAGE_BUFFER_BINDING_ARRAY,
+                C::STORAGE_BUFFER_BINDING_ARRAY_NON_UNIFORM_INDEXING,
+            ),
+            (
+                ArrayClass::StorageImages,
+                C::STORAGE_TEXTURE_BINDING_ARRAY,
+                C::STORAGE_TEXTURE_BINDING_ARRAY_NON_UNIFORM_INDEXING,
+            ),
+        ]
+        .into_iter()
+        .flat_map(|(class, uniform, non_uniform)| {
+            [
+                (Capability::BindingArray(class), uniform),
+                (Capability::BindingArrayNonUniform(class), non_uniform),
+            ]
+        }),
+    )
     .filter(|(c, _)| profile.capabilities.contains(*c))
     .fold(C::empty(), |all, (_, c)| all | c)
 }
@@ -414,4 +448,307 @@ fn naga_refuses_the_operations_on_literals_when_they_are_written_inline() {
         };
         assert!(refused, "{inline}");
     }
+}
+
+/// A resource at register 0 of its class.
+fn bound(id: u32, kind: ResourceKind, count: u32, name: &str, class: D3dClass) -> Resource {
+    Resource {
+        id: ResourceId(id),
+        kind,
+        count,
+        provenance: ResourceProvenance {
+            name: name.into(),
+            d3d: Some(D3dBinding {
+                class,
+                register: 0,
+                space: 0,
+            }),
+            ..ResourceProvenance::default()
+        },
+    }
+}
+
+const F2D: ResourceKind = ResourceKind::Texture {
+    dim: TextureDim::D2,
+    arrayed: false,
+    multisampled: false,
+    sample: SampleType::Float,
+};
+
+#[test]
+fn arrays_of_resources_are_binding_arrays_of_naga_s_dialect() {
+    let p = program(
+        "iridia-ir 1
+fn main {
+  %0: vec4<f32> = input 0.xyzw
+  %1: vec2<f32> = %0.xy
+  %2: f32 = %0.z
+  %3: u32 = bitcast %2
+  %4: vec4<f32> = sample r0@%3, r1@%3!, %1 level 0
+  output 0.xyzw = %4
+  return
+}
+",
+        &[F4],
+        &[F4],
+        vec![
+            bound(0, F2D, 4, "tex", D3dClass::ShaderResource),
+            bound(
+                1,
+                ResourceKind::Sampler { comparison: false },
+                Resource::UNBOUNDED,
+                "smp",
+                D3dClass::Sampler,
+            ),
+        ],
+    );
+    // a binding array of each class, and one indexed per invocation
+    let needs: Vec<_> = iridia_ir::target::requirements(&p)
+        .iter()
+        .map(|r| r.capability)
+        .collect();
+    assert_eq!(
+        needs,
+        [
+            Capability::BindingArray(ArrayClass::TexturesAndSamplers),
+            Capability::BindingArrayNonUniform(ArrayClass::TexturesAndSamplers)
+        ]
+    );
+    // WGSL has no arrays of resources
+    let e = iridia_wgsl::wgsl(&p, &Profile::BROWSER).unwrap_err();
+    assert!(
+        e.0.starts_with("browser WGSL cannot carry this program: resource tex is an array of textures"),
+        "{e}"
+    );
+    // naga's dialect binds each array at its first register, a binding array of its length (unsized for the unbounded
+    // one), and picks the element the program names
+    let wgsl = written(&p, &Profile::NAGA);
+    assert!(wgsl.starts_with("enable wgpu_binding_array;"), "{wgsl}");
+    assert!(
+        wgsl.contains("var t0: binding_array<texture_2d<f32>, 4>;"),
+        "{wgsl}"
+    );
+    assert!(wgsl.contains("var s0: binding_array<sampler>;"), "{wgsl}");
+    assert!(wgsl.contains("textureSampleLevel(t0[v3], s0[v3], "), "{wgsl}");
+}
+
+#[test]
+fn an_array_of_buffers_is_a_binding_array_of_structures_with_one_member() {
+    let words = ResourceKind::Storage {
+        target: StorageTarget::Buffer(iridia_ir::interface::BufferKind::Raw),
+        access: Access::ReadWrite,
+    };
+    let constants = ResourceKind::ConstantBuffer {
+        layout: iridia_ir::interface::BufferLayout {
+            size: 32,
+            constants: Vec::new(),
+        },
+    };
+    let p = program(
+        "iridia-ir 1
+fn main {
+  %0: u32 = input 0.x
+  %1: u32 = buffer r0@%0[%0 * 4] + 0 oob.zero
+  %2: u32 = query.elements r0@%0
+  store buffer r0@%0[%0 * 4] + 0 = %2
+  %3: u32 = buffer r1@%0 + 16 oob.zero
+  %4: u32 = iadd %1, %3
+  output 0.x = %4
+  return
+}
+",
+        &[(ScalarType::Uint, 1)],
+        &[(ScalarType::Uint, 1)],
+        vec![
+            bound(0, words, 3, "words", D3dClass::UnorderedAccess),
+            bound(1, constants, 2, "cb", D3dClass::ConstantBuffer),
+        ],
+    );
+    let wgsl = written(&p, &Profile::NAGA);
+    assert!(wgsl.contains("data: array<u32>,"), "{wgsl}");
+    assert!(wgsl.contains("binding_array<u0_element, 3>"), "{wgsl}");
+    assert!(wgsl.contains("arrayLength(&u0[v0].data)"), "{wgsl}");
+    assert!(wgsl.contains("binding_array<cb0_element, 2>"), "{wgsl}");
+}
+
+#[test]
+fn array_elements_share_one_packed_counter_buffer() {
+    let p = program(
+        "iridia-ir 1
+fn main {
+  %0: u32 = input 0.x
+  %1: u32 = counter.increment r0@%0
+  %2: u32 = counter.decrement r0@%0
+  return
+}
+",
+        &[(ScalarType::Uint, 1)],
+        &[],
+        vec![bound(
+            0,
+            ResourceKind::Storage {
+                target: StorageTarget::Buffer(iridia_ir::interface::BufferKind::Structured { stride: 4 }),
+                access: Access::ReadWrite,
+            },
+            4,
+            "views",
+            D3dClass::UnorderedAccess,
+        )],
+    );
+    // one counter buffer of the resource, word n counting element n
+    let wgsl = written(&p, &Profile::NAGA);
+    assert!(wgsl.contains("u0_counter: array<atomic<u32>>;"), "{wgsl}");
+    assert!(wgsl.contains("atomicAdd(&u0_counter[v0], 1u)"), "{wgsl}");
+    assert!(wgsl.contains("atomicSub(&u0_counter[v0], 1u)"), "{wgsl}");
+}
+
+/// A storage image of `u32` or `i32` texels at register `u0`.
+fn image(sample: SampleType) -> Resource {
+    bound(
+        0,
+        ResourceKind::Storage {
+            target: StorageTarget::Image {
+                dim: TextureDim::D2,
+                arrayed: false,
+                sample,
+            },
+            access: Access::ReadWrite,
+        },
+        1,
+        "img",
+        D3dClass::UnorderedAccess,
+    )
+}
+
+/// A pixel program that changes a texel of `img` by each of `ops` (`atomic.<op>`), reading the old value of none unless
+/// `read` (then the last one's is an output). An atomic is of the texels' type.
+fn texel_atomics(sample: SampleType, ops: &[&str], read: bool) -> Program {
+    let (t, scalar) = if sample == SampleType::Sint {
+        ("i32", ScalarType::Sint)
+    } else {
+        ("u32", ScalarType::Uint)
+    };
+    let mut text = format!(
+        "iridia-ir 1
+fn main {{
+  %0: vec4<f32> = input 0.xyzw
+  %1: vec4<{t}> = bitcast %0
+  %2: vec2<{t}> = %1.xy
+  %3: {t} = %1.z
+"
+    );
+    for (k, op) in ops.iter().enumerate() {
+        text.push_str(&format!(
+            "  %{}: {t} = atomic.{op} image r0, %2 value %3\n",
+            k + 4
+        ));
+    }
+    if read {
+        text.push_str(&format!("  output 0.x = %{}\n", ops.len() + 3));
+    }
+    text.push_str("  return\n}\n");
+    let outputs: &[(ScalarType, u8)] = if read { &[(scalar, 1)] } else { &[] };
+    program(&text, &[F4], outputs, vec![image(sample)])
+}
+
+#[test]
+fn a_texel_atomic_whose_old_value_is_not_read_is_naga_s_image_atomic() {
+    let p = texel_atomics(SampleType::Uint, &["or", "sub", "umax", "xor"], false);
+    let needs: Vec<_> = iridia_ir::target::requirements(&p)
+        .iter()
+        .map(|r| r.capability)
+        .collect();
+    assert_eq!(needs, [Capability::TextureAtomic]);
+    // WGSL has no texel atomics
+    let e = iridia_wgsl::wgsl(&p, &Profile::BROWSER).unwrap_err();
+    assert!(
+        e.0.starts_with("browser WGSL cannot carry this program: value %4 is an atomic of storage image img"),
+        "{e}"
+    );
+    // one texel of an `atomic` image, inside it only; a subtraction is the addition of the negation
+    let wgsl = written(&p, &Profile::NAGA);
+    assert!(
+        wgsl.contains("var u0: texture_storage_2d<r32uint, atomic>;"),
+        "{wgsl}"
+    );
+    for call in [
+        "textureAtomicOr(u0, ",
+        "textureAtomicAdd(u0, ",
+        "textureAtomicMax(u0, ",
+        "textureAtomicXor(u0, ",
+    ] {
+        assert!(wgsl.contains(call), "{call}\n{wgsl}");
+    }
+    assert!(wgsl.contains("(0u - "), "{wgsl}");
+    // a signed image's
+    let p = texel_atomics(SampleType::Sint, &["smin", "add"], false);
+    let wgsl = written(&p, &Profile::NAGA);
+    assert!(
+        wgsl.contains("var u0: texture_storage_2d<r32sint, atomic>;"),
+        "{wgsl}"
+    );
+    assert!(wgsl.contains("textureAtomicMin(u0, "), "{wgsl}");
+}
+
+#[test]
+fn a_texel_atomic_naga_s_image_atomic_cannot_carry_is_refused_by_name() {
+    let refusal = |sample, ops: &[&str], read| {
+        iridia_wgsl::wgsl(&texel_atomics(sample, ops, read), &Profile::NAGA)
+            .unwrap_err()
+            .0
+    };
+    // naga's image atomic gives no old value and takes no exchange
+    let e = refusal(SampleType::Uint, &["add"], true);
+    assert!(
+        e.contains("a storage image's texel whose old value is read"),
+        "{e}"
+    );
+    let e = refusal(SampleType::Uint, &["exchange"], false);
+    assert!(e.contains("an exchange of a texel has no naga form"), "{e}");
+    // a minimum is of the texels' signedness
+    let e = refusal(SampleType::Uint, &["smin"], false);
+    assert!(
+        e.contains("a SMin of a storage image of Uint texels has no naga form"),
+        "{e}"
+    );
+}
+
+#[test]
+fn a_sample_position_is_read_from_direct3d_s_standard_table() {
+    let texture = bound(
+        0,
+        ResourceKind::Texture {
+            dim: TextureDim::D2,
+            arrayed: false,
+            multisampled: true,
+            sample: SampleType::Float,
+        },
+        1,
+        "msaa",
+        D3dClass::ShaderResource,
+    );
+    let p = program(
+        "iridia-ir 1
+fn main {
+  %0: vec4<f32> = input 0.xyzw
+  %1: vec4<u32> = bitcast %0
+  %2: u32 = %1.x
+  %3: vec2<f32> = query.sampleposition r0 index %2
+  output 0.xy = %3
+  return
+}
+",
+        &[F4],
+        &[(ScalarType::Float, 2)],
+        vec![texture],
+    );
+    // a table of every standard count's positions, its rows from the texture's sample count; core WGSL
+    let wgsl = written(&p, &Profile::BROWSER);
+    assert!(
+        wgsl.contains("var<private> sample_positions: array<vec2<f32>, 31> = array<vec2<f32>, 31>(vec2<f32>(0.0f, 0.0f), "),
+        "{wgsl}"
+    );
+    // the 16-sample pattern's last position, (-7, -8) sixteenths
+    assert!(wgsl.contains("vec2<f32>((-4.375e-1f), (-5e-1f)));"), "{wgsl}");
+    assert!(wgsl.contains("textureNumSamples(t0)"), "{wgsl}");
 }

@@ -6,15 +6,15 @@
 use alloc::{format, vec::Vec};
 
 use iridia_ir::Program;
-use iridia_ir::target::{Bindings, Capability, Requirement, requirements};
+use iridia_ir::target::{ArrayClass, Bindings, Capability, Requirement, requirements};
 
 use crate::Error;
 
 /// A set of [`Capability`]s.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Capabilities(u16);
+pub struct Capabilities(u32);
 
-const fn bit(c: Capability) -> u16 {
+const fn bit(c: Capability) -> u32 {
     match c {
         Capability::Float64 => 1,
         Capability::Float16 => 1 << 1,
@@ -26,6 +26,15 @@ const fn bit(c: Capability) -> u16 {
         Capability::ClipDistances => 1 << 7,
         Capability::Subgroup => 1 << 8,
         Capability::SubgroupVertexStage => 1 << 9,
+        Capability::BindingArray(ArrayClass::TexturesAndSamplers) => 1 << 10,
+        Capability::BindingArray(ArrayClass::ConstantBuffers) => 1 << 11,
+        Capability::BindingArray(ArrayClass::Buffers) => 1 << 12,
+        Capability::BindingArray(ArrayClass::StorageImages) => 1 << 13,
+        Capability::BindingArrayNonUniform(ArrayClass::TexturesAndSamplers) => 1 << 14,
+        Capability::BindingArrayNonUniform(ArrayClass::ConstantBuffers) => 1 << 15,
+        Capability::BindingArrayNonUniform(ArrayClass::Buffers) => 1 << 16,
+        Capability::BindingArrayNonUniform(ArrayClass::StorageImages) => 1 << 17,
+        Capability::TextureAtomic => 1 << 18,
     }
 }
 
@@ -97,6 +106,15 @@ impl Profile {
             Capability::ClipDistances,
             Capability::Subgroup,
             Capability::SubgroupVertexStage,
+            Capability::BindingArray(ArrayClass::TexturesAndSamplers),
+            Capability::BindingArray(ArrayClass::ConstantBuffers),
+            Capability::BindingArray(ArrayClass::Buffers),
+            Capability::BindingArray(ArrayClass::StorageImages),
+            Capability::BindingArrayNonUniform(ArrayClass::TexturesAndSamplers),
+            Capability::BindingArrayNonUniform(ArrayClass::ConstantBuffers),
+            Capability::BindingArrayNonUniform(ArrayClass::Buffers),
+            Capability::BindingArrayNonUniform(ArrayClass::StorageImages),
+            Capability::TextureAtomic,
         ]),
         bindings: Bindings::D3d,
         directives: Directives::Naga,
@@ -105,7 +123,9 @@ impl Profile {
     /// WebGPU's core WGSL: per-sample shading and cube array textures are core; `f16` (`shader-f16`), `primitive_index`
     /// (`primitive-index`), `clip_distances` and the subgroup operations (`subgroups`) are optional device features a
     /// consumer adds with [`Profile::with`] when its device has them; WGSL has no 64-bit or 16-bit integers and no
-    /// `f64`. Resources bind inside WebGPU's default limits, and the text states the standard's directives.
+    /// `f64`, no arrays of resources (naga's binding arrays, `enable wgpu_binding_array;` in its dialect) and no texel
+    /// atomics (naga's `textureAtomic*`). Resources bind inside WebGPU's default limits, and the text states the standard's
+    /// directives.
     pub const BROWSER: Profile = Profile {
         name: "browser WGSL",
         capabilities: Capabilities::of(&[Capability::MultisampledShading, Capability::CubeArrayTextures]),
