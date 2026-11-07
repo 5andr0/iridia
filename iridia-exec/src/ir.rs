@@ -254,7 +254,11 @@ impl Cx<'_> {
         })))
     }
 
+    /// Register `to` set to the words of register `from`, which is nothing when they are one.
     fn copy(&mut self, to: u32, from: u32) {
+        if to == from {
+            return;
+        }
         self.ops.push((
             to,
             Op::Swizzle {
@@ -263,6 +267,30 @@ impl Cx<'_> {
                 n: 4,
             },
         ));
+    }
+
+    /// The copies `(to, from)` as if all were made at once: a new value may read a register another copy replaces, so a
+    /// copy waits until no other reads its target, and a cycle of them goes through a register of its own.
+    fn moves(&mut self, mut pending: Vec<(u32, u32)>) -> Result<(), String> {
+        pending.retain(|(to, from)| to != from);
+        while let Some(&(first, _)) = pending.first() {
+            let free = pending
+                .iter()
+                .position(|(to, _)| pending.iter().all(|(_, from)| from != to));
+            if let Some(i) = free {
+                let (to, from) = pending.remove(i);
+                self.copy(to, from);
+            } else {
+                let parked = self.fresh(self.value(ValueId(first))?.ty)?;
+                self.copy(parked, first);
+                for m in &mut pending {
+                    if m.1 == first {
+                        m.1 = parked;
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     /// The operations since the last statement, as a run of their own.
@@ -1513,17 +1541,8 @@ impl Cx<'_> {
                     .params
                     .clone()
                     .ok_or("a continue of a switch")?;
-                // through temporaries: a new value may read the parameters it replaces
-                let mut temps = Vec::with_capacity(vs.len());
-                for v in vs {
-                    let t = self.value(*v)?.ty;
-                    let temp = self.fresh(t)?;
-                    self.copy(temp, v.0);
-                    temps.push(temp);
-                }
-                for (p, t) in params.iter().zip(temps) {
-                    self.copy(p.0, t);
-                }
+                let moves = params.iter().zip(vs).map(|(p, v)| (p.0, v.0)).collect();
+                self.moves(moves)?;
                 self.statement(out, St::Continue)
             }
             End::Return => self.ret(out),

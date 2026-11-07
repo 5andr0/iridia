@@ -256,6 +256,55 @@ fn each_return_leaves_with_its_own_result() {
     );
 }
 
+/// A loop that moves its values on to the next turn in a cycle of three, a swap, and with one left as it is: each moves
+/// as if all moved at once.
+#[test]
+fn a_continue_moves_every_value_as_if_all_moved_at_once() {
+    let text = "iridia-ir 1
+fn main {
+  %0: vec4<f32> = input 0.xyzw
+  %1: f32 = %0.x
+  %2: f32 = %0.y
+  %3: f32 = %0.z
+  %4: f32 = %0.w
+  %5: u32 = u32(0)
+  %6: u32 = u32(1)
+  %7: u32 = u32(4)
+  loop '0 (%8: f32, %9: f32, %10: f32, %11: u32, %12: f32) = (%1, %2, %3, %5, %4) {
+    %13: bool = ucmp.ge %11, %7
+    if %13 {
+      br '0 %8, %9, %10, %12
+    } else {
+      yield
+    }
+    %14: u32 = iadd %11, %6
+    continue '0 %9, %10, %8, %14, %12
+  } -> %20: f32, %21: f32, %22: f32, %23: f32
+  %24: u32 = u32(3)
+  loop '1 (%30: f32, %31: f32, %32: u32) = (%20, %21, %5) {
+    %33: bool = ucmp.ge %32, %24
+    if %33 {
+      br '1 %30, %31
+    } else {
+      yield
+    }
+    %34: u32 = iadd %32, %6
+    continue '1 %31, %30, %34
+  } -> %40: f32, %41: f32
+  %42: vec4<f32> = compose %40, %41, %22, %23
+  output 0.xyzw = %42
+  return
+}
+";
+    let program = pixel(text, vec![input("TEXCOORD", 4, 0xf)], vec![target()], Vec::new());
+    let shader = ProgramShader::from_ir(program.clone()).unwrap();
+    let inputs = [bits([1.0, 2.0, 3.0, 4.0])];
+    let e = shader.execute(&inputs, &[], &mut Unused).unwrap();
+    agree(&program, &e, &reference(&program, &inputs, &[], &mut no_samples));
+    // the three turn four times (one place on), the two swap three times (once)
+    assert_eq!(lanes(e.outputs[0]), [3.0, 2.0, 1.0, 4.0]);
+}
+
 /// `SV_Target0 = float4(uv.x, uv.y, uv.y, uv.x)`, the input read by two operations: both are the one input.
 #[test]
 fn an_input_read_by_several_operations_is_the_same_value_in_each() {

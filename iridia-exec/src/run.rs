@@ -538,6 +538,21 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
             .copied()
             .ok_or_else(|| no_register(index, self.regs.len()))
     }
+    /// Set every lane of the slot whose first lane is `to` to the register of the same lane of the slot whose first lane
+    /// is `from`.
+    #[inline(always)]
+    fn copy_slot(&mut self, from: usize, to: usize) -> Result<(), String> {
+        let len = self.regs.len();
+        let end = |at: usize| at.saturating_add(N);
+        if end(from) > len {
+            return Err(no_register(end(from).saturating_sub(1), len));
+        }
+        if end(to) > len {
+            return Err(no_register(end(to).saturating_sub(1), len));
+        }
+        self.regs.copy_within(from..end(from), to);
+        Ok(())
+    }
     /// Set register `lane` of the slot whose first lane is `base` to `value`.
     #[inline(always)]
     fn wr(&mut self, base: usize, lane: usize, value: Reg) -> Result<(), String> {
@@ -918,6 +933,22 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                     let loaded = self.mem_get(ptr.loc, l, x, *n)?;
                     self.wr(dst, l, loaded)?;
                 }),
+                // a whole register moved on, which a yield or a continue does for each value: one copy for every lane
+                Op::Swizzle {
+                    src,
+                    pat: [0, 1, 2, 3],
+                    n: 4,
+                } => {
+                    let src = slot_at::<N>(*src);
+                    if active == M::first(N) {
+                        self.copy_slot(src, dst)?;
+                    } else {
+                        each!(active, l, {
+                            let s = self.rd(src, l)?;
+                            self.wr(dst, l, s)?;
+                        })
+                    }
+                }
                 Op::Swizzle { src, pat, n } => {
                     let src = slot_at::<N>(*src);
                     each!(active, l, {
@@ -2063,8 +2094,14 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                 }
                 St::If { c, a, r } => {
                     let mut take = M::none();
-                    for l in 0..N {
-                        if active.has(l) && self.rd(slot_at::<N>(*c), l)?[0] != 0 {
+                    let at = slot_at::<N>(*c);
+                    let len = self.regs.len();
+                    let cond = self
+                        .regs
+                        .get(at..at.saturating_add(N))
+                        .ok_or_else(|| no_register(at.saturating_add(N).saturating_sub(1), len))?;
+                    for (l, r) in cond.iter().enumerate() {
+                        if r[0] != 0 && active.has(l) {
                             take.insert(l);
                         }
                     }
