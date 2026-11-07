@@ -476,7 +476,7 @@ impl Lift<'_> {
 }
 
 /// The patch-constant varying whose register and lanes hold this cell, and the lane's position in its value.
-fn patch_cell(list: &[Varying], register: u32, lane: u8) -> Option<(usize, u8)> {
+pub(crate) fn patch_cell(list: &[Varying], register: u32, lane: u8) -> Option<(usize, u8)> {
     list.iter().enumerate().find_map(|(i, v)| {
         let d3d = v.provenance.d3d?;
         (d3d.register == register && lanes_below(d3d.mask, lane).is_some())

@@ -1,9 +1,10 @@
 //! The `dx.op` intrinsics that are not resource operations: signature reads and writes, math, bit operations, the
-//! invocation ids, derivatives, discard and barriers. Each takes Direct3D's result as the naga-path lift does.
+//! invocation ids, derivatives, discard and barriers. Each takes Direct3D's result as the naga-path lift does. The
+//! stage operations of hull, domain and geometry programs are in [`super::stages`].
 
 use iridia_ir::{
-    Axis, Barrier, Binary, Block, Cmp, Fineness, FloatToInt, Node, Op, Rounding, SaturateNan, Scalar, Scope,
-    Target, Terminator, Ternary, Type, Unary, ValueId as IrValue, interface::SystemValue,
+    Axis, Barrier, Binary, Block, Builtin, Cmp, Fineness, FloatToInt, Node, Op, Rounding, SaturateNan,
+    Scalar, Scope, Target, Terminator, Ternary, Type, Unary, ValueId as IrValue, interface::SystemValue,
 };
 
 use super::{Lift, Lv};
@@ -305,6 +306,14 @@ impl Lift<'_> {
                 let r = self.system_input(SystemValue::GroupIndex, None)?;
                 value(self, r)
             }
+            97..=99 => self.stream_op(code, args),
+            100 => self.pipeline_value(inst, Builtin::GsInstance),
+            103 => self.load_output_control_point(inst, args),
+            104 => self.load_patch_constant(inst, args),
+            105 => self.domain_location(inst, args),
+            106 => self.store_patch_constant(args),
+            107 => self.pipeline_value(inst, Builtin::OutputControlPoint),
+            108 => self.pipeline_value(inst, Builtin::PrimitiveId),
             // LegacyF32ToF16 and LegacyF16ToF32: the half in the low 16 bits of an integer
             130 => {
                 let x = self.float(self.arg(args, 1)?)?;
@@ -356,7 +365,8 @@ impl Lift<'_> {
         }
     }
 
-    /// `LoadInput(element, row, column, vertex)`: one lane of an input element, as the call's type.
+    /// `LoadInput(element, row, column, vertex)`: one lane of an input element, as the call's type; of the point
+    /// `vertex` names in a program whose inputs are arrays of points.
     fn load_input(&mut self, inst: &Instruction, args: &[ValueId]) -> Result<()> {
         let Some(id) = self.const_arg(args, 1) else {
             return self.refuse("an input read at a computed element");
@@ -387,28 +397,26 @@ impl Lift<'_> {
             .get(varying)
             .cloned()
             .ok_or_else(|| crate::error(self.at, "an input past the interface"))?;
-        let t = Type::scalar(iridia_ir::value_type(v.value).scalar);
+        let scalar = iridia_ir::value_type(v.value).scalar;
         let slot = u32::try_from(varying).map_err(|_| crate::error(self.at, "an input slot past 2^32"))?;
-        let x = self.g.value(t, Op::LoadInput(slot, 1 << position));
-        let want = inst
-            .result
-            .map(|(_, ty)| self.carried_type(ty))
-            .transpose()?
-            .flatten()
-            .ok_or_else(|| crate::error(self.at, "an input read of no type"))?;
-        let r = if t.scalar == Scalar::Bool && want.scalar != Scalar::Bool {
-            // a flag read as an integer: all ones where it holds
-            let (on, off) = (self.u32_lit(u32::MAX), self.u32_lit(0));
-            let r = self.select(Type::U32, x, on, off);
-            self.retype(r, want)?
+        let op = if self.reads_points() {
+            let point = self.uint(self.arg(args, 4)?)?;
+            Op::LoadInputAt(slot, 1 << position, point)
         } else {
-            self.retype(x, want)?
+            Op::LoadInput(slot, 1 << position)
         };
-        self.define_result(inst, Lv::Value(r))
+        let x = self.g.value(Type::scalar(scalar), op);
+        self.varying_result(inst, x, scalar)
     }
 
     /// The register and lane an element's row and column name.
-    fn cell_of(&self, first_row: u32, first_column: u8, row: i64, column: i64) -> Result<(u32, u8)> {
+    pub(crate) fn cell_of(
+        &self,
+        first_row: u32,
+        first_column: u8,
+        row: i64,
+        column: i64,
+    ) -> Result<(u32, u8)> {
         let register = u32::try_from(row).ok().and_then(|row| first_row.checked_add(row));
         let lane = u8::try_from(column)
             .ok()
@@ -479,12 +487,7 @@ impl Lift<'_> {
             .ok_or_else(|| crate::error(self.at, "an output past the interface"))?;
         let t = Type::scalar(iridia_ir::value_type(v.value).scalar);
         let x = self.value(self.arg(args, 4)?)?;
-        let x = if self.g.ty(x).is_some_and(|xt| xt.scalar == Scalar::Bool) {
-            let (on, off) = (self.u32_lit(u32::MAX), self.u32_lit(0));
-            self.select(Type::U32, x, on, off)
-        } else {
-            x
-        };
+        let x = self.flag_bits(x);
         let x = self.retype(x, t)?;
         let slot = u32::try_from(slot).map_err(|_| crate::error(self.at, "an output slot past 2^32"))?;
         self.g.node(Node::StoreOutput(slot, 1 << position, x));

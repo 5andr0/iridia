@@ -98,38 +98,44 @@ impl Lift<'_> {
         None
     }
 
-    /// The interface's resources as the naga-path lift makes them, from how the program uses each: a texture compared
-    /// against a reference is a depth texture, a typed buffer has four lanes an element, and a view's access is the
-    /// loads and stores the program makes of it (an atomic operation does both).
+    /// The interface's resources as the naga-path lift makes them, from how the program's functions use each: a texture
+    /// compared against a reference is a depth texture, a typed buffer has four lanes an element, and a view's access
+    /// is the loads and stores the program makes of it (an atomic operation does both).
     pub(crate) fn declare_resources(&mut self) -> Result<()> {
         let mut depth = BTreeSet::new();
         let mut views: BTreeMap<usize, (bool, bool)> = BTreeMap::new();
-        for inst in &self.f.instructions {
-            let LlvmOp::Call { function, args, .. } = &inst.op else {
-                continue;
-            };
-            let Some(code) = dx_opcode(self.m, self.f, *function, args) else {
-                continue;
-            };
-            let Some(r) = args.get(1).and_then(|&a| self.handle_of(a)) else {
-                continue;
-            };
-            match code {
-                64 | 65 | 74 => {
-                    depth.insert(r);
-                }
-                66 | 68 | 139 => {
-                    if matches!(self.setup.kind(r), ResourceKind::Storage { .. }) {
-                        views.entry(r).or_default().0 = true;
+        let lifting = self.f;
+        for f in self.functions.clone() {
+            // a handle is found among the instructions of the function that uses it
+            self.f = f;
+            for inst in &f.instructions {
+                let LlvmOp::Call { function, args, .. } = &inst.op else {
+                    continue;
+                };
+                let Some(code) = dx_opcode(self.m, f, *function, args) else {
+                    continue;
+                };
+                let Some(r) = args.get(1).and_then(|&a| self.handle_of(a)) else {
+                    continue;
+                };
+                match code {
+                    64 | 65 | 74 => {
+                        depth.insert(r);
                     }
+                    66 | 68 | 139 => {
+                        if matches!(self.setup.kind(r), ResourceKind::Storage { .. }) {
+                            views.entry(r).or_default().0 = true;
+                        }
+                    }
+                    67 | 69 | 140 => views.entry(r).or_default().1 = true,
+                    78 | 79 => {
+                        views.insert(r, (true, true));
+                    }
+                    _ => {}
                 }
-                67 | 69 | 140 => views.entry(r).or_default().1 = true,
-                78 | 79 => {
-                    views.insert(r, (true, true));
-                }
-                _ => {}
             }
         }
+        self.f = lifting;
         for i in 0..self.setup.interface.resources.len() {
             let kind = self.setup.kind(i).clone();
             let changed = match kind {

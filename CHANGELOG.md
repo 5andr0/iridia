@@ -4,7 +4,10 @@
 
 - `iridia-dxil::ir`: a lift of DXIL onto the IR, its body a control flow graph (block parameters for LLVM's phis,
   blocks in reverse post-order) that `iridia_passes::structurize` makes structured. It lifts vertex (one that writes no
-  position too), pixel and compute programs, with the older lift's resource semantics carried over: constant buffer
+  position too), pixel, compute, hull, domain and geometry programs (a hull program's patch-constant function is the
+  program's `patch`; a point's input, the output control points, the patch constants, the domain location, the
+  primitive, control point and instance ids, and a geometry program's vertices and strip cuts on stream 0 as the older
+  lift reads them), with the older lift's resource semantics carried over: constant buffer
   rows (a minimum-precision row of 16-bit lanes reads each lane's low half), samples, gathers, texel loads and stores,
   typed, raw and structured buffers, sizes and sample counts, sample positions, atomics, hidden counters (one per
   element of an array of views), the interface edits the older lift makes (a texture sampled with a comparison is a
@@ -12,11 +15,13 @@
   denormals flushed unless the entry's `fp32-denorm-mode` is `preserve`, and `MakeDouble`, `SplitDouble` and
   `Coverage`. A 16-bit lane of a raw or structured buffer is half of a word: read with a shift and a mask, written with
   an atomic and and or, so another invocation's half of the word is never overwritten; `tests/ir_warp.rs` holds such a
-  program (`fixtures/buffer_lanes16`) to the memory Direct3D 12 WARP leaves, word for word. Hull, domain, geometry,
-  mesh, amplification and ray tracing programs, wave and quad operations and ray queries are refused by name for now.
-  `iridia-dxbc/tests/ir_gate.rs` takes DXIL containers: on the slim set's 4,059 DXIL programs, of the 796 the older
-  lift runs the IR agrees with it on 713 (the rest are refused by name: waves, other stages), and 586 agree again
-  through `iridia-naga`'s WGSL; none differ. The slim pre-push gate has the `IR` and `IR WGSL` columns for DXIL.
+  program (`fixtures/buffer_lanes16`) to the memory Direct3D 12 WARP leaves, word for word. Mesh, amplification and
+  ray tracing programs, wave and quad operations and ray queries are refused by name for now.
+  `iridia-dxbc/tests/ir_gate.rs` takes DXIL containers: on the slim set's 4,059 DXIL programs, of the 852 the older
+  lift runs (132 of them programs of functions) the IR agrees with it on 767 (on the other 85 the older lift's
+  executor runs none of the vectors it is given), and 586 agree again through `iridia-naga`'s WGSL; none differ. The IR
+  refuses 1,012 programs the older lift takes, by name (waves, quads, ray queries, mesh and ray tracing stages), and
+  lifts 685 it refuses. The slim pre-push gate has the `IR` and `IR WGSL` columns for DXIL.
 - `iridia-dxil`: a structured buffer whose element holds native 16-bit members (`-enable-16bit-types`) is no longer
   refused for a layout the interface reads as 32-bit lanes: its layout, which the interface's types cannot state, is
   left out.

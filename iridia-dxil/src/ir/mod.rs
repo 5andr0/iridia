@@ -10,9 +10,13 @@
 //! with Direct3D's behaviour stated in the IR's operations (`min` and `max` take the number over a NaN, `saturate`
 //! gives 0 for NaN, a float-to-integer conversion saturates, a buffer read outside its buffer gives zero). The interface
 //! is the naga-path lift's (the same signature, resource and stage reading).
+//!
+//! A hull program is two functions, as the IR states one: the entry, its control-point phase, and the patch-constant
+//! function (`Program::patch`), each lifted from its own LLVM function. A domain or geometry program is its entry.
 
 mod dxop;
 mod resources;
+mod stages;
 mod values;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -36,8 +40,8 @@ pub const LIFTER: &str = "iridia-dxil-ir";
 /// Increment when the same bytecode lifts differently.
 pub const LIFTER_VERSION: u32 = 1;
 
-/// Lift a DXIL container's entry function onto the IR: a vertex, pixel or compute program. What the lift does not carry
-/// is an `Err` naming the bit offset and why.
+/// Lift a DXIL container's entry function onto the IR: a vertex, pixel, compute, hull, domain or geometry program. What
+/// the lift does not carry is an `Err` naming the bit offset and why.
 pub fn lift(container: &[u8]) -> Result<Program> {
     lift_with(container, &iridia::BoundSizes::new())
 }
@@ -62,12 +66,18 @@ pub fn lift_with(container: &[u8], bound: &iridia::BoundSizes) -> Result<Program
         .iter()
         .find(|f| f.value == entry_value)
         .ok_or_else(|| error(0, "the entry point has no body"))?;
-    let mut setup = Setup::new(&chunks, &module, &[entry])?;
+    let patch_constant = crate::lift::patch_constant_function(&module, part.program_version)?;
+    let mut functions = vec![entry];
+    functions.extend(patch_constant);
+    let mut setup = Setup::new(&chunks, &module, &functions)?;
     bound
         .apply(&mut setup.interface)
         .map_err(|why| error(0, format!("bound sizes: {why}")))?;
     let stage = setup.interface.stage;
-    if !matches!(stage, Stage::Vertex | Stage::Pixel | Stage::Compute) {
+    if !matches!(
+        stage,
+        Stage::Vertex | Stage::Pixel | Stage::Compute | Stage::Hull | Stage::Domain | Stage::Geometry
+    ) {
         return Err(error(
             0,
             format!("a {stage:?} program is not lifted onto the IR yet"),
@@ -82,16 +92,7 @@ pub fn lift_with(container: &[u8], bound: &iridia::BoundSizes) -> Result<Program
     } else {
         None
     };
-    let target = format!(
-        "{}_{}_{}",
-        match part.program_version >> 16 {
-            0 => "ps",
-            1 => "vs",
-            _ => "cs",
-        },
-        (part.program_version >> 4) & 15,
-        part.program_version & 15
-    );
+    let target = crate::lift::target_of(part.program_version);
     // the entry's 32-bit denormal mode (dxc's `-denorm`): kept where it says `preserve`; flushed, as Direct3D's
     // default, where it says `ftz` or `any` or states none
     let f32_denormals = if reflection::fp32_denorm_mode(&module).map_err(read)?.as_deref() == Some("preserve")
@@ -100,20 +101,23 @@ pub fn lift_with(container: &[u8], bound: &iridia::BoundSizes) -> Result<Program
     } else {
         Denormals::Flush
     };
-    let mut lift = Lift::new(&module, entry, setup)?;
-    lift.prepare()?;
-    lift.blocks()?;
-    lift.prune();
-    let function = lift.finish_function()?;
+    let mut lift = Lift::new(&module, functions, setup)?;
+    lift.declare_resources()?;
+    let function = lift.function(entry, "main")?;
+    let patch = patch_constant
+        .map(|f| lift.function(f, "patch_constant"))
+        .transpose()?;
     let mut notes: Vec<String> = lift.notes.into_iter().collect();
     notes.extend(lift.setup.notes.iter().cloned());
     notes.sort();
     notes.dedup();
+    // the instructions of the program's functions
+    let count = lift.functions.iter().map(|f| f.instructions.len() as u64).sum();
     let interface = lift.setup.interface;
     Ok(Program {
         stage,
         entry: function,
-        patch: None,
+        patch,
         workgroup,
         interface,
         conventions: Conventions::D3D,
@@ -132,7 +136,7 @@ pub fn lift_with(container: &[u8], bound: &iridia::BoundSizes) -> Result<Program
             source_hash: Some(iridia::source_hash(container)),
             instruction_count: Some(InstructionCount {
                 unit: InstructionUnit::DxilInstructions,
-                count: entry.instructions.len() as u64,
+                count,
             }),
             policies: Vec::new(),
         },
@@ -221,6 +225,9 @@ impl Graph {
 /// The state of one lift.
 pub(crate) struct Lift<'m> {
     pub(crate) m: &'m Module,
+    /// The program's functions: the entry, and a hull program's patch-constant function.
+    functions: Vec<&'m LlvmFunction>,
+    /// The function being lifted.
     pub(crate) f: &'m LlvmFunction,
     pub(crate) setup: Setup,
     g: Graph,
@@ -239,7 +246,35 @@ pub(crate) struct Lift<'m> {
 }
 
 impl<'m> Lift<'m> {
-    fn new(m: &'m Module, f: &'m LlvmFunction, setup: Setup) -> Result<Self> {
+    fn new(m: &'m Module, functions: Vec<&'m LlvmFunction>, setup: Setup) -> Result<Self> {
+        let Some(&f) = functions.first() else {
+            return Err(error(0, "a program of no functions"));
+        };
+        let mut lift = Lift {
+            m,
+            functions,
+            f,
+            setup,
+            g: Graph {
+                values: Vec::new(),
+                vars: Vec::new(),
+                blocks: Vec::new(),
+                current: 0,
+                origin: None,
+            },
+            values: Vec::new(),
+            llvm_blocks: Vec::new(),
+            params: Vec::new(),
+            memory: BTreeMap::new(),
+            notes: BTreeSet::new(),
+            at: 0,
+        };
+        lift.begin(f)?;
+        Ok(lift)
+    }
+
+    /// Start lifting function `f`: no values, blocks or memory of its own yet.
+    fn begin(&mut self, f: &'m LlvmFunction) -> Result<()> {
         let mut llvm_blocks = vec![Vec::new(); f.blocks];
         for (i, inst) in f.instructions.iter().enumerate() {
             llvm_blocks
@@ -255,24 +290,29 @@ impl<'m> Lift<'m> {
                 })?
                 .push(i);
         }
-        Ok(Lift {
-            m,
-            f,
-            setup,
-            g: Graph {
-                values: Vec::new(),
-                vars: Vec::new(),
-                blocks: Vec::new(),
-                current: 0,
-                origin: None,
-            },
-            values: vec![None; f.locals.len()],
-            llvm_blocks,
-            params: vec![Vec::new(); f.blocks],
-            memory: BTreeMap::new(),
-            notes: BTreeSet::new(),
-            at: 0,
-        })
+        self.f = f;
+        self.g = Graph {
+            values: Vec::new(),
+            vars: Vec::new(),
+            blocks: Vec::new(),
+            current: 0,
+            origin: None,
+        };
+        self.values = vec![None; f.locals.len()];
+        self.llvm_blocks = llvm_blocks;
+        self.params = vec![Vec::new(); f.blocks];
+        self.memory.clear();
+        self.at = 0;
+        Ok(())
+    }
+
+    /// Function `f` of the program lifted as the IR function `name`.
+    fn function(&mut self, f: &'m LlvmFunction, name: &str) -> Result<Function> {
+        self.begin(f)?;
+        self.prepare()?;
+        self.blocks()?;
+        self.prune();
+        self.finish_function(name)
     }
 
     pub(crate) fn refuse<T>(&self, why: impl Into<String>) -> Result<T> {
@@ -280,7 +320,7 @@ impl<'m> Lift<'m> {
     }
 
     /// The blocks, with a parameter for each phi, before any instruction is lifted (a branch names the blocks after
-    /// it); and the module's thread-group and constant memory.
+    /// it); and the module's thread-group and constant memory the function reaches.
     fn prepare(&mut self) -> Result<()> {
         for b in 0..self.f.blocks {
             self.g.blocks.push(Block {
@@ -318,7 +358,6 @@ impl<'m> Lift<'m> {
         if self.g.blocks.is_empty() {
             return self.refuse("a function of no blocks");
         }
-        self.declare_resources()?;
         self.declare_memory()?;
         Ok(())
     }
@@ -543,10 +582,10 @@ impl<'m> Lift<'m> {
         }
     }
 
-    /// The function: its values, variables and blocks.
-    fn finish_function(&mut self) -> Result<Function> {
+    /// The function `name`: its values, variables and blocks.
+    fn finish_function(&mut self, name: &str) -> Result<Function> {
         Ok(Function {
-            name: "main".into(),
+            name: name.into(),
             values: std::mem::take(&mut self.g.values),
             vars: std::mem::take(&mut self.g.vars),
             body: Body::Cfg(std::mem::take(&mut self.g.blocks)),

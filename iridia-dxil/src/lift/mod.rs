@@ -22,7 +22,7 @@ mod rayquery;
 mod raytracing;
 mod resources;
 pub(crate) mod setup;
-mod stages;
+pub(crate) mod stages;
 mod values;
 mod wide;
 
@@ -100,6 +100,40 @@ pub fn lift_with(container: &[u8], bound: &iridia::BoundSizes) -> Result<Program
     Ok(program)
 }
 
+/// A hull program's patch-constant function, which with the entry (its control-point phase) makes the program; `None`
+/// for a program of another kind.
+pub(crate) fn patch_constant_function(module: &Module, program_version: u32) -> Result<Option<&Function>> {
+    if program_version >> 16 != 3 {
+        return Ok(None);
+    }
+    let state = reflection::hull_state(module).map_err(read)?;
+    module
+        .functions
+        .iter()
+        .find(|f| f.value == state.patch_constant)
+        .map(Some)
+        .ok_or_else(|| error(0, "the patch-constant function has no body"))
+}
+
+/// The target a program's version names (`vs_6_0`, `lib_6_3`).
+pub(crate) fn target_of(program_version: u32) -> String {
+    format!(
+        "{}_{}_{}",
+        match program_version >> 16 {
+            0 => "ps",
+            1 => "vs",
+            2 => "gs",
+            13 => "ms",
+            3 => "hs",
+            4 => "ds",
+            6..=12 => "lib",
+            _ => "cs",
+        },
+        (program_version >> 4) & 15,
+        program_version & 15
+    )
+}
+
 fn lift_program(container: &[u8], bound: &iridia::BoundSizes) -> Result<Program> {
     let chunks = dxil_reader::parts(container).map_err(read)?;
     let module = dxil_reader::module(&chunks, b"DXIL")
@@ -119,40 +153,14 @@ fn lift_program(container: &[u8], bound: &iridia::BoundSizes) -> Result<Program>
         .iter()
         .find(|f| f.value == entry_value)
         .ok_or_else(|| error(0, "the entry point has no body"))?;
-    // a hull program is two functions: the control-point phase (the entry) and the patch-constant function
-    let patch_constant = if part.program_version >> 16 == 3 {
-        let state = reflection::hull_state(&module).map_err(read)?;
-        Some(
-            module
-                .functions
-                .iter()
-                .find(|f| f.value == state.patch_constant)
-                .ok_or_else(|| error(0, "the patch-constant function has no body"))?,
-        )
-    } else {
-        None
-    };
+    let patch_constant = patch_constant_function(&module, part.program_version)?;
     let mut functions = vec![entry];
     functions.extend(patch_constant);
     let mut setup = setup::Setup::new(&chunks, &module, &functions)?;
     bound
         .apply(&mut setup.interface)
         .map_err(|why| error(0, format!("bound sizes: {why}")))?;
-    let target = format!(
-        "{}_{}_{}",
-        match part.program_version >> 16 {
-            0 => "ps",
-            1 => "vs",
-            2 => "gs",
-            13 => "ms",
-            3 => "hs",
-            4 => "ds",
-            6..=12 => "lib",
-            _ => "cs",
-        },
-        (part.program_version >> 4) & 15,
-        part.program_version & 15
-    );
+    let target = target_of(part.program_version);
     // the entry's 32-bit denormal mode (dxc's `-denorm`): kept where it says `preserve`; flushed, as D3D's default,
     // where it says `ftz` or `any` or states none
     let flush_denormals = reflection::fp32_denorm_mode(&module).map_err(read)?.as_deref() != Some("preserve");
