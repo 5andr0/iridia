@@ -86,9 +86,9 @@
   views keeps a counter per element, the element's word at its index (`counter_of`, documented in `iridia-ir`). A
   program compiled with `-denorm preserve` (the entry's `fp32-denorm-mode`) keeps 32-bit denormals
   (`D3dModes::flush_denormals` false), where every program flushed them. `dx.op.coverage` (91) reads the pixel's
-  `SV_Coverage`, where it was refused.
+  `SV_Coverage`, where it was refused. `LIFTER_VERSION` is 10.
 - `iridia-dxbc`: `ld` with an immediate texel offset (`ld_aoffimmi`) reads the texel the offset moves to, where it
-  dropped the offset.
+  dropped the offset. `LIFTER_VERSION` is 12.
 - Tests: the oracle tools (vkd3d's programs, WARP, dxc) run through primase-testdata 0.1.14's `program(Tool::X)` with a
   time limit (`output_within`): a tool that hangs is killed and the test fails naming it, instead of hanging. A minute
   per vkd3d call, two per dxc compile, ten per WARP batch. vkd3d's tools are its Linux programs, so the vkd3d
