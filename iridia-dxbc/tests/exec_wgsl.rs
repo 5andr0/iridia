@@ -225,12 +225,55 @@ struct Tally {
     errors: BTreeMap<String, (usize, String)>,
     /// Programs written for a browser and held to Tint, and those a browser cannot carry.
     tinted: BTreeMap<String, usize>,
+    /// Programs whose every run discards on both sides, so no lane is compared.
+    all_discarded: BTreeMap<String, (usize, String)>,
+    /// Programs Tint refuses for a barrier whose uniformity WGSL's analysis cannot prove.
+    unprovable: BTreeMap<String, (usize, String)>,
     browser_refused: BTreeMap<String, (usize, String)>,
     lanes: BTreeMap<Class, usize>,
     /// Per source of an amplified lane: the lanes and the programs.
     amplified: BTreeMap<Source, (usize, BTreeSet<String>)>,
     by_program: BTreeMap<String, Class>,
+    /// Per compared program, its lanes by class.
+    program_lanes: BTreeMap<String, BTreeMap<Class, usize>>,
     worst: Vec<String>,
+}
+
+/// Programs whose barrier Tint cannot prove is reached by every invocation, though it is: each by program name and source hash,
+/// with why. A barrier-uniformity error on any program not listed here fails the run.
+const UNPROVABLE_BARRIERS: &[(&str, &str, &str)] = &[
+    (
+        "GXLightOrganize16.cpo",
+        "sha256:3de7407b369589024aecb01052cc686608f07b6e0e43276ba467f85f95a9b20d",
+        UNIFORM_BY_ARITHMETIC,
+    ),
+    (
+        "GXLightOrganize16Sdw.cpo",
+        "sha256:4329a89cdca46549936eaa1008f27b18c6f16ec431c419a5293fb19725f45bb9",
+        UNIFORM_BY_ARITHMETIC,
+    ),
+    (
+        "GXLightOrganize8_noopt.cpo",
+        "sha256:af75218b2d3179d480fde0c153e2365cced4f08a83c4fa1b587bd7214b143bca",
+        UNIFORM_BY_ARITHMETIC,
+    ),
+    (
+        "GXLightOrganize8Sdw_noopt.cpo",
+        "sha256:8215d3fc4d1460ed64a01fa7ba6808d7061e5bf880af504a28267266ee633f2c",
+        UNIFORM_BY_ARITHMETIC,
+    ),
+];
+
+/// The reason of the entries of [`UNPROVABLE_BARRIERS`]. Open: an IR rewrite that cancels the thread-index offset (the
+/// induction variable minus its start) would make these provable in WGSL.
+const UNIFORM_BY_ARITHMETIC: &str = "counter starts at the thread index and the condition subtracts it again: uniform by arithmetic, not provable in WGSL";
+
+/// The reason `name` (of the program with source hash `hash`) may fail with a barrier that is not provably uniform, if listed.
+fn unprovable_barrier(name: &str, hash: &str) -> Option<&'static str> {
+    UNPROVABLE_BARRIERS
+        .iter()
+        .find(|(n, h, _)| *n == short(name) && *h == hash)
+        .map(|(_, _, why)| *why)
 }
 
 /// A program's file name, without its folder.
@@ -332,7 +375,17 @@ fn run_program(harness: &Harness, name: &str, bytes: &[u8], t: &mut Tally) {
             Ok(text) => {
                 *t.tinted.entry(format!("{stage:?}")).or_default() += 1;
                 if let Err(e) = tint.check(name, &text) {
-                    tally(&mut t.errors, &at(&format!("tint: {e}")), name);
+                    let hash = p.provenance.source_hash.as_deref().unwrap_or("-");
+                    let barrier = e.contains("Barrier' must only be called from uniform control flow");
+                    if barrier {
+                        println!("barrier-uniformity {} {hash}", short(name));
+                    }
+                    // a barrier that is reached by every invocation, by arithmetic WGSL's analysis cannot follow, is a
+                    // class of the source and counted; the programs of that class are named, and any other is a fault
+                    match unprovable_barrier(name, hash).filter(|_| barrier) {
+                        Some(why) => tally(&mut t.unprovable, &at(&format!("tint: {why}")), name),
+                        None => tally(&mut t.errors, &at(&format!("tint: {e}")), name),
+                    }
                 }
             }
             Err(e) => tally(&mut t.browser_refused, &at(&e), name),
@@ -402,7 +455,17 @@ fn run_program(harness: &Harness, name: &str, bytes: &[u8], t: &mut Tally) {
         })
         .collect();
     let mut worst = Class::Exact;
+    let mut counts: BTreeMap<Class, usize> = BTreeMap::new();
     let mut compared = false;
+    let mut killed = false;
+    // `shader.dump`: a folder that takes the text of each program that runs, to set one writer's text against another's
+    if let Some(dir) = inputs::debug("shader.dump") {
+        let _ = std::fs::create_dir_all(&dir);
+        let _ = std::fs::write(
+            std::path::Path::new(&dir).join(format!("{}.wgsl", short(name))),
+            &wgsl,
+        );
+    }
     // `shader.lanes`: every lane that is not exact, of the programs whose name has this in it
     let show_lanes = inputs::debug("shader.lanes").is_some_and(|s| name.contains(&s));
     if show_lanes {
@@ -510,6 +573,7 @@ fn run_program(harness: &Harness, name: &str, bytes: &[u8], t: &mut Tally) {
             }
             if e.discarded {
                 t.discarded += 1;
+                killed = true;
                 continue;
             }
             compared = true;
@@ -539,6 +603,7 @@ fn run_program(harness: &Harness, name: &str, bytes: &[u8], t: &mut Tally) {
                         programs.insert(short(name).to_owned());
                     }
                     *t.lanes.entry(class).or_default() += 1;
+                    *counts.entry(class).or_default() += 1;
                     worst = worst.max(class);
                     if class != Class::Exact && show_lanes {
                         println!(
@@ -564,13 +629,43 @@ fn run_program(harness: &Harness, name: &str, bytes: &[u8], t: &mut Tally) {
             }
         }
     }
+    if killed && !compared && worst != Class::Beyond {
+        tally(
+            &mut t.all_discarded,
+            "every run discarded on both sides: nothing to compare",
+            name,
+        );
+    }
     if compared || worst == Class::Beyond {
         t.compared += 1;
         t.by_program.insert(name.to_owned(), worst);
+        t.program_lanes.insert(name.to_owned(), counts);
     }
 }
 
 fn report(title: &str, t: &Tally) {
+    // `shader.worst`: a file that takes each program's worst class, to set one writer's run against another's
+    if let Some(path) = inputs::debug("shader.worst") {
+        let lines: String = t
+            .by_program
+            .iter()
+            .map(|(n, c)| {
+                let lanes: Vec<String> = t.program_lanes.get(n).map_or_else(Vec::new, |m| {
+                    m.iter()
+                        .map(|(k, v)| format!("{}={v}", wgsl_run::CLASSES[*k as usize].trim()))
+                        .collect()
+                });
+                format!(
+                    "{}	{}	{}
+",
+                    short(n),
+                    wgsl_run::CLASSES[*c as usize].trim(),
+                    lanes.join(" ")
+                )
+            })
+            .collect();
+        let _ = std::fs::write(format!("{path}-{}.txt", title.replace(['/', '\\'], "-")), lines);
+    }
     println!(
         "{title}: {} programs ({:?}), {} compared, {} runs ({} discarded on both sides)",
         t.programs, t.stages, t.compared, t.runs, t.discarded
@@ -593,6 +688,8 @@ fn report(title: &str, t: &Tally) {
         ("not written (iridia_naga refuses)", &t.refused),
         ("not on the harness", &t.gaps),
         ("not run", &t.unrun),
+        ("no run survives", &t.all_discarded),
+        ("barrier not provably uniform", &t.unprovable),
         ("not for a browser", &t.browser_refused),
         ("ERROR", &t.errors),
     ] {
@@ -637,7 +734,17 @@ fn corpus_over(corpus: &common::Corpus) {
              (set it to the dxcompiler.dll of DXC 1.8.2502 or later, dxil.dll beside it)"
         );
     }
-    let files = &corpus.names[..corpus.names.len().min(common::diff_limit())];
+    // `shader.only`: `|`-separated parts of program names; only the programs with one of them in their name run
+    let only: Vec<String> = inputs::debug("shader.only")
+        .map(|s| s.split('|').map(str::to_owned).collect())
+        .unwrap_or_default();
+    let selected: Vec<String> = corpus
+        .names
+        .iter()
+        .filter(|n| only.is_empty() || only.iter().any(|o| n.contains(o.as_str())))
+        .cloned()
+        .collect();
+    let files = &selected[..selected.len().min(common::diff_limit())];
     let next = std::sync::atomic::AtomicUsize::new(0);
     let tallies: Vec<std::sync::Mutex<Tally>> = files.iter().map(|_| Default::default()).collect();
     let workers = std::thread::available_parallelism()
@@ -687,12 +794,15 @@ fn corpus_over(corpus: &common::Corpus) {
             (&mut t.unrun, one.unrun),
             (&mut t.errors, one.errors),
             (&mut t.browser_refused, one.browser_refused),
+            (&mut t.all_discarded, one.all_discarded),
+            (&mut t.unprovable, one.unprovable),
         ] {
             for (why, (n, at)) in theirs {
                 mine.entry(why).or_insert((0, at)).0 += n;
             }
         }
         t.by_program.extend(one.by_program);
+        t.program_lanes.extend(one.program_lanes);
         t.worst.extend(one.worst);
     }
     report(&corpus.name, &t);
@@ -739,4 +849,19 @@ fn outside_programs_run_as_naga_wgsl_on_warp() {
         return;
     };
     corpus_over(&common::folder(&root));
+}
+
+/// A barrier failure is excused by the program's name and source hash together: a program of the same name with other
+/// source, or other source of the same hash under another name, is a fault.
+#[test]
+fn a_barrier_failure_is_excused_only_for_a_listed_program() {
+    let (name, hash, _) = UNPROVABLE_BARRIERS[0];
+    assert!(unprovable_barrier(&format!("folder/{name}"), hash).is_some());
+    assert!(unprovable_barrier(name, "sha256:0").is_none());
+    assert!(unprovable_barrier(name, "-").is_none());
+    assert!(unprovable_barrier("GXLightOrganize4.cpo", hash).is_none());
+    for (n, h, why) in UNPROVABLE_BARRIERS {
+        assert!(h.starts_with("sha256:") && h.len() == 71, "{n}: {h}");
+        assert!(!why.is_empty());
+    }
 }

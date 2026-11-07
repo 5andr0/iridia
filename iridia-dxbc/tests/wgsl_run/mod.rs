@@ -56,11 +56,20 @@ impl Tint {
             .stderr(Stdio::piped())
             .output()
             .map_err(|e| format!("starting {}: {e}", self.program.path().display()))?;
+        let text = String::from_utf8_lossy(&out.stderr);
+        // `shader.tint_keep`: a folder that takes the text Tint refuses and what it said
+        if !out.status.success()
+            && let Some(keep) = inputs::debug("shader.tint_keep").map(PathBuf::from)
+        {
+            let _ = std::fs::create_dir_all(&keep);
+            let name = file.file_name().unwrap_or_default();
+            let _ = std::fs::copy(&file, keep.join(name));
+            let _ = std::fs::write(keep.join(name).with_extension("tint.txt"), &*text);
+        }
         let _ = std::fs::remove_file(&file);
         if out.status.success() {
             return Ok(());
         }
-        let text = String::from_utf8_lossy(&out.stderr);
         Err(text
             .lines()
             .find(|l| l.contains("error"))

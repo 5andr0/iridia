@@ -124,6 +124,10 @@ primase_testdata::inputs! {
         "shader.lanes" => "a part of a program's name: the WGSL comparison prints that program's WGSL and every lane that is not exact",
         "shader.warp_all" => "`1` compares every program the WARP oracle can bind",
         "shader.tint" => "`1` also writes each program's browser-profile WGSL and holds it to `tools.tint`",
+        "shader.tint_keep" => "a folder that keeps the WGSL Tint refuses, with what Tint said (`shader.tint`)",
+        "shader.worst" => "a file name prefix: each corpus's programs and their worst class are written to `<prefix>-<corpus>.txt`",
+        "shader.dump" => "a folder: the WGSL of each program that runs is written to it, named by the program",
+        "shader.only" => "`|`-separated parts of program names: only the programs of a corpus with one of them in the name run",
         "shader.writer" => "`wgsl` runs the WGSL of iridia-wgsl in the WARP comparison; `naga` (the default) runs iridia-naga's",
         "shader.outside" => "a folder of containers outside the configured corpora (walked for every DXBC container in it) that the IR gate and the WARP comparison run",
     }
