@@ -1,7 +1,7 @@
 {
   "version": 1,
   "iridia": "0.6.0",
-  "dx": "d3d9-reader, dxbc-reader, dxil-reader 0.11.0",
+  "dx": "d3d9-reader, dxbc-reader, dxil-reader 0.12.0",
   "features": [
     {
       "format": "d3d9",

@@ -7,6 +7,8 @@
   each (`phi [7.0, %0]` three times); the IR lift made each edge's arguments afresh, so a constant became three
   values and `iridia_passes::structurize` refused the program ("block N's switch gives block M two sets of
   arguments").
+- The dx readers are 0.12.0 (`d3d9-reader`, `dxbc-reader`, `dxil-reader`, `dxcontainer`; before, 0.11.0). Nothing a
+  lift reads changes; the `d3d9-reader` types `iridia-d3d9` and `iridia-d3d9-ir` re-export are 0.12.0's.
 - `iridia-passes`: `prepare(&mut Program)`, the passes every output and executor takes a lifted program through, on
   each of its functions: `structurize`, `promote`, `simplify` and `break_flags`. What it gives is what `iridia-exec`'s
   `::from_ir` constructors and `iridia-naga` take, so a caller no longer copies the sequence (the slim gate and the IR

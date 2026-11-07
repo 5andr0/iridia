@@ -137,9 +137,9 @@ dependencies = [
 
 [[package]]
 name = "d3d9-reader"
-version = "0.11.0"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92d425781216a902c5a8bd7989bb800eb53e583d3407af92fb7477903ae72763"
+checksum = "c5de383ac97fbe3b752fbd135118a23dae0feecbdfd941ac04c49ed8adbc567d"
 dependencies = [
  "thiserror",
 ]
@@ -156,9 +156,9 @@ dependencies = [
 
 [[package]]
 name = "dxbc-reader"
-version = "0.11.0"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96d26dabbab1eed38a948279b3322c30677ee4849ea3704374e530549d2d5ad1"
+checksum = "ba230a28cf320b3f2aeff8be2c71147b486e81139eed3704f52f041c620389da"
 dependencies = [
  "d3d9-reader",
  "dxcontainer",
@@ -167,9 +167,9 @@ dependencies = [
 
 [[package]]
 name = "dxcontainer"
-version = "0.11.0"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "434e78a929a111671777fe4ca0a81aaabb51a51483b0acc0cf0653f6234b2136"
+checksum = "e88682dabbb043b2048aa966527791b0a2e89b465ff1898c5d01949108418f04"
 dependencies = [
  "primase-foundations",
  "thiserror",
@@ -177,9 +177,9 @@ dependencies = [
 
 [[package]]
 name = "dxil-reader"
-version = "0.11.0"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "663bdc332f401344e64903868769f593f33df7597336fac80de204679eaa17ac"
+checksum = "77291f42aa86aeed7a6f974bec5d3f41cf18d1fade73ee3d25856d164a043f64"
 dependencies = [
  "dxcontainer",
  "primase-foundations",

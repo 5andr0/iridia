@@ -11,10 +11,10 @@ repository = "https://github.com/Kalmarv/iridia"
 publish = true
 
 [workspace.dependencies]
-d3d9-reader = "0.11.0"
-dxbc-reader = "0.11.0"
-dxcontainer = "0.11.0"
-dxil-reader = "0.11.0"
+d3d9-reader = "0.12.0"
+dxbc-reader = "0.12.0"
+dxcontainer = "0.12.0"
+dxil-reader = "0.12.0"
 half = { version = "=2.7.1", default-features = false }
 iridia = { version = "0.6.0", path = "iridia" }
 iridia-d3d9 = { path = "iridia-d3d9" }
