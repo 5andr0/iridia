@@ -60,8 +60,8 @@
         "failed": 0
       },
       "executed": {
-        "pass": 390,
-        "fail": 6
+        "pass": 392,
+        "fail": 4
       },
       "proved_by": [
         "vkd3d"
@@ -156,8 +156,8 @@
         "failed": 0
       },
       "executed": {
-        "pass": 155,
-        "fail": 30
+        "pass": 159,
+        "fail": 26
       },
       "proved_by": [
         "vkd3d"
@@ -188,8 +188,8 @@
         "failed": 0
       },
       "executed": {
-        "pass": 951,
-        "fail": 26
+        "pass": 953,
+        "fail": 24
       },
       "proved_by": [
         "vkd3d"
@@ -764,8 +764,8 @@
         "failed": 0
       },
       "executed": {
-        "pass": 1195,
-        "fail": 26
+        "pass": 1199,
+        "fail": 22
       },
       "proved_by": [
         "vkd3d"
@@ -828,8 +828,8 @@
         "failed": 0
       },
       "executed": {
-        "pass": 278,
-        "fail": 8
+        "pass": 280,
+        "fail": 6
       },
       "proved_by": [
         "vkd3d"
@@ -1364,8 +1364,8 @@
         "failed": 0
       },
       "executed": {
-        "pass": 561,
-        "fail": 13
+        "pass": 562,
+        "fail": 12
       },
       "proved_by": [
         "vkd3d"
@@ -1396,8 +1396,8 @@
         "failed": 0
       },
       "executed": {
-        "pass": 628,
-        "fail": 11
+        "pass": 629,
+        "fail": 10
       },
       "proved_by": [
         "vkd3d"
@@ -1458,8 +1458,8 @@
         "failed": 0
       },
       "executed": {
-        "pass": 29,
-        "fail": 5
+        "pass": 30,
+        "fail": 4
       },
       "proved_by": [
         "vkd3d"
@@ -1490,8 +1490,8 @@
         "failed": 0
       },
       "executed": {
-        "pass": 38,
-        "fail": 3
+        "pass": 39,
+        "fail": 2
       },
       "proved_by": [
         "vkd3d"
@@ -7720,11 +7720,11 @@
         "unchecked": 123
       },
       "lifted": {
-        "ok": 684,
-        "refused": 224
+        "ok": 685,
+        "refused": 223
       },
       "wgsl": {
-        "ok": 664,
+        "ok": 665,
         "failed": 20
       },
       "executed": {
@@ -7753,11 +7753,11 @@
         "unchecked": 7
       },
       "lifted": {
-        "ok": 42,
-        "refused": 10
+        "ok": 47,
+        "refused": 5
       },
       "wgsl": {
-        "ok": 41,
+        "ok": 46,
         "failed": 1
       },
       "executed": {
@@ -9210,11 +9210,11 @@
         "unchecked": 0
       },
       "lifted": {
-        "ok": 0,
-        "refused": 5
+        "ok": 5,
+        "refused": 0
       },
       "wgsl": {
-        "ok": 0,
+        "ok": 5,
         "failed": 0
       },
       "executed": {
@@ -9240,11 +9240,11 @@
         "unchecked": 598
       },
       "lifted": {
-        "ok": 2990,
-        "refused": 598
+        "ok": 2994,
+        "refused": 594
       },
       "wgsl": {
-        "ok": 2911,
+        "ok": 2915,
         "failed": 79
       },
       "executed": {
@@ -9363,11 +9363,11 @@
         "unchecked": 123
       },
       "lifted": {
-        "ok": 682,
-        "refused": 224
+        "ok": 683,
+        "refused": 223
       },
       "wgsl": {
-        "ok": 662,
+        "ok": 663,
         "failed": 20
       },
       "executed": {
@@ -10612,11 +10612,11 @@
         "unchecked": 94
       },
       "lifted": {
-        "ok": 922,
-        "refused": 134
+        "ok": 927,
+        "refused": 129
       },
       "wgsl": {
-        "ok": 839,
+        "ok": 844,
         "failed": 83
       },
       "executed": {
@@ -13027,11 +13027,11 @@
         "unchecked": 104
       },
       "lifted": {
-        "ok": 4538,
-        "refused": 318
+        "ok": 4543,
+        "refused": 313
       },
       "wgsl": {
-        "ok": 4370,
+        "ok": 4375,
         "failed": 168
       },
       "executed": {
@@ -18636,11 +18636,11 @@
         "unchecked": 63
       },
       "lifted": {
-        "ok": 4209,
-        "refused": 433
+        "ok": 4214,
+        "refused": 428
       },
       "wgsl": {
-        "ok": 4137,
+        "ok": 4142,
         "failed": 72
       },
       "executed": {
@@ -18696,33 +18696,33 @@
       "description": "Each test file run at each shader model on each of vkd3d's Windows runners (d3d9, d3d11, d3d12 with fxc, d3d12 with dxc), every step in order, every probe compared as vkd3d compares it. A row is one run: pass when every probe holds that vkd3d's runner runs at that model (selected); a run it runs none of is extended (selected false), its status that of all its probes, and the probes vkd3d leaves out of the others are their extended_status: the same expectations at a model vkd3d's own runs leave out, which need not hold on any device.",
       "totals": {
         "error": 9,
-        "fail": 42,
-        "not-modelled": 19,
-        "pass": 806,
-        "refused": 61
+        "fail": 41,
+        "not-modelled": 20,
+        "pass": 807,
+        "refused": 60
       },
       "probe_totals": {
         "error": 811,
-        "fail": 258,
-        "not-modelled": 252,
-        "pass": 7442,
-        "refused": 642
+        "fail": 256,
+        "not-modelled": 261,
+        "pass": 7445,
+        "refused": 632
       },
       "extended_totals": {
         "compiler-refused": 6,
         "error": 23,
-        "fail": 75,
-        "not-modelled": 32,
-        "pass": 1756,
-        "refused": 103
+        "fail": 74,
+        "not-modelled": 36,
+        "pass": 1757,
+        "refused": 99
       },
       "extended_probe_totals": {
         "compiler-refused": 43,
         "error": 2866,
-        "fail": 666,
-        "not-modelled": 366,
-        "pass": 16877,
-        "refused": 1688
+        "fail": 665,
+        "not-modelled": 405,
+        "pass": 16879,
+        "refused": 1648
       },
       "rows": [
         {
@@ -21566,7 +21566,7 @@
           "format": "d3d9",
           "model": "2.0",
           "status": "fail",
-          "detail": "line 125: (160, 120): got [0.2, 0.6979167, 0.2, 1.2], expected [0.2, 0.7, 0.2, 1.0] within 32 ulps",
+          "detail": "line 125: (160, 120): got [0.2, 0.7, 0.2, 1.2], expected [0.2, 0.7, 0.2, 1.0] within 32 ulps",
           "probes": 26,
           "selected": true,
           "selected_probes": 26,
@@ -21890,8 +21890,8 @@
           "runner": "d3d9",
           "format": "d3d9",
           "model": "2.0",
-          "status": "fail",
-          "detail": "line 24: (320, 0): got [0.40015626, 0.49979168, 0.40015626, 0.49979168], expected [0.4, 0.5, 0.4, 0.5] within 4 ulps",
+          "status": "pass",
+          "detail": "",
           "probes": 2,
           "selected": true,
           "selected_probes": 2,
@@ -21903,8 +21903,8 @@
           "runner": "d3d9",
           "format": "d3d9",
           "model": "3.0",
-          "status": "fail",
-          "detail": "line 24: (320, 0): got [0.40015626, 0.49979168, 0.40015626, 0.49979168], expected [0.4, 0.5, 0.4, 0.5] within 4 ulps",
+          "status": "pass",
+          "detail": "",
           "probes": 2,
           "selected": false,
           "selected_probes": 0,
@@ -44926,8 +44926,8 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.0",
-          "status": "refused",
-          "detail": "line 49: bc3de9dbeabd72a5: DXIL at bit 11386: dx.op.coverage.i32: dx.op 91 is not lifted",
+          "status": "not-modelled",
+          "detail": "line 18: a multisampled target",
           "probes": 12,
           "selected": true,
           "selected_probes": 12,
@@ -44939,8 +44939,8 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.1",
-          "status": "refused",
-          "detail": "line 49: 074971c31b510180: DXIL at bit 11386: dx.op.coverage.i32: dx.op 91 is not lifted",
+          "status": "not-modelled",
+          "detail": "line 18: a multisampled target",
           "probes": 12,
           "selected": false,
           "selected_probes": 0,
@@ -44952,8 +44952,8 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.2",
-          "status": "refused",
-          "detail": "line 49: 7be5d6eff1555c66: DXIL at bit 11386: dx.op.coverage.i32: dx.op 91 is not lifted",
+          "status": "not-modelled",
+          "detail": "line 18: a multisampled target",
           "probes": 12,
           "selected": false,
           "selected_probes": 0,
@@ -44965,8 +44965,8 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.5",
-          "status": "refused",
-          "detail": "line 49: ee82750c97f482f9: DXIL at bit 11386: dx.op.coverage.i32: dx.op 91 is not lifted",
+          "status": "not-modelled",
+          "detail": "line 18: a multisampled target",
           "probes": 12,
           "selected": false,
           "selected_probes": 0,
@@ -44978,8 +44978,8 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.6",
-          "status": "refused",
-          "detail": "line 49: 97323951e715817e: DXIL at bit 12128: dx.op.coverage.i32: dx.op 91 is not lifted",
+          "status": "not-modelled",
+          "detail": "line 18: a multisampled target",
           "probes": 12,
           "selected": false,
           "selected_probes": 0,

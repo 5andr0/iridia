@@ -82,7 +82,7 @@ const KINDS: [&str; 15] = [
 ];
 
 impl<'de> Deserialize<'de> for Step {
-    /// A step is an object whose kind is the one of [`KINDS`] it has as a key.
+    /// A step is an object whose kind is the one of `KINDS` it has as a key.
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         use serde::de::Error;
         let map = serde_json::Map::<String, serde_json::Value>::deserialize(d)?;

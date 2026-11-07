@@ -1,5 +1,5 @@
 //! Runs the offload-test-suite's tests as lit runs them for DirectX with DXC: each RUN line in order, the offloader's
-//! part ([`offload`]) on the CPU [`Device`] through `iridia-exec`, and what the line pipes its output to (FileCheck,
+//! part (`offload`) on the CPU [`Device`] through `iridia-exec`, and what the line pipes its output to (FileCheck,
 //! imgdiff) as those tools would. A test's REQUIRES, UNSUPPORTED and XFAIL lines are taken against [`features`], the
 //! device iridia's executor is.
 use std::collections::{BTreeMap, BTreeSet};
