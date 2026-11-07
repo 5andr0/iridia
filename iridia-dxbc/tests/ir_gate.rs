@@ -2,7 +2,9 @@
 //! The IR lifter against the lifter it replaces: every DXBC container of a corpus is lifted both ways, and each
 //! vertex or pixel program both lift is run in the executor on the same deterministic inputs, constant buffers and
 //! textures. Column A is the old lift, B the IR lift as lifted, P the IR lift after `promote`, `simplify` and
-//! `break_flags`. Every written output lane, the masks and the discard must agree bit for bit (NaNs alike); a
+//! `break_flags`, and C that program lowered to stock naga (`iridia_naga`), written as WGSL and read back by naga's
+//! front end, run in the executor A runs in; a program the lowering refuses is counted by its reason, not compared in
+//! C. Every written output lane, the masks and the discard must agree bit for bit (NaNs alike); a
 //! program the IR lifter refuses is counted by reason, and a program the old lifter lifts but the IR lifter does not
 //! is a lifted-count regression.
 //! Needs the corpus oracle set's `sekiro/shaders`, `riders/shaders` or `sledding/shaders`. `IR_GATE_TRACE=1` names
@@ -191,6 +193,43 @@ fn hash_words(words: &[u32]) -> u64 {
         .fold(0x1234_5678u64, |h, &w| common::mix64(h ^ u64::from(w)))
 }
 
+/// The mip levels, samples per texel, and size of each level of every texture the gate's sampler answers for.
+const LEVELS: u32 = 9;
+const SAMPLES: u32 = 4;
+fn texture_size(level: u32) -> [u32; 3] {
+    let shift = level.min(8);
+    [(256 >> shift).max(1), (128 >> shift).max(1), 4]
+}
+
+/// Whether a texel address is inside the texture this sampler answers for: within the size of its level, a
+/// level, layer and sample it has (as its queries answer). Outside, a load reads zero and a store writes nothing,
+/// as Direct3D's views answer.
+fn texel_inside(
+    texture: u32,
+    dim: Dim,
+    texel: [u32; 3],
+    layer: Option<u32>,
+    sample: Option<u32>,
+    mip: Option<u32>,
+) -> bool {
+    let mip = mip.unwrap_or(0);
+    let lanes = match dim {
+        Dim::D1 => 1,
+        Dim::D2 | Dim::Cube => 2,
+        Dim::D3 => 3,
+    };
+    let size = texture_size(mip);
+    mip < LEVELS
+        && texel.iter().zip(size).take(lanes).all(|(t, s)| *t < s)
+        && layer.is_none_or(|l| l < texture_layers(texture, dim))
+        && sample.is_none_or(|s| s < SAMPLES)
+}
+
+/// The array layers of texture `texture` of shape `dim` (1 to 6, by its hash).
+fn texture_layers(texture: u32, dim: Dim) -> u32 {
+    common::mix(hash_words(&[3, texture, dim_word(dim), QueryKind::Layers as u32])) % 6 + 1
+}
+
 fn dim_word(d: Dim) -> u32 {
     match d {
         Dim::D1 => 1,
@@ -275,6 +314,15 @@ impl Sampler for Hashed {
         self.asked.push(format!("{r:?}"));
         let h = hash_words(&w);
         self.reads.push(w);
+        let texel = r.texel.map(i32::cast_unsigned);
+        let (layer, sample, mip) = (
+            r.layer.map(i32::cast_unsigned),
+            r.sample.map(i32::cast_unsigned),
+            r.mip.map(i32::cast_unsigned),
+        );
+        if !texel_inside(r.texture, r.dim, texel, layer, sample, mip) {
+            return Ok([0; 4]);
+        }
         let mut t = if self.ints {
             std::array::from_fn(|k| common::mix(h ^ k as u64) % 4)
         } else {
@@ -311,15 +359,14 @@ impl Sampler for Hashed {
         ];
         self.asked.push(format!("{r:?}"));
         self.reads.push(w.to_vec());
-        let h = common::mix(hash_words(&w));
         Ok(match r.kind {
             QueryKind::Size => {
-                let shift = r.level.unwrap_or(0).min(8);
-                [(256 >> shift).max(1), (128 >> shift).max(1), 4, 0]
+                let [x, y, z] = texture_size(r.level.unwrap_or(0));
+                [x, y, z, 0]
             }
-            QueryKind::Levels => [9, 0, 0, 0],
-            QueryKind::Layers => [h % 6 + 1, 0, 0, 0],
-            QueryKind::Samples => [4, 0, 0, 0],
+            QueryKind::Levels => [LEVELS, 0, 0, 0],
+            QueryKind::Layers => [texture_layers(r.texture, r.dim), 0, 0, 0],
+            QueryKind::Samples => [SAMPLES, 0, 0, 0],
         })
     }
     fn store(&mut self, r: Store) -> Result<(), String> {
@@ -332,6 +379,9 @@ impl Sampler for Hashed {
     }
     fn store_image(&mut self, r: ImageStore<u32>) -> Result<(), String> {
         self.asked.push(format!("{r:?}"));
+        if !texel_inside(r.view, r.dim, r.texel, r.layer, None, None) {
+            return Ok(());
+        }
         for (lane, &v) in (0..u32::from(r.lanes)).zip(&r.value) {
             let at = Word::Texel {
                 view: r.view,
@@ -709,6 +759,12 @@ struct Gate {
     /// discarded (a derivative reaches no output there): what the coherent vectors leave untested.
     coherent_no_derivative: usize,
     coherent_derivatives_discarded: usize,
+    /// Programs C agrees with A on (every vector A evaluates).
+    agree_c: usize,
+    /// Programs the lowering refuses, by reason: not compared in C.
+    c_unlowered: BTreeMap<String, (usize, String)>,
+    /// Programs the lowering takes whose WGSL C cannot build or run, by reason: failures.
+    c_unbuilt: BTreeMap<String, (usize, String)>,
 }
 
 fn tally(map: &mut BTreeMap<String, (usize, String)>, why: &str, at: &str) {
@@ -736,6 +792,9 @@ impl Gate {
             identical,
             coherent_no_derivative,
             coherent_derivatives_discarded,
+            agree_c,
+            c_unlowered,
+            c_unbuilt,
         } = other;
         self.programs += programs;
         self.a += a;
@@ -747,6 +806,7 @@ impl Gate {
         self.identical += identical;
         self.coherent_no_derivative += coherent_no_derivative;
         self.coherent_derivatives_discarded += coherent_derivatives_discarded;
+        self.agree_c += agree_c;
         self.differ.extend(differ);
         for (mine, theirs) in [
             (&mut self.refused, refused),
@@ -755,9 +815,31 @@ impl Gate {
             (&mut self.skipped, skipped),
             (&mut self.only_ir, only_ir),
             (&mut self.neither, neither),
+            (&mut self.c_unlowered, c_unlowered),
+            (&mut self.c_unbuilt, c_unbuilt),
         ] {
             for (why, (n, e)) in theirs {
                 mine.entry(why).or_insert((0, e)).0 += n;
+            }
+        }
+    }
+
+    /// C's program of `p` ([`lower_c`]), or `None` with why tallied.
+    fn lowered(
+        &mut self,
+        old: &iridia::Program,
+        p: &iridia_ir::Program,
+        at: &str,
+    ) -> Option<iridia::Program> {
+        match lower_c(old, p) {
+            Ok(c) => Some(c),
+            Err(Unlowered::Refused(e)) => {
+                tally(&mut self.c_unlowered, &e, at);
+                None
+            }
+            Err(Unlowered::Unbuilt(e)) => {
+                tally(&mut self.c_unbuilt, &e, at);
+                None
             }
         }
     }
@@ -801,11 +883,12 @@ struct Took {
     a: Duration,
     b: Duration,
     p: Duration,
+    c: Duration,
 }
 
 impl Took {
     fn total(&self) -> Duration {
-        self.lift + self.a + self.b + self.p
+        self.lift + self.a + self.b + self.p + self.c
     }
 }
 
@@ -823,22 +906,24 @@ fn report_times(took: &mut [(Took, String)], workers: usize) {
     let sum = |f: fn(&Took) -> Duration| took.iter().map(|(t, _)| f(t)).sum::<Duration>();
     println!(
         "  times over {} programs on {workers} threads: lifting and building {:.1} s, A's runs {:.1} s, B's {:.1} s, \
-         P's {:.1} s",
+         P's {:.1} s, C's {:.1} s",
         took.len(),
         sum(|t| t.lift).as_secs_f64(),
         sum(|t| t.a).as_secs_f64(),
         sum(|t| t.b).as_secs_f64(),
-        sum(|t| t.p).as_secs_f64()
+        sum(|t| t.p).as_secs_f64(),
+        sum(|t| t.c).as_secs_f64()
     );
     took.sort_by_key(|(t, _)| std::cmp::Reverse(t.total()));
     for (t, at) in took.iter().take(20) {
         println!(
-            "  {:7.2} s ({:.2} + {:.2} + {:.2} + {:.2})  {at}",
+            "  {:7.2} s ({:.2} + {:.2} + {:.2} + {:.2} + {:.2})  {at}",
             t.total().as_secs_f64(),
             t.lift.as_secs_f64(),
             t.a.as_secs_f64(),
             t.b.as_secs_f64(),
-            t.p.as_secs_f64()
+            t.p.as_secs_f64(),
+            t.c.as_secs_f64()
         );
     }
 }
@@ -879,7 +964,7 @@ fn check(g: &mut Gate, path: &std::path::Path, at: &str, took: &mut Took) {
             return;
         }
     }
-    let a = match ProgramShader::new(old) {
+    let a = match ProgramShader::new(old.clone()) {
         Ok(a) => a,
         Err(e) => {
             tally(&mut g.a_fails, &format!("A not built: {e}"), at);
@@ -924,7 +1009,14 @@ fn check(g: &mut Gate, path: &std::path::Path, at: &str, took: &mut Took) {
         }
         Verdict::Differs(d) => g.differ.push(format!("{at} (B)\n  {d}")),
     }
-    let pp = match passed(p).and_then(|p| ProgramShader::from_ir(p).map_err(|e| e.to_string())) {
+    let p = match passed(p) {
+        Ok(p) => p,
+        Err(e) => {
+            tally(&mut g.unrun, &format!("P: {e}"), at);
+            return;
+        }
+    };
+    let pp = match ProgramShader::from_ir(p.clone()) {
         Ok(pp) => pp,
         Err(e) => {
             tally(&mut g.unrun, &format!("P: {e}"), at);
@@ -945,6 +1037,148 @@ fn check(g: &mut Gate, path: &std::path::Path, at: &str, took: &mut Took) {
         Verdict::AFails(e) => tally(&mut g.a_fails, &e, at),
         Verdict::Differs(d) => g.differ.push(format!("{at} (P)\n  {d}")),
     }
+    let Some(c) = g.lowered(&old, &p, at) else {
+        took.c = lap(&mut mark);
+        return;
+    };
+    let c = match ProgramShader::new(c) {
+        Ok(c) => c,
+        Err(e) => {
+            tally(&mut g.c_unbuilt, &format!("not compiled: {e}"), at);
+            took.c = lap(&mut mark);
+            return;
+        }
+    };
+    let quad = a.needs_quad() || c.needs_quad();
+    let older = if quad == older.quad {
+        older
+    } else {
+        older_runs(&a, CASES, quad)
+    };
+    match compare(&older, &c, false).0 {
+        // A's failures are B's and P's, counted there
+        Verdict::Agree | Verdict::AFails(_) => g.agree_c += 1,
+        Verdict::Differs(d) => g.differ.push(format!("{at} (C)\n  {d}")),
+    }
+    took.c = lap(&mut mark);
+}
+
+/// What naga's WGSL front end makes of the lowering's text cannot say everything the older module says, which the
+/// executor reads: put back from the older module by position, a global's name ending in a digit (naga's namer writes
+/// `cb0_` for `cb0`) and the entry point's argument and result member names and bindings (WGSL cannot say a varying
+/// has no interpolation, so the front end supplies the default). Anything else that differs is left for the executor
+/// to refuse or to compute differently.
+fn normalise(m: &mut naga::Module, old: &naga::Module) -> Result<(), String> {
+    for (_, g) in m.global_variables.iter_mut() {
+        if let Some(n) = &mut g.name
+            && n.len() > 1
+            && n.ends_with('_')
+            && n[..n.len() - 1].ends_with(|c: char| c.is_ascii_digit())
+        {
+            n.pop();
+        }
+    }
+    let (Some(ep), Some(oe)) = (m.entry_points.first_mut(), old.entry_points.first()) else {
+        return Err("no entry point".into());
+    };
+    if ep.function.arguments.len() != oe.function.arguments.len() {
+        return Err(format!(
+            "{} arguments, where A's entry point has {}",
+            ep.function.arguments.len(),
+            oe.function.arguments.len()
+        ));
+    }
+    for (a, o) in ep.function.arguments.iter_mut().zip(&oe.function.arguments) {
+        a.name.clone_from(&o.name);
+        a.binding.clone_from(&o.binding);
+    }
+    match (&ep.function.result, &oe.function.result) {
+        (None, None) => Ok(()),
+        (Some(r), Some(or)) => {
+            let (rt, ort) = (r.ty, or.ty);
+            let naga::TypeInner::Struct { members: om, .. } = &old.types[ort].inner else {
+                return Err("A's result is not a structure".into());
+            };
+            let mut t = m.types[rt].clone();
+            let naga::TypeInner::Struct { members, .. } = &mut t.inner else {
+                return Err("the result is not a structure".into());
+            };
+            if members.len() != om.len() {
+                return Err(format!(
+                    "{} result members, where A's has {}",
+                    members.len(),
+                    om.len()
+                ));
+            }
+            for (a, o) in members.iter_mut().zip(om) {
+                a.name.clone_from(&o.name);
+                a.binding.clone_from(&o.binding);
+            }
+            t.name.clone_from(&old.types[ort].name);
+            m.types.replace(rt, t);
+            Ok(())
+        }
+        _ => Err("a result where A's entry point has none, or none where it has one".into()),
+    }
+}
+
+/// Why C has no program to run.
+enum Unlowered {
+    /// The lowering refuses the program: counted by its reason.
+    Refused(String),
+    /// The lowering made WGSL that is not the older program's interface, or not WGSL naga reads back: a failure.
+    Unbuilt(String),
+}
+
+/// C's program for `iridia-exec`: `p` lowered for naga's own dialect and written as WGSL, read back by naga's front
+/// end, with the older lift's interface and each of its resources bound to the global its binding plan names.
+fn lower_c(old: &iridia::Program, p: &iridia_ir::Program) -> Result<iridia::Program, Unlowered> {
+    // a diagnostic: C's text from a file (`one`), to try a change to it
+    let wgsl = match std::env::var("IR_GATE_C_WGSL") {
+        Ok(path) => std::fs::read_to_string(path).unwrap(),
+        // a module naga rejects after the preflight took the program is the lowering's fault, not a refusal
+        Err(_) => iridia_naga::wgsl(p, &iridia_naga::Profile::NAGA).map_err(|e| {
+            if e.0.starts_with("lowering bug") {
+                Unlowered::Unbuilt(e.0)
+            } else {
+                Unlowered::Refused(e.0)
+            }
+        })?,
+    };
+    let unbuilt = |e: String| Unlowered::Unbuilt(e);
+    let mut module = naga::front::wgsl::parse_str(&wgsl)
+        .map_err(|e| unbuilt(format!("naga's WGSL front end: {}", e.emit_to_string(&wgsl))))?;
+    normalise(&mut module, &old.module).map_err(unbuilt)?;
+    let mut bindings = Vec::new();
+    for r in &old.interface.resources {
+        let d = r
+            .provenance
+            .d3d
+            .ok_or_else(|| unbuilt(format!("resource {} has no D3D binding", r.provenance.name)))?;
+        let prefix = match d.class {
+            iridia::D3dClass::ConstantBuffer => "cb",
+            iridia::D3dClass::ShaderResource => "t",
+            iridia::D3dClass::Sampler => "s",
+            iridia::D3dClass::UnorderedAccess => "u",
+        };
+        // the binding plan's names (`iridia_naga::BindingPlan::d3d`)
+        let name = if d.space == 0 {
+            format!("{prefix}{}", d.register)
+        } else {
+            format!("{prefix}{}_space{}", d.register, d.space)
+        };
+        let g = module
+            .global_variables
+            .iter()
+            .find(|(_, g)| g.name.as_deref() == Some(&name))
+            .map(|(h, _)| h)
+            .ok_or_else(|| unbuilt(format!("no global {name}")))?;
+        bindings.push((r.id, g));
+    }
+    let mut c = old.clone();
+    c.module = module;
+    c.bindings = bindings;
+    Ok(c)
 }
 
 /// The gate over the containers `paths` (`name` in its report): a refusal is a failure unless its reason contains one
@@ -994,14 +1228,17 @@ fn gate_over(name: &str, paths: &[std::path::PathBuf], not_yet: &[&str]) {
         report_times(&mut took, workers);
     }
     println!(
-        "{name}: {} programs, A runs {} ({} compute, {} of functions), B agrees {}, P agrees {}, {} differ, IR \
-         refuses {}, only the IR lifts {}, neither lifts {}",
+        "{name}: {} programs, A runs {} ({} compute, {} of functions), B agrees {}, P agrees {}, C agrees {} ({} not \
+         lowered, {} not built), {} differ, IR refuses {}, only the IR lifts {}, neither lifts {}",
         g.programs,
         g.a,
         g.compute,
         g.functions,
         g.agree_b,
         g.agree_p,
+        g.agree_c,
+        g.c_unlowered.values().map(|(n, _)| n).sum::<usize>(),
+        g.c_unbuilt.values().map(|(n, _)| n).sum::<usize>(),
         g.differ.len(),
         g.refused.values().map(|(n, _)| n).sum::<usize>(),
         g.only_ir.values().map(|(n, _)| n).sum::<usize>(),
@@ -1029,6 +1266,12 @@ fn gate_over(name: &str, paths: &[std::path::PathBuf], not_yet: &[&str]) {
     for (why, (n, e)) in &g.neither {
         println!("  neither {n:5}  {why}  (e.g. {e})");
     }
+    for (why, (n, e)) in &g.c_unlowered {
+        println!("  C not lowered {n:5}  {why}  (e.g. {e})");
+    }
+    for (why, (n, e)) in &g.c_unbuilt {
+        println!("  C NOT BUILT {n:5}  {why}  (e.g. {e})");
+    }
     for d in g.differ.iter().take(20) {
         println!("  DIFFER {d}");
     }
@@ -1037,6 +1280,11 @@ fn gate_over(name: &str, paths: &[std::path::PathBuf], not_yet: &[&str]) {
         println!("  differs {}", d.lines().next().unwrap_or_default());
     }
     assert!(g.differ.is_empty(), "{} programs differ", g.differ.len());
+    assert!(
+        g.c_unbuilt.is_empty(),
+        "{} lowered programs C does not build or run",
+        g.c_unbuilt.values().map(|(n, _)| n).sum::<usize>()
+    );
     assert!(
         g.unrun.is_empty(),
         "{} IR-lifted programs do not run",
@@ -1122,6 +1370,18 @@ impl Backend for Group {
         })
     }
     fn load(&mut self, r: ImageLoad<Element>) -> Result<[u32; 4], String> {
+        if r.storage
+            && !texel_inside(
+                element_word(r.texture),
+                r.dim,
+                r.texel.map(i32::cast_unsigned),
+                r.layer.map(i32::cast_unsigned),
+                None,
+                None,
+            )
+        {
+            return Ok([0; 4]);
+        }
         if r.storage {
             let key = (
                 r.texture.id.0,
@@ -1155,6 +1415,13 @@ impl Backend for Group {
         })
     }
     fn store_image(&mut self, r: ImageStore<ResourceId>) -> Result<(), String> {
+        let word = element_word(Element {
+            id: r.view,
+            index: r.index,
+        });
+        if !texel_inside(word, r.dim, r.texel, r.layer, None, None) {
+            return Ok(());
+        }
         let key = (r.view.0, r.index, r.texel, r.layer);
         let mut t = self.texels.get(&key).copied().unwrap_or_default();
         for (to, from) in t.iter_mut().zip(r.value).take(usize::from(r.lanes)) {
@@ -1321,11 +1588,12 @@ fn compute(g: &mut Gate, old: &iridia::Program, p: iridia_ir::Program, at: &str,
     // A's memory after each vector, which B and P are both held to
     let older: Vec<_> = (0..CASES).map(|c| dispatch(&a, old, c)).collect();
     took.a = lap(&mut mark);
+    let passed = passed(p.clone());
     for column in ["B", "P"] {
         let ir = if column == "B" {
             Ok(p.clone())
         } else {
-            passed(p.clone())
+            passed.clone()
         };
         let b = match ir.and_then(|p| Executable::from_ir(&p).map_err(|e| e.to_string())) {
             Ok(b) => b,
@@ -1350,6 +1618,26 @@ fn compute(g: &mut Gate, old: &iridia::Program, p: iridia_ir::Program, at: &str,
             return;
         }
     }
+    let Ok(passed) = passed else { return };
+    let c = g.lowered(old, &passed, at).map(|c| Executable::new(&c));
+    match c {
+        None => {}
+        Some(Err(e)) => tally(&mut g.c_unbuilt, &format!("not compiled: {e}"), at),
+        Some(Ok(c)) => {
+            let differs = (0..).zip(&older).find_map(|(n, x)| {
+                let y = dispatch(&c, old, n);
+                (x.is_ok() && *x != y).then(|| format!("case {n}: A {x:x?}\n  but {y:x?}"))
+            });
+            match differs {
+                None => g.agree_c += 1,
+                Some(d) => {
+                    let d: String = d.chars().take(4000).collect();
+                    g.differ.push(format!("{at} (C)\n  {d}"));
+                }
+            }
+        }
+    }
+    took.c = lap(&mut mark);
 }
 
 /// A lane of seeded words of a varying of `scalar`, as [`common::case_with`] seeds an input's: a float in about
@@ -1466,6 +1754,16 @@ fn functions(
     took: &mut Took,
 ) {
     let mut mark = Instant::now();
+    // a program made of functions has no WGSL entry point: C counts the lowering's refusal, or fails one it takes
+    if let Ok(passed) = passed(p.clone())
+        && g.lowered(old, &passed, at).is_some()
+    {
+        tally(
+            &mut g.c_unbuilt,
+            "a program made of functions lowered as an entry point",
+            at,
+        );
+    }
     let mut a = Vec::with_capacity(sigs.len());
     for sig in sigs {
         match Executable::function(old, sig.name) {
@@ -1593,24 +1891,41 @@ fn outside_programs() {
     gate_over(&root.display().to_string(), &paths, &[]);
 }
 
-/// One program's two lifts and runs, for a disagreement the gate prints: `IR_GATE_ONE=<container> cargo test -p
-/// iridia-dxbc --test ir_gate one -- --ignored --nocapture`.
+/// One program's lifts and runs, for a disagreement the gate prints: `IR_GATE_ONE=<container> cargo test -p
+/// iridia-dxbc --test ir_gate one -- --ignored --nocapture`. A and B as text (not with `IR_GATE_QUIET`), then each
+/// vector's runs of A, B and C, the first request C makes otherwise than A, and C on a quad of the first lane's inputs;
+/// `IR_GATE_C_WGSL=<file>` runs that WGSL as C instead of the lowering's (to try a change to it).
 #[test]
 #[ignore = "a diagnostic: names its program in IR_GATE_ONE"]
 fn one() {
     let path = std::env::var("IR_GATE_ONE").expect("IR_GATE_ONE names a container");
     let bytes = std::fs::read(&path).unwrap();
     let old = iridia_dxbc::lift(&bytes).unwrap();
-    println!(
-        "A (old lift) as WGSL:\n{}",
-        iridia::emit::wgsl(&old).unwrap_or_else(|e| e.to_string())
-    );
+    let quiet = std::env::var_os("IR_GATE_QUIET").is_some();
+    if !quiet {
+        println!(
+            "A (old lift) as WGSL:\n{}",
+            iridia::emit::wgsl(&old).unwrap_or_else(|e| e.to_string())
+        );
+    }
     let p = iridia_dxbc::ir::lift(&bytes).unwrap();
-    println!("B (IR lift):\n{}", iridia_ir::text::print(&p.entry));
+    if !quiet {
+        println!("B (IR lift):\n{}", iridia_ir::text::print(&p.entry));
+    }
+    // C, where the lowering takes the program
+    let c_program = passed(p.clone()).ok().and_then(|pp| match lower_c(&old, &pp) {
+        Ok(c) => Some(c),
+        Err(Unlowered::Refused(e) | Unlowered::Unbuilt(e)) => {
+            println!("C: {e}");
+            None
+        }
+    });
     let a = ProgramShader::new(old).unwrap();
     let b = ProgramShader::from_ir(p).unwrap();
+    let c_shader = c_program.map(|c| ProgramShader::new(c).unwrap());
     for c in 0..CASES {
-        let case = gate_case(&a, c, a.needs_quad() || b.needs_quad(), QuadInputs::Own);
+        let quad = a.needs_quad() || b.needs_quad();
+        let case = gate_case(&a, c, quad, QuadInputs::Own);
         println!(
             "case {c}: inputs {:x?}",
             case.iter().map(|q| &q.inputs).collect::<Vec<_>>()
@@ -1618,13 +1933,39 @@ fn one() {
         let (mut sa, mut sb) = (Hashed::for_shader(&a, c), Hashed::for_shader(&b, c));
         let (x, y) = (run_asking(&a, &case, &mut sa), run_asking(&b, &case, &mut sb));
         println!("  A {x:x?}\n  B {y:x?}");
-        for (k, (p, q)) in sa.asked.iter().zip(&sb.asked).enumerate() {
-            if p != q {
-                println!("  request {k} differs:\n    A {p}\n    B {q}");
+        if let Some(cs) = &c_shader {
+            let mut sc = Hashed::for_shader(cs, c);
+            let z = run_asking(cs, &case, &mut sc);
+            println!("  C {z:x?}");
+            for (k, (p, q)) in sa.asked.iter().zip(&sc.asked).enumerate() {
+                if p != q {
+                    println!("  request {k} differs:\n    A {p}\n    C {q}");
+                    break;
+                }
+            }
+            if sa.asked.len() != sc.asked.len() {
+                println!("  A made {} requests, C {}", sa.asked.len(), sc.asked.len());
+            }
+            // the quad with every lane the first lane's inputs (no lane leaves a loop before the others)
+            if quad {
+                let first = gate_case(&a, c, quad, QuadInputs::First);
+                let (mut ta, mut tc) = (Hashed::for_shader(&a, c), Hashed::for_shader(cs, c));
+                let (xa, xc) = (run_asking(&a, &first, &mut ta), run_asking(cs, &first, &mut tc));
+                println!(
+                    "  first lane's inputs everywhere: A and C agree: {}",
+                    same_run(&xa, &xc, false)
+                );
             }
         }
-        if c == 0 || x != y {
-            println!("  A asked {:#?}\n  B asked {:#?}", sa.asked, sb.asked);
+        if !quiet {
+            for (k, (p, q)) in sa.asked.iter().zip(&sb.asked).enumerate() {
+                if p != q {
+                    println!("  request {k} differs:\n    A {p}\n    B {q}");
+                }
+            }
+            if c == 0 || x != y {
+                println!("  A asked {:#?}\n  B asked {:#?}", sa.asked, sb.asked);
+            }
         }
         if sa.asked.len() != sb.asked.len() {
             println!("  A made {} requests, B {}", sa.asked.len(), sb.asked.len());

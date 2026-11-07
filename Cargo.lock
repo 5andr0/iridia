@@ -315,6 +315,7 @@ dependencies = [
  "iridia-dxil",
  "iridia-exec",
  "iridia-ir",
+ "iridia-naga",
  "iridia-passes",
  "primase-naga",
  "primase-testdata",
@@ -397,6 +398,7 @@ dependencies = [
  "iridia-ir",
  "naga",
  "primase-naga",
+ "proptest",
 ]
 
 [[package]]

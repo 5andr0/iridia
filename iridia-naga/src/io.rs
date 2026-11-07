@@ -18,7 +18,8 @@ pub struct Item {
     pub value: Value,
     /// Its location or built-in.
     pub binding: Binding,
-    /// The varying it carries, by index into the inputs or outputs.
+    /// The varying it carries, by index into the inputs or outputs. A vertex program's clip distances are one item,
+    /// `clip_distances`, an array of every clip distance output's lanes in order: this is the first of them.
     pub varying: usize,
 }
 
@@ -43,8 +44,12 @@ fn carried(stage: Stage, output: bool, v: &Varying) -> Value {
             | SystemValue::InstanceIndex
             | SystemValue::PrimitiveIndex
             | SystemValue::SampleIndex
-            | SystemValue::Coverage,
+            | SystemValue::Coverage
+            | SystemValue::GroupIndex,
         ) => (ScalarType::Uint, 1),
+        Some(SystemValue::GroupId | SystemValue::GroupThreadId | SystemValue::DispatchThreadId) => {
+            (ScalarType::Uint, 3)
+        }
         Some(SystemValue::Depth | SystemValue::DepthGreaterEqual | SystemValue::DepthLessEqual) => {
             (ScalarType::Float, 1)
         }
@@ -69,6 +74,10 @@ fn builtin(stage: Stage, output: bool, system: SystemValue) -> Option<naga::Buil
         (Stage::Pixel, _, Coverage) => naga::BuiltIn::SampleMask,
         // naga has no conservative-depth variants: the depth hints are not carried
         (Stage::Pixel, true, Depth | DepthGreaterEqual | DepthLessEqual) => naga::BuiltIn::FragDepth,
+        (Stage::Compute, false, GroupId) => naga::BuiltIn::WorkGroupId,
+        (Stage::Compute, false, GroupThreadId) => naga::BuiltIn::LocalInvocationId,
+        (Stage::Compute, false, DispatchThreadId) => naga::BuiltIn::GlobalInvocationId,
+        (Stage::Compute, false, GroupIndex) => naga::BuiltIn::LocalInvocationIndex,
         _ => return None,
     })
 }
@@ -122,11 +131,11 @@ fn location(stage: Stage, output: bool, v: &Varying, at: u32) -> Binding {
     }
 }
 
-/// The entry point's arguments and result members for a vertex or pixel interface. `Err` says why the module cannot
-/// carry it.
+/// The entry point's arguments and result members for a vertex, pixel or compute interface (a compute program's
+/// inputs are its invocation ids, built-ins). `Err` says why the module cannot carry it.
 pub fn entry_io(interface: &Interface) -> Result<EntryIo, String> {
     let stage = interface.stage;
-    if !matches!(stage, Stage::Vertex | Stage::Pixel) {
+    if !matches!(stage, Stage::Vertex | Stage::Pixel | Stage::Compute) {
         return Err(format!("a {stage:?} program's entry point is not lowered yet"));
     }
     let mut io = EntryIo::default();
@@ -137,7 +146,8 @@ pub fn entry_io(interface: &Interface) -> Result<EntryIo, String> {
             &interface.inputs
         };
         let mut next = 0u32;
-        let mut items = Vec::new();
+        let mut items: Vec<Item> = Vec::new();
+        let mut clip: Option<usize> = None;
         for (i, v) in list.iter().enumerate() {
             let name = format!("{}{}", v.label.name, v.label.index);
             let direction = if output { "output" } else { "input" };
@@ -154,8 +164,36 @@ pub fn entry_io(interface: &Interface) -> Result<EntryIo, String> {
                     blend_src: None,
                     per_primitive: false,
                 },
+                // a vertex program's clip distances are one array of floats, every clip distance output's lanes in
+                // order, at the place of the first
+                Some(SystemValue::ClipDistance) if stage == Stage::Vertex && output => {
+                    let width = v.value.width;
+                    match clip.and_then(|at| items.get_mut(at)) {
+                        Some(item) => item.value.width = item.value.width.saturating_add(width),
+                        None => {
+                            clip = Some(items.len());
+                            items.push(Item {
+                                name: "clip_distances".into(),
+                                value: Value {
+                                    scalar: ScalarType::Float,
+                                    width,
+                                },
+                                binding: Binding::BuiltIn(naga::BuiltIn::ClipDistances),
+                                varying: i,
+                            });
+                        }
+                    }
+                    continue;
+                }
+                // WebGPU has no cull distance: a vertex program's value travels as a varying, and culling the primitive
+                // whose vertices are all negative is the pipeline's
+                Some(SystemValue::CullDistance) if stage == Stage::Vertex && output => plain(v),
+                // a clip or cull distance a pixel program reads has no built-in; one it does not read is not carried
+                Some(SystemValue::ClipDistance | SystemValue::CullDistance) if !v.used => continue,
                 Some(SystemValue::ClipDistance | SystemValue::CullDistance) => {
-                    return Err(format!("{name}: clip and cull distances are not lowered yet"));
+                    return Err(format!(
+                        "{name}: a clip or cull distance as a {stage:?} {direction} has no built-in"
+                    ));
                 }
                 Some(SystemValue::RenderTargetArrayIndex | SystemValue::ViewportArrayIndex) => plain(v),
                 Some(system) => match builtin(stage, output, system) {

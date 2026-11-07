@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+- `iridia-naga` lowers compute programs and the memory of every stage: the thread group size and the invocation ids
+  as built-ins; workgroup variables; barriers (WGSL's are execution barriers of the workgroup, so a memory barrier
+  without execution and a device-wide one are lowered as the workgroup's); raw, structured and typed buffers, read and
+  written, bounds-checked as the IR states (outside, a read gives zero and a write does nothing); every atomic of the
+  IR on buffers, typed buffers and workgroup memory (a compare-exchange is a loop of naga's weak one, and a minimum or
+  maximum of the other signedness than the memory's words a compare-exchange loop); the hidden counters of
+  structured views; storage images (`rgba32*`, or `r32*` where an atomic reaches them) loaded and stored; texel loads
+  of textures, checked against the size of their level; size, level, layer and sample queries; gathers; depth
+  textures and comparison samples; fixed sample offsets; and a vertex program's clip distances as one
+  `clip_distances` array (`Profile::NAGA` now allows `CLIP_DISTANCES`). A sample's array layer is rounded and taken at
+  least 0, as Direct3D does (it was passed as a coordinate lane, which naga rejected). A front-facing flag read as an
+  integer is all ones. A bitcast between 32-bit lanes and f64 goes through 64-bit integers (naga's bitcast keeps the
+  lane count), an infinite or NaN literal is the bits of one, bitcast (naga holds none), and a lane or swizzle of a
+  scalar is the scalar. What it still refuses, by name: hull, domain and geometry programs, a vertex program that feeds
+  a tessellator, an element of an array of resources, an atomic of a storage image, a multisampled array texture, a
+  level clamp, a gather at a computed offset, a sample of a 1D texture at an explicit level, bias or derivatives, and a
+  biased sample of a depth texture or one at a computed level (WGSL has none of these). A module naga rejects is
+  reported as a lowering bug naming the expression it rejects. Breaking: `BindingPlan` gains `counters` (group 4, at the
+  view's binding), and `BindingPlan::d3d` binds a register of another space than 0 at `(space << 16) | register`
+  (`uN_spaceS`) where it refused it.
+- `iridia-exec`: a lane or swizzle of a value loaded from memory is the value as it was loaded. It was read from memory
+  again where it was taken, so a store between the load and the read reached it: a naga module whose loads and their
+  uses are apart (WGSL read back, `let s = l; l = ...; s.z`) ran wrong. The lifts' own modules, whose reads follow
+  their loads, were not affected.
+- `iridia-dxbc/tests/ir_gate.rs` has a column C: the IR after the passes, lowered by `iridia-naga`, written as WGSL,
+  read back by naga and run in the executor A runs in, held to A on every vector. Sekiro: 432 of 432 agree; Riders
+  Republic: 2,414 of 2,443 (25 hull, domain and geometry programs, 1 vertex program that feeds a tessellator and 3
+  image atomics not lowered); Unity: 4,847 of 4,854 (7 multisampled array textures not lowered). The gate's texture
+  backend answers a texel outside the size it reports with zero and drops a store there, as Direct3D's views do.
+  `iridia-naga/tests/compute.rs` holds generated compute programs (buffer and workgroup stores, loads and atomics,
+  inside and past their ends, with barriers) to leave the memory the IR leaves (proptest, 1,000 cases). The slim set's
+  DXBC programs whose IR lowers and whose WGSL naga reads back: 3,026 of 3,670, from 951.
 - The pre-push gate: `iridia/tests/slim.rs` takes the slim shader set (`oracles.corpus.general/slim`, primase-testdata
   0.2.1: 8,286 DXBC, DXIL and Direct3D 9 programs that reach every lifter region the full pool of 108,394 reaches)
   through every lift of each family: the older lift (validated, WGSL written and read back by naga), the IR lift

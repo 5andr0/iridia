@@ -18,7 +18,7 @@ wgsl = ["naga/wgsl-out"]
 
 [dependencies]
 iridia-ir.workspace = true
-# stock naga, pinned: every naga node this crate builds is in `lower.rs`
+# stock naga, pinned: every naga node this crate builds is in `src/lower`
 naga = { version = "=30.0.1", default-features = false }
 
 [dev-dependencies]
@@ -29,6 +29,8 @@ iridia.workspace = true
 iridia-exec.workspace = true
 iridia-exec-ir.workspace = true
 naga-fork = { package = "primase-naga", version = "30.0.1", default-features = false, features = ["wgsl-in"] }
+# tests/compute.rs generates the programs it runs both ways
+proptest.workspace = true
 
 [lints]
 workspace = true

@@ -33,7 +33,8 @@ impl Profile {
             .union(Capabilities::SHADER_INT64)
             .union(Capabilities::PRIMITIVE_INDEX)
             .union(Capabilities::MULTISAMPLED_SHADING)
-            .union(Capabilities::CUBE_ARRAY_TEXTURES),
+            .union(Capabilities::CUBE_ARRAY_TEXTURES)
+            .union(Capabilities::CLIP_DISTANCES),
     };
 
     /// WebGPU's core WGSL: per-sample shading (`sample_index`, `@interpolate(..., sample)`) and cube array textures
@@ -87,6 +88,13 @@ pub fn requirements(program: &Program) -> Vec<Requirement> {
         if let Some((c, what)) = capability_of(v.ty.scalar) {
             need(c, format!("value %{n} is {what}"));
         }
+        // an f64's bits are moved and tested as 64-bit integers (a bitcast to or from 32-bit lanes, a NaN test)
+        if v.ty.scalar == Scalar::F64 {
+            need(
+                Capabilities::SHADER_INT64,
+                format!("value %{n} is f64, whose bits the lowering moves as 64-bit integers"),
+            );
+        }
     }
     for v in &f.vars {
         if let Some((c, what)) = capability_of(v.ty.scalar) {
@@ -102,6 +110,9 @@ pub fn requirements(program: &Program) -> Vec<Requirement> {
             need(Capabilities::FLOAT64, format!("{name} is f64"));
         }
         let pixel_input = stage == Stage::Pixel && list == "input";
+        if stage == Stage::Vertex && list == "output" && v.system == Some(SystemValue::ClipDistance) {
+            need(Capabilities::CLIP_DISTANCES, format!("{name} is a clip distance"));
+        }
         match v.system {
             Some(SystemValue::PrimitiveIndex) if pixel_input => {
                 need(

@@ -6,7 +6,9 @@ Part of [iridia](https://github.com/Kalmarv/iridia), which turns compiled shader
 
 ## What it does
 
-- `module(program, plan)` builds the module: the entry point `main` with an argument per interface input and a member of the result structure `Out` per output (`entry_io` states them), and each resource a global where the `BindingPlan` binds it. `BindingPlan::d3d` puts Direct3D's register classes in bind groups 0 to 3 (`cbN`, `tN`, `sN`, `uN`), each register its binding.
+- `module(program, plan)` builds the module of a vertex, pixel or compute program: the entry point `main` with an argument per interface input (a compute program's are its invocation ids, built-ins) and a member of the result structure `Out` per output (`entry_io` states them; a vertex program's clip distances are one `clip_distances` array), the thread group size of a compute program, and each resource a global where the `BindingPlan` binds it. `BindingPlan::d3d` puts Direct3D's register classes in bind groups 0 to 3 (`cbN`, `tN`, `sN`, `uN`), each register its binding; a register of another space than 0 binds at `(space << 16) | register` (`uN_spaceS`), and a structured view's hidden counter in group 4 at the view's binding (`uN_counter`).
+- Memory is bound as the older lifts bind it: a constant buffer is rows of `vec4<u32>`; a raw or structured buffer a runtime array of 32-bit words (atomic words where an atomic reaches it); a typed buffer an array of `vec4<u32>`, each element four 32-bit lanes the host wrote in the view's type (structures of four atomic words where an atomic reaches it); a storage image `rgba32float`, `rgba32uint` or `rgba32sint` by its texels' type. Every read and write of a buffer or image is checked against its size, as the IR states: outside, a read gives zero and a write does nothing, where WGSL leaves it to the implementation.
+- Workgroup variables are `var<workgroup>` (zero at the start, as the IR's); an atomic of the IR is naga's where it has one, a compare-exchange is a loop of naga's weak one until it exchanges or the word differs, and a minimum or maximum of the other signedness than its memory's words is a compare-exchange loop. WGSL's barriers are execution barriers of the workgroup: a memory barrier without execution is lowered as one with it, and a device-wide one as the workgroup's.
 - Operations naga has whole map to one expression; the others expand in the lowering, each in one function: a zero-wins multiply, `min` and `max` with their NaN rule, `saturate` of NaN, a float-to-integer conversion that saturates, rounding with ties away from zero, a constant buffer row read outside the buffer.
 - A masked input load is a swizzle of the argument; a masked output store is composed with what the output held (zero before the first store).
 - `validate(module, profile)` runs naga's validator with the profile's capabilities; `wgsl(program, profile)` (the `wgsl` feature, on by default) preflights the program, lowers it with the D3D plan, validates and writes the WGSL.
@@ -75,14 +77,14 @@ assert!(wgsl.contains("select("), "{wgsl}");
 ## Guarantees and limits
 
 - A program is lowered for a target `Profile` (`Profile::BROWSER` for WebGPU's core WGSL, `Profile::NAGA` for naga's own dialect, either widened with `Profile::with`): `preflight` refuses a program that needs a capability the profile lacks, naming the value, varying or resource that needs it, and naga's validator runs with the profile's capabilities alone. A module naga rejects after the preflight accepted is reported as a lowering bug.
-- It lowers what the Direct3D 9 reader makes, and refuses the rest by name.
+- It lowers the vertex, pixel and compute programs the Direct3D 9 and DXBC readers make, and refuses the rest by name: hull, domain and geometry programs (WGSL has no such stage), a vertex program that feeds a tessellator, an element of an array of resources, an atomic of a storage image (naga's has no result), a multisampled array texture, a sample with a level clamp, a gather at a computed offset, a comparison sample at a level other than the derivatives' or zero, a sample of a 1D texture at an explicit level, bias or derivatives, and a biased sample of a depth texture or one at a computed level.
 - naga's `break` and `continue` reach only the innermost construct: run `iridia_passes::break_flags` first. A `Cfg` body must be structured first (`iridia_passes::structurize`).
 - Pipeline state is not lowered: `iridia_passes::specialise` it first.
 - WGSL text cannot say a varying has no interpolation, and naga's namer adds a `_` to some names; a reader of the WGSL sees those, not the IR's.
 
 ## Tests
 
-`cargo test -p iridia-naga` needs no game files: `tests/lower.rs` pins the WGSL of masked loads and stores and checks that unspecialised state is refused. The Direct3D 9 reader's tests lower every Shaun White Skateboarding program they read.
+`cargo test -p iridia-naga` needs no game files: `tests/lower.rs` pins the WGSL of masked loads and stores and checks that unspecialised state is refused, and `tests/compute.rs` lowers compute programs and runs what naga reads back of their WGSL. The Direct3D 9 reader's tests lower every Shaun White Skateboarding program they read, and `iridia-dxbc/tests/ir_gate.rs` runs every lowered program of the Sekiro, Riders Republic and Unity corpora (column C) against the older lift.
 
 ## Licence
 

@@ -204,9 +204,16 @@ fn main {
         &[(ScalarType::Float, 1)],
         Vec::new(),
     );
+    // f64 itself, and 64-bit integers, which an f64's bits are moved through
     let needs = iridia_naga::requirements(&p);
-    assert_eq!(needs.len(), 1, "{needs:?}");
-    assert_eq!(needs[0].capability, naga::valid::Capabilities::FLOAT64);
+    assert_eq!(
+        needs.iter().map(|r| r.capability).collect::<Vec<_>>(),
+        [
+            naga::valid::Capabilities::FLOAT64,
+            naga::valid::Capabilities::SHADER_INT64
+        ],
+        "{needs:?}"
+    );
     // browser WGSL has no f64: the preflight names the value, before any naga module is built
     let e = iridia_naga::wgsl(&p, &iridia_naga::Profile::BROWSER).unwrap_err();
     assert!(

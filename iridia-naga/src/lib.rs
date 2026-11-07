@@ -30,7 +30,7 @@ mod profile;
 use alloc::{format, string::String, vec::Vec};
 use core::fmt;
 
-use iridia_ir::interface::{D3dClass, Interface, ResourceId, ResourceKind};
+use iridia_ir::interface::{BufferKind, D3dClass, Interface, ResourceId, ResourceKind, StorageTarget};
 
 pub use io::{EntryIo, Item, entry_io};
 pub use lower::module;
@@ -68,14 +68,20 @@ pub struct Bind {
 pub struct BindingPlan {
     /// One per resource.
     pub bindings: Vec<Bind>,
+    /// The hidden counter of a structured unordered-access view (D3D's append and consume buffers), a buffer of its
+    /// own in WebGPU: one per view that has one, `resource` the view. The module binds only those the program changes.
+    pub counters: Vec<Bind>,
 }
 
 impl BindingPlan {
     /// Direct3D's register classes as bind groups, each register its binding: constant buffers in group 0 (`cbN`),
-    /// shader resources in group 1 (`tN`), samplers in group 2 (`sN`), unordered-access views in group 3 (`uN`).
-    /// Pipeline state is not bound. A resource with no D3D register is refused.
+    /// shader resources in group 1 (`tN`), samplers in group 2 (`sN`), unordered-access views in group 3 (`uN`). A
+    /// register of a space other than 0 binds at `(space << 16) | register` (`uN_spaceS`). A structured view's hidden
+    /// counter binds in group 4 at the view's binding (`uN_counter`). Pipeline state is not bound. A resource with no
+    /// D3D register is refused.
     pub fn d3d(interface: &Interface) -> Result<BindingPlan, Error> {
         let mut bindings = Vec::new();
+        let mut counters = Vec::new();
         // pipeline state is set with the draw, not bound: specialisation folds it (a state block would be planned here)
         for r in interface
             .resources
@@ -94,20 +100,43 @@ impl BindingPlan {
                 D3dClass::Sampler => (2, "s"),
                 D3dClass::UnorderedAccess => (3, "u"),
             };
-            if d.space != 0 {
-                return Err(Error(format!(
-                    "resource {} is in register space {}",
-                    r.provenance.name, d.space
-                )));
+            let (binding, name) = if d.space == 0 {
+                (d.register, format!("{prefix}{}", d.register))
+            } else {
+                if d.space > 0xffff || d.register > 0xffff {
+                    return Err(Error(format!(
+                        "resource {}: register {} of space {} is past what a binding of (space << 16) | register \
+                         holds",
+                        r.provenance.name, d.register, d.space
+                    )));
+                }
+                (
+                    (d.space << 16) | d.register,
+                    format!("{prefix}{}_space{}", d.register, d.space),
+                )
+            };
+            if matches!(
+                r.kind,
+                ResourceKind::Storage {
+                    target: StorageTarget::Buffer(BufferKind::Structured { .. }),
+                    ..
+                }
+            ) {
+                counters.push(Bind {
+                    resource: r.id,
+                    group: 4,
+                    binding,
+                    name: format!("{name}_counter"),
+                });
             }
             bindings.push(Bind {
                 resource: r.id,
                 group,
-                binding: d.register,
-                name: format!("{prefix}{}", d.register),
+                binding,
+                name,
             });
         }
-        Ok(BindingPlan { bindings })
+        Ok(BindingPlan { bindings, counters })
     }
 }
 
