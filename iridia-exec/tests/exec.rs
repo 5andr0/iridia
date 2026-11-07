@@ -373,16 +373,12 @@ fn an_index_the_program_computes_picks_an_element_of_a_resource_array() {
 }
 
 /// The interface's count is a resource array's length, the one place the IR states it, and a run checks an index
-/// against it. The naga-based writer wrote the arrays as WGSL (`binding_array<texture_2d<f32>, 4>`,
-/// `binding_array<sampler>`); the IR's lowering to naga takes no element of an array of resources yet, and says so.
+/// against it. The IR lowering writes the texture and sampler arrays as WGSL binding arrays.
 #[test]
 fn a_resource_array_is_written_and_its_count_is_checked() {
-    let e = iridia_naga::wgsl(&array_program(4), &iridia_naga::Profile::NAGA).unwrap_err();
-    assert!(
-        e.to_string()
-            .contains("a sample through an element of an array of samplers is not lowered yet"),
-        "{e}"
-    );
+    let wgsl = iridia_naga::wgsl(&array_program(4), &iridia_naga::Profile::NAGA).unwrap();
+    assert!(wgsl.contains("binding_array<texture_2d<f32>, 4>"), "{wgsl}");
+    assert!(wgsl.contains("binding_array<sampler>"), "{wgsl}");
     // three textures: element 3 is past the array
     use iridia_exec::{Executable, Resources, Runner};
     let three = array_program(3);
