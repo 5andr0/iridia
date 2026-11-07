@@ -109,6 +109,23 @@ fn unorm(x: f32, n: u8) -> u32 {
 }
 
 impl Format {
+    /// One texel of a multisampled resource of this format resolved, as `ResolveSubresource` (and Direct3D 9's
+    /// `StretchRect`) resolves it: the average of its `samples`' lanes, as floats. An integer, typeless or depth format
+    /// has no average and is refused.
+    pub fn resolve(&self, samples: &[[u32; 4]]) -> Result<[u32; 4], String> {
+        if !matches!(self.class, Class::Float | Class::Unorm) {
+            return Err(format!("a resolve of a multisampled {} target", self.name));
+        }
+        let mut sum = [0f64; 4];
+        for sample in samples {
+            for (total, &lane) in sum.iter_mut().zip(sample) {
+                *total += f64::from(f32::from_bits(lane));
+            }
+        }
+        let n = samples.len().max(1) as f64;
+        Ok(sum.map(|total| ((total / n) as f32).to_bits()))
+    }
+
     /// The four lanes a view reads of the texel `bytes` (as many as [`Format::size`]): f32 bits for a float or UNORM
     /// format, the integers for an integer one, each missing component 0 and a missing alpha 1.
     pub fn read(&self, bytes: &[u8]) -> [u32; 4] {

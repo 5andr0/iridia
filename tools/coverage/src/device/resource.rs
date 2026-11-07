@@ -266,23 +266,17 @@ impl Resource {
         if self.samples <= 1 {
             return Ok(self.clone());
         }
-        if !matches!(self.format.class, Class::Float | Class::Unorm) {
-            return Err(format!("a resolve of a multisampled {} target", self.format.name));
-        }
         let size = self.format.size as usize;
         let samples = self.samples as usize;
         let mut out = self.clone();
         out.samples = 1;
         out.data = vec![0; out.total_bytes()];
         for (texel, into) in self.data.chunks(size * samples).zip(out.data.chunks_mut(size)) {
-            let mut sum = [0f64; 4];
-            for sample in texel.chunks(size) {
-                for (total, lane) in sum.iter_mut().zip(self.format.read(sample)) {
-                    *total += f64::from(f32::from_bits(lane));
-                }
-            }
-            let lanes = sum.map(|total| ((total / samples as f64) as f32).to_bits());
-            self.format.write(lanes, 0xf, into);
+            let read: Vec<[u32; 4]> = texel
+                .chunks(size)
+                .map(|sample| self.format.read(sample))
+                .collect();
+            self.format.write(self.format.resolve(&read)?, 0xf, into);
         }
         Ok(out)
     }

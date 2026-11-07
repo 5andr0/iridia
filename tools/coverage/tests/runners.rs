@@ -55,6 +55,35 @@ fn the_offload_resource_array_tests_bind_every_element() {
     ]));
 }
 
+/// The offloader's mesh pipelines (a mesh and a pixel program, `DispatchGroupCount` groups, its default rasterizer
+/// state) and multisampled targets (`SampleCount`, resolved before the read back) draw and reach the image comparison.
+/// The comparison itself needs a checkout of offload-golden-images, which the suite does not copy: the coverage job
+/// holds it, making the table (`docs/coverage`, where these four pass) with the checkout and failing where it differs.
+/// The amplification pipeline is refused, iridia-dxil not lifting amplification programs, and the stencil one is not
+/// modelled.
+#[test]
+fn the_offload_mesh_and_multisampled_pipelines_draw_to_their_image_comparisons() {
+    let outcomes = offload_outcomes(&[
+        "Graphics/MSAA/MeshShaderTriangle.test",
+        "Graphics/MSAA/SimpleTriangle.test",
+        "Graphics/MeshShaders/SimpleAmplification.test",
+        "Graphics/MeshShaders/SimpleLines.test",
+        "Graphics/MeshShaders/SimpleTriangle.test",
+        "Graphics/MeshShaders/StencilState.test",
+    ]);
+    for (test, outcome) in &outcomes {
+        let want = match test.as_str() {
+            "Graphics/MeshShaders/SimpleAmplification.test" => "refused: ",
+            "Graphics/MeshShaders/StencilState.test" => "not-modelled: a stencil test",
+            _ => "not-modelled: no checkout of offload-golden-images",
+        };
+        assert!(outcome.starts_with(want), "{test}: {outcome}");
+        if want == "refused: " {
+            assert!(outcome.contains("amplification"), "{test}: {outcome}");
+        }
+    }
+}
+
 /// The runs of vkd3d test file `test` in case file `cases`.
 fn vkd3d_runs(cases: &str, test: &str) -> Vec<vkd3d::run::RunResult> {
     let text = read_text(&suite(cases)).expect("the vkd3d case file");

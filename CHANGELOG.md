@@ -72,7 +72,9 @@
   holds multisampled resources (a texel's samples together), loads a multisampled texture's sample, and a probe
   reads a multisampled target resolved, as vkd3d's runners do. A mesh dispatch runs the mesh program's thread groups
   (`iridia_exec::mesh`) and draws the primitives they emit with the pixel program; an amplification program and a
-  pixel program reading primitive outputs are refused by name. CI makes the table again (`docs/coverage`) and fails
+  pixel program reading primitive outputs are refused by name. The offload-test-suite's mesh pipelines run as the
+  offloader's D3D12 mesh pipeline state has them (its default rasterizer: back faces culled, clockwise front faces),
+  and its raster pipelines draw on multisampled targets, resolved before they are read back. CI makes the table again (`docs/coverage`) and fails
   when it differs from the one committed.
 - `iridia-exec`: `draw` draws points and lines as well as triangles (every list and strip topology), each primitive
   numbered for `SV_PrimitiveID`; an aliased line by the diamond exit rule (3.4.3), which an NVIDIA RTX 5070 Ti draws

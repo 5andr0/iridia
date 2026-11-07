@@ -12,6 +12,7 @@ use iridia_exec::draw::{
     Viewport as DrawViewport,
 };
 use iridia_exec::geometry::{GeometryShader, Topology};
+use iridia_exec::mesh::MeshShader;
 use iridia_exec::tessellation::TessellationShader;
 use iridia_exec::{PixelShader, ProgramShader};
 use serde_json::Value;
@@ -30,7 +31,7 @@ use crate::device::resource::{Counter, Dim, Kind, Resource, Swizzle};
 use crate::device::sample::{Address, Compare, Reduction, Sampler};
 use crate::device::{Device, Dispatch, SlotRequests};
 use crate::front::{Programs, Ready, Stop};
-use crate::stages::{Assembly, Stages, Stopped as StageStop};
+use crate::stages::{Assembly, Stages, Stopped as StageStop, mesh_draw};
 use crate::vkd3d::cases::Descriptor;
 
 /// The wave width compute programs run with (the device's `WaveLaneCountMin` and `Max`).
@@ -42,7 +43,7 @@ const DESCRIPTION: &str = "iridia-exec (CPU reference executor)";
 /// The features the device has, as lit.cfg.py would set them from api-query for it: the configuration (DirectX, DXC,
 /// Windows), every shader model 6 the lifter reads, what the executor runs (16- and 64-bit types, 64-bit and float
 /// atomics, derivatives in compute, a 32-lane wave), unbounded descriptor tables, and the golden images. Not here,
-/// so the tests needing them are reported unsupported: mesh shaders, barycentrics, stencil reference from the pixel
+/// so the tests needing them are reported unsupported: barycentrics, stencil reference from the pixel
 /// program, shading rate, several viewports, and acceleration structures and ray-tracing pipelines.
 pub fn features() -> BTreeSet<String> {
     let mut f: BTreeSet<String> = [
@@ -60,6 +61,7 @@ pub fn features() -> BTreeSet<String> {
         "ResourceBindingTier3",
         "WaveSize_32",
         "goldenimage",
+        "MeshShader",
     ]
     .map(String::from)
     .into();
@@ -872,18 +874,12 @@ fn raster(
         ),
         other => return Err(not_modelled(format!("a draw of a {other}"))),
     };
-    if p.bindings.sample_count != 1 {
-        return Err(not_modelled(format!(
-            "{} samples per pixel",
-            p.bindings.sample_count
-        )));
-    }
-    if p.bindings.viewports.len() > 1 {
-        return Err(not_modelled("more than one viewport"));
-    }
-    if p.stencil.as_ref().is_some_and(|s| s.enabled) {
-        return Err(not_modelled("a stencil test"));
-    }
+    let RasterTarget {
+        name: target,
+        format,
+        mut surface,
+        rasterizer,
+    } = target_of(p)?;
     let vsh = vs
         .shader
         .as_ref()
@@ -946,9 +942,168 @@ fn raster(
         .map(|i| vertex_inputs(vsh, p, i))
         .collect::<Result<Vec<_>, _>>()?;
     let indices: Vec<u32> = (0..count).collect();
-    let target = p.bindings.render_target.clone();
+    let l = layout(p, rs)?;
+    let (mut device, constants) = device_of(p, &l)?;
+    samplers_in_space_0(&l)?;
+    let (vs_constants, ps_constants) = (banks_of(vsh, &constants), banks_of(psh, &constants));
+    let vs_banks: Vec<(u32, &[[u32; 4]])> = vs_constants.iter().map(|(s, r)| (*s, r.as_slice())).collect();
+    let ps_banks: Vec<(u32, &[[u32; 4]])> = ps_constants.iter().map(|(s, r)| (*s, r.as_slice())).collect();
+    let mut interfaces = vec![vsh.interface(), psh.interface()];
+    interfaces.extend(between.iter().map(|(_, r)| &r.lifted.program.interface));
+    let mut requests = SlotRequests::new(&mut device, &interfaces).map_err(Stopped::NotModelled)?;
+    match &linked {
+        Some(linked) => {
+            let Assembly::Primitives(topology) = assembly else {
+                return Err(not_modelled("a patch list with no hull and domain program"));
+            };
+            let primitives =
+                Primitive::assemble(topology, &indices, None).map_err(|e| not_modelled(e.detail))?;
+            if let Err(e) = linked.draw(
+                &vertices,
+                &primitives,
+                &vs_banks,
+                &ps_banks,
+                &mut requests,
+                &rasterizer,
+                &mut surface,
+            ) {
+                return Ok(Err(format!("{ps_name}: {e}")));
+            }
+        }
+        None => {
+            let rows = rows_of(&constants);
+            let staged = Stages {
+                vs: vsh,
+                tessellation: tessellation.as_ref(),
+                gs: gs.as_ref(),
+                ps: psh,
+            };
+            match staged.draw(
+                &vertices,
+                assembly,
+                [&vs_banks, &ps_banks],
+                &rows,
+                &mut requests,
+                &rasterizer,
+                &mut surface,
+            ) {
+                Ok(_) => {}
+                Err(StageStop::NotModelled(m)) => return Err(not_modelled(m)),
+                Err(StageStop::Failed(stage, m)) => {
+                    let name = match stage {
+                        "vs" => &vs_name,
+                        "hs" => hull.as_ref().map_or(&vs_name, |h| &h.0),
+                        "ds" => domain.as_ref().map_or(&vs_name, |d| &d.0),
+                        "gs" => geometry.as_ref().map_or(&vs_name, |g| &g.0),
+                        _ => &ps_name,
+                    };
+                    return Ok(Err(format!("{name}: {m}")));
+                }
+            }
+        }
+    }
+    write_back(p, &target, format, &surface, &l, &device)?;
+    Ok(Ok(()))
+}
+
+/// Run a mesh pipeline of a mesh and a pixel program as the offloader's D3D12 mesh pipeline state has it:
+/// `DispatchGroupCount` thread groups of the mesh program, the primitives they write drawn with the pixel program, with
+/// a depth buffer, viewport and target as [`raster`]'s but the default rasterizer state (`CD3DX12_RASTERIZER_DESC`:
+/// back faces culled, clockwise triangles front facing), where the traditional pipeline culls none.
+fn mesh_raster(
+    p: &mut Pipeline,
+    ready: &[(String, Arc<Ready>)],
+    rs: Option<&RootSignature>,
+) -> Result<Result<(), String>, Stopped> {
+    let stage = |s: &str| {
+        p.shaders
+            .iter()
+            .zip(ready)
+            .find(|(sh, _)| sh.stage == s)
+            .map(|(_, r)| r.clone())
+    };
+    if stage("Amplification").is_some() {
+        return Err(not_modelled(
+            "an amplification program (iridia-dxil does not lift them)",
+        ));
+    }
+    let (Some((ms_name, ms)), Some((ps_name, ps))) = (stage("Mesh"), stage("Pixel")) else {
+        return Err(not_modelled("a mesh pipeline without a mesh and a pixel program"));
+    };
+    let RasterTarget {
+        name: target,
+        format,
+        mut surface,
+        mut rasterizer,
+    } = target_of(p)?;
+    rasterizer.cull = Cull::Back;
+    rasterizer.front_counter_clockwise = false;
+    let psh = ps
+        .shader
+        .as_ref()
+        .map_err(|e| Stopped::Refused(format!("{ps_name}: {e}")))?;
+    for (r, name) in [(&ms, &ms_name), (&ps, &ps_name)] {
+        if let Some(why) = unbindable(&r.lifted.program.interface) {
+            return Err(not_modelled(format!("{name}: {why}")));
+        }
+    }
+    let mesh = match MeshShader::new(Program::clone(&ms.lifted.program)) {
+        Ok(m) => m,
+        Err(e) => return Ok(Err(format!("{ms_name}: {e}"))),
+    };
+    let l = layout(p, rs)?;
+    let (mut device, constants) = device_of(p, &l)?;
+    samplers_in_space_0(&l)?;
+    let ps_constants = banks_of(psh, &constants);
+    let ps_banks: Vec<(u32, &[[u32; 4]])> = ps_constants.iter().map(|(s, r)| (*s, r.as_slice())).collect();
+    let rows = rows_of(&constants);
+    let interfaces = [&ms.lifted.program.interface, psh.interface()];
+    let mut requests = SlotRequests::new(&mut device, &interfaces).map_err(Stopped::NotModelled)?;
+    match mesh_draw(
+        &mesh,
+        psh,
+        p.dispatch,
+        WAVE,
+        &ps_banks,
+        &rows,
+        &mut requests,
+        &rasterizer,
+        &mut surface,
+    ) {
+        Ok(_) => {}
+        Err(StageStop::NotModelled(m)) => return Err(not_modelled(m)),
+        Err(StageStop::Failed(stage, m)) => {
+            let name = if stage == "ms" { &ms_name } else { &ps_name };
+            return Ok(Err(format!("{name}: {m}")));
+        }
+    }
+    write_back(p, &target, format, &surface, &l, &device)?;
+    Ok(Ok(()))
+}
+
+/// The render target a raster pipeline draws into and the state it draws with, as the offloader's D3D12 pipeline
+/// state has them (see [`raster`]).
+struct RasterTarget {
+    /// The render target's buffer.
+    name: String,
+    format: Format,
+    /// The target, loaded with its buffer's contents, and a depth buffer cleared to 1.
+    surface: Surface,
+    rasterizer: Rasterizer,
+}
+
+/// The render target of a raster pipeline, which draws through one viewport with no stencil test: `SampleCount`
+/// samples a pixel, each loaded with the buffer's texel.
+fn target_of(p: &Pipeline) -> Result<RasterTarget, Stopped> {
+    let samples = p.bindings.sample_count.max(1);
+    if p.bindings.viewports.len() > 1 {
+        return Err(not_modelled("more than one viewport"));
+    }
+    if p.stencil.as_ref().is_some_and(|s| s.enabled) {
+        return Err(not_modelled("a stencil test"));
+    }
     let rt = p
-        .buffer(&target)
+        .buffer(&p.bindings.render_target)
         .ok_or_else(|| not_modelled("a raster pipeline with no render target"))?;
     let format = format_of(rt.format, rt.channels)?;
     let (width, height) = (
@@ -958,15 +1113,15 @@ fn raster(
     let texels: Vec<[u32; 4]> = rt.data[0]
         .chunks(format.size as usize)
         .take((width * height) as usize)
-        .map(|t| format.read(t))
+        .flat_map(|t| std::iter::repeat_n(format.read(t), samples as usize))
         .collect();
-    let mut surface = Surface {
+    let surface = Surface {
         width,
         height,
         layers: 1,
-        samples: 1,
+        samples,
         targets: vec![Some(texels)],
-        depth: Some(vec![1.0; (width * height) as usize]),
+        depth: Some(vec![1.0; (width * height * samples) as usize]),
     };
     let [vx, vy, vw, vh, z0, z1] = p
         .bindings
@@ -1000,93 +1155,35 @@ fn raster(
         clamp_colours: false,
         fog: None,
     };
-    let l = layout(p, rs)?;
-    let (mut device, constants) = device_of(p, &l)?;
-    for (_, space, _) in &l.samplers {
-        if *space != 0 {
-            return Err(not_modelled("a sampler in a register space other than 0"));
-        }
-    }
-    let banks = |sh: &ProgramShader| -> Vec<(u32, Vec<[u32; 4]>)> {
-        sh.constant_buffers()
-            .iter()
-            .map(|&(slot, rows)| {
-                let words = constants.get(&(slot, 0)).map(Vec::as_slice).unwrap_or(&[]);
-                let rows = (0..rows as usize)
-                    .map(|r| [0, 1, 2, 3].map(|k| words.get(r * 4 + k).copied().unwrap_or(0)))
-                    .collect();
-                (slot, rows)
-            })
-            .collect()
-    };
-    let (vs_constants, ps_constants) = (banks(vsh), banks(psh));
-    let vs_banks: Vec<(u32, &[[u32; 4]])> = vs_constants.iter().map(|(s, r)| (*s, r.as_slice())).collect();
-    let ps_banks: Vec<(u32, &[[u32; 4]])> = ps_constants.iter().map(|(s, r)| (*s, r.as_slice())).collect();
-    let mut interfaces = vec![vsh.interface(), psh.interface()];
-    interfaces.extend(between.iter().map(|(_, r)| &r.lifted.program.interface));
-    let mut requests = SlotRequests::new(&mut device, &interfaces).map_err(Stopped::NotModelled)?;
-    match &linked {
-        Some(linked) => {
-            let Assembly::Primitives(topology) = assembly else {
-                return Err(not_modelled("a patch list with no hull and domain program"));
+    Ok(RasterTarget {
+        name: p.bindings.render_target.clone(),
+        format,
+        surface,
+        rasterizer,
+    })
+}
+
+/// Write a draw's target back to its buffer `target`, a multisampled one resolved as the offloader resolves it before
+/// it reads it back (`ResolveSubresource`), and read back every read-write view of the layout `l`.
+fn write_back(
+    p: &mut Pipeline,
+    target: &str,
+    format: Format,
+    surface: &Surface,
+    l: &Layout,
+    device: &Device,
+) -> Result<(), Stopped> {
+    if let (Some(Some(texels)), Some(rt)) = (surface.targets.first(), p.buffer_mut(target)) {
+        let samples = surface.samples.max(1) as usize;
+        for (pixel, bytes) in texels
+            .chunks(samples)
+            .zip(rt.data[0].chunks_mut(format.size as usize))
+        {
+            let texel = match pixel {
+                [one] => *one,
+                _ => format.resolve(pixel).map_err(Stopped::NotModelled)?,
             };
-            let primitives =
-                Primitive::assemble(topology, &indices, None).map_err(|e| not_modelled(e.detail))?;
-            if let Err(e) = linked.draw(
-                &vertices,
-                &primitives,
-                &vs_banks,
-                &ps_banks,
-                &mut requests,
-                &rasterizer,
-                &mut surface,
-            ) {
-                return Ok(Err(format!("{ps_name}: {e}")));
-            }
-        }
-        None => {
-            let rows = |register: u32, space: u32, n: usize| -> Vec<[u32; 4]> {
-                let words = constants
-                    .get(&(register, space))
-                    .map(Vec::as_slice)
-                    .unwrap_or(&[]);
-                (0..n)
-                    .map(|r| [0, 1, 2, 3].map(|k| words.get(r * 4 + k).copied().unwrap_or(0)))
-                    .collect()
-            };
-            let staged = Stages {
-                vs: vsh,
-                tessellation: tessellation.as_ref(),
-                gs: gs.as_ref(),
-                ps: psh,
-            };
-            match staged.draw(
-                &vertices,
-                assembly,
-                [&vs_banks, &ps_banks],
-                &rows,
-                &mut requests,
-                &rasterizer,
-                &mut surface,
-            ) {
-                Ok(_) => {}
-                Err(StageStop::NotModelled(m)) => return Err(not_modelled(m)),
-                Err(StageStop::Failed(stage, m)) => {
-                    let name = match stage {
-                        "vs" => &vs_name,
-                        "hs" => hull.as_ref().map_or(&vs_name, |h| &h.0),
-                        "ds" => domain.as_ref().map_or(&vs_name, |d| &d.0),
-                        "gs" => geometry.as_ref().map_or(&vs_name, |g| &g.0),
-                        _ => &ps_name,
-                    };
-                    return Ok(Err(format!("{name}: {m}")));
-                }
-            }
-        }
-    }
-    if let (Some(Some(texels)), Some(rt)) = (surface.targets.first(), p.buffer_mut(&target)) {
-        for (t, bytes) in texels.iter().zip(rt.data[0].chunks_mut(format.size as usize)) {
-            format.write(*t, 0xf, bytes);
+            format.write(texel, 0xf, bytes);
         }
     }
     for (i, v) in l.views.iter().enumerate() {
@@ -1096,7 +1193,43 @@ fn raster(
             read_back(p, v, r);
         }
     }
-    Ok(Ok(()))
+    Ok(())
+}
+
+/// Refuse a layout with a sampler in a register space other than 0, which a draw's sampler slots do not name.
+fn samplers_in_space_0(l: &Layout) -> Result<(), Stopped> {
+    if l.samplers.iter().any(|(_, space, _)| *space != 0) {
+        return Err(not_modelled("a sampler in a register space other than 0"));
+    }
+    Ok(())
+}
+
+/// The constant buffer banks a stage's program `sh` reads, from the pipeline's `constants` (space 0).
+fn banks_of(sh: &ProgramShader, constants: &Rows) -> Vec<(u32, Vec<[u32; 4]>)> {
+    sh.constant_buffers()
+        .iter()
+        .map(|&(slot, rows)| {
+            let words = constants.get(&(slot, 0)).map(Vec::as_slice).unwrap_or(&[]);
+            let rows = (0..rows as usize)
+                .map(|r| [0, 1, 2, 3].map(|k| words.get(r * 4 + k).copied().unwrap_or(0)))
+                .collect();
+            (slot, rows)
+        })
+        .collect()
+}
+
+/// The pipeline's `constants` as a stage between reads them: `n` rows of the buffer at `register` in `space`, zeros
+/// past what it holds.
+fn rows_of(constants: &Rows) -> impl Fn(u32, u32, usize) -> Vec<[u32; 4]> + '_ {
+    move |register: u32, space: u32, n: usize| -> Vec<[u32; 4]> {
+        let words = constants
+            .get(&(register, space))
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        (0..n)
+            .map(|r| [0, 1, 2, 3].map(|k| words.get(r * 4 + k).copied().unwrap_or(0)))
+            .collect()
+    }
 }
 
 /// Run the offloader on a pipeline and programs.
@@ -1159,7 +1292,31 @@ fn offload(
             stdout.push_str("Graphics command list created complete.\n");
             r
         }
-        PipelineKind::MeshShaderRaster => return Err(not_modelled("a mesh shader pipeline")),
+        PipelineKind::MeshShaderRaster => {
+            let mut ready_all = Vec::new();
+            for name in digests {
+                ready_all.push((name.clone(), ready(programs, name)?));
+            }
+            let bytes = programs.bytes(&digests[0]).map_err(Stopped::NotModelled)?;
+            let rs = rts0::of(&bytes).map_err(Stopped::NotModelled)?;
+            stdout.push_str(
+                "Descriptor heap created.
+Command buffer created.
+Buffers created.
+",
+            );
+            stdout.push_str(
+                "Render pass created.
+Mesh Shader Pipeline created.
+",
+            );
+            let r = mesh_raster(&mut p, &ready_all, rs.as_ref())?;
+            stdout.push_str(
+                "Graphics command list created complete.
+",
+            );
+            r
+        }
         PipelineKind::RayTracing => return Err(not_modelled("a ray tracing pipeline")),
     };
     if let Err(e) = result {
