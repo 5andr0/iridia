@@ -24,8 +24,8 @@ half.workspace = true
 
 [dev-dependencies]
 # The implementations, to run one fixture through each bytecode (a dev-dependency cycle cargo allows).
-iridia-dxbc.workspace = true
-iridia-dxil.workspace = true
+iridia-dxbc = { path = "../iridia-dxbc" }
+iridia-dxil = { path = "../iridia-dxil" }
 proptest.workspace = true
 
 [lints]

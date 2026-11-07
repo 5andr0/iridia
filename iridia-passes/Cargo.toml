@@ -15,9 +15,9 @@ publish.workspace = true
 iridia-ir.workspace = true
 
 [dev-dependencies]
-iridia-exec.workspace = true
-iridia-exec-ir.workspace = true
-iridia-naga = { workspace = true, features = ["wgsl"] }
+iridia-exec = { path = "../iridia-exec" }
+iridia-exec-ir = { path = "../iridia-exec-ir" }
+iridia-naga = { path = "../iridia-naga", default-features = false, features = ["wgsl"] }
 
 [lints]
 workspace = true

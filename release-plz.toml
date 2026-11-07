@@ -2,6 +2,8 @@
 # each crate whose version crates.io does not have yet, then tags the carrier's new version and creates its GitHub
 # Release with that version's CHANGELOG section as notes. Versions are raised by hand: no release pull requests.
 [workspace]
+# paused until 0.7.0, the release with no naga fork: no crate is published, whatever its version
+release = false
 changelog_path = "./CHANGELOG.md"  # from the cargo workspace
 git_tag_enable = false
 git_release_enable = false

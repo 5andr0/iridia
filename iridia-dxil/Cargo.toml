@@ -21,10 +21,10 @@ naga.workspace = true
 half.workspace = true
 
 [dev-dependencies]
-iridia-passes.workspace = true
+iridia-passes = { path = "../iridia-passes" }
 primase-testdata.workspace = true
 serde_json.workspace = true
 
-iridia-exec.workspace = true
+iridia-exec = { path = "../iridia-exec" }
 [lints]
 workspace = true

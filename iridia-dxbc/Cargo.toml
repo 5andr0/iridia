@@ -23,12 +23,12 @@ naga.workspace = true
 primase-testdata.workspace = true
 serde_json.workspace = true
 
-iridia-exec.workspace = true
-iridia-dxil.workspace = true
-iridia-passes.workspace = true
+iridia-exec = { path = "../iridia-exec" }
+iridia-dxil = { path = "../iridia-dxil" }
+iridia-passes = { path = "../iridia-passes" }
 proptest.workspace = true
 # tests/ir_gate.rs's column C: the IR lowered to stock naga, its WGSL read back by naga's front end
-iridia-naga = { workspace = true, features = ["wgsl"] }
+iridia-naga = { path = "../iridia-naga", default-features = false, features = ["wgsl"] }
 naga = { workspace = true, features = ["wgsl-in"] }
 [lints]
 workspace = true
