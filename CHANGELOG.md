@@ -11,6 +11,11 @@
   each of its functions: `structurize`, `promote`, `simplify` and `break_flags`. What it gives is what `iridia-exec`'s
   `::from_ir` constructors and `iridia-naga` take, so a caller no longer copies the sequence (the slim gate and the IR
   gate's column P call it).
+- `iridia-dxbc::ir` lifts a hull program whose patch-constant function leaves patch constants unwritten: the registers
+  the patch-constant signature places them in need no declaration in any fork or join phase, and an unwritten one gives
+  zero, as the naga lift does (it refused "output register oN is not declared": the patch function's registers were
+  the control points'). `hull_unwritten.hlsl` (fxc) tessellates on the IR as the HLSL says, as the naga lift does, and
+  as WARP does.
 - `iridia-coverage`: the table names the dx readers' versions as the build takes them (from `Cargo.lock`, where it
   named 0.5.0 after 0.11.0 came in), and every row has a format: a vkd3d run with no program (the compiler refused
   every shader) its runner's, an offload test with no program DXIL's (the suite is read for DirectX with DXC).

@@ -261,8 +261,8 @@ impl Lift<'_> {
             None => self.pass_through()?,
         }
         let entry = self.end_function("patch_constant")?;
-        self.begin_function()?;
         self.patch_fn = true;
+        self.begin_function()?;
         for phase in phases.iter().filter(|p| p.kind != PhaseKind::ControlPoint) {
             let zero = self.b.u32(0);
             let (label, params) = self

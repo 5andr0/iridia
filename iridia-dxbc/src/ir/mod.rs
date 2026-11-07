@@ -274,10 +274,10 @@ impl<'a> Lift<'a> {
                 }
             }
         }
+        // the registers the function's results are placed in, which a program need not declare where it never writes
+        // them (an unwritten one gives zero): the outputs, or a hull program's patch constants
         let placed: Vec<u32> = self
-            .setup
-            .interface
-            .outputs
+            .result_varyings()
             .iter()
             .filter_map(|v| v.provenance.d3d.map(|d| d.register))
             .filter(|&r| r != u32::MAX)
@@ -369,14 +369,19 @@ impl<'a> Lift<'a> {
     /// Store the output registers into what the function gives as it returns: the outputs, or a hull program's patch
     /// constants.
     fn epilogue(&mut self) -> Result<()> {
-        if !self.patch_fn {
-            return self.store_outputs();
-        }
-        let StageFacts::Hull(h) = &self.setup.interface.facts else {
+        if self.patch_fn && !matches!(self.setup.interface.facts, StageFacts::Hull(_)) {
             return self.refuse("patch constants of a program that is no hull program");
-        };
-        let constants = h.patch_constants.clone();
-        self.store_registers(&constants, true)
+        }
+        let results = self.result_varyings();
+        self.store_registers(&results, self.patch_fn)
+    }
+
+    /// What the function being built gives as it returns: the outputs, or a hull program's patch constants.
+    fn result_varyings(&self) -> Vec<Varying> {
+        match (&self.setup.interface.facts, self.patch_fn) {
+            (StageFacts::Hull(h), true) => h.patch_constants.clone(),
+            _ => self.setup.interface.outputs.clone(),
+        }
     }
 
     /// Store the output registers into the outputs.

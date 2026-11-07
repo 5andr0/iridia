@@ -492,3 +492,126 @@ fn tessellated_patches_are_the_ones_warp_makes() {
         failures.join("\n")
     );
 }
+
+/// A patch-constant function that leaves patch constants its signature places unwritten
+/// (tests/fixtures/hull_unwritten.hlsl: no phase declares o7 to o10) lifts onto the IR, and the patch it makes is what
+/// the HLSL says: the constant factors, each domain point's `mix` from the control points and the written constant
+/// `extra`. The older lift makes the same patch bit for bit, and WARP the same vertices where it is configured.
+#[test]
+fn a_hull_program_that_leaves_patch_constants_unwritten_tessellates() {
+    let hs = include_bytes!("fixtures/hull_unwritten.hs.dxbc");
+    let ds = include_bytes!("fixtures/hull_unwritten.ds.dxbc");
+    let ir = |bytes: &[u8], what: &str| {
+        iridia_dxbc::ir::lift(bytes).unwrap_or_else(|e| panic!("{what} on the IR: {e}"))
+    };
+    let shader =
+        TessellationShader::from_ir(&ir(hs, "hull"), &ir(ds, "domain")).unwrap_or_else(|e| panic!("{e}"));
+    let older =
+        TessellationShader::new(lift(hs).unwrap(), lift(ds).unwrap()).unwrap_or_else(|e| panic!("{e}"));
+    // the vertex program's output for vertex k: (k + 1, 2k + 1, 3, 4)
+    let points: Vec<Vec<[u32; 4]>> = (0..4u8)
+        .map(|k| vec![[f32::from(k) + 1.0, 2.0 * f32::from(k) + 1.0, 3.0, 4.0].map(f32::to_bits)])
+        .collect();
+    let run = |s: &TessellationShader| {
+        s.tessellate(&BTreeMap::new(), &BTreeMap::new(), &mut NoSampler, &points, 0)
+            .unwrap_or_else(|e| panic!("{e}"))
+    };
+    let patch = run(&shader);
+    assert!(
+        patch == run(&older),
+        "the IR lift's patch is not the older lift's"
+    );
+    assert_eq!(patch.factors.edges, [1.0, 2.0, 3.0, 4.0]);
+    assert_eq!(patch.factors.inside, [5.0, 6.0]);
+    assert_eq!(patch.topology, TessTopology::TriangleCw);
+    let names: Vec<&str> = shader.outputs().collect();
+    let register = |name: &str| names.iter().position(|n| *n == name).unwrap();
+    let (loc, mix) = (register("LOC0"), register("MIX0"));
+    // output point i is input point i plus (i, i / 2, 1 / 4, 0): point 1's x is 3, point 2's y is 6; extra is points
+    // 0 and 3 added, plus the primitive (0): (5, 8, 6, 8)
+    assert!(!patch.indices.is_empty());
+    let vertices: Vec<(Vertex, Vertex)> = patch
+        .indices
+        .iter()
+        .map(|&i| {
+            let v = &patch.vertices[i as usize];
+            (v[loc].map(f32::from_bits), v[mix].map(f32::from_bits))
+        })
+        .collect();
+    for (l, m) in &vertices {
+        let said = [l[0] * 3.0 + 5.0, l[1] * 6.0 + 8.0, 6.0, 8.0];
+        assert!(
+            m.iter()
+                .zip(said)
+                .all(|(x, y)| (x - y).abs() <= 1e-5 * y.abs().max(1.0)),
+            "at {l:?}: {m:?}, the HLSL says {said:?}"
+        );
+    }
+
+    let Some(warp) = program(Tool::Warp) else {
+        eprintln!("WARP skipped: needs tools.warp");
+        return;
+    };
+    let own = own_scratch("warp");
+    let dir = own.join("tess-unwritten");
+    std::fs::create_dir_all(&dir).unwrap();
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    let stage = |s: &str| {
+        fixture
+            .join(format!("hull_unwritten.{s}.dxbc"))
+            .display()
+            .to_string()
+    };
+    let cases = dir.join("cases.txt");
+    let results = dir.join("results.jsonl");
+    std::fs::write(
+        &cases,
+        format!(
+            "case hull_unwritten\napi d3d11ts\nvs {}\nhs {}\nds {}\ngs {}\nsopv 3\ncps 4\nend\n",
+            stage("vs"),
+            stage("hs"),
+            stage("ds"),
+            stage("gs")
+        ),
+    )
+    .unwrap();
+    let _oracle = inputs::warp_exclusive();
+    let ran = warp
+        .command()
+        .path_arg(&cases)
+        .path_arg(&results)
+        .output_within(inputs::WARP_LIMIT)
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert!(
+        ran.status.success(),
+        "warp: {}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+    let line = std::fs::read_to_string(&results).unwrap();
+    let v: serde_json::Value = serde_json::from_str(line.trim()).unwrap();
+    assert!(v["error"].is_null(), "WARP: {}", v["error"]);
+    let words: Vec<u32> = v["words"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|w| u32::from_str_radix(w.as_str().unwrap(), 16).unwrap())
+        .collect();
+    let from_warp: Vec<(Vertex, Vertex)> = words
+        .chunks(8)
+        .map(|w| {
+            (
+                [w[0], w[1], w[2], w[3]].map(f32::from_bits),
+                [w[4], w[5], w[6], w[7]].map(f32::from_bits),
+            )
+        })
+        .collect();
+    assert_eq!(vertices.len(), from_warp.len(), "vertices here and from WARP");
+    for (k, (a, b)) in vertices.iter().zip(&from_warp).enumerate() {
+        let near =
+            a.1.iter()
+                .zip(&b.1)
+                .all(|(x, y)| (x - y).abs() <= 1e-5 * x.abs().max(y.abs()).max(1.0));
+        assert!(a.0 == b.0 && near, "vertex {k}: {a:?} here, {b:?} from WARP");
+    }
+    eprintln!("{} vertices compared with WARP", vertices.len());
+}

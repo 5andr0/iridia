@@ -316,8 +316,7 @@
 3ae45a37f1ba0b2cd39b672c81ffee67f41a0cfaac4830636beebde1ef963ca0	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 3c57b0ded9418671878bddcd3d37ed4a7d55d893dca1ef1c5f76d5d164dfaa09	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 3ca58837cdf7a38c2ce96a71791eb456994b0eeb3fc6d82e6fff21ae11bc4fd6	IR WGSL	lower: a read of an element of an array of buffers is not lowered yet
-3cd9568fda3e94345b8a09f79a9a5fee388c1883f1a5223fb8f9af7f16eee570	IR	lift: output register oN is not declared
-3cd9568fda3e94345b8a09f79a9a5fee388c1883f1a5223fb8f9af7f16eee570	IR WGSL	not reached
+3cd9568fda3e94345b8a09f79a9a5fee388c1883f1a5223fb8f9af7f16eee570	IR WGSL	lower: a Hull program is not lowered yet
 3d87252277acef4bf9dff73b634fcbcdf1746615321f6c43d3f494428834c794	IR WGSL	lower: a Geometry program is not lowered yet
 3daeacdaa12cf5593667148f581d3d2ae5aa860449fd80bcbb0478df3ffa7eb5	A	lift: bufinfo: opcode N is not lifted
 3daeacdaa12cf5593667148f581d3d2ae5aa860449fd80bcbb0478df3ffa7eb5	IR	lift: bufinfo: opcode N is not lifted to the IR yet
