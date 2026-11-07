@@ -338,6 +338,7 @@ fn a_scalar_run_reads_the_derivatives_the_caller_states() {
         .unwrap();
     assert_eq!(lanes(e.outputs[0]), [0.5, 1.5, 0.125, 0.0625]);
     assert_eq!(e.output_masks, vec![0xf]);
+    assert_eq!(e.derivatives, 2);
     // the derivatives of an input are an error where they are not given
     let e = shader.execute(&inputs, &[(3, &cb)], &mut Unused).unwrap_err();
     assert!(e.detail.contains("derivatives"), "{e}");
@@ -370,6 +371,8 @@ fn a_quad_takes_its_own_derivatives_from_its_four_lanes() {
     for (k, e) in e.iter().enumerate() {
         let (x, y) = (0.25 + (k & 1) as f32 * 0.125, 0.5 + (k >> 1) as f32 * 0.0625);
         assert_eq!(lanes(e.outputs[0]), [x * 2.0, y * 3.0, 0.125, 0.0625], "lane {k}");
+        // each lane takes part in the program's two derivatives
+        assert_eq!(e.derivatives, 2, "lane {k}");
     }
 }
 

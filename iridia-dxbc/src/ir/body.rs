@@ -5,7 +5,7 @@ use iridia_ir::{
 };
 
 use super::operands::OperandAt;
-use super::{Frame, Lift, SwitchState};
+use super::{Exit, Frame, Lift, SwitchState};
 use crate::Result;
 use dxbc_reader::decode::{Instruction, Operand, Register};
 
@@ -21,9 +21,10 @@ fn divides(name: &str) -> bool {
 }
 
 impl Lift<'_> {
-    pub(super) fn body(&mut self) -> Result<()> {
+    /// Lift the instructions whose first word is in `words` (a hull program's phase; all of another).
+    pub(super) fn body_range(&mut self, words: std::ops::Range<usize>) -> Result<()> {
         let decoded = self.decoded;
-        for ins in &decoded.instructions {
+        for ins in decoded.instructions.iter().filter(|i| words.contains(&i.word)) {
             self.word = ins.word;
             let name = ins.name();
             // code after an unconditional exit is not reached: skipped to the end of its region
@@ -111,17 +112,23 @@ impl Lift<'_> {
         self.close(end)
     }
 
-    /// Store the outputs and return, under `cond` where it is given.
+    /// `ret`, under `cond` where it is given: store the outputs and return, end a hull phase's instance, or return (a
+    /// geometry program).
     fn ret(&mut self, cond: Option<ValueId>) -> Result<()> {
+        let end = match self.exit_kind {
+            Exit::Phase(label) => End::Br(label, vec![]),
+            Exit::Epilogue | Exit::Bare => End::Return,
+        };
+        if let Some(c) = cond {
+            self.b.open_if(c);
+        }
+        if self.exit_kind == Exit::Epilogue {
+            self.epilogue()?;
+        }
         match cond {
-            Some(c) => {
-                self.b.open_if(c);
-                self.epilogue()?;
-                self.close(End::Return)
-            }
+            Some(_) => self.close(end),
             None => {
-                self.epilogue()?;
-                self.exit(End::Return);
+                self.exit(end);
                 Ok(())
             }
         }
@@ -163,7 +170,7 @@ impl Lift<'_> {
         self.write(ins.operand(0)?, r, false)
     }
     /// A bool's lanes as D3D's mask: all ones or zero.
-    fn mask_of(&mut self, c: ValueId) -> Result<ValueId> {
+    pub(super) fn mask_of(&mut self, c: ValueId) -> Result<ValueId> {
         let ones = self.like(c, Scalar::U32, u32::MAX)?;
         let zero = self.like(c, Scalar::U32, 0)?;
         self.select(c, ones, zero)
@@ -246,6 +253,10 @@ impl Lift<'_> {
                 } else {
                     self.write(ins.operand(0)?, r, false)?;
                 }
+            }
+            "dadd" | "dmul" | "ddiv" | "dmin" | "dmax" | "dfma" | "drcp" | "dmov" | "dmovc" | "deq"
+            | "dge" | "dlt" | "dne" | "dtof" | "dtoi" | "dtou" | "ftod" | "itod" | "utod" => {
+                self.double(ins, name)?
             }
             "add" => self.float2(ins, Binary::FAdd)?,
             "mul" => self.float2(ins, mul)?,
@@ -532,11 +543,13 @@ impl Lift<'_> {
                     return self.refuse("case outside a switch");
                 };
                 if state.open {
-                    // the region before ends here: by its exit, or it falls into this one
+                    // the region before ends here by its exit: Direct3D 11 has no case that falls into the next one
+                    // after code of its own (the Direct3D 11.3 specification, 22.7.18; Direct3D 10's had, and HLSL
+                    // never wrote one), and WARP runs one as if it ended with `break`, whatever its program's model
                     let Some((end, _)) = ended else {
                         return Err(crate::error(
                             self.word,
-                            "a case that falls into the next one after code of its own is not lifted to the IR yet",
+                            "a case that falls into the next one after code of its own, which Direct3D 11 does not allow",
                         ));
                     };
                     state.open = false;
@@ -589,6 +602,9 @@ impl Lift<'_> {
                 self.store_memory(ins, &address, ins.operand(3)?)?
             }
             "sync" => self.sync(ins)?,
+            "emit" | "emit_stream" | "cut" | "cut_stream" | "emitthencut" | "emitthencut_stream" => {
+                self.emit_or_cut(ins, name)?;
+            }
             "imm_atomic_alloc" | "imm_atomic_consume" => self.counter(ins)?,
             n if n.starts_with("atomic_") || n.starts_with("imm_atomic_") => self.atomic(ins)?,
             _ => return self.refuse(format!("opcode {} is not lifted to the IR yet", ins.opcode)),

@@ -10,8 +10,8 @@
 //! refused, naming the instruction word and the reason; a malformed program is an `Err`, never a panic.
 //!
 //! The reflection functions read a container's RDEF and signature chunks without lifting its program:
-//! [`reflection`] (everything), [`signatures`] (for a container whose RDEF was stripped, as some engines ship them) and
-//! [`resource_reflection`] (the resources alone).
+//! [`reflection`] (everything, of a pixel, vertex or compute program), [`signatures`] (for a container whose RDEF was
+//! stripped, as some engines ship them) and [`resource_reflection`] (the resources alone, of a program of any stage).
 //!
 //! # Example
 //!

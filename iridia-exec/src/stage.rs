@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use super::pixel::SlotBackend;
 use super::{Bound, Executable};
 use crate::Sampler;
-use iridia::{BufferKind, D3dClass, Program, ResourceId, ResourceKind, StorageTarget};
+use iridia::{BufferKind, D3dClass, Interface, ResourceId, ResourceKind, StorageTarget};
 
 /// The rows of constant buffers, by (register, space).
 pub type Constants = BTreeMap<(u32, u32), Vec<[u32; 4]>>;
@@ -21,11 +21,11 @@ pub(super) struct Bindings {
 }
 
 impl Bindings {
-    pub(super) fn new(program: &Program) -> Result<Self, String> {
+    pub(super) fn new(interface: &Interface) -> Result<Self, String> {
         let mut constants = BTreeMap::new();
         let mut slots = BTreeMap::new();
         let mut buffers = BTreeMap::new();
-        for r in &program.interface.resources {
+        for r in &interface.resources {
             let Some(binding) = r.provenance.d3d else {
                 return Err(format!("resource {} has no D3D bind slot", r.provenance.name));
             };

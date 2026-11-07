@@ -67,7 +67,7 @@ impl MeshShader {
             .mesh_output
             .ok_or_else(|| error("a mesh program without its output variable"))?;
         let shader = Self {
-            bindings: Bindings::new(&program).map_err(error)?,
+            bindings: Bindings::new(&program.interface).map_err(error)?,
             program,
             executable,
             facts,

@@ -6,13 +6,13 @@
 use std::collections::BTreeMap;
 
 use super::{
-    Backend, Element, Executable, ImageAtomic, ImageLoad, ImageQuery, ImageSample, ImageStore, Runner,
-    Scratch, error,
+    Backend, BufferAtomic, Element, Executable, ImageAtomic, ImageAtomicOp, ImageLoad, ImageQuery,
+    ImageSample, ImageStore, Runner, Scratch, error,
 };
-use crate::{AtomicAdd, Error, Execution, PixelShader, Sampler, Store};
+use crate::{Atomic, Error, Execution, PixelShader, Sampler, Store};
 use iridia::{
-    BufferKind, D3dClass, Interface, Program, ResourceId, ResourceKind, Stage, StorageTarget, SystemValue,
-    TextureDim,
+    BufferKind, D3dClass, Interface, Program, ResourceId, ResourceKind, ScalarType, Stage, StorageTarget,
+    SystemValue, TextureDim,
 };
 use std::sync::Mutex;
 
@@ -22,9 +22,17 @@ struct Argument {
     register: usize,
     /// The register lanes it takes, in order.
     lanes: Vec<u8>,
-    /// A front-facing flag: the register word is non-zero for a front face.
-    boolean: bool,
+    /// A front-facing flag (the register word is non-zero for a front face) and how the code takes it.
+    facing: Option<Facing>,
     used: bool,
+}
+
+/// How compiled code takes a front-facing flag: as a bool (the naga module's built-in, an IR program's bool input), or
+/// as the integer word an IR program's interface types it, Direct3D's all ones for a front face.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Facing {
+    Bool,
+    Word,
 }
 
 /// One member of the result and the register lanes it is written to.
@@ -104,7 +112,9 @@ impl ProgramShader {
             return Err(error("not a pixel or vertex program"));
         }
         let executable = Executable::new(&program)?;
-        let mut shader = Self::assemble(executable, program.interface.clone(), |id| rows_of(&program, id))?;
+        let mut shader = Self::assemble(executable, program.interface.clone(), false, |id| {
+            rows_of(&program, id)
+        })?;
         shader.program = Some(program);
         Ok(shader)
     }
@@ -126,15 +136,18 @@ impl ProgramShader {
                     _ => None,
                 })
         };
-        let mut shader = Self::assemble(executable, program.interface.clone(), rows)?;
+        let mut shader = Self::assemble(executable, program.interface.clone(), true, rows)?;
         shader.ir = Some(program);
         Ok(shader)
     }
 
-    /// The register view of a compiled program with this interface; `rows` gives a constant buffer's rows.
+    /// The register view of a compiled program with this interface; `ir` where the code is an IR program's (which
+    /// takes its inputs as the interface types them, not as the pipeline carries them); `rows` gives a constant
+    /// buffer's rows.
     fn assemble(
         executable: Executable,
         interface_owned: Interface,
+        ir: bool,
         rows: impl Fn(ResourceId) -> Option<u32>,
     ) -> Result<Self, Error> {
         let interface = &interface_owned;
@@ -161,7 +174,7 @@ impl ProgramShader {
                 arguments.push(Argument {
                     register: usize::MAX,
                     lanes: Vec::new(),
-                    boolean: false,
+                    facing: None,
                     used: false,
                 });
                 continue;
@@ -185,42 +198,82 @@ impl ProgramShader {
             arguments.push(Argument {
                 register: sig.register as usize,
                 lanes: lanes.iter().take(width).copied().collect(),
-                boolean: v.system == Some(SystemValue::FrontFacing),
+                facing: (v.system == Some(SystemValue::FrontFacing)).then_some(
+                    if ir && v.value.scalar != ScalarType::Bool {
+                        Facing::Word
+                    } else {
+                        Facing::Bool
+                    },
+                ),
                 used: v.used,
             });
         }
+        // a run's result members are the entry's result items, in order: one value each, the clip distances one per
+        // distance (the lanes of their varyings in turn); a varying with neither a binding nor a use has none
+        let results = iridia::entry_io(interface).map_err(error)?.results;
         let mut members = Vec::new();
         let mut output_count = 0;
-        let position = interface
-            .outputs
-            .iter()
-            .position(|v| stage == Stage::Vertex && v.system == Some(SystemValue::ClipPosition));
-        for v in &interface.outputs {
-            let name = Program::varying_name(&v.label);
-            // depth, coverage and stencil have no output register
-            if !matches!(v.system, None | Some(SystemValue::Target(_))) {
-                members.push(Member {
-                    register: usize::MAX,
-                    lanes: Vec::new(),
-                    written: 0,
-                });
-                continue;
+        let mut position = None;
+        for item in &results {
+            let varyings: Vec<&iridia::Varying> = item
+                .varyings
+                .iter()
+                .filter_map(|&i| interface.outputs.get(i))
+                .collect();
+            if stage == Stage::Vertex
+                && varyings
+                    .iter()
+                    .any(|v| v.system == Some(SystemValue::ClipPosition))
+            {
+                position = Some(members.len());
             }
-            let sig = v
-                .provenance
-                .d3d
-                .ok_or_else(|| error(format!("output {name} has no D3D register")))?;
-            output_count = output_count.max(sig.register as usize + 1);
-            members.push(Member {
-                register: sig.register as usize,
-                lanes: lanes_of(sig.mask),
-                // an element the program does not write (the signature lists it, `used` is false) has no lane written
-                written: if v.used {
-                    sig.mask & !sig.read_write_mask
+            let distances = matches!(item.ty, iridia::IoType::ClipDistances(_));
+            for v in varyings {
+                let name = Program::varying_name(&v.label);
+                // depth, coverage, stencil, the position and the clip distances have no output register
+                let member = if matches!(v.system, None | Some(SystemValue::Target(_))) {
+                    let sig = v
+                        .provenance
+                        .d3d
+                        .ok_or_else(|| error(format!("output {name} has no D3D register")))?;
+                    output_count = output_count.max(sig.register as usize + 1);
+                    Member {
+                        register: sig.register as usize,
+                        lanes: lanes_of(sig.mask),
+                        // an element the program does not write (the signature lists it, `used` is false) has no lane
+                        // written
+                        written: if v.used {
+                            sig.mask & !sig.read_write_mask
+                        } else {
+                            0
+                        },
+                    }
                 } else {
-                    0
-                },
-            });
+                    Member {
+                        register: usize::MAX,
+                        lanes: Vec::new(),
+                        written: 0,
+                    }
+                };
+                if distances {
+                    // a clip distance varying is as many members as it has lanes, one distance each, at its lane
+                    for k in 0..usize::from(v.value.width) {
+                        let lane = member.lanes.get(k).copied();
+                        members.push(Member {
+                            register: if lane.is_some() {
+                                member.register
+                            } else {
+                                usize::MAX
+                            },
+                            lanes: lane.into_iter().collect(),
+                            written: lane
+                                .map_or(0, |l| member.written & 1u8.checked_shl(l.into()).unwrap_or(0)),
+                        });
+                    }
+                } else {
+                    members.push(member);
+                }
+            }
         }
         let mut constants = Vec::new();
         let (mut textures, mut samplers) = (Vec::new(), Vec::new());
@@ -331,8 +384,10 @@ impl ProgramShader {
             } else if a.used {
                 return Err(error(format!("input register {} not given", a.register)));
             }
-            if a.boolean {
-                value[0] = u32::from(value[0] != 0);
+            match a.facing {
+                Some(Facing::Bool) => value[0] = u32::from(value[0] != 0),
+                Some(Facing::Word) => value[0] = if value[0] != 0 { u32::MAX } else { 0 },
+                None => {}
             }
             out.push(value);
         }
@@ -358,7 +413,12 @@ impl ProgramShader {
 
     fn execution(&self, o: super::Output) -> Execution {
         let mut e = Execution::default();
-        self.execution_into(&o.values, o.discarded, o.steps, o.samples, &mut e);
+        let tally = super::run::Tally {
+            steps: o.steps,
+            samples: o.samples,
+            derivatives: o.derivatives,
+        };
+        self.execution_into(&o.values, o.discarded, tally, &mut e);
         e
     }
 
@@ -367,8 +427,7 @@ impl ProgramShader {
         &self,
         values: &[[u32; 4]],
         discarded: bool,
-        steps: u64,
-        samples: u64,
+        tally: super::run::Tally,
         e: &mut Execution,
     ) {
         e.outputs.clear();
@@ -390,8 +449,9 @@ impl ProgramShader {
                 *mask |= m.written;
             }
         }
-        e.instructions = usize::try_from(steps).unwrap_or(usize::MAX);
-        e.samples = usize::try_from(samples).unwrap_or(usize::MAX);
+        e.instructions = usize::try_from(tally.steps).unwrap_or(usize::MAX);
+        e.samples = usize::try_from(tally.samples).unwrap_or(usize::MAX);
+        e.derivatives = usize::try_from(tally.derivatives).unwrap_or(usize::MAX);
         e.discarded = discarded;
     }
 
@@ -481,7 +541,8 @@ impl SlotBackend<'_> {
         }
         self.slot(e.id)
     }
-    /// A buffer view's address of word `word`: (element, byte offset in the element).
+    /// A buffer view's address of word `word` (as [`Store`] states it): a structured view's element and byte offset in
+    /// it, a typed view's element (four words each, the word's lane in it `word % 4`), a raw view's word.
     fn address(&self, id: ResourceId, word: u32) -> [u32; 3] {
         match self.buffers.get(&id) {
             Some(BufferKind::Structured { stride }) if *stride >= 4 => {
@@ -492,7 +553,7 @@ impl SlotBackend<'_> {
                     0,
                 ]
             }
-            // raw and typed views are addressed by the word
+            Some(BufferKind::Typed(_)) => [word / 4, 0, 0],
             _ => [word, 0, 0],
         }
     }
@@ -567,19 +628,69 @@ impl Backend for SlotBackend<'_> {
         })
     }
     fn store_buffer(&mut self, view: ResourceId, word: u32, value: [u32; 4], mask: u8) -> Result<(), String> {
-        let address = self.address(view, word);
-        let view = self.slot(view)?;
-        self.sampler.store(Store {
-            view,
-            address,
-            value,
-            mask,
-        })
+        let slot = self.slot(view)?;
+        if !matches!(self.buffers.get(&view), Some(BufferKind::Typed(_))) {
+            return self.sampler.store(Store {
+                view: slot,
+                address: self.address(view, word),
+                value,
+                mask,
+            });
+        }
+        // a typed view's words are its elements' lanes, four to an element: one store per element the words reach,
+        // each word at its lane
+        let mut element: Option<(u32, [u32; 4], u8)> = None;
+        for (k, &v) in (0u32..).zip(&value).filter(|(k, _)| mask >> k & 1 != 0) {
+            let at = word.wrapping_add(k);
+            let (e, lane) = (at / 4, at % 4);
+            if let Some((current, lanes, m)) = element
+                && current != e
+            {
+                self.sampler.store(Store {
+                    view: slot,
+                    address: [current, 0, 0],
+                    value: lanes,
+                    mask: m,
+                })?;
+                element = None;
+            }
+            let (_, lanes, m) = element.get_or_insert((e, [0; 4], 0));
+            if let Some(to) = lanes.get_mut(lane as usize) {
+                *to = v;
+            }
+            *m |= 1 << lane;
+        }
+        match element {
+            Some((e, lanes, m)) => self.sampler.store(Store {
+                view: slot,
+                address: [e, 0, 0],
+                value: lanes,
+                mask: m,
+            }),
+            None => Ok(()),
+        }
     }
     fn atomic_add(&mut self, view: ResourceId, word: u32, value: u32) -> Result<u32, String> {
-        let address = self.address(view, word);
-        let view = self.slot(view)?;
-        self.sampler.atomic_add(AtomicAdd { view, address, value })
+        self.atomic_buffer(BufferAtomic {
+            view: Element { id: view, index: 0 },
+            word,
+            op: ImageAtomicOp::Add,
+            signed: false,
+            value,
+            compare: 0,
+        })
+    }
+    fn atomic_buffer(&mut self, r: BufferAtomic) -> Result<u32, String> {
+        let address = self.address(r.view.id, r.word);
+        let view = self.slot_of(r.view)?;
+        self.sampler.atomic(Atomic {
+            view,
+            address,
+            op: r.op,
+            signed: r.signed,
+            value: r.value,
+            compare: r.compare,
+        })
     }
     fn read_buffer(&mut self, view: ResourceId, word: u32, count: u8) -> Result<[u32; 4], String> {
         let slot = self.slot(view)?;
@@ -808,8 +919,8 @@ impl ProgramShader {
         let run = runner.run_in_place(args, count);
         if run.is_ok() {
             for l in 0..count {
-                let (values, discarded, steps, samples) = runner.lane(l);
-                self.execution_into(values, discarded, steps, samples, &mut room.execution);
+                let (values, discarded, tally) = runner.lane(l);
+                self.execution_into(values, discarded, tally, &mut room.execution);
                 each(l, &room.execution);
             }
         }

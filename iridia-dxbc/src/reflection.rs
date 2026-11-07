@@ -1,5 +1,5 @@
-//! SM5 RDEF and signature records ([`dxbc_reader`]'s, as the file stores them) mapped into the interface vocabulary;
-//! no material or binding policy. D3D's enum numbers stop here: a value the mapping does not know is an error naming
+//! Shader Model 4 and 5 RDEF and signature records ([`dxbc_reader`]'s, as the file stores them) mapped into the
+//! interface vocabulary; no material or binding policy. D3D's enum numbers stop here: a value the mapping does not know is an error naming
 //! it.
 use crate::{Result, error, read};
 use dxbc_reader::{ProgramType, RdefBinding, RdefType, SignatureElement};
@@ -216,6 +216,24 @@ impl Binding<'_> {
     }
 }
 
+/// A struct type with `by` taken from each member's offset; `None` for another type or a member before `by`.
+fn rebased(ty: &ConstantType, by: u32) -> Option<ConstantType> {
+    let ConstantType::Struct { members } = ty else {
+        return None;
+    };
+    let members = members
+        .iter()
+        .map(|m| {
+            Some(Member {
+                name: m.name.clone(),
+                offset: m.offset.checked_sub(by)?,
+                ty: m.ty.clone(),
+            })
+        })
+        .collect::<Option<Vec<_>>>()?;
+    Some(ConstantType::Struct { members })
+}
+
 /// A stored type record in the vocabulary, under the buffer's packing.
 fn constant_type(ty: &RdefType, packing: d3d::Packing) -> Result<ConstantType> {
     let mut members = Vec::new();
@@ -260,34 +278,81 @@ fn constant_type(ty: &RdefType, packing: d3d::Packing) -> Result<ConstantType> {
     }
 }
 
-/// A container's reflection ([`reflection`]) where it has one this reader reads: `None` where it has no RDEF chunk, or
-/// its RDEF's target isn't an SM5.0/5.1 pixel, vertex or compute program (another stage or an earlier model: the lift then
-/// names its resources from their declarations, as without reflection). An RDEF of a target it reads that doesn't
-/// parse is an error, never taken as absent.
-pub fn resource_reflection(bytes: &[u8]) -> Result<Option<Interface>> {
-    match dxbc_reader::rdef_target(bytes).map_err(read)? {
-        Some(0xffff_0500 | 0xfffe_0500 | 0x4353_0500 | 0xffff_0501 | 0xfffe_0501 | 0x4353_0501) => {
-            reflection(bytes).map(Some)
-        }
-        _ => Ok(None),
+/// The stage an RDEF's target (its version token) names, and whether it is Shader Model 5.1's, where this reader reads
+/// it: a program of any stage, of Shader Model 4.0, 4.1, 5.0 or 5.1.
+fn rdef_stage(target: u32) -> Option<(Stage, bool)> {
+    let stage = match target >> 16 {
+        0xffff => Stage::Pixel,
+        0xfffe => Stage::Vertex,
+        0x4753 => Stage::Geometry,
+        0x4853 => Stage::Hull,
+        0x4453 => Stage::Domain,
+        0x4353 => Stage::Compute,
+        _ => return None,
+    };
+    match target & 0xffff {
+        0x0400 | 0x0410 | 0x0500 => Some((stage, false)),
+        0x0501 => Some((stage, true)),
+        _ => None,
     }
 }
 
-/// Read a container's RDEF resource and constant-buffer metadata and its ISGN/OSGN signatures.
+/// A container's reflected resources where it has an RDEF this reader reads (a Shader Model 4.0 to 5.1 program's, of
+/// any stage): `None` where it has no RDEF chunk or one of another target (the lift then names its resources from
+/// their declarations, as without reflection). An RDEF of a target it reads that doesn't parse is an error, never
+/// taken as absent.
+pub fn resource_reflection(bytes: &[u8]) -> Result<Option<Vec<Resource>>> {
+    let Some((_, sm51)) = dxbc_reader::rdef_target(bytes)
+        .map_err(read)?
+        .and_then(rdef_stage)
+    else {
+        return Ok(None);
+    };
+    let rdef = dxbc_reader::rdef(bytes)
+        .map_err(read)?
+        .ok_or_else(|| error(0, "missing reflection chunk RDEF"))?;
+    resources(&rdef, sm51).map(Some)
+}
+
+/// Read a pixel, vertex or compute program's RDEF resource and constant-buffer metadata and its ISGN/OSGN signatures
+/// (the stage is the RDEF's own target, so reflection reads a container without its code). A hull, domain or
+/// geometry program is refused: its interface is more than its signatures ([`resource_reflection`] reads its
+/// resources).
 pub fn reflection(bytes: &[u8]) -> Result<Interface> {
     let directory = dxbc_reader::parts(bytes).map_err(read)?;
     let rdef = dxbc_reader::rdef(bytes)
         .map_err(read)?
         .ok_or_else(|| error(0, "missing reflection chunk RDEF"))?;
-    // SM5.0/5.1 pixel, vertex or compute shader (the stage is the RDEF's own target, so reflection reads a container
-    // without its code)
-    let program_stage = match rdef.target {
-        0xffff_0500 | 0xffff_0501 => Stage::Pixel,
-        0xfffe_0500 | 0xfffe_0501 => Stage::Vertex,
-        0x4353_0500 | 0x4353_0501 => Stage::Compute,
-        _ => return Err(error(4, "expected SM5.0/5.1 pixel, vertex or compute RDEF")),
+    let (program_stage, sm51) = rdef_stage(rdef.target)
+        .filter(|(stage, _)| matches!(stage, Stage::Pixel | Stage::Vertex | Stage::Compute))
+        .ok_or_else(|| {
+            error(
+                4,
+                "expected the RDEF of a Shader Model 4.0 to 5.1 pixel, vertex or compute program",
+            )
+        })?;
+    let resources = resources(&rdef, sm51)?;
+    // a compute program has no varyings: its invocation ids are system values its declarations state, and its
+    // signature parts (where it has them) are empty
+    let (inputs, outputs) = if program_stage == Stage::Compute {
+        (Vec::new(), Vec::new())
+    } else {
+        (
+            signature_of(&directory, &[b"ISGN", b"ISG1"], program_stage, false)?,
+            signature_of(&directory, &[b"OSGN", b"OSG1", b"OSG5"], program_stage, true)?,
+        )
     };
-    let sm51 = rdef.target & 0xffff == 0x0501;
+    Ok(Interface {
+        stage: program_stage,
+        inputs,
+        outputs,
+        resources,
+        facts: Default::default(),
+    })
+}
+
+/// An RDEF's resources: each binding record with the layout of its constant buffer or structured element.
+fn resources(rdef: &dxbc_reader::Rdef, sm51: bool) -> Result<Vec<Resource>> {
     for binding in &rdef.bindings {
         if (binding.count == 0 && !sm51) || binding.flags & !0x1f != 0 {
             return Err(error(
@@ -326,22 +391,37 @@ pub fn reflection(bytes: &[u8]) -> Result<Interface> {
         };
         let mut constants = Vec::new();
         for variable in &buffer.variables {
-            let ty = constant_type(&variable.ty, packing)?;
-            let packed_size = if table == 3 {
-                ty.size()
-                    .and_then(|n| n.checked_next_multiple_of(d3d::Packing::Structured.alignment(&ty)))
-            } else {
-                ty.size()
+            let packed = |ty: &ConstantType| {
+                if table == 3 {
+                    ty.size()
+                        .and_then(|n| n.checked_next_multiple_of(d3d::Packing::Structured.alignment(ty)))
+                } else {
+                    ty.size()
+                }
             };
-            if packed_size != Some(variable.size) {
-                return Err(error(
-                    variable.word,
-                    format!(
-                        "variable {} is {} bytes, its type packs to {:?}",
-                        variable.name, variable.size, packed_size
-                    ),
-                ));
-            }
+            let stated = constant_type(&variable.ty, packing)?;
+            let ty = if packed(&stated) == Some(variable.size) {
+                stated
+            } else {
+                // a struct whose members' offsets include the variable's own offset in the buffer, as a hull
+                // program's record of a struct it does not use can state them (Sekiro's SAT_MtdParam: its members
+                // from 384 of a 384-byte struct at 384, where the material's pixel programs have them from 0): taken
+                // with those offsets made the struct's own, where that is what packs to the stated size
+                match rebased(&stated, variable.offset) {
+                    Some(r) if packed(&r) == Some(variable.size) => r,
+                    _ => {
+                        return Err(error(
+                            variable.word,
+                            format!(
+                                "variable {} is {} bytes, its type packs to {:?}",
+                                variable.name,
+                                variable.size,
+                                packed(&stated)
+                            ),
+                        ));
+                    }
+                }
+            };
             constants.push(Constant {
                 name: variable.name.clone(),
                 offset: variable.offset,
@@ -455,23 +535,7 @@ pub fn reflection(bytes: &[u8]) -> Result<Interface> {
             format!("constant buffer {name} has no resource binding"),
         ));
     }
-    // a compute program has no varyings: its invocation ids are system values its declarations state, and its
-    // signature parts (where it has them) are empty
-    let (inputs, outputs) = if program_stage == Stage::Compute {
-        (Vec::new(), Vec::new())
-    } else {
-        (
-            signature_of(&directory, &[b"ISGN", b"ISG1"], program_stage, false)?,
-            signature_of(&directory, &[b"OSGN", b"OSG1", b"OSG5"], program_stage, true)?,
-        )
-    };
-    Ok(Interface {
-        stage: program_stage,
-        inputs,
-        outputs,
-        resources,
-        facts: Default::default(),
-    })
+    Ok(resources)
 }
 
 #[cfg(test)]

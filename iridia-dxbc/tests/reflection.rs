@@ -276,20 +276,30 @@ fn reflected_bindings_match_independent_disassembly() -> Result<(), Box<dyn std:
 }
 
 /// Reflection where the container has one this reader reads: none without an RDEF chunk or with a target it doesn't
-/// read (a geometry program's, an SM4.0 pixel program's), the reflection of an SM5.0 pixel or compute program's, and an
-/// error, never none, for one of those that doesn't parse.
+/// read (another model's, an unknown stage's), the resources of a Shader Model 5 program of every stage, the full
+/// reflection of a pixel, vertex or compute program only, and an error, never none, for one that doesn't parse.
 #[test]
 fn a_reflection_is_read_where_it_is_one_this_reader_reads() {
     let good = fixture(&rdef());
     assert!(iridia_dxbc::resource_reflection(&good).unwrap().is_some());
     let mut compute = rdef();
     set(&mut compute, 16, 0x4353_0500);
-    let reflected = iridia_dxbc::resource_reflection(&fixture(&compute))
-        .unwrap()
-        .unwrap();
+    let reflected = iridia_dxbc::reflection(&fixture(&compute)).unwrap();
     assert_eq!(reflected.stage, iridia::Stage::Compute);
     assert!(reflected.inputs.is_empty() && reflected.outputs.is_empty());
-    for target in [0x4753_0500, 0xffff_0400] {
+    for stage in [0xffff, 0xfffe, 0x4753, 0x4853, 0x4453, 0x4353] {
+        let mut other = rdef();
+        set(&mut other, 16, stage << 16 | 0x0500);
+        let resources = iridia_dxbc::resource_reflection(&fixture(&other)).unwrap();
+        assert_eq!(resources.map(|r| r.len()), Some(1), "{stage:#x}");
+        let full = iridia_dxbc::reflection(&fixture(&other));
+        assert_eq!(
+            full.is_ok(),
+            matches!(stage, 0xffff | 0xfffe | 0x4353),
+            "{stage:#x}"
+        );
+    }
+    for target in [0xffff_0300, 0xffff_0600, 0x1234_0500] {
         let mut other = rdef();
         set(&mut other, 16, target);
         assert!(
@@ -308,4 +318,311 @@ fn a_reflection_is_read_where_it_is_one_this_reader_reads() {
     let at = without.windows(4).position(|w| w == b"RDEF").unwrap();
     without[at..at + 4].copy_from_slice(b"STAT");
     assert!(iridia_dxbc::resource_reflection(&without).unwrap().is_none());
+}
+
+/// One row of the Resource Bindings table of Microsoft's listing: name, type, format, dimension, bind point, count.
+struct Row {
+    name: String,
+    kind: String,
+    format: String,
+    dim: String,
+    class: D3dClass,
+    register: u32,
+    count: u32,
+}
+
+/// The rows of a listing's Resource Bindings table (after its dashed rule, up to the blank comment line that ends it).
+fn binding_rows(listing: &str) -> Vec<Row> {
+    let mut rows = Vec::new();
+    let (mut inside, mut ruled) = (false, false);
+    for line in listing.lines() {
+        let text = line.trim().trim_start_matches("//").trim();
+        if text == "Resource Bindings:" {
+            inside = true;
+            continue;
+        }
+        if !inside {
+            continue;
+        }
+        if text.starts_with("---") {
+            ruled = true;
+            continue;
+        }
+        if !ruled {
+            continue;
+        }
+        if text.is_empty() {
+            break;
+        }
+        let f: Vec<&str> = text.split_whitespace().collect();
+        let [name, kind, format, dim, bind, count] = f[..] else {
+            panic!("a binding row {text:?} of other columns");
+        };
+        let (class, digits) = if let Some(n) = bind.strip_prefix("cb") {
+            (D3dClass::ConstantBuffer, n)
+        } else if let Some(n) = bind.strip_prefix('t') {
+            (D3dClass::ShaderResource, n)
+        } else if let Some(n) = bind.strip_prefix('s') {
+            (D3dClass::Sampler, n)
+        } else if let Some(n) = bind.strip_prefix('u') {
+            (D3dClass::UnorderedAccess, n)
+        } else {
+            panic!("a bind point {bind:?}");
+        };
+        rows.push(Row {
+            name: name.to_owned(),
+            kind: kind.to_owned(),
+            format: format.to_owned(),
+            dim: dim.to_owned(),
+            class,
+            register: digits.parse().unwrap(),
+            count: count.parse().unwrap(),
+        });
+    }
+    rows
+}
+
+/// Buffer blocks by name: each leaf's byte offset and array count, by name.
+type Layouts = BTreeMap<String, BTreeMap<String, (u32, u32)>>;
+
+/// Every buffer block of a listing's Buffer Definitions (`cbuffer X` and `Resource bind info for X`): its leaves, by
+/// name, with their byte offsets and array counts, and how many of its structs list their members outside them. The
+/// listing states a struct member's offset within the buffer (the struct's start added to the record's), so a struct
+/// only nests it and its own line is not a leaf; where a record's member offsets include the struct's start already
+/// (the listing then puts them past the struct's end), that start is taken off again, as the reader takes it.
+fn listed_layouts(listing: &str) -> (Layouts, usize) {
+    let mut out = Layouts::new();
+    let mut outside = 0;
+    let mut buffer: Option<String> = None;
+    // the members of each open struct: name, listed offset, count
+    let mut stack: Vec<Vec<(String, u32, u32)>> = Vec::new();
+    for line in listing.lines() {
+        let text = line.trim().trim_start_matches("//").trim();
+        if let Some(name) = text
+            .strip_prefix("cbuffer ")
+            .or_else(|| text.strip_prefix("Resource bind info for "))
+        {
+            buffer = Some(name.trim().to_owned());
+            out.entry(name.trim().to_owned()).or_default();
+            stack.clear();
+            continue;
+        }
+        let Some(b) = &buffer else { continue };
+        if text.starts_with("struct") {
+            stack.push(Vec::new());
+            continue;
+        }
+        if text == "}" && stack.is_empty() {
+            buffer = None;
+            continue;
+        }
+        let Some((declared, rest)) = text.split_once("// Offset:") else {
+            continue;
+        };
+        let mut numbers = rest.split_whitespace().filter_map(|w| w.parse::<u32>().ok());
+        let offset = numbers.next().unwrap();
+        let declared = declared.trim().trim_end_matches(';');
+        let leaves = if declared.starts_with('}') {
+            let mut members = stack.pop().unwrap_or_default();
+            let size = numbers.next().unwrap_or(0);
+            if members
+                .iter()
+                .any(|m| m.1 < offset || m.1 >= offset.saturating_add(size))
+            {
+                outside += 1;
+                for m in &mut members {
+                    m.1 = m.1.checked_sub(offset).unwrap();
+                }
+            }
+            members
+        } else {
+            let last = declared.split_whitespace().last().unwrap();
+            let (name, count) = match last.split_once('[') {
+                Some((n, c)) => (n, c.trim_end_matches(']').parse().unwrap()),
+                None => (last, 1),
+            };
+            vec![(name.to_owned(), offset, count)]
+        };
+        match stack.last_mut() {
+            Some(open) => open.extend(leaves),
+            None => {
+                for (name, offset, count) in leaves {
+                    assert!(
+                        out.get_mut(b)
+                            .unwrap()
+                            .insert(name.clone(), (offset, count))
+                            .is_none(),
+                        "{b}.{name} listed twice"
+                    );
+                }
+            }
+        }
+    }
+    (out, outside)
+}
+
+/// The texture shape a listing's dimension names: dimensionality, array, multisampled.
+fn listed_shape(dim: &str) -> Option<(iridia::TextureDim, bool, bool)> {
+    use iridia::TextureDim::{Cube, D1, D2, D3};
+    Some(match dim {
+        "1d" => (D1, false, false),
+        "1darray" => (D1, true, false),
+        "2d" => (D2, false, false),
+        "2darray" => (D2, true, false),
+        "2dMS" => (D2, false, true),
+        "2dMSarray" => (D2, true, true),
+        "3d" => (D3, false, false),
+        "cube" => (Cube, false, false),
+        "cubearray" => (Cube, true, false),
+        _ => return None,
+    })
+}
+
+/// The reflection of the programs whose RDEF this reader read only from Shader Model 5 pixel, vertex and compute
+/// programs before: Sekiro's hull, domain and geometry programs (`corpus.sekiro/d3d11-shaders`) and the Shader Model 4
+/// pixel programs of the Unity corpus (`corpus.sledding/shaders`). Each lifts onto the IR, and its interface's
+/// resources are those of Microsoft's listing of it (`fxc /dumpbin`): each binding's name, class, register and count,
+/// a texture's shape and value type, and every leaf of each constant buffer and structured element at its offset with
+/// its count; and no resource the listing does not name.
+#[test]
+fn every_stage_and_model_reflects_as_fxc_lists_it() {
+    let Some(fxc) = inputs::tool(inputs::Tool::Fxc) else {
+        return;
+    };
+    let sekiro = inputs::oracle(inputs::OracleSet::Corpus, inputs::Game::Sekiro, "d3d11-shaders");
+    let unity = inputs::oracle(inputs::OracleSet::Corpus, inputs::Game::Sledding, "shaders");
+    let both = sekiro.is_some() && unity.is_some();
+    let scratch = inputs::own_scratch("fxc-reflection");
+    let mut by_target: BTreeMap<String, usize> = BTreeMap::new();
+    let (mut bindings, mut leaves_checked, mut structs_rebased) = (0, 0, 0);
+    for root in [sekiro, unity].into_iter().flatten() {
+        let mut paths = Vec::new();
+        common::containers(&root, &mut paths);
+        for path in paths {
+            let bytes = std::fs::read(&path).unwrap();
+            let Some(target) = dxbc_reader::rdef_target(&bytes).unwrap() else {
+                continue;
+            };
+            let other_stage = matches!(target >> 16, 0x4753 | 0x4853 | 0x4453);
+            if !(other_stage || target & 0xffff < 0x0500) {
+                continue;
+            }
+            let at = path.display();
+            let program = iridia_dxbc::ir::lift(&bytes).unwrap_or_else(|e| panic!("{at}: {e}"));
+            let listing_path = scratch.join("listing.asm");
+            let out = std::process::Command::new(&fxc)
+                .args(["/nologo", "/dumpbin", "/Fc"])
+                .arg(&listing_path)
+                .arg(&path)
+                .output()
+                .unwrap();
+            assert!(
+                out.status.success(),
+                "fxc {at}: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            let listing = std::fs::read_to_string(&listing_path).unwrap();
+            let resources = &program.interface.resources;
+            let rows = binding_rows(&listing);
+            for row in &rows {
+                let r = resources
+                    .iter()
+                    .find(|r| {
+                        r.provenance.name == row.name
+                            && r.provenance.d3d.is_some_and(|d| d.class == row.class)
+                    })
+                    .unwrap_or_else(|| panic!("{at}: {} {:?} is not in the interface", row.name, row.class));
+                let d = r.provenance.d3d.unwrap();
+                assert_eq!(
+                    (d.register, r.count),
+                    (row.register, row.count),
+                    "{at}: {}",
+                    row.name
+                );
+                if row.kind == "texture"
+                    && let Some(shape) = listed_shape(&row.dim)
+                {
+                    let ResourceKind::Texture {
+                        dim,
+                        arrayed,
+                        multisampled,
+                        sample,
+                    } = &r.kind
+                    else {
+                        panic!("{at}: {} is listed as a texture", row.name);
+                    };
+                    assert_eq!((*dim, *arrayed, *multisampled), shape, "{at}: {}", row.name);
+                    let scalar = match sample {
+                        iridia::SampleType::Sint => "int",
+                        iridia::SampleType::Uint => "uint",
+                        _ => "float",
+                    };
+                    assert_eq!(
+                        row.format.trim_end_matches(char::is_numeric),
+                        scalar,
+                        "{at}: {}",
+                        row.name
+                    );
+                }
+                bindings += 1;
+            }
+            for r in resources {
+                assert!(
+                    rows.iter().any(|row| row.name == r.provenance.name),
+                    "{at}: {} is not in the listing",
+                    r.provenance.name
+                );
+            }
+            let (layouts, outside) = listed_layouts(&listing);
+            structs_rebased += outside;
+            for (buffer, expected) in layouts {
+                let r = resources
+                    .iter()
+                    .find(|r| r.provenance.name == buffer)
+                    .unwrap_or_else(|| panic!("{at}: buffer {buffer} is not in the interface"));
+                let layout = match (&r.kind, &r.provenance.layout) {
+                    (ResourceKind::ConstantBuffer { layout }, _) | (_, Some(layout)) => layout,
+                    _ => panic!("{at}: {buffer} has no layout"),
+                };
+                let mut actual = BTreeMap::new();
+                for c in &layout.constants {
+                    leaves(&c.name, c.offset, &c.ty, &mut actual);
+                }
+                for (name, (offset, count)) in expected {
+                    let (o, ty) = actual
+                        .get(name.as_str())
+                        .unwrap_or_else(|| panic!("{at}: {buffer}.{name} is not in the layout"));
+                    let n = match ty {
+                        ConstantType::Array { count, .. } => *count,
+                        _ => 1,
+                    };
+                    assert_eq!((*o, n), (offset, count), "{at}: {buffer}.{name}");
+                    leaves_checked += 1;
+                }
+            }
+            *by_target.entry(format!("{target:#010x}")).or_default() += 1;
+        }
+    }
+    println!(
+        "reflection as fxc lists it: {by_target:?}, {bindings} bindings, {leaves_checked} leaves, {structs_rebased} \
+         structs whose record's member offsets include their start"
+    );
+    if both {
+        // measured: Sekiro's 46 domain, 22 geometry and 19 hull programs, four of the hull programs with such a struct
+        // (SAT_MtdParam); the Unity corpus's 16 ps_4_0 programs
+        assert_eq!(
+            structs_rebased, 4,
+            "structs whose record's member offsets include their start"
+        );
+        let counts: Vec<(&str, usize)> = by_target.iter().map(|(t, &n)| (t.as_str(), n)).collect();
+        assert_eq!(
+            counts,
+            [
+                ("0x44530500", 46),
+                ("0x47530500", 22),
+                ("0x48530500", 19),
+                ("0xffff0400", 16)
+            ]
+        );
+    }
 }

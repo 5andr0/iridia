@@ -9,9 +9,12 @@
 
 use std::collections::BTreeMap;
 
+use iridia::{FunctionSig, IoType, ItemList};
 use iridia_ir::{
     self as ir, Body, End, FloatToInt, Function, Node, Region, Scalar, Type, ValueId, VarId,
-    interface::{BufferKind, Interface, ResourceKind, SampleType, Stage, StorageTarget, TextureDim},
+    interface::{
+        BufferKind, Interface, ResourceKind, SampleType, Stage, StageFacts, StorageTarget, TextureDim,
+    },
 };
 
 use crate::flat::{
@@ -32,9 +35,36 @@ struct Place {
 /// A construct a `Br` or `Continue` names.
 struct Frame {
     label: ir::LabelId,
-    /// A loop's parameters; `None` for a switch.
+    /// A loop's parameters; `None` for a switch or a block.
     params: Option<Vec<ValueId>>,
     results: Vec<ValueId>,
+    /// A `Block` a `Br` leaves, run as a loop that ends after one pass: a `Continue` inside it cannot reach an outer
+    /// loop.
+    block: bool,
+}
+
+/// A geometry program's emitted vertices: the words of how many it emitted and whether the next starts a strip, the
+/// most it may emit, each output's array (its slot, first word and lanes) and the strip starts' array.
+#[derive(Clone)]
+struct Emitted {
+    count: u32,
+    pending: u32,
+    max: u32,
+    arrays: Vec<(usize, u32, u8)>,
+    strips: u32,
+}
+
+/// Whether region `r` (or one inside it) ends by leaving the construct `label` names.
+fn breaks_to(r: &Region, label: ir::LabelId) -> bool {
+    matches!(&r.end, Some(End::Br(l, _)) if *l == label)
+        || r.nodes.iter().any(|n| match n {
+            Node::If { accept, reject, .. } => breaks_to(accept, label) || breaks_to(reject, label),
+            Node::Block { body, .. } | Node::Loop { body, .. } => breaks_to(body, label),
+            Node::Switch { cases, default, .. } => {
+                cases.iter().any(|c| breaks_to(&c.body, label)) || breaks_to(default, label)
+            }
+            _ => false,
+        })
 }
 
 /// What the end of a region does with the values it yields.
@@ -64,6 +94,17 @@ struct Cx<'p> {
     vars: Vec<Place>,
     /// Per interface input: its entry argument (index, register).
     inputs: Vec<Option<(u32, u32)>>,
+    /// Per interface input and output of a stage that reads arrays of points: the array argument of its points.
+    point_inputs: Vec<Option<Place>>,
+    point_outputs: Vec<Option<Place>>,
+    /// Per patch constant: the register a domain program takes it in.
+    patch_in: Vec<Option<u32>>,
+    /// Per patch constant a hull program's patch constant function stores: its first local word.
+    patch_out: Vec<Option<u32>>,
+    /// The registers of the values the pipeline gives.
+    builtins: Vec<(ir::Builtin, u32)>,
+    /// A geometry program's vertices.
+    emitted: Option<Emitted>,
     /// Per interface output: its first local word and its words.
     outputs: Vec<(u32, u32)>,
     /// The members of the result, in the order of the entry point's results.
@@ -316,6 +357,71 @@ impl Cx<'_> {
                 }
                 Op::Swizzle { src: arg, pat, n }
             }
+            ir::Op::LoadInputAt(slot, mask, index) | ir::Op::LoadOutputAt(slot, mask, index) => {
+                let points = if matches!(d.op, ir::Op::LoadInputAt(..)) {
+                    &self.point_inputs
+                } else {
+                    &self.point_outputs
+                };
+                let p =
+                    points.get(*slot as usize).copied().flatten().ok_or_else(|| {
+                        format!("varying {slot} is not an array of points the function takes")
+                    })?;
+                let whole = u8::try_from(p.stride).unwrap_or(4);
+                let element = self.fresh(Type::vector(Scalar::U32, whole))?;
+                self.ops.push((
+                    element,
+                    Op::Element {
+                        loc: p.loc,
+                        index: index.0,
+                        stride: p.stride,
+                        len: p.len,
+                        n: whole,
+                    },
+                ));
+                let mut pat = [0u8; 4];
+                for (to, l) in pat.iter_mut().zip(lanes_of(*mask)) {
+                    *to = l;
+                }
+                Op::Swizzle { src: element, pat, n }
+            }
+            ir::Op::LoadPatch(slot, mask) => {
+                let mut pat = [0u8; 4];
+                for (to, l) in pat.iter_mut().zip(lanes_of(*mask)) {
+                    *to = l;
+                }
+                let given = self.patch_in.get(*slot as usize).copied().flatten();
+                let stored = self.patch_out.get(*slot as usize).copied().flatten();
+                let src = match (given, stored) {
+                    (Some(r), _) => r,
+                    (_, Some(word)) => {
+                        let four = self.fresh(Type::U32X4)?;
+                        self.ops.push((
+                            four,
+                            Op::Load {
+                                loc: Loc::Local(word),
+                                n: 4,
+                            },
+                        ));
+                        four
+                    }
+                    _ => return Err(format!("patch constant {slot} is not one the function has")),
+                };
+                Op::Swizzle { src, pat, n }
+            }
+            ir::Op::Builtin(b) => {
+                let src = self
+                    .builtins
+                    .iter()
+                    .find(|(x, _)| x == b)
+                    .map(|(_, r)| *r)
+                    .ok_or_else(|| format!("the pipeline gives the function no {b:?}"))?;
+                Op::Swizzle {
+                    src,
+                    pat: [0, 1, 2, 3],
+                    n,
+                }
+            }
             ir::Op::LoadVar(var) => Op::Load {
                 loc: self.var(*var)?.loc,
                 n,
@@ -528,6 +634,11 @@ impl Cx<'_> {
             .outputs
             .get(slot as usize)
             .ok_or_else(|| format!("output {slot} is not in the interface"))?;
+        self.store_lanes(out, base, mask, src)
+    }
+
+    /// Lanes `mask` of the four words at `base` take the lanes of register `src`, in order.
+    fn store_lanes(&mut self, out: &mut Vec<St>, base: u32, mask: u8, src: u32) -> Result<(), String> {
         let lanes = lanes_of(mask);
         let first = lanes.first().copied().unwrap_or(0);
         let contiguous = lanes.iter().zip(first..).all(|(&l, k)| l == k);
@@ -736,6 +847,41 @@ impl Cx<'_> {
                 )
             }
             Node::StoreOutput(slot, mask, v) => self.store_output(out, *slot, *mask, v.0),
+            Node::StorePatch(slot, mask, v) => {
+                let base = self
+                    .patch_out
+                    .get(*slot as usize)
+                    .copied()
+                    .flatten()
+                    .ok_or_else(|| format!("patch constant {slot} is not one the function stores"))?;
+                self.store_lanes(out, base, *mask, v.0)
+            }
+            Node::Emit(stream) => {
+                if *stream != 0 {
+                    return Err(format!("a vertex of stream {stream}: only stream 0 is carried"));
+                }
+                self.emit(out)
+            }
+            Node::Cut(stream) => {
+                if *stream != 0 {
+                    return Err(format!(
+                        "a strip cut on stream {stream}: only stream 0 is carried"
+                    ));
+                }
+                let e = self
+                    .emitted
+                    .clone()
+                    .ok_or("a strip cut outside a geometry program")?;
+                let one = self.literal(Type::U32, [1, 0, 0, 0])?;
+                self.statement(
+                    out,
+                    St::Store {
+                        loc: Loc::Local(e.pending),
+                        src: one,
+                        n: 1,
+                    },
+                )
+            }
             Node::Demote => self.statement(out, St::Kill),
             Node::StoreBuffer {
                 resource,
@@ -813,6 +959,27 @@ impl Cx<'_> {
                 out.push(St::If { c: cond.0, a, r });
                 Ok(())
             }
+            Node::Block { label, body, results } if breaks_to(body, *label) => {
+                self.flush(out)?;
+                self.frames.push(Frame {
+                    label: *label,
+                    params: None,
+                    results: results.clone(),
+                    block: true,
+                });
+                let mut b = Vec::new();
+                let done = self.region(body, Yield::Into(results), &mut b);
+                self.frames.pop();
+                done?;
+                // falling off its end leaves it
+                b.push(St::Break);
+                out.push(St::Loop {
+                    body: b,
+                    cont: Vec::new(),
+                    break_if: None,
+                });
+                Ok(())
+            }
             Node::Block { body, results, .. } => self.region(body, Yield::Into(results), out),
             Node::Loop {
                 label,
@@ -829,6 +996,7 @@ impl Cx<'_> {
                     label: *label,
                     params: Some(params.clone()),
                     results: results.clone(),
+                    block: false,
                 });
                 let mut b = Vec::new();
                 let done = self.region(body, Yield::Leave(results), &mut b);
@@ -853,6 +1021,7 @@ impl Cx<'_> {
                     label: *label,
                     params: None,
                     results: results.clone(),
+                    block: false,
                 });
                 let mut arms = Vec::new();
                 let mut done = Ok(());
@@ -880,14 +1049,6 @@ impl Cx<'_> {
                 });
                 Ok(())
             }
-            Node::StorePatch(..) | Node::Emit(_) | Node::Cut(_) => Err(format!(
-                "{} is not compiled yet",
-                match n {
-                    Node::StorePatch(..) => "a patch constant store",
-                    Node::Emit(_) => "an emit",
-                    _ => "a cut",
-                }
-            )),
         }
     }
 
@@ -897,7 +1058,7 @@ impl Cx<'_> {
             .frames
             .iter()
             .rev()
-            .find(|f| !loop_only || f.params.is_some())
+            .find(|f| !loop_only || f.params.is_some() || f.block)
             .ok_or("an exit outside a loop or switch")?;
         if f.label != label {
             return Err(
@@ -979,28 +1140,125 @@ fn typed_buffer(kind: &ResourceKind) -> bool {
 /// The name of an operation the compile does not take, for its refusal.
 fn op_name(op: &ir::Op) -> &'static str {
     match op {
-        ir::Op::LoadInputAt(..) => "an input of one control point or vertex",
-        ir::Op::LoadOutputAt(..) => "an output control point read",
-        ir::Op::LoadPatch(..) => "a patch constant read",
-        ir::Op::Builtin(_) => "a pipeline value of a stage made of functions",
         ir::Op::LoadState(_) => "a pipeline state read (fold it with iridia_passes::specialise)",
         _ => "this operation",
     }
 }
 
-/// Compile the entry function of `p`.
-pub(crate) fn compile(p: &ir::Program) -> Result<Executable, String> {
-    if !matches!(p.stage, Stage::Vertex | Stage::Pixel | Stage::Compute) {
-        return Err(format!("a {:?} program is not compiled from the IR yet", p.stage));
+impl Cx<'_> {
+    /// A geometry program's `emit`: past the most vertices nothing, else each output as stored becomes the next
+    /// vertex's, the strip start its flag, and the count one more.
+    fn emit(&mut self, out: &mut Vec<St>) -> Result<(), String> {
+        let e = self.emitted.clone().ok_or("an emit outside a geometry program")?;
+        let count = self.fresh(Type::U32)?;
+        self.ops.push((
+            count,
+            Op::Load {
+                loc: Loc::Local(e.count),
+                n: 1,
+            },
+        ));
+        let max = self.literal(Type::U32, [e.max, 0, 0, 0])?;
+        let inside = self.compute(
+            Type::vector(Scalar::Bool, 1),
+            ir::Op::Binary(ir::Binary::UCmp(ir::Cmp::Lt), ValueId(count), ValueId(max)),
+        )?;
+        self.flush(out)?;
+        let mut a = Vec::new();
+        for &(slot, base, width) in &e.arrays {
+            let (word, _) = *self
+                .outputs
+                .get(slot)
+                .ok_or_else(|| format!("output {slot} is not in the interface"))?;
+            let v = self.fresh(Type::vector(Scalar::U32, width))?;
+            self.ops.push((
+                v,
+                Op::Load {
+                    loc: Loc::Local(word),
+                    n: width,
+                },
+            ));
+            self.statement(
+                &mut a,
+                St::StoreElement {
+                    loc: Loc::Local(base),
+                    index: count,
+                    stride: u32::from(width),
+                    len: e.max,
+                    src: v,
+                    n: width,
+                },
+            )?;
+        }
+        let pending = self.fresh(Type::U32)?;
+        self.ops.push((
+            pending,
+            Op::Load {
+                loc: Loc::Local(e.pending),
+                n: 1,
+            },
+        ));
+        self.statement(
+            &mut a,
+            St::StoreElement {
+                loc: Loc::Local(e.strips),
+                index: count,
+                stride: 1,
+                len: e.max,
+                src: pending,
+                n: 1,
+            },
+        )?;
+        let zero = self.literal(Type::U32, [0; 4])?;
+        self.statement(
+            &mut a,
+            St::Store {
+                loc: Loc::Local(e.pending),
+                src: zero,
+                n: 1,
+            },
+        )?;
+        let one = self.literal(Type::U32, [1, 0, 0, 0])?;
+        let next = self.compute(
+            Type::U32,
+            ir::Op::Binary(ir::Binary::IAdd, ValueId(count), ValueId(one)),
+        )?;
+        self.statement(
+            &mut a,
+            St::Store {
+                loc: Loc::Local(e.count),
+                src: next,
+                n: 1,
+            },
+        )?;
+        self.flush(&mut a)?;
+        out.push(St::If {
+            c: inside,
+            a,
+            r: Vec::new(),
+        });
+        Ok(())
     }
-    let f = &p.entry;
-    let Body::Regions(body) = &f.body else {
-        return Err(
-            "the body is a control flow graph: structure it first (iridia_passes::structurize)".into(),
-        );
-    };
+}
+
+/// How a compiled function takes its arguments: per argument its register and lanes (none for an array), where its
+/// registers start among those passed and how many there are, its array arguments, and the built-in each carries.
+struct Arguments {
+    args: Vec<(u32, u8)>,
+    arg_at: Vec<usize>,
+    arg_len: usize,
+    array_args: Vec<(usize, u32, u32, u8)>,
+    builtins: Vec<Option<naga::BuiltIn>>,
+}
+
+/// The state of a compile of function `f` of `p` before its arguments and results are placed: its literals.
+fn start<'p>(p: &'p ir::Program, f: &'p Function) -> Result<Cx<'p>, String> {
     let interface = &p.interface;
-    let io = iridia::entry_io(interface)?;
+    let patch_constants = match &interface.facts {
+        StageFacts::Hull(h) => h.patch_constants.len(),
+        StageFacts::Domain(d) => d.patch_constants.len(),
+        _ => 0,
+    };
     let mut cx = Cx {
         f,
         interface,
@@ -1013,27 +1271,46 @@ pub(crate) fn compile(p: &ir::Program) -> Result<Executable, String> {
         buffer_of: BTreeMap::new(),
         vars: Vec::new(),
         inputs: vec![None; interface.inputs.len()],
+        point_inputs: vec![None; interface.inputs.len()],
+        point_outputs: vec![None; interface.outputs.len()],
+        patch_in: vec![None; patch_constants],
+        patch_out: vec![None; patch_constants],
+        builtins: Vec::new(),
+        emitted: None,
         outputs: Vec::new(),
         returned: Vec::new(),
         frames: Vec::new(),
     };
     for d in &f.values {
-        if d.ty.scalar.bits() > 32 || (d.ty.scalar.bits() < 32 && d.ty.scalar != Scalar::Bool) {
+        if !iridia_exec_ir::runs(d.ty) {
             return Err(format!("{} values are not compiled yet", d.ty));
         }
     }
     // the literals, and an undefined value as zero
     for (i, d) in f.values.iter().enumerate() {
-        match d.op {
-            ir::Op::Literal(bits) => {
-                // a lane is at most 32 bits here
-                let words = bits.map(|b| (b & 0xffff_ffff) as u32);
-                cx.inits.push((number(i)?, words));
-            }
+        match &d.op {
+            ir::Op::Literal(bits) => cx
+                .inits
+                .push((number(i)?, iridia_exec_ir::literal_words(bits, d.ty))),
             ir::Op::Undef => cx.inits.push((number(i)?, [0; 4])),
             _ => {}
         }
     }
+    Ok(cx)
+}
+
+/// Compile the entry function of `p`, a program of a stage that is an entry point (vertex, pixel, compute).
+pub(crate) fn compile(p: &ir::Program) -> Result<Executable, String> {
+    if !matches!(p.stage, Stage::Vertex | Stage::Pixel | Stage::Compute)
+        || p.interface.facts == StageFacts::VertexWithoutPosition
+    {
+        return Err(format!(
+            "a {:?} program is made of functions: compile it with Executable::function_from_ir",
+            p.stage
+        ));
+    }
+    let io = iridia::entry_io(&p.interface)?;
+    let mut cx = start(p, &p.entry)?;
     // the entry arguments: one register each, the varying's lanes first
     let mut args = Vec::with_capacity(io.arguments.len());
     let mut builtins = Vec::with_capacity(io.arguments.len());
@@ -1055,7 +1332,7 @@ pub(crate) fn compile(p: &ir::Program) -> Result<Executable, String> {
         });
     }
     // the outputs: four words each in local memory, the clip distances one after another
-    let mut outputs = vec![None; interface.outputs.len()];
+    let mut outputs = vec![None; p.interface.outputs.len()];
     for item in &io.results {
         match item.ty {
             iridia::IoType::Value(v) => {
@@ -1070,7 +1347,7 @@ pub(crate) fn compile(p: &ir::Program) -> Result<Executable, String> {
             iridia::IoType::ClipDistances(n) => {
                 let first = cx.local_words;
                 for &i in &item.varyings {
-                    let width = interface.outputs.get(i).map_or(1, |v| u32::from(v.value.width));
+                    let width = p.interface.outputs.get(i).map_or(1, |v| u32::from(v.value.width));
                     let word = cx.grow(width)?;
                     if let Some(o) = outputs.get_mut(i) {
                         *o = Some((word, width));
@@ -1089,7 +1366,201 @@ pub(crate) fn compile(p: &ir::Program) -> Result<Executable, String> {
             ref t => return Err(format!("an entry result of {t:?}")),
         }
     }
-    // an output the entry point does not carry is stored to words of its own, never read
+    let n_args = args.len();
+    let arguments = Arguments {
+        args,
+        arg_at: (0..n_args).collect(),
+        arg_len: n_args,
+        array_args: Vec::new(),
+        builtins,
+    };
+    finish(p, cx, outputs, arguments)
+}
+
+/// The value the pipeline gives that a stage function's argument of this name carries.
+fn builtin_named(name: &str) -> Option<ir::Builtin> {
+    Some(match name {
+        "SV_OutputControlPointID" => ir::Builtin::OutputControlPoint,
+        "SV_PrimitiveID" => ir::Builtin::PrimitiveId,
+        "SV_DomainLocation" => ir::Builtin::DomainLocation,
+        "SV_GSInstanceID" => ir::Builtin::GsInstance,
+        _ => return None,
+    })
+}
+
+/// Compile function `f` of `p` (its entry, or a hull program's patch constant function) as `sig`, its stage function
+/// of [`iridia::stage_functions`], takes and gives it: the same registers in and members out as
+/// [`Executable::function`] compiles a naga module's function with.
+pub(crate) fn compile_function(
+    p: &ir::Program,
+    f: &Function,
+    sig: &FunctionSig,
+) -> Result<Executable, String> {
+    let mut cx = start(p, f)?;
+    let mut args = Vec::with_capacity(sig.arguments.len());
+    let mut arg_at = Vec::with_capacity(sig.arguments.len());
+    let mut array_args = Vec::new();
+    let mut at = 0usize;
+    for (k, item) in sig.arguments.iter().enumerate() {
+        arg_at.push(at);
+        match item.ty {
+            IoType::Array(carried, n) => {
+                let stride = u32::from(carried.width);
+                let base = cx.grow(
+                    stride
+                        .checked_mul(n)
+                        .ok_or("an array argument past the words of memory")?,
+                )?;
+                array_args.push((at, base, n, carried.width));
+                args.push((0, 0));
+                let place = Place {
+                    loc: Loc::Local(base),
+                    stride,
+                    len: n,
+                };
+                let points = match item.list {
+                    ItemList::Inputs => &mut cx.point_inputs,
+                    ItemList::Outputs => &mut cx.point_outputs,
+                    _ => return Err(format!("the array argument {} carries no points", item.name)),
+                };
+                let slot = item
+                    .varying
+                    .and_then(|v| points.get_mut(v))
+                    .ok_or_else(|| format!("the array argument {} carries no varying", item.name))?;
+                *slot = Some(place);
+                at = at.saturating_add(n as usize);
+            }
+            IoType::Value(v) => {
+                let r = cx.fresh(Type::U32X4)?;
+                args.push((r, v.width));
+                match (item.list, item.varying) {
+                    (ItemList::Inputs, Some(i)) => {
+                        if let Some(slot) = cx.inputs.get_mut(i) {
+                            *slot = Some((number(k)?, r));
+                        }
+                    }
+                    (ItemList::PatchConstants, Some(i)) => {
+                        if let Some(slot) = cx.patch_in.get_mut(i) {
+                            *slot = Some(r);
+                        }
+                    }
+                    (ItemList::Pipeline, None) => {
+                        let b = builtin_named(&item.name).ok_or_else(|| {
+                            format!("the argument {} is no value the pipeline gives", item.name)
+                        })?;
+                        cx.builtins.push((b, r));
+                    }
+                    _ => {
+                        return Err(format!(
+                            "the argument {} carries nothing the function reads",
+                            item.name
+                        ));
+                    }
+                }
+                at = at.saturating_add(1);
+            }
+            ref t => return Err(format!("an argument of {t:?}")),
+        }
+    }
+    // the results: an output or patch constant in four words of local memory each; a geometry program's vertices as
+    // arrays, how many there are and where strips start
+    let mut outputs = vec![None; p.interface.outputs.len()];
+    let mut emitted = Emitted {
+        count: 0,
+        pending: 0,
+        max: 0,
+        arrays: Vec::new(),
+        strips: 0,
+    };
+    let mut geometry = false;
+    for item in &sig.result {
+        match (item.ty, item.list, item.varying) {
+            (IoType::Value(v), ItemList::Outputs, Some(i)) => {
+                let word = cx.grow(4)?;
+                if let Some(o) = outputs.get_mut(i) {
+                    *o = Some((word, 4));
+                }
+                cx.returned.push((Some((word, v.width)), Member::Reg(0, v.width)));
+            }
+            (IoType::Value(v), ItemList::PatchConstants, Some(i)) => {
+                let word = cx.grow(4)?;
+                if let Some(o) = cx.patch_out.get_mut(i) {
+                    *o = Some(word);
+                }
+                cx.returned.push((Some((word, v.width)), Member::Reg(0, v.width)));
+            }
+            (IoType::Array(carried, max), ItemList::Outputs, Some(i)) => {
+                geometry = true;
+                let base = cx.grow(
+                    u32::from(carried.width)
+                        .checked_mul(max)
+                        .ok_or("an emitted vertex array past the words of memory")?,
+                )?;
+                emitted.max = max;
+                emitted.arrays.push((i, base, carried.width));
+                cx.returned.push((
+                    None,
+                    Member::Mem {
+                        word: base,
+                        count: max,
+                        width: carried.width,
+                        keep: None,
+                    },
+                ));
+            }
+            (IoType::Value(_), ItemList::Pipeline, None) if item.name == "SV_VertexCount" => {
+                emitted.count = cx.grow(1)?;
+                cx.returned.push((Some((emitted.count, 1)), Member::Reg(0, 1)));
+            }
+            (IoType::Array(_, max), ItemList::Pipeline, None) if item.name == "SV_StripStart" => {
+                emitted.strips = cx.grow(max)?;
+                cx.returned.push((
+                    None,
+                    Member::Mem {
+                        word: emitted.strips,
+                        count: max,
+                        width: 1,
+                        keep: None,
+                    },
+                ));
+            }
+            _ => {
+                return Err(format!(
+                    "the result member {} is not one a stage function gives",
+                    item.name
+                ));
+            }
+        }
+    }
+    if geometry {
+        emitted.pending = cx.grow(1)?;
+        cx.emitted = Some(emitted);
+    }
+    let arguments = Arguments {
+        args,
+        arg_at,
+        arg_len: at,
+        array_args,
+        builtins: vec![None; sig.arguments.len()],
+    };
+    finish(p, cx, outputs, arguments)
+}
+
+/// The rest of a compile once its arguments and results are placed: the buffers, the variables, the outputs' words
+/// (an output no result carries gets words of its own, never read), and the body.
+fn finish(
+    p: &ir::Program,
+    mut cx: Cx<'_>,
+    mut outputs: Vec<Option<(u32, u32)>>,
+    arguments: Arguments,
+) -> Result<Executable, String> {
+    let f = cx.f;
+    let Body::Regions(body) = &f.body else {
+        return Err(
+            "the body is a control flow graph: structure it first (iridia_passes::structurize)".into(),
+        );
+    };
+    let interface = &p.interface;
     for o in &mut outputs {
         if o.is_none() {
             *o = Some((cx.grow(4)?, 4));
@@ -1117,7 +1588,7 @@ pub(crate) fn compile(p: &ir::Program) -> Result<Executable, String> {
         cx.globals.push(GlobalDesc { kind, elem_words: 1 });
     }
     // the variables: private ones in local memory, workgroup ones in globals
-    let mut start = Vec::new();
+    let mut prologue = Vec::new();
     for var in &f.vars {
         let stride = u32::from(var.ty.lanes);
         let len = var.len.unwrap_or(1);
@@ -1144,7 +1615,7 @@ pub(crate) fn compile(p: &ir::Program) -> Result<Executable, String> {
                     .get(e as usize)
                     .map_or([0; 4], |b| b.map(|w| (w & 0xffff_ffff) as u32));
                 let r = cx.literal(var.ty, bits)?;
-                start.push(St::Store {
+                prologue.push(St::Store {
                     loc: Loc::Local(base.saturating_add(e.saturating_mul(stride))),
                     src: r,
                     n: var.ty.lanes,
@@ -1152,35 +1623,49 @@ pub(crate) fn compile(p: &ir::Program) -> Result<Executable, String> {
             }
         }
     }
-    // every output lane starts as zero; a lane never written stays so
+    // every output lane and patch constant starts as zero, a lane never written stays so; a geometry program's first
+    // vertex starts a strip
     let zero = cx.literal(Type::U32X4, [0; 4])?;
-    for &(word, words) in &cx.outputs {
-        start.push(St::Store {
+    let patch_words: Vec<u32> = cx.patch_out.iter().flatten().copied().collect();
+    for (word, words) in cx
+        .outputs
+        .iter()
+        .copied()
+        .chain(patch_words.into_iter().map(|w| (w, 4)))
+    {
+        prologue.push(St::Store {
             loc: Loc::Local(word),
             src: zero,
             n: u8::try_from(words).unwrap_or(4),
         });
     }
-    let mut out = start;
+    if let Some(pending) = cx.emitted.as_ref().map(|e| e.pending) {
+        let one = cx.literal(Type::U32, [1, 0, 0, 0])?;
+        prologue.push(St::Store {
+            loc: Loc::Local(pending),
+            src: one,
+            n: 1,
+        });
+    }
+    let mut out = prologue;
     cx.region(body, Yield::Return, &mut out)?;
     cx.flush(&mut out)?;
-    let n_args = args.len();
     Ok(Executable {
         ops: cx.ops,
         body: out,
         slots: cx.types.len(),
         inits: cx.inits,
-        args,
-        arg_at: (0..n_args).collect(),
-        arg_len: n_args,
+        args: arguments.args,
+        arg_at: arguments.arg_at,
+        arg_len: arguments.arg_len,
         pointer_args: Vec::new(),
-        array_args: Vec::new(),
+        array_args: arguments.array_args,
         local_words: cx.local_words as usize,
         globals: cx.globals,
         flush_denormals: p.float.f32 == ir::Denormals::Flush,
         workgroup: p.workgroup,
         mesh_output: None,
-        builtins,
+        builtins: arguments.builtins,
         ir_types: cx.types,
     })
 }

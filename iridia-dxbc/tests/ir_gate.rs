@@ -12,22 +12,176 @@ mod inputs;
 use std::collections::BTreeMap;
 
 use inputs::Game;
-use iridia::{BufferKind, ResourceId, ResourceKind, Stage, StorageTarget};
+use iridia::{
+    BufferKind, FunctionSig, IoType, ItemList, ResourceId, ResourceKind, Stage, StageFacts, StorageTarget,
+};
 use iridia_exec::{
-    Backend, BufferAtomic, Dim, Element, Executable, ImageAtomic, ImageLoad, ImageLod, ImageQuery,
-    ImageSample, ImageStore, Load, PixelShader, ProgramShader, QueryKind, Resources, Sample, Sampler,
+    Atomic, Backend, BufferAtomic, Dim, Element, Executable, ImageAtomic, ImageLoad, ImageLod, ImageQuery,
+    ImageSample, ImageStore, Load, PixelShader, ProgramShader, QueryKind, Resources, Runner, Sample, Sampler,
+    Store,
 };
 
 mod common;
 
-/// The vectors each program is run on.
-const CASES: u32 = 4;
+/// The vectors each program is run on: the first two seed the constants no reflection names as floats, the next two
+/// as small integers, and the last ([`ZEROED`]) is every constant and every unordered-access word 0.
+const CASES: u32 = 5;
+
+/// The vector whose constants, unordered-access memory, texel loads and buffer reads are all 0, as a cleared buffer
+/// and an unset parameter are (its samples keep their hash): it reaches the code behind a guard against 0 or against
+/// a constant (a debug pixel at the origin, a first use of a counter, a texel compared with an id).
+const ZEROED: u32 = 4;
+
+/// How vector `c` seeds the constants no reflection names (all of them, for [`ZEROED`]).
+fn unstated(c: u32) -> common::Unstated {
+    match c {
+        0 | 1 => common::Unstated::Floats,
+        ZEROED => common::Unstated::Zeros,
+        _ => common::Unstated::Ints,
+    }
+}
 
 /// Answers every request from a hash of everything it states, so two programs that ask the same agree and two that
 /// ask differently (another coordinate, offset, level, component) almost surely do not.
 #[derive(Default)]
 struct Hashed {
     asked: Vec<String>,
+    /// Every read request (a sample, a texel load, a query, a structured read) and atomic operation, in order, as the
+    /// words its answer is hashed by: compared between the lifts, since a texel asked for differently is the
+    /// program's own behaviour even where what it computes from it is dropped (a select that does not take it).
+    reads: Vec<Vec<u32>>,
+    /// The words the run's stores and atomic operations left, a texel never written read as its hash.
+    written: Written,
+    /// The element stride of each structured unordered-access view, by bind slot: a store's words are addressed by
+    /// element and byte offset there, by element and lane in a typed buffer ([`Hashed::typed`]), by word in a raw one.
+    strides: BTreeMap<u32, u32>,
+    /// The bind slots of the typed unordered-access buffers.
+    typed: std::collections::BTreeSet<u32>,
+    /// A texel load answers small integers, not floats' bits: the vectors that seed the constants so (a count of
+    /// lights read from a buffer of integers, which a float's bits make a loop of millions).
+    ints: bool,
+    /// Texel loads, buffer reads and an unordered-access word never written read 0 ([`ZEROED`]), not their hash.
+    zeroed: bool,
+}
+
+impl Hashed {
+    /// The sampler of test vector `c`.
+    fn for_case(c: u32) -> Self {
+        Hashed {
+            ints: c >= 2,
+            zeroed: c == ZEROED,
+            ..Hashed::default()
+        }
+    }
+
+    /// The sampler of test vector `c` for `shader`'s views.
+    fn for_shader(shader: &ProgramShader, c: u32) -> Self {
+        let resources = &shader.interface().resources;
+        let strides = resources
+            .iter()
+            .filter_map(|r| match r.kind {
+                ResourceKind::Storage {
+                    target: StorageTarget::Buffer(BufferKind::Structured { stride }),
+                    ..
+                } => Some((r.provenance.d3d?.register, stride)),
+                _ => None,
+            })
+            .collect();
+        let typed = resources
+            .iter()
+            .filter_map(|r| match r.kind {
+                ResourceKind::Storage {
+                    target: StorageTarget::Buffer(BufferKind::Typed(_)),
+                    ..
+                } => Some(r.provenance.d3d?.register),
+                _ => None,
+            })
+            .collect();
+        Hashed {
+            strides,
+            typed,
+            ..Hashed::for_case(c)
+        }
+    }
+
+    /// The word of buffer view `view` a store or an atomic operation at `address` reaches `k` words in.
+    fn buffer_word(&self, view: u32, address: [u32; 3], k: u32) -> Word {
+        match self.strides.get(&view) {
+            Some(&stride) => Word::Element {
+                view,
+                element: address[0],
+                word: (address[1] / 4).wrapping_add(k),
+                stride,
+            },
+            // a typed buffer's lanes are its element's, four words to an element
+            None if self.typed.contains(&view) => Word::Buffer {
+                view,
+                word: address[0].wrapping_mul(4).wrapping_add(k),
+            },
+            None => Word::Buffer {
+                view,
+                word: address[0].wrapping_add(k),
+            },
+        }
+    }
+}
+
+/// A 32-bit word of an unordered-access view.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum Word {
+    /// Of a raw or typed buffer, by word.
+    Buffer { view: u32, word: u32 },
+    /// Of a structured buffer: an element's word.
+    Element {
+        view: u32,
+        element: u32,
+        word: u32,
+        stride: u32,
+    },
+    /// A lane of a texel.
+    Texel {
+        view: u32,
+        dim: u32,
+        texel: [u32; 3],
+        layer: Option<u32>,
+        lane: u32,
+    },
+}
+
+/// What a pixel or vertex run's stores and atomic operations do: each word written, with the values written to it in
+/// the order they were (the last is what it holds). Each word's sequence is compared, not the order of writes to
+/// different words: Direct3D orders an invocation's writes to a word, and leaves the order between the lanes of a quad
+/// open; a record a program rewrites in place leaves the same last words with a write left out.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct Written {
+    writes: BTreeMap<Word, Vec<u32>>,
+}
+
+impl Written {
+    /// Word `at` takes `v`.
+    fn write(&mut self, at: Word, v: u32) {
+        self.writes.entry(at).or_default().push(v);
+    }
+
+    /// What word `at` holds, where it was written.
+    fn last(&self, at: &Word) -> Option<u32> {
+        self.writes.get(at).and_then(|v| v.last()).copied()
+    }
+
+    /// An atomic operation's change of word `at` (`fresh` where never written): the word as it was.
+    fn atomic(&mut self, at: Word, fresh: u32, change: impl FnOnce(u32) -> u32) -> u32 {
+        let old = self.last(&at).unwrap_or(fresh);
+        self.write(at, change(old));
+        old
+    }
+
+    /// The words with every NaN as one pattern, as outputs are compared.
+    fn canonical(mut self) -> Self {
+        for w in self.writes.values_mut().flatten() {
+            *w = canonical(*w);
+        }
+        self
+    }
 }
 
 fn hash_words(words: &[u32]) -> u64 {
@@ -93,6 +247,7 @@ impl Sampler for Hashed {
         w.push(u32::from(r.depth));
         self.asked.push(format!("{r:?}"));
         let mut t = texel_floats(hash_words(&w));
+        self.reads.push(w);
         if r.depth || r.depth_ref.is_some() {
             // a depth texture's one lane; the rest as a depth view reads them
             t = [t[0].clamp(0.0, 1.0), 0.0, 0.0, 1.0];
@@ -117,7 +272,33 @@ impl Sampler for Hashed {
         w.push(r.sample.map_or(u32::MAX, i32::cast_unsigned));
         w.push(r.mip.map_or(u32::MAX, i32::cast_unsigned));
         self.asked.push(format!("{r:?}"));
-        Ok(texel_floats(hash_words(&w)).map(f32::to_bits))
+        let h = hash_words(&w);
+        self.reads.push(w);
+        let mut t = if self.ints {
+            std::array::from_fn(|k| common::mix(h ^ k as u64) % 4)
+        } else {
+            texel_floats(h).map(f32::to_bits)
+        };
+        if self.zeroed {
+            // a cleared texture: a guard comparing a texel with a constant (an id lookup) holds
+            t = [0; 4];
+        }
+        if r.storage {
+            // what this run stored there
+            for (lane, t) in (0..).zip(t.iter_mut()) {
+                let at = Word::Texel {
+                    view: r.texture,
+                    dim: dim_word(r.dim),
+                    texel: r.texel.map(i32::cast_unsigned),
+                    layer: r.layer.map(i32::cast_unsigned),
+                    lane,
+                };
+                if let Some(w) = self.written.last(&at) {
+                    *t = w;
+                }
+            }
+        }
+        Ok(t)
     }
     fn query_image(&mut self, r: ImageQuery<u32>) -> Result<[u32; 4], String> {
         let w = [
@@ -128,6 +309,7 @@ impl Sampler for Hashed {
             r.level.unwrap_or(u32::MAX),
         ];
         self.asked.push(format!("{r:?}"));
+        self.reads.push(w.to_vec());
         let h = common::mix(hash_words(&w));
         Ok(match r.kind {
             QueryKind::Size => {
@@ -139,8 +321,90 @@ impl Sampler for Hashed {
             QueryKind::Samples => [4, 0, 0, 0],
         })
     }
+    fn store(&mut self, r: Store) -> Result<(), String> {
+        self.asked.push(format!("{r:?}"));
+        for k in (0..4).filter(|k| r.mask >> k & 1 != 0) {
+            let at = self.buffer_word(r.view, r.address, k);
+            self.written.write(at, r.value[k as usize]);
+        }
+        Ok(())
+    }
+    fn store_image(&mut self, r: ImageStore<u32>) -> Result<(), String> {
+        self.asked.push(format!("{r:?}"));
+        for (lane, &v) in (0..u32::from(r.lanes)).zip(&r.value) {
+            let at = Word::Texel {
+                view: r.view,
+                dim: dim_word(r.dim),
+                texel: r.texel,
+                layer: r.layer,
+                lane,
+            };
+            self.written.write(at, v);
+        }
+        Ok(())
+    }
+    fn atomic(&mut self, r: Atomic) -> Result<u32, String> {
+        self.asked.push(format!("{r:?}"));
+        let [x, y, z] = r.address;
+        self.reads.push(vec![
+            8,
+            r.view,
+            x,
+            y,
+            z,
+            r.op as u32,
+            r.value,
+            r.compare,
+            u32::from(r.signed),
+        ]);
+        let at = self.buffer_word(r.view, r.address, 0);
+        let fresh = if self.zeroed {
+            0
+        } else {
+            common::mix(hash_words(&[8, r.view, r.address[0], r.address[1], r.address[2]]))
+        };
+        Ok(self
+            .written
+            .atomic(at, fresh, |old| r.op.apply(old, r.value, r.compare, r.signed)))
+    }
+    fn atomic_image(&mut self, r: ImageAtomic<u32>) -> Result<u32, String> {
+        self.asked.push(format!("{r:?}"));
+        let [x, y, z] = r.texel;
+        let layer = r.layer.unwrap_or(u32::MAX);
+        self.reads.push(vec![
+            5,
+            r.view,
+            x,
+            y,
+            z,
+            layer,
+            r.op as u32,
+            r.value,
+            r.compare,
+            u32::from(r.signed),
+        ]);
+        let at = Word::Texel {
+            view: r.view,
+            dim: dim_word(r.dim),
+            texel: r.texel,
+            layer: r.layer,
+            lane: 0,
+        };
+        let fresh = if self.zeroed {
+            0
+        } else {
+            common::mix(hash_words(&[5, r.view, r.texel[0], r.texel[1], r.texel[2]]))
+        };
+        Ok(self
+            .written
+            .atomic(at, fresh, |old| r.op.apply(old, r.value, r.compare, r.signed)))
+    }
     fn structured(&mut self, slot: u32, element: u32, offset: u32) -> Result<u32, String> {
         self.asked.push(format!("structured t{slot}[{element}]+{offset}"));
+        self.reads.push(vec![4, slot, element, offset]);
+        if self.zeroed {
+            return Ok(0);
+        }
         Ok(common::mix(hash_words(&[4, slot, element, offset])) % 1024)
     }
     fn buffer_elements(&mut self, slot: u32) -> Option<u32> {
@@ -149,16 +413,17 @@ impl Sampler for Hashed {
     }
 }
 
-/// What a run gives: each output register's written lanes (unwritten lanes zero), the masks and the discard; or
-/// the error.
-type Run = Result<Vec<Invocation>, String>;
+/// What a run gives: each invocation's output lanes, masks and discard, the words its stores and atomic operations
+/// left, and its read requests ([`Hashed::reads`]); or the error.
+type Run = Result<(Vec<Invocation>, Written, Vec<Vec<u32>>), String>;
 
 /// One invocation's written output lanes (unwritten lanes zero), its masks and whether it was discarded; a discarded
 /// invocation's outputs are not compared, since nothing it writes reaches a target.
 type Invocation = (Vec<[u32; 4]>, Vec<u8>, bool);
 
-fn run(shader: &ProgramShader, c: &[common::Case]) -> Run {
-    run_asking(shader, c, &mut Hashed::default())
+/// A run of test vector `c` (its invocation, or its quad's four).
+fn run(shader: &ProgramShader, c: u32, cases: &[common::Case]) -> Run {
+    run_asking(shader, cases, &mut Hashed::for_shader(shader, c))
 }
 
 /// A run of one invocation, or of a quad's four (lanes 0 and 1 the top row) whose derivatives are the quad's own.
@@ -199,7 +464,11 @@ fn run_asking(shader: &ProgramShader, cases: &[common::Case], sampler: &mut Hash
             .collect();
         out.push((outputs, e.output_masks, e.discarded));
     }
-    Ok(out)
+    Ok((
+        out,
+        std::mem::take(&mut sampler.written).canonical(),
+        std::mem::take(&mut sampler.reads),
+    ))
 }
 
 /// A NaN as one bit pattern: two lifts may produce different NaNs.
@@ -211,11 +480,13 @@ fn canonical(w: u32) -> u32 {
     }
 }
 
-/// The IR lift's program after the passes the cut-over runs.
+/// The IR lift's program after the passes the cut-over runs, on each of its functions.
 fn passed(mut p: iridia_ir::Program) -> Result<iridia_ir::Program, String> {
-    iridia_passes::promote(&mut p.entry)?;
-    iridia_passes::simplify(&mut p.entry);
-    iridia_passes::break_flags(&mut p.entry)?;
+    for f in std::iter::once(&mut p.entry).chain(p.patch.as_mut()) {
+        iridia_passes::promote(f)?;
+        iridia_passes::simplify(f);
+        iridia_passes::break_flags(f)?;
+    }
     iridia_ir::validate(&p).map_err(|e| format!("{e:?}"))?;
     Ok(p)
 }
@@ -230,21 +501,57 @@ enum Verdict {
     Differs(String),
 }
 
-/// Test vector `c`: the first half seed the constants no reflection names as floats, the second as small integers
-/// (a loop bound read from a stripped buffer). A program that takes derivatives of what it computes (`quad`) runs as a
-/// quad of four vectors: each lane's own inputs, the constants, the facing of lane 0 and positions a pixel apart.
-fn gate_case(a: &ProgramShader, c: u32, quad: bool) -> Vec<common::Case> {
-    let unstated = if c < CASES / 2 {
-        common::Unstated::Floats
-    } else {
-        common::Unstated::Ints
-    };
+/// The inputs of a quad's lanes, in the order the gate tries them: a quad whose lanes take different paths to a
+/// derivative or an implicit-level sample cannot be evaluated, and runs again with the next.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum QuadInputs {
+    /// Each lane its own.
+    Own,
+    /// As a rasterizer interpolates them across a quad: each interpolated float input the first lane's plus a step
+    /// of its own along x and along y (so its derivatives are those steps); the flat and integer ones the first
+    /// lane's.
+    Coherent,
+    /// Every lane the first lane's (but its position): the derivatives of the inputs are 0.
+    First,
+}
+
+/// Test vector `c`: the constants seeded as [`unstated`] says (a loop bound read from a stripped buffer needs small
+/// integers), as [`Hashed`] then answers texel loads. A program that takes
+/// derivatives of what it computes (`quad`) runs as a quad of four vectors: the lanes' inputs as `inputs` says, the
+/// constants, the facing of lane 0 and positions a pixel apart.
+fn gate_case(a: &ProgramShader, c: u32, quad: bool, inputs: QuadInputs) -> Vec<common::Case> {
+    let unstated = unstated(c);
     if !quad {
         return vec![common::case_with(a, c, unstated)];
     }
+    let own = |k: u32| if inputs == QuadInputs::Own { k } else { 0 };
     let mut lanes: Vec<common::Case> = (0..4)
-        .map(|k| common::case_with(a, c * 4 + k, unstated))
+        .map(|k| common::case_with(a, c * 4 + own(k), unstated))
         .collect();
+    if inputs == QuadInputs::Coherent {
+        for v in &a.interface().inputs {
+            let interpolated = v.system.is_none()
+                && v.value.scalar == iridia::ScalarType::Float
+                && v.interp.is_none_or(|i| i.mode != iridia::InterpMode::Flat);
+            let Some(sig) = v.provenance.d3d.filter(|_| interpolated) else {
+                continue;
+            };
+            let r = sig.register as usize;
+            if r >= lanes[0].inputs.len() {
+                continue;
+            }
+            for lane in (0..4usize).filter(|l| sig.mask >> l & 1 != 0) {
+                let h = common::mix(hash_words(&[11, c, sig.register, lane as u32]));
+                let dx = (common::unit(h) - 0.5) / 16.0;
+                let dy = (common::unit(common::mix(u64::from(h) ^ 1)) - 0.5) / 16.0;
+                let base = f32::from_bits(lanes[0].inputs[r][lane]);
+                for (k, l) in lanes.iter_mut().enumerate() {
+                    let x = base + dx * (k & 1) as f32 + dy * (k >> 1) as f32;
+                    l.inputs[r][lane] = x.to_bits();
+                }
+            }
+        }
+    }
     let first = lanes[0].buffers.clone();
     let facing = a
         .interface()
@@ -277,30 +584,70 @@ fn gate_case(a: &ProgramShader, c: u32, quad: bool) -> Vec<common::Case> {
     lanes
 }
 
-/// A and B on every vector. A vector A cannot evaluate (a loop past the executor's budget on these inputs, a request
-/// the sampler does not answer) is not compared, and B is not run on it; a program none of whose vectors A evaluates
-/// is `AFails`.
-fn compare(a: &ProgramShader, b: &ProgramShader, cases: u32) -> Verdict {
-    let mut failed = None;
+/// A and B on every vector, and the furthest of the [`QuadInputs`] a quad needed. A quad whose lanes diverge at a
+/// derivative or an implicit-level sample runs again with coherent inputs, then with every lane the first lane's. A
+/// vector A cannot evaluate (a loop past the executor's budget on these inputs, a request the sampler does not
+/// answer) is not compared, and B is not run on it: the third result is why, for each; a program none of whose
+/// vectors A evaluates is `AFails`.
+/// Where `textures`, every texture request (sample, texel load, query) B makes must be one A makes too: a texel the
+/// program asks for differently is its own behaviour even where a select then drops it. A request A makes and B does
+/// not is one for a value nothing uses, which B's compiler leaves out (buffer reads have no effect; a pass removes a
+/// sample nothing reads, so P is held to its results only).
+fn compare(
+    a: &ProgramShader,
+    b: &ProgramShader,
+    cases: u32,
+    textures: bool,
+) -> (Verdict, QuadInputs, Vec<String>) {
+    let mut skipped = Vec::new();
     let mut compared = 0;
+    let mut furthest = QuadInputs::Own;
     let quad = a.needs_quad() || b.needs_quad();
     for c in 0..cases {
-        let case = gate_case(a, c, quad);
-        let x = run(a, &case);
+        let mut case = gate_case(a, c, quad, QuadInputs::Own);
+        let mut x = run(a, c, &case);
+        for next in [QuadInputs::Coherent, QuadInputs::First] {
+            if !(quad && x.as_ref().is_err_and(|e| e.contains("diverge"))) {
+                break;
+            }
+            case = gate_case(a, c, quad, next);
+            x = run(a, c, &case);
+            furthest = furthest.max(next);
+        }
         if let Err(e) = &x {
-            failed.get_or_insert_with(|| e.clone());
+            skipped.push(e.clone());
             continue;
         }
-        let y = run(b, &case);
-        if x != y {
-            return Verdict::Differs(format!("case {c}: A {x:x?}\n  but {y:x?}"));
+        let y = run(b, c, &case);
+        let same = match (&x, &y) {
+            (Ok((ix, wx, rx)), Ok((iy, wy, ry))) => {
+                ix == iy && wx == wy && (!textures || texture_requests(ry).is_subset(&texture_requests(rx)))
+            }
+            _ => x == y,
+        };
+        if !same {
+            return (
+                Verdict::Differs(format!("case {c}: A {x:x?}\n  but {y:x?}")),
+                furthest,
+                skipped,
+            );
         }
         compared += 1;
     }
-    match failed {
-        Some(e) if compared == 0 => Verdict::AFails(e),
+    let verdict = match skipped.first() {
+        Some(e) if compared == 0 => Verdict::AFails(e.clone()),
         _ => Verdict::Agree,
-    }
+    };
+    (verdict, furthest, skipped)
+}
+
+/// The distinct texture requests of a run's read requests ([`Hashed::reads`]): its samples, texel loads and queries.
+fn texture_requests(reads: &[Vec<u32>]) -> std::collections::BTreeSet<&[u32]> {
+    reads
+        .iter()
+        .filter(|r| matches!(r.first(), Some(1..=3)))
+        .map(Vec::as_slice)
+        .collect()
 }
 
 #[derive(Default)]
@@ -314,30 +661,65 @@ struct Gate {
     refused: BTreeMap<String, (usize, String)>,
     /// Programs B lifted the executor (or a pass) refuses, by reason.
     unrun: BTreeMap<String, (usize, String)>,
-    /// Programs A cannot evaluate, by reason.
+    /// Programs A cannot evaluate on any vector, by reason.
     a_fails: BTreeMap<String, (usize, String)>,
+    /// The vectors A cannot evaluate of programs B agrees with on the others, by reason: not compared.
+    skipped: BTreeMap<String, (usize, String)>,
     /// Disagreements: program and the first difference.
     differ: Vec<String>,
-    /// Programs the IR lifter lifts and A does not.
-    only_ir: usize,
+    /// Programs the IR lifter lifts and A does not, by A's reason.
+    only_ir: BTreeMap<String, (usize, String)>,
+    /// Containers neither lifter lifts (DXIL among them), by the IR lifter's reason.
+    neither: BTreeMap<String, (usize, String)>,
     /// Compute programs among those A runs.
     compute: usize,
+    /// Programs made of functions (hull, domain, geometry, a vertex program feeding a tessellator) among those A runs.
+    functions: usize,
+    /// Programs a quad of whose ran with coherent inputs at most, and with the first lane's in every lane.
+    coherent: usize,
+    identical: usize,
+    /// Of the programs that ran coherent quads and agree, those that take no derivative on any vector with coherent
+    /// inputs (their quads diverged at an implicit-level sample only), and those in which every lane taking one is
+    /// discarded (a derivative reaches no output there): what the coherent vectors leave untested.
+    coherent_no_derivative: usize,
+    coherent_derivatives_discarded: usize,
 }
 
 fn tally(map: &mut BTreeMap<String, (usize, String)>, why: &str, at: &str) {
     map.entry(common::reason(why)).or_insert((0, at.to_string())).0 += 1;
 }
 
+impl Gate {
+    /// Settle a column of a program whose compared vectors agree: `compared` the vectors A evaluated, `skipped` why it
+    /// could not evaluate the others. With none compared A fails the program (`false`); otherwise the column agrees,
+    /// and B's skipped vectors are counted.
+    fn settle(&mut self, column: &str, compared: usize, skipped: &[String], at: &str) -> bool {
+        if compared == 0 {
+            tally(
+                &mut self.a_fails,
+                skipped.first().map_or("no vector", String::as_str),
+                at,
+            );
+            return false;
+        }
+        if column == "B" {
+            self.agree_b += 1;
+            for e in skipped {
+                tally(&mut self.skipped, e, at);
+            }
+        } else {
+            self.agree_p += 1;
+        }
+        true
+    }
+}
+
 fn gate(game: Game) {
     let Some((name, paths)) = common::corpus(game) else {
         return;
     };
-    gate_over(&name, &paths, NOT_YET);
+    gate_over(&name, &paths, &[]);
 }
-
-/// What the IR lifter does not lift yet that the old lifter does: the programs of the stages made of functions (hull,
-/// domain, geometry, and a vertex program feeding tessellation). The gate fails on any other refusal.
-const NOT_YET: &[&str] = &["program made of functions is not lifted to the IR yet"];
 
 /// The gate over the containers `paths` (`name` in its report): a refusal is a failure unless its reason contains one
 /// of `not_yet`.
@@ -360,15 +742,29 @@ fn gate_over(name: &str, paths: &[std::path::PathBuf], not_yet: &[&str]) {
                 tally(&mut g.refused, &e.to_string(), &at);
                 continue;
             }
-            (Err(_), Ok(_)) => {
-                g.only_ir += 1;
+            (Err(e), Ok(_)) => {
+                tally(&mut g.only_ir, &e.to_string(), &at);
                 continue;
             }
-            (Err(_), Err(_)) => continue,
+            (Err(_), Err(e)) => {
+                tally(&mut g.neither, &e.to_string(), &at);
+                continue;
+            }
         };
         if old.interface.stage == Stage::Compute {
             compute(&mut g, &old, p, &at);
             continue;
+        }
+        match iridia::stage_functions(&old.interface) {
+            Ok(Some(sigs)) => {
+                functions(&mut g, &old, &sigs, p, &at);
+                continue;
+            }
+            Ok(None) => {}
+            Err(e) => {
+                tally(&mut g.a_fails, &format!("A's functions: {e}"), &at);
+                continue;
+            }
         }
         let a = match ProgramShader::new(old) {
             Ok(a) => a,
@@ -385,8 +781,24 @@ fn gate_over(name: &str, paths: &[std::path::PathBuf], not_yet: &[&str]) {
                 continue;
             }
         };
-        match compare(&a, &b, CASES) {
-            Verdict::Agree => g.agree_b += 1,
+        let (verdict, quads, skipped) = compare(&a, &b, CASES, true);
+        match quads {
+            QuadInputs::Own => {}
+            QuadInputs::Coherent => g.coherent += 1,
+            QuadInputs::First => g.identical += 1,
+        }
+        if quads == QuadInputs::Coherent && matches!(verdict, Verdict::Agree) {
+            let runs = coherent_runs(&b);
+            g.coherent_no_derivative += usize::from(!runs.derivatives);
+            g.coherent_derivatives_discarded += usize::from(runs.derivatives && !runs.kept);
+        }
+        match verdict {
+            Verdict::Agree => {
+                g.agree_b += 1;
+                for e in &skipped {
+                    tally(&mut g.skipped, e, &at);
+                }
+            }
             Verdict::AFails(e) => {
                 tally(&mut g.a_fails, &e, &at);
                 continue;
@@ -400,7 +812,7 @@ fn gate_over(name: &str, paths: &[std::path::PathBuf], not_yet: &[&str]) {
                 continue;
             }
         };
-        match compare(&a, &pp, CASES) {
+        match compare(&a, &pp, CASES, false).0 {
             Verdict::Agree => g.agree_p += 1,
             Verdict::AFails(e) => {
                 tally(&mut g.a_fails, &e, &at);
@@ -410,16 +822,22 @@ fn gate_over(name: &str, paths: &[std::path::PathBuf], not_yet: &[&str]) {
         }
     }
     println!(
-        "{name}: {} programs, A runs {} ({} compute), B agrees {}, P agrees {}, {} differ, IR refuses {}, only the IR \
-         lifts {}",
+        "{name}: {} programs, A runs {} ({} compute, {} of functions), B agrees {}, P agrees {}, {} differ, IR \
+         refuses {}, only the IR lifts {}, neither lifts {}",
         g.programs,
         g.a,
         g.compute,
+        g.functions,
         g.agree_b,
         g.agree_p,
         g.differ.len(),
         g.refused.values().map(|(n, _)| n).sum::<usize>(),
-        g.only_ir,
+        g.only_ir.values().map(|(n, _)| n).sum::<usize>(),
+        g.neither.values().map(|(n, _)| n).sum::<usize>(),
+    );
+    println!(
+        "  quads rerun with coherent inputs {}, with the first lane's in every lane {}; of the coherent, {} take no derivative on those vectors and {} discard every lane that takes one",
+        g.coherent, g.identical, g.coherent_no_derivative, g.coherent_derivatives_discarded
     );
     for (why, (n, e)) in &g.refused {
         println!("  refused {n:5}  {why}  (e.g. {e})");
@@ -430,8 +848,21 @@ fn gate_over(name: &str, paths: &[std::path::PathBuf], not_yet: &[&str]) {
     for (why, (n, e)) in &g.a_fails {
         println!("  A fails {n:5}  {why}  (e.g. {e})");
     }
+    for (why, (n, e)) in &g.skipped {
+        println!("  skipped {n:5}  vectors of agreeing programs A cannot evaluate: {why}  (e.g. {e})");
+    }
+    for (why, (n, e)) in &g.only_ir {
+        println!("  IR only {n:5}  A: {why}  (e.g. {e})");
+    }
+    for (why, (n, e)) in &g.neither {
+        println!("  neither {n:5}  {why}  (e.g. {e})");
+    }
     for d in g.differ.iter().take(20) {
         println!("  DIFFER {d}");
+    }
+    // every one by name, past the first twenty in full
+    for d in g.differ.iter().skip(20) {
+        println!("  differs {}", d.lines().next().unwrap_or_default());
     }
     assert!(g.differ.is_empty(), "{} programs differ", g.differ.len());
     assert!(
@@ -481,11 +912,21 @@ impl Memory {
 
 /// A compute run's backend: textures answered by the hash, unordered-access texels kept as the program leaves them
 /// (a texel never written reads as its hash), counters starting from a hash of their view.
-#[derive(Default)]
 struct Group {
     hashed: Hashed,
     texels: Texels,
     counters: BTreeMap<(u32, u32), u32>,
+}
+
+impl Group {
+    /// The backend of test vector `c`.
+    fn for_case(c: u32) -> Self {
+        Group {
+            hashed: Hashed::for_case(c),
+            texels: BTreeMap::new(),
+            counters: BTreeMap::new(),
+        }
+    }
 }
 
 /// An element of the interface as the one word the hashed answers take.
@@ -519,6 +960,9 @@ impl Backend for Group {
             if let Some(t) = self.texels.get(&key) {
                 return Ok(*t);
             }
+            if self.hashed.zeroed {
+                return Ok([0; 4]);
+            }
         }
         self.hashed.load_image(ImageLoad {
             texture: element_word(r.texture),
@@ -549,9 +993,13 @@ impl Backend for Group {
     }
     fn atomic_image(&mut self, r: ImageAtomic<ResourceId>) -> Result<u32, String> {
         let key = (r.view.0, r.index, r.texel, r.layer);
-        let fresh = common::mix(hash_words(&[
-            5, r.view.0, r.index, r.texel[0], r.texel[1], r.texel[2],
-        ]));
+        let fresh = if self.hashed.zeroed {
+            0
+        } else {
+            common::mix(hash_words(&[
+                5, r.view.0, r.index, r.texel[0], r.texel[1], r.texel[2],
+            ]))
+        };
         let t = self.texels.entry(key).or_insert([fresh, 0, 0, 0]);
         let old = t[0];
         t[0] = r.op.apply(old, r.value, r.compare, r.signed);
@@ -564,10 +1012,13 @@ impl Backend for Group {
         ))
     }
     fn counter(&mut self, view: Element, decrement: bool) -> Result<u32, String> {
-        let c = self
-            .counters
-            .entry((view.id.0, view.index))
-            .or_insert_with(|| common::mix(hash_words(&[6, view.id.0, view.index])) % 64);
+        let c = self.counters.entry((view.id.0, view.index)).or_insert_with(|| {
+            if self.hashed.zeroed {
+                0
+            } else {
+                common::mix(hash_words(&[6, view.id.0, view.index])) % 64
+            }
+        });
         if decrement {
             *c = c.wrapping_sub(1);
             Ok(*c)
@@ -617,7 +1068,11 @@ fn seeded(program: &iridia::Program, c: u32) -> Seeded {
                     let v = (0..rows)
                         .map(|row| {
                             std::array::from_fn(|k| {
-                                common::mix(hash_words(&[7, c, r.id.0, e, row, k as u32])) % 97
+                                if c == ZEROED {
+                                    0
+                                } else {
+                                    common::mix(hash_words(&[7, c, r.id.0, e, row, k as u32])) % 97
+                                }
                             })
                         })
                         .collect();
@@ -637,8 +1092,15 @@ fn seeded(program: &iridia::Program, c: u32) -> Seeded {
             BufferKind::Raw => 256,
         };
         for e in 0..bound_elements(r.count) {
+            // the zeroed vector's read-write buffers start cleared
             let v: Vec<u32> = (0..words)
-                .map(|w| common::mix(hash_words(&[8, c, r.id.0, e, w])) % 251)
+                .map(|w| {
+                    if storage && c == ZEROED {
+                        0
+                    } else {
+                        common::mix(hash_words(&[8, c, r.id.0, e, w])) % 251
+                    }
+                })
                 .collect();
             match (storage, array) {
                 (true, true) => {
@@ -663,7 +1125,7 @@ fn seeded(program: &iridia::Program, c: u32) -> Seeded {
 fn dispatch(exe: &Executable, program: &iridia::Program, c: u32) -> Result<Memory, String> {
     let mut s = seeded(program, c);
     let bound = exe.bind_resources(&s.resources)?;
-    let mut backend = Group::default();
+    let mut backend = Group::for_case(c);
     exe.dispatch_elements(&bound, &mut backend, &mut s.buffers, &mut s.elements, GROUPS, 32)?;
     Ok(Memory {
         buffers: s.buffers,
@@ -688,10 +1150,12 @@ fn compute(g: &mut Gate, old: &iridia::Program, p: iridia_ir::Program, at: &str)
             Ok(b) => b,
             Err(e) => return tally(&mut g.unrun, &format!("{column}: {e}"), at),
         };
+        let (mut compared, mut skipped) = (0, Vec::new());
         for c in 0..CASES {
             let x = dispatch(&a, old, c);
             if let Err(e) = &x {
-                return tally(&mut g.a_fails, e, at);
+                skipped.push(e.clone());
+                continue;
             }
             let y = dispatch(&b, old, c);
             if x != y {
@@ -699,12 +1163,166 @@ fn compute(g: &mut Gate, old: &iridia::Program, p: iridia_ir::Program, at: &str)
                 let d: String = d.chars().take(4000).collect();
                 return g.differ.push(format!("{at} ({column})\n  {d}"));
             }
+            compared += 1;
         }
-        if column == "B" {
-            g.agree_b += 1;
-        } else {
-            g.agree_p += 1;
+        if !g.settle(column, compared, &skipped, at) {
+            return;
         }
+    }
+}
+
+/// A lane of seeded words of a varying of `scalar`, as [`common::case_with`] seeds an input's: a float in about
+/// [-0.25, 1.75), a small integer.
+fn seeded_lane(scalar: iridia::ScalarType, h: u32) -> u32 {
+    match scalar {
+        iridia::ScalarType::Float => (common::unit(h) * 2.0 - 0.25).to_bits(),
+        iridia::ScalarType::Uint => h % 4,
+        iridia::ScalarType::Sint => (h % 5).wrapping_sub(2),
+        _ => h & 1,
+    }
+}
+
+/// The registers stage function `sig` of `program` takes on case `c`: each point of an array argument and each
+/// varying seeded by its scalar type, and the values the pipeline gives within what the stage's facts allow (an
+/// output point the hull program has, a domain location inside the patch, an instance the geometry program runs).
+fn arguments(program: &iridia::Program, sig: &FunctionSig, c: u32) -> Vec<[u32; 4]> {
+    let interface = &program.interface;
+    let patch: &[iridia::Varying] = match &interface.facts {
+        StageFacts::Hull(h) => &h.patch_constants,
+        StageFacts::Domain(d) => &d.patch_constants,
+        _ => &[],
+    };
+    let scalar = |list: ItemList, v: Option<usize>| {
+        let varyings = match list {
+            ItemList::Inputs => &interface.inputs[..],
+            ItemList::Outputs => &interface.outputs[..],
+            ItemList::PatchConstants => patch,
+            ItemList::Pipeline => &[],
+        };
+        v.and_then(|v| varyings.get(v))
+            .map_or(iridia::ScalarType::Uint, |v| v.value.scalar)
+    };
+    let seeded = |k: usize, point: u32, s: iridia::ScalarType| -> [u32; 4] {
+        std::array::from_fn(|lane| {
+            seeded_lane(s, common::mix(hash_words(&[9, c, k as u32, point, lane as u32])))
+        })
+    };
+    let mut registers = Vec::new();
+    for (k, item) in sig.arguments.iter().enumerate() {
+        let h = common::mix(hash_words(&[10, c, k as u32]));
+        match (item.ty, item.name.as_str()) {
+            (IoType::Array(_, n), _) => {
+                let s = scalar(item.list, item.varying);
+                registers.extend((0..n).map(|point| seeded(k, point, s)));
+            }
+            (_, "SV_OutputControlPointID") => {
+                let points = match &interface.facts {
+                    StageFacts::Hull(h) => h.output_control_points.max(1),
+                    _ => 1,
+                };
+                registers.push([c % points, 0, 0, 0]);
+            }
+            (_, "SV_PrimitiveID") => registers.push([c, 0, 0, 0]),
+            (_, "SV_GSInstanceID") => {
+                let instances = match &interface.facts {
+                    StageFacts::Geometry(g) => g.instances.max(1),
+                    _ => 1,
+                };
+                registers.push([c % instances, 0, 0, 0]);
+            }
+            (_, "SV_DomainLocation") => {
+                let u = common::unit(h);
+                let v = common::unit(common::mix(u64::from(h) ^ 1)) * (1.0 - u);
+                let w = match &interface.facts {
+                    StageFacts::Domain(d) if d.domain == iridia::TessDomain::Triangle => 1.0 - u - v,
+                    _ => 0.0,
+                };
+                registers.push([u.to_bits(), v.to_bits(), w.to_bits(), 0]);
+            }
+            _ => registers.push(seeded(k, 0, scalar(item.list, item.varying))),
+        }
+    }
+    registers
+}
+
+/// One run of stage function `exe` (of `program`'s interface, as `sig`) on case `c`'s arguments and memory: its
+/// result's members (NaNs alike) and the memory it leaves.
+fn call(
+    exe: &Executable,
+    program: &iridia::Program,
+    sig: &FunctionSig,
+    c: u32,
+) -> Result<(Vec<[u32; 4]>, Memory), String> {
+    let s = seeded(program, c);
+    let bound = exe.bind_resources(&s.resources)?;
+    let mut backend = Group::for_case(c);
+    let registers = arguments(program, sig, c);
+    let values = {
+        let mut runner = Runner::<1>::new(exe, &bound, &mut backend, None);
+        let [out] = runner.run([&registers])?;
+        out.values
+    };
+    Ok((
+        values.into_iter().map(|v| v.map(canonical)).collect(),
+        Memory {
+            buffers: s.buffers,
+            elements: s.elements,
+            texels: backend.texels,
+            counters: backend.counters,
+        }
+        .canonical(),
+    ))
+}
+
+/// A program made of functions: each function of A, B and P run on the same seeded arguments and memory must give
+/// the same members and leave the same memory.
+fn functions(g: &mut Gate, old: &iridia::Program, sigs: &[FunctionSig], p: iridia_ir::Program, at: &str) {
+    let mut a = Vec::with_capacity(sigs.len());
+    for sig in sigs {
+        match Executable::function(old, sig.name) {
+            Ok(e) => a.push(e),
+            Err(e) => return tally(&mut g.a_fails, &format!("A not built: {e}"), at),
+        }
+    }
+    g.a += 1;
+    g.functions += 1;
+    let columns = [("B", Ok(p.clone())), ("P", passed(p))];
+    for (column, ir) in columns {
+        let ir = match ir {
+            Ok(ir) => ir,
+            Err(e) => return tally(&mut g.unrun, &format!("{column}: {e}"), at),
+        };
+        // each function is compared on a vector at least, or A fails the program
+        let mut skipped = Vec::new();
+        for (sig, a) in sigs.iter().zip(&a) {
+            let b = match Executable::function_from_ir(&ir, sig.name) {
+                Ok(b) => b,
+                Err(e) => return tally(&mut g.unrun, &format!("{column} {}: {e}", sig.name), at),
+            };
+            let mut compared = 0;
+            for c in 0..CASES {
+                let x = call(a, old, sig, c);
+                if let Err(e) = &x {
+                    skipped.push(format!("{}: {e}", sig.name));
+                    continue;
+                }
+                let y = call(&b, old, sig, c);
+                if x != y {
+                    let d = format!("{} case {c}: A {x:x?}\n  but {y:x?}", sig.name);
+                    let d: String = d.chars().take(4000).collect();
+                    return g.differ.push(format!("{at} ({column})\n  {d}"));
+                }
+                compared += 1;
+            }
+            if compared == 0 {
+                return tally(
+                    &mut g.a_fails,
+                    skipped.last().map_or("no vector", String::as_str),
+                    at,
+                );
+            }
+        }
+        g.settle(column, 1, &skipped, at);
     }
 }
 
@@ -715,7 +1333,7 @@ fn fixture_programs() {
     let mut paths = Vec::new();
     common::containers(&root, &mut paths);
     assert!(paths.len() >= 20, "{} fixtures", paths.len());
-    gate_over("fixtures", &paths, NOT_YET);
+    gate_over("fixtures", &paths, &[]);
 }
 
 /// The compute comparison catches a wrong lift: in each compute fixture the IR program's first integer add made a
@@ -775,28 +1393,69 @@ fn a_planted_derivative_bug_is_caught() {
         if !(a.needs_quad() || b.needs_quad()) {
             continue;
         }
-        let Some(d) = p
-            .entry
-            .values
-            .iter_mut()
-            .find(|v| matches!(v.op, iridia_ir::Op::Unary(iridia_ir::Unary::Derivative(..), _)))
-        else {
+        if !swap_derivative_axis(&mut p, 0) {
             continue;
-        };
-        let iridia_ir::Op::Unary(iridia_ir::Unary::Derivative(axis, _), _) = &mut d.op else {
-            unreachable!()
-        };
-        *axis = match axis {
-            iridia_ir::Axis::X => iridia_ir::Axis::Y,
-            iridia_ir::Axis::Y => iridia_ir::Axis::X,
-        };
+        }
         tried += 1;
         let planted = ProgramShader::from_ir(p).unwrap();
-        if matches!(compare(&a, &planted, CASES), Verdict::Differs(_)) {
+        if matches!(compare(&a, &planted, CASES, true).0, Verdict::Differs(_)) {
             return;
         }
     }
     panic!("no planted derivative of {tried} programs that need a quad was caught");
+}
+
+/// What `b` does on the gate's vectors with coherent quad inputs (a vector it cannot run does nothing, as [`compare`]
+/// skips it).
+#[derive(Clone, Copy)]
+struct CoherentRuns {
+    /// Whether it takes a screen derivative on any.
+    derivatives: bool,
+    /// Whether a lane of any takes a derivative and is kept (not discarded).
+    kept: bool,
+}
+
+fn coherent_runs(b: &ProgramShader) -> CoherentRuns {
+    let mut runs = CoherentRuns {
+        derivatives: false,
+        kept: false,
+    };
+    for c in 0..CASES {
+        let case = gate_case(b, c, true, QuadInputs::Coherent);
+        let buffers = common::refs(&case[0], b);
+        let mut sampler = Hashed::for_shader(b, c);
+        if let Ok(quad) = b.execute_quad(
+            [&case[0].inputs, &case[1].inputs, &case[2].inputs, &case[3].inputs],
+            &buffers,
+            &mut sampler,
+        ) {
+            runs.derivatives |= quad.iter().any(|e| e.derivatives > 0);
+            runs.kept |= quad.iter().any(|e| e.derivatives > 0 && !e.discarded);
+        }
+    }
+    runs
+}
+
+/// The `n`-th derivative of the program's entry, in the order of its values, taken along the other axis; whether it has
+/// one.
+fn swap_derivative_axis(p: &mut iridia_ir::Program, n: usize) -> bool {
+    let Some(axis) = p
+        .entry
+        .values
+        .iter_mut()
+        .filter_map(|v| match &mut v.op {
+            iridia_ir::Op::Unary(iridia_ir::Unary::Derivative(axis, _), _) => Some(axis),
+            _ => None,
+        })
+        .nth(n)
+    else {
+        return false;
+    };
+    *axis = match axis {
+        iridia_ir::Axis::X => iridia_ir::Axis::Y,
+        iridia_ir::Axis::Y => iridia_ir::Axis::X,
+    };
+    true
 }
 
 #[test]
@@ -810,6 +1469,18 @@ fn riders_republic_programs() {
 #[test]
 fn unity_programs() {
     gate(Game::Sledding);
+}
+
+/// The gate over a folder of containers outside the configured corpora, named by the debug key `shader.outside` and
+/// walked as the fixtures are; without it, nothing to run.
+#[test]
+fn outside_programs() {
+    let Some(root) = inputs::debug("shader.outside").map(std::path::PathBuf::from) else {
+        return;
+    };
+    let mut paths = Vec::new();
+    common::containers(&root, &mut paths);
+    gate_over(&root.display().to_string(), &paths, &[]);
 }
 
 /// The gate catches a wrong lift: the IR program's first float add made a subtract no longer agrees.
@@ -839,7 +1510,7 @@ fn a_planted_bug_is_caught() {
             continue;
         };
         // an add whose result no output reads is no plant: the first program the plant reaches is caught
-        if matches!(compare(&a, &b, CASES), Verdict::Differs(_)) {
+        if matches!(compare(&a, &b, CASES, true).0, Verdict::Differs(_)) {
             return;
         }
     }
@@ -863,12 +1534,12 @@ fn one() {
     let a = ProgramShader::new(old).unwrap();
     let b = ProgramShader::from_ir(p).unwrap();
     for c in 0..CASES {
-        let case = gate_case(&a, c, a.needs_quad() || b.needs_quad());
+        let case = gate_case(&a, c, a.needs_quad() || b.needs_quad(), QuadInputs::Own);
         println!(
             "case {c}: inputs {:x?}",
             case.iter().map(|q| &q.inputs).collect::<Vec<_>>()
         );
-        let (mut sa, mut sb) = (Hashed::default(), Hashed::default());
+        let (mut sa, mut sb) = (Hashed::for_shader(&a, c), Hashed::for_shader(&b, c));
         let (x, y) = (run_asking(&a, &case, &mut sa), run_asking(&b, &case, &mut sb));
         println!("  A {x:x?}\n  B {y:x?}");
         for (k, (p, q)) in sa.asked.iter().zip(&sb.asked).enumerate() {

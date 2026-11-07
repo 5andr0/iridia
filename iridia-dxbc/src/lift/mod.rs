@@ -38,7 +38,7 @@ use dxbc_reader::decode::{Decoded, decode};
 
 /// The version of the lifter: bumped when what it produces for the same bytecode changes, so a cache keyed by the
 /// bytecode's hash knows what is stale; gated by `tests/versions.rs` (the lifted fixtures hashed under it, `iridia::gate`).
-pub const LIFTER_VERSION: u32 = 10;
+pub const LIFTER_VERSION: u32 = 11;
 
 /// Lift a DXBC container's program: Shader Model 4 or 5, any stage. Every instruction or declaration the lifter does
 /// not carry (and every container that holds no such program) is an `Err` naming the word and the reason.
@@ -77,6 +77,12 @@ fn lift_program(bytes: &[u8], bound: &iridia::BoundSizes) -> Result<Program> {
     let decoded = decode(&words).map_err(crate::read)?;
     let stage = crate::reflection::stage_of(decoded.kind);
     let mut setup = setup::Setup::new(bytes, &decoded, stage)?;
+    if let Some(word) = setup.doubles {
+        return Err(error(
+            word,
+            "double precision is enabled (global flag): doubles are not lifted",
+        ));
+    }
     setup.bind_sizes(bound)?;
     let mut lift = Lift::new(&decoded, stage, setup)?;
     if let Some(sigs) = lift.setup.sigs.clone() {

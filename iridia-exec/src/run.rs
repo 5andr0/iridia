@@ -208,6 +208,16 @@ pub struct Output {
     pub steps: u64,
     /// Sample requests this lane made.
     pub samples: u64,
+    /// Screen derivatives this lane took part in.
+    pub derivatives: u64,
+}
+
+/// What a lane of the last run counted: its steps, its sample requests and the screen derivatives it took part in.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct Tally {
+    pub steps: u64,
+    pub samples: u64,
+    pub derivatives: u64,
 }
 
 /// The registers and local memory of a [`Runner`], kept from one run of a program to the next so that the literals are
@@ -256,6 +266,7 @@ pub struct Runner<'a, const N: usize, M: Mask = u8> {
     /// The steps of each lane of independent invocations.
     lane_steps: [u64; N],
     samples: [u64; N],
+    derivatives: [u64; N],
     outs: [Vec<Reg>; N],
     /// What an any-hit program decided, per lane.
     decisions: [Decision; N],
@@ -517,6 +528,7 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
             steps: 0,
             lane_steps: [0; N],
             samples: [0; N],
+            derivatives: [0; N],
             outs: scratch.outs,
             decisions: [Decision::None; N],
             killed: M::none(),
@@ -719,6 +731,8 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                 }
                 Ok(())
             }
+            // a killed invocation's store to memory has no effect (it runs on as a helper of its quad)
+            Loc::Elem(..) | Loc::Global(..) if self.killed.has(lane) => Ok(()),
             Loc::Elem(g, o, pick) => {
                 let e = self.element_index(g, pick, lane)?;
                 let at = offset(o, extra)?;
@@ -984,10 +998,10 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                     }
                     // each arm a constant operation, so its loop is specialised
                     match op {
-                        UnOp::NegF => un!(w => unary(UnOp::NegF, w)),
-                        UnOp::NegI => un!(w => unary(UnOp::NegI, w)),
-                        UnOp::Not => un!(w => unary(UnOp::Not, w)),
-                        UnOp::BitNot => un!(w => unary(UnOp::BitNot, w)),
+                        UnOp::NegF => un!(w => unary(UnOp::NegF, w, ftz)),
+                        UnOp::NegI => un!(w => unary(UnOp::NegI, w, ftz)),
+                        UnOp::Not => un!(w => unary(UnOp::Not, w, ftz)),
+                        UnOp::BitNot => un!(w => unary(UnOp::BitNot, w, ftz)),
                     }
                 }
                 Op::Bin { op, a, b, n, a1, b1 } => {
@@ -1236,6 +1250,11 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                     n,
                     prov,
                 } => {
+                    for l in (0..N).filter(|&l| active.has(l)) {
+                        if let Some(count) = self.derivatives.get_mut(l) {
+                            *count = count.saturating_add(1);
+                        }
+                    }
                     if self.grouping == Grouping::Quad {
                         if active != M::first(4) {
                             return Err("a quad's lanes diverge at a derivative".into());
@@ -1549,6 +1568,12 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                             let first = self.rd(slot_at::<N>(*word), l)?[0];
                             let len = self.buffer_words(*g, *pick, l)?;
                             let v = self.rd(slot_at::<N>(*src), l)?;
+                            if first.checked_add(u32::from(*n)).is_some_and(|end| end <= len) {
+                                // every word inside: one store of them all
+                                self.mem_put(buffer_loc(*g, *pick), l, first, *n, v)?;
+                                continue;
+                            }
+                            // a word past the end is not written
                             for (&w, k) in v.iter().zip(0u32..).take(*n as usize) {
                                 let at = first.wrapping_add(k);
                                 if at < len {
@@ -1577,7 +1602,8 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                     vn,
                 } => {
                     for l in 0..N {
-                        if active.has(l) {
+                        // a killed invocation's store has no effect
+                        if active.has(l) && !self.killed.has(l) {
                             let cd = self.rd(slot_at::<N>(*coord), l)?;
                             let element = self.element(tex, l)?;
                             self.sampler.store_image(ImageStore {
@@ -1650,49 +1676,25 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                 } => {
                     for l in 0..N {
                         if active.has(l) {
-                            let (g, o, elem) = match ptr.loc {
-                                Loc::Global(g, o) => (g, o, None),
-                                Loc::Elem(g, o, pick) => (g, o, Some(self.element_index(g, pick, l)?)),
+                            let (g, o, pick) = match ptr.loc {
+                                Loc::Global(g, o) => (g, o, Pick::One),
+                                Loc::Elem(g, o, pick) => (g, o, pick),
                                 Loc::Local(_) => return Err("atomic on a local".into()),
                             };
-                            let word = offset(o, self.dyn_extra(ptr, l)?)?;
+                            let word = u32::try_from(offset(o, self.dyn_extra(ptr, l)?)?)
+                                .map_err(|_| "atomic past the end of the memory")?;
                             let v = self.rd(slot_at::<N>(*value), l)?[0];
                             let expected = match compare {
                                 Some(c) => self.rd(slot_at::<N>(*c), l)?[0],
                                 None => 0,
                             };
-                            let memory = match elem {
-                                Some(e) => self.elem_store.get_mut(g as usize).and_then(|v| v.get_mut(&e)),
-                                None => self.store.get_mut(g as usize).and_then(Option::as_mut),
-                            };
-                            let (old, swapped) = if let Some(d) = memory {
-                                let cell = d.get_mut(word).ok_or("atomic past the end of the memory")?;
-                                let old = *cell;
-                                let (new, swapped) = atomic(*fun, *signed, old, v, expected);
-                                *cell = new;
-                                (old, swapped)
+                            // a killed invocation changes no memory; its results are 0
+                            let (old, swapped) = if self.killed.has(l) {
+                                (0, false)
                             } else {
-                                let view = match self.c.globals.at(g as usize)?.kind {
-                                    GlobalKind::Storage(view) => view,
-                                    GlobalKind::StorageArray(..) => {
-                                        return Err("atomic on an element of an array of buffers this run does not hold (only a compute run writes them; the backend is not asked for element atomics)".into());
-                                    }
-                                    _ => return Err("atomic on a read-only global".into()),
-                                };
-                                if *fun != AtomOp::Add {
-                                    return Err(format!(
-                                        "atomic {fun:?} on a buffer the backend holds (only add is passed on)"
-                                    ));
-                                }
-                                (
-                                    self.sampler.atomic_add(
-                                        view,
-                                        u32::try_from(word)
-                                            .map_err(|_| "atomic past the end of the memory")?,
-                                        v,
-                                    )?,
-                                    true,
-                                )
+                                let old =
+                                    self.atomic_buffer_word(g, pick, l, word, *fun, *signed, v, expected)?;
+                                (old, *fun != AtomOp::CompareExchange || old == expected)
                             };
                             if let Some(r) = result {
                                 self.wr(slot_at::<N>(*r), l, [old; 4])?;
@@ -2245,7 +2247,7 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
         let c: &'a Executable = self.c;
         let mut outputs = Vec::with_capacity(N);
         for l in 0..N {
-            let (values, discarded, steps, samples) = self.lane(l);
+            let (values, discarded, tally) = self.lane(l);
             outputs.push(Output {
                 pointees: c
                     .pointer_args
@@ -2255,8 +2257,9 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                 decision: self.decisions.get(l).copied().unwrap_or_default(),
                 values: values.to_vec(),
                 discarded,
-                steps,
-                samples,
+                steps: tally.steps,
+                samples: tally.samples,
+                derivatives: tally.derivatives,
             });
         }
         outputs
@@ -2276,6 +2279,7 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
         self.lane_steps = [0; N];
         self.mem.fill(0);
         self.samples = [0; N];
+        self.derivatives = [0; N];
         self.killed = M::none();
         self.queries.clear();
         self.decisions = [Decision::None; N];
@@ -2317,8 +2321,8 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
         Ok(())
     }
 
-    /// Lane `l` of the last run: its result members, whether it was discarded, its steps and its samples.
-    pub(super) fn lane(&self, l: usize) -> (&[Reg], bool, u64, u64) {
+    /// Lane `l` of the last run: its result members, whether it was discarded, and what it counted.
+    pub(super) fn lane(&self, l: usize) -> (&[Reg], bool, Tally) {
         let steps = match self.grouping {
             Grouping::Independent => self.lane_steps.get(l).copied().unwrap_or(0),
             Grouping::Quad | Grouping::Group => self.steps,
@@ -2326,8 +2330,11 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
         (
             self.outs.get(l).map_or(&[], Vec::as_slice),
             self.killed.has(l),
-            steps,
-            self.samples.get(l).copied().unwrap_or(0),
+            Tally {
+                steps,
+                samples: self.samples.get(l).copied().unwrap_or(0),
+                derivatives: self.derivatives.get(l).copied().unwrap_or(0),
+            },
         )
     }
 }
@@ -2392,11 +2399,12 @@ fn atomic(fun: AtomOp, signed: bool, old: u32, v: u32, expected: u32) -> (u32, b
     (new, true)
 }
 
-/// Unary operation `op` on the word `w`.
+/// Unary operation `op` on the word `w`, a subnormal float flushed to zero (sign kept) first where `ftz`: a negation is
+/// a float operation, as a `mov` with a source modifier is in Direct3D.
 #[inline(always)]
-pub(super) fn unary(op: UnOp, w: u32) -> u32 {
+pub(super) fn unary(op: UnOp, w: u32, ftz: bool) -> u32 {
     match op {
-        UnOp::NegF => w ^ 0x8000_0000,
+        UnOp::NegF => fl(f(w), ftz).to_bits() ^ 0x8000_0000,
         UnOp::NegI => (w as i32).wrapping_neg() as u32,
         UnOp::Not => (w == 0) as u32,
         UnOp::BitNot => !w,
@@ -2521,7 +2529,7 @@ pub(super) fn math(mf: MathOp, [a, b, c, d]: [Reg; 4], n: u8, z: bool) -> Reg {
         let g = |v: f32| fl(v, z);
         let one = |h: &dyn Fn(f32) -> f32| g(h(g(f(x)))).to_bits();
         let out = match mf {
-            MathOp::AbsF => (f(x).abs()).to_bits(),
+            MathOp::AbsF => one(&f32::abs),
             MathOp::AbsI => (x as i32).wrapping_abs() as u32,
             MathOp::MinF => g(g(f(x)).min(g(f(y)))).to_bits(),
             MathOp::MaxF => g(g(f(x)).max(g(f(y)))).to_bits(),
@@ -2530,7 +2538,8 @@ pub(super) fn math(mf: MathOp, [a, b, c, d]: [Reg; 4], n: u8, z: bool) -> Reg {
             MathOp::MinI => (x as i32).min(y as i32) as u32,
             MathOp::MaxI => (x as i32).max(y as i32) as u32,
             MathOp::ClampF => g(g(f(x)).max(g(f(y))).min(g(f(w)))).to_bits(),
-            MathOp::SatF => one(&|v| if v.is_nan() { 0.0 } else { v.clamp(0.0, 1.0) }),
+            // below zero (-0 among it) and NaN give +0, as WARP does
+            MathOp::SatF => one(&|v| if v.is_nan() || v <= 0.0 { 0.0 } else { v.min(1.0) }),
             MathOp::Floor => one(&|v| v.floor()),
             MathOp::Ceil => one(&|v| v.ceil()),
             MathOp::Trunc => one(&|v| v.trunc()),
@@ -2786,6 +2795,7 @@ impl Executable {
             steps: 0,
             lane_steps: [0; N],
             samples: [0; N],
+            derivatives: [0; N],
             outs: scratch.outs,
             decisions: [Decision::None; N],
             killed: Wide::none(),

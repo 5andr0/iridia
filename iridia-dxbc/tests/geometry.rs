@@ -52,3 +52,64 @@ fn every_truncation_of_a_geometry_program_is_refused() {
         }
     }
 }
+
+struct NoSampler;
+impl iridia_exec::Sampler for NoSampler {
+    fn sample(&mut self, _: iridia_exec::Sample) -> Result<[f32; 4], String> {
+        Err("no sampling in this fixture".into())
+    }
+}
+
+/// A draw of two triangles through the program in each build, lifted both ways: each triangle emits the two strips
+/// the source says (its corners with x scaled, then moved by the primitive number in x and one in y with uv.x one
+/// more), and the IR lift's strips are the older lift's, bit for bit.
+#[test]
+fn a_geometry_program_on_the_ir_emits_the_strips_it_states() {
+    use iridia_exec::geometry::{GeometryShader, Topology};
+    let bits = |x: [f32; 4]| x.map(f32::to_bits);
+    let vertices: Vec<Vec<[u32; 4]>> = (0..6)
+        .map(|k| {
+            let k = k as f32;
+            vec![bits([k, 10.0 + k, 0.5, 1.0]), bits([0.25 * k, 0.75, 0.0, 0.0])]
+        })
+        .collect();
+    let mut constants = iridia_exec::Constants::new();
+    constants.insert((0, 0), vec![bits([2.0, 0.0, 0.0, 0.0])]);
+    for name in ["geometry.dxbc", "geometry.od.dxbc"] {
+        let bytes = fixture(name);
+        let a = GeometryShader::new(lift(&bytes).unwrap()).unwrap_or_else(|e| panic!("{name}: {e}"));
+        let ir = iridia_dxbc::ir::lift(&bytes).unwrap_or_else(|e| panic!("{name} on the IR: {e}"));
+        let b = GeometryShader::from_ir(&ir).unwrap_or_else(|e| panic!("{name} on the IR: {e}"));
+        let draw = |s: &GeometryShader| {
+            s.draw(&constants, &mut NoSampler, &vertices, Topology::TriangleList)
+                .unwrap_or_else(|e| panic!("{name}: {e}"))
+        };
+        let (strips, ir_strips) = (draw(&a), draw(&b));
+        assert_eq!(ir_strips, strips, "{name}: the IR lift's strips");
+        assert_eq!(strips.len(), 4, "{name}: two strips a triangle");
+        for (k, strip) in strips.iter().enumerate() {
+            let primitive = (k / 2) as u32;
+            assert_eq!(
+                (strip.primitive, strip.instance),
+                (primitive, 0),
+                "{name} strip {k}"
+            );
+            for (corner, v) in strip.vertices.iter().enumerate() {
+                let input = &vertices[primitive as usize * 3 + corner];
+                let [x, y, z, w] = input[0].map(f32::from_bits);
+                let [u, t, ..] = input[1].map(f32::from_bits);
+                let (position, uv) = if k % 2 == 0 {
+                    ([x * 2.0, y, z, w], [u, t])
+                } else {
+                    ([x + primitive as f32, y + 1.0, z, w], [u + 1.0, t])
+                };
+                assert_eq!(v[0], bits(position), "{name} strip {k} vertex {corner}: position");
+                assert_eq!(
+                    &v[1][..2],
+                    &bits([uv[0], uv[1], 0.0, 0.0])[..2],
+                    "{name} strip {k} vertex {corner}: uv"
+                );
+            }
+        }
+    }
+}

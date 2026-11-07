@@ -66,6 +66,12 @@ primase_testdata::inputs! {
             about: r#"a folder (searched recursively) of the DXBC containers of Riders Republic's shader pack (ShaderDataDX11.bin, split at its containers), lifted, validated and written as WGSL, the refusals counted by reason; iridia-dxbc/tests/lift_corpus.rs"#,
             source: r#"the user's own install: the programs split from its shader pack"#,
         },
+        Query::Oracle(OracleSet::Corpus, Game::Sekiro, "d3d11-shaders") => {
+            status: Live,
+            gate: false,
+            about: r#"a folder of the DXBC containers of Sekiro's Direct3D 11 programs of every stage (`<hash>.<stage>.dxbc`: 9,680, its hull, domain and geometry programs among them), each one's reflection held to Microsoft's listing of it; iridia-dxbc/tests/reflection.rs"#,
+            source: r#"the user's own install: the programs extracted from its shader archives"#,
+        },
         Query::Oracle(OracleSet::Corpus, Game::Sekiro, "shaders") => {
             status: Live,
             gate: false,
@@ -95,5 +101,6 @@ primase_testdata::inputs! {
         "vkd3d.limit" => "how many containers of a corpus the vkd3d comparison reads (200 spread evenly by default; `all` reads every one)",
         "shader.diff_limit" => "how many programs of a corpus the WARP comparison runs",
         "shader.warp_all" => "`1` compares every program the WARP oracle can bind",
+        "shader.outside" => "a folder of containers outside the configured corpora (walked for every DXBC container in it) that the IR gate and the WARP comparison run",
     }
 }

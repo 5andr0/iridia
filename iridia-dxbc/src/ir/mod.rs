@@ -9,19 +9,21 @@
 //! and bit-field counts take their low five bits, and a buffer read outside the buffer gives zero.
 
 mod body;
+mod doubles;
 mod memory;
 mod operands;
 mod resources;
+mod stages;
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use iridia_ir::{
     Builder, Conventions, Denormals, End, FloatEnv, LabelId, Op, Program, Provenance, Scalar, Type, ValueId,
     VarId,
-    interface::{InstructionCount, InstructionUnit, ShaderFormat, Stage, SystemValue},
+    interface::{InstructionCount, InstructionUnit, ShaderFormat, Stage, StageFacts, SystemValue, Varying},
 };
 
-use crate::lift::setup::Setup;
+use crate::lift::setup::{PhaseKind, Setup};
 use crate::{Result, error};
 use dxbc_reader::decode::{Declared, Decoded, Register, decode};
 
@@ -29,7 +31,7 @@ use dxbc_reader::decode::{Declared, Decoded, Register, decode};
 pub const LIFTER: &str = "iridia-dxbc-ir";
 
 /// Increment when the same bytecode lifts differently.
-pub const LIFTER_VERSION: u32 = 1;
+pub const LIFTER_VERSION: u32 = 2;
 
 /// Lift a DXBC container's program onto the IR. What the lift does not carry is an `Err` naming the word and why.
 pub fn lift(bytes: &[u8]) -> Result<Program> {
@@ -60,17 +62,32 @@ pub fn lift_with(bytes: &[u8], bound: &iridia::BoundSizes) -> Result<Program> {
     let stage = crate::reflection::stage_of(decoded.kind);
     let mut setup = Setup::new(bytes, &decoded, stage)?;
     setup.bind_sizes(bound)?;
-    if setup.sigs.is_some() {
-        return Err(error(
-            0,
-            format!("a {stage:?} program made of functions is not lifted to the IR yet"),
-        ));
-    }
     let mut lift = Lift::new(&decoded, stage, setup);
-    lift.declare()?;
-    lift.prologue()?;
-    lift.body()?;
-    lift.finish(decoded.target(), bytes)
+    let (entry, patch) = if stage == Stage::Hull {
+        let (entry, patch) = lift.hull()?;
+        (entry, Some(patch))
+    } else {
+        if stage == Stage::Geometry {
+            // a geometry program's outputs are its vertices, emitted as it goes
+            lift.exit_kind = Exit::Bare;
+        }
+        lift.declare()?;
+        lift.prologue()?;
+        lift.body_range(0..usize::MAX)?;
+        (lift.end_function("main")?, None)
+    };
+    lift.finish(entry, patch, decoded.target(), bytes)
+}
+
+/// What a `ret` does in the code being lifted.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Exit {
+    /// The outputs are stored and the function returns.
+    Epilogue,
+    /// The instance of a hull phase ends: the block of this label is left.
+    Phase(LabelId),
+    /// The function returns (a geometry program, whose outputs are its emitted vertices).
+    Bare,
 }
 
 /// An open construct of the token stream's flow.
@@ -124,6 +141,12 @@ struct Lift<'a> {
     notes: BTreeSet<String>,
     /// The word of the instruction being lifted, for refusals.
     word: usize,
+    /// What a `ret` does here.
+    exit_kind: Exit,
+    /// A hull program's patch constant function is being lifted: its outputs are the patch constants.
+    patch_fn: bool,
+    /// In a hull program's fork or join phase: its kind and its instance number as four lanes.
+    phase_instance: Option<(PhaseKind, ValueId)>,
 }
 
 /// The mask of the lowest `width` lanes.
@@ -165,6 +188,9 @@ impl<'a> Lift<'a> {
             frames: Vec::new(),
             ended: None,
             word: 0,
+            exit_kind: Exit::Epilogue,
+            patch_fn: false,
+            phase_instance: None,
         }
     }
 
@@ -196,7 +222,13 @@ impl<'a> Lift<'a> {
             let v = self.register(&format!("r{n}"));
             self.temps.push(v);
         }
+        // a hull program's phases each declare their own arrays: one variable of the largest size each
+        let mut indexable: BTreeMap<u32, u32> = BTreeMap::new();
         for (register, size) in self.setup.indexable.clone() {
+            let e = indexable.entry(register).or_default();
+            *e = (*e).max(size);
+        }
+        for (register, size) in indexable {
             if size == 0 {
                 continue;
             }
@@ -261,8 +293,12 @@ impl<'a> Lift<'a> {
         self.declare_resources()
     }
 
-    /// The input registers, each composed from the input varyings it holds, and the special inputs.
+    /// The input registers, each composed from the input varyings it holds, and the special inputs. A hull, domain or
+    /// geometry program has none: it reads each point's varyings where it names them.
     fn prologue(&mut self) -> Result<()> {
+        if self.reads_points() {
+            return Ok(());
+        }
         let zero = self.b.u32(0);
         let mut lanes: BTreeMap<u32, [ValueId; 4]> = BTreeMap::new();
         let inputs = self.setup.interface.inputs.clone();
@@ -293,20 +329,7 @@ impl<'a> Lift<'a> {
             }
             let ty = Type::vector(scalar_of(v.value.scalar), width);
             let value = self.b.value(ty, Op::LoadInput(slot, every(width)));
-            // raw bits: a bool is D3D's all ones or zero
-            let bits = if ty.scalar == Scalar::Bool {
-                let ones = self
-                    .b
-                    .literal(Type::vector(Scalar::U32, width), [u64::from(u32::MAX); 4]);
-                let none = self.b.literal(Type::vector(Scalar::U32, width), [0; 4]);
-                self.op(Op::Select {
-                    cond: value,
-                    accept: ones,
-                    reject: none,
-                })?
-            } else {
-                self.b.value(Type::vector(Scalar::U32, width), Op::Bitcast(value))
-            };
+            let bits = self.raw_bits(value, width)?;
             let lane = |l: &mut Self, k: u8| -> Result<ValueId> {
                 if width == 1 {
                     Ok(bits)
@@ -343,10 +366,44 @@ impl<'a> Lift<'a> {
         Ok(())
     }
 
-    /// Store the output registers into the outputs, as the function returns.
+    /// Store the output registers into what the function gives as it returns: the outputs, or a hull program's patch
+    /// constants.
     fn epilogue(&mut self) -> Result<()> {
+        if !self.patch_fn {
+            return self.store_outputs();
+        }
+        let StageFacts::Hull(h) = &self.setup.interface.facts else {
+            return self.refuse("patch constants of a program that is no hull program");
+        };
+        let constants = h.patch_constants.clone();
+        self.store_registers(&constants, true)
+    }
+
+    /// Store the output registers into the outputs.
+    fn store_outputs(&mut self) -> Result<()> {
         let outputs = self.setup.interface.outputs.clone();
-        for (slot, v) in (0u32..).zip(&outputs) {
+        self.store_registers(&outputs, false)
+    }
+
+    /// The value of `width` lanes of `scalar` whose bits are `bits` (`u32` lanes): a bool is a lane that is not zero.
+    fn of_bits(&mut self, bits: ValueId, scalar: Scalar, width: u8) -> Result<ValueId> {
+        Ok(match scalar {
+            Scalar::U32 => bits,
+            Scalar::Bool => {
+                let zero = self.b.literal(Type::vector(Scalar::U32, width), [0; 4]);
+                self.op(Op::Binary(
+                    iridia_ir::Binary::UCmp(iridia_ir::Cmp::Ne),
+                    bits,
+                    zero,
+                ))?
+            }
+            s => self.b.value(Type::vector(s, width), Op::Bitcast(bits)),
+        })
+    }
+
+    /// Store each varying of `list` from the register lanes it is placed in: as outputs, or as patch constants.
+    fn store_registers(&mut self, list: &[Varying], patch: bool) -> Result<()> {
+        for (slot, v) in (0u32..).zip(list) {
             let (var, lanes) = match v.system {
                 Some(SystemValue::Depth | SystemValue::DepthGreaterEqual | SystemValue::DepthLessEqual) => {
                     match self.depth {
@@ -379,36 +436,23 @@ impl<'a> Lift<'a> {
             let bits = self
                 .b
                 .value(Type::vector(Scalar::U32, width), Op::Swizzle(row, pattern));
-            let scalar = scalar_of(v.value.scalar);
-            let value = match scalar {
-                Scalar::U32 => bits,
-                Scalar::Bool => {
-                    let zero = self.b.literal(Type::vector(Scalar::U32, width), [0; 4]);
-                    self.op(Op::Binary(
-                        iridia_ir::Binary::UCmp(iridia_ir::Cmp::Ne),
-                        bits,
-                        zero,
-                    ))?
-                }
-                s => self.b.value(Type::vector(s, width), Op::Bitcast(bits)),
-            };
-            self.b.store_output(slot, every(width), value);
+            let value = self.of_bits(bits, scalar_of(v.value.scalar), width)?;
+            if patch {
+                self.b.store_patch(slot, every(width), value);
+            } else {
+                self.b.store_output(slot, every(width), value);
+            }
         }
         Ok(())
     }
 
-    fn finish(mut self, target: String, bytes: &[u8]) -> Result<Program> {
-        if let Some(frame) = self.frames.last() {
-            return self.refuse(format!("{frame:?} is not closed at the end of the program"));
-        }
-        let end = match self.ended.take() {
-            Some((end, _)) => end,
-            None => {
-                self.epilogue()?;
-                End::Return
-            }
-        };
-        let entry = self.b.finish(end).map_err(|e| error(self.word, e))?;
+    fn finish(
+        self,
+        entry: iridia_ir::Function,
+        patch: Option<iridia_ir::Function>,
+        target: String,
+        bytes: &[u8],
+    ) -> Result<Program> {
         let mut policies = vec!["dxbc.mul=ieee".to_owned()];
         policies.sort();
         let workgroup = match self.stage {
@@ -422,7 +466,7 @@ impl<'a> Lift<'a> {
         let program = Program {
             stage: self.stage,
             entry,
-            patch: None,
+            patch,
             workgroup,
             interface: self.setup.interface,
             conventions: Conventions::D3D,

@@ -195,6 +195,42 @@ impl Executable {
         compile::compile(program, &info, Some(name)).map_err(error)
     }
 
+    /// Compile one function of a program on the IR made of functions (a hull program's `main`, its entry, and
+    /// `patch_constant`, its patch constant function; a domain, geometry or position-less vertex program's `main`) to
+    /// run as [`Executable::function`] runs that function of the program's naga form: the same registers in, the same
+    /// members of [`iridia::FunctionSig::result`] out.
+    pub fn function_from_ir(program: &iridia_ir::Program, name: &str) -> Result<Self, Error> {
+        iridia_ir::validate(program).map_err(|problems| {
+            error(
+                problems
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join("; "),
+            )
+        })?;
+        let signatures = iridia::stage_functions(&program.interface)
+            .map_err(error)?
+            .ok_or_else(|| {
+                error(format!(
+                    "a {:?} program is an entry point: Executable::from_ir",
+                    program.stage
+                ))
+            })?;
+        let sig = signatures
+            .iter()
+            .find(|s| s.name == name)
+            .ok_or_else(|| error(format!("a {:?} program has no function {name}", program.stage)))?;
+        let f = match name {
+            "patch_constant" => program
+                .patch
+                .as_ref()
+                .ok_or_else(|| error("a hull program without its patch constant function"))?,
+            _ => &program.entry,
+        };
+        ir::compile_function(program, f, sig).map_err(error)
+    }
+
     /// Every function of a program made of functions ([`iridia::stage_functions`]: a hull, domain, geometry or ray tracing
     /// program, a vertex program that feeds a tessellator), each compiled by [`Executable::function`] under its name;
     /// `None` for a program that is an entry point, which [`Executable::new`] takes.
@@ -338,10 +374,11 @@ pub struct Load {
 pub struct Store {
     /// Unordered-access view bind slot (`u<n>`).
     pub view: u32,
-    /// A typed view's x, y, and z or a 2D array's layer (0 where the view has fewer); a structured view's element and
-    /// byte offset (then 0).
+    /// A typed texture's x, y, and z or a 2D array's layer (0 where the view has fewer); a typed buffer's element (then
+    /// 0, 0); a structured view's element and byte offset (then 0); a raw view's 32-bit word (then 0, 0).
     pub address: [u32; 3],
-    /// The lanes as the program writes them (bits), only those `mask` marks.
+    /// The lanes as the program writes them (bits), only those `mask` marks: a typed view's lanes of the element, a
+    /// structured or raw view's consecutive words from the address.
     pub value: [u32; 4],
     /// The lanes written, bit 0 for x to bit 3 for w.
     pub mask: u8,
@@ -357,6 +394,24 @@ pub struct AtomicAdd {
     pub address: [u32; 3],
     /// The value added to the 32-bit word.
     pub value: u32,
+}
+
+/// An atomic operation on the 32-bit word of an unordered-access buffer view at `address` (as [`AtomicAdd`] addresses
+/// it); its result the word as it was before.
+#[derive(Clone, Copy, Debug)]
+pub struct Atomic {
+    /// Unordered-access view bind slot (`u<n>`).
+    pub view: u32,
+    /// Where the operation lands: a structured view's element and byte offset, or a typed view's x, y and z.
+    pub address: [u32; 3],
+    /// The operation.
+    pub op: ImageAtomicOp,
+    /// Whether `Min` and `Max` compare the words as signed integers.
+    pub signed: bool,
+    /// The program's operand.
+    pub value: u32,
+    /// The comparand of a [`ImageAtomicOp::CompareExchange`] (0 for the other operations).
+    pub compare: u32,
 }
 
 /// Answers sample, load, store and structured-buffer requests; an error stops the evaluation. A closure answers samples
@@ -378,6 +433,18 @@ pub trait Sampler {
     /// An atomic add ([`AtomicAdd`]); its result the word as it was before. The add itself is the caller's effect.
     fn atomic_add(&mut self, request: AtomicAdd) -> std::result::Result<u32, String> {
         Err(format!("u{}: no atomics given", request.view))
+    }
+    /// Any atomic operation on a buffer view's word ([`Atomic`]); its result the word as it was before. By default an
+    /// add is [`Sampler::atomic_add`] and the rest are refused.
+    fn atomic(&mut self, request: Atomic) -> std::result::Result<u32, String> {
+        match request.op {
+            ImageAtomicOp::Add => self.atomic_add(AtomicAdd {
+                view: request.view,
+                address: request.address,
+                value: request.value,
+            }),
+            op => Err(format!("u{}: no atomic {op:?} given", request.view)),
+        }
     }
     /// The 32-bit word at byte `offset` of element `element` of the structured buffer at `t<slot>`.
     fn structured(&mut self, slot: u32, element: u32, offset: u32) -> std::result::Result<u32, String> {
@@ -472,6 +539,8 @@ pub struct Execution {
     pub instructions: usize,
     /// Samples this evaluation requested.
     pub samples: usize,
+    /// Screen derivatives this evaluation took part in (a quad's are taken by all four lanes together).
+    pub derivatives: usize,
     /// Whether the program discarded the pixel (`discard`): its outputs are then those written before.
     pub discarded: bool,
 }

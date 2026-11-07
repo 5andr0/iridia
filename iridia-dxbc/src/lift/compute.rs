@@ -93,6 +93,7 @@ impl Lift<'_> {
             .expect("the caller found the view");
         let (coordinate, layer) = self.view_address(ins.operand(at.saturating_add(1))?, &v)?;
         let kind = v.kind;
+        self.signed_as_memory(name, kind)?;
         let value = self.read(ins.operand(at.saturating_add(2))?, 1, kind)?;
         let coordinate = self.b.bitcast_to(coordinate, Kind::I);
         let array_index = layer.map(|l| {
@@ -318,6 +319,21 @@ impl Lift<'_> {
         });
     }
 
+    /// Refuse a minimum or maximum whose signedness is not the memory's: naga's atomics compare as the memory's type, a
+    /// buffer has one, and Direct3D lets a program take `imin` and `umin` of the same words.
+    fn signed_as_memory(&self, name: &str, kind: Kind) -> Result<()> {
+        let signed = match name.trim_start_matches("imm_").trim_start_matches("atomic_") {
+            "imin" | "imax" => true,
+            "umin" | "umax" => false,
+            _ => return Ok(()),
+        };
+        if signed != (kind == Kind::I) {
+            let memory = if kind == Kind::I { "signed" } else { "unsigned" };
+            return self.refuse(format!("{name} on memory whose atomics are {memory}"));
+        }
+        Ok(())
+    }
+
     /// The atomic function of an `atomic_*` or `imm_atomic_*` instruction.
     fn atomic_function(&self, name: &str) -> Result<AtomicFunction> {
         let op = name.trim_start_matches("imm_").trim_start_matches("atomic_");
@@ -350,6 +366,7 @@ impl Lift<'_> {
         };
         let word = self.word_address(&mem, &[ins.operand(at.saturating_add(1))?])?;
         let kind = mem.kind();
+        self.signed_as_memory(name, kind)?;
         let compare = name.ends_with("cmp_exch") || name.ends_with("cmp_store");
         let (first, second) = {
             let v = self.read(ins.operand(at.saturating_add(2))?, 1, Kind::U)?;

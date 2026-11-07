@@ -895,6 +895,7 @@ mod stage_functions {
                     "CTRL_POSITION0" => Some(points(&POSITIONS)),
                     "CTRL_COLOR0" => Some(points(&COLOURS)),
                     "SV_OutputControlPointID" => Some(vec![[i, 0, 0, 0]]),
+                    "SV_PrimitiveID" => Some(vec![[7, 0, 0, 0]]),
                     _ => None,
                 });
                 let mut want = POSITIONS[i as usize];

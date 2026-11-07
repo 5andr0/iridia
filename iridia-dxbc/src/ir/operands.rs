@@ -4,6 +4,7 @@ use iridia_ir::{
     Address, Binary, Cmp, Op, OutOfBounds, Scalar, Type, Unary, ValueId, interface::SystemValue,
 };
 
+use super::stages::Points;
 use super::{Lift, lanes_of};
 use crate::Result;
 use dxbc_reader::decode::{Index, Operand, Register, Selection};
@@ -152,6 +153,18 @@ impl Lift<'_> {
                 };
                 Ok(self.b.value(Type::U32X4, Op::LoadVar(var)))
             }
+            // a hull, domain or geometry program's inputs are indexed by point first
+            Register::Input | Register::InputControlPoint if self.reads_points() && op.indices.len() == 2 => {
+                self.point_register(op, Points::Input)
+            }
+            Register::OutputControlPoint => self.point_register(op, Points::Output),
+            Register::InputPatchConstant => self.patch_register(op),
+            Register::InputDomainPoint
+            | Register::OutputControlPointId
+            | Register::GsInstanceId
+            | Register::ForkInstanceId
+            | Register::JoinInstanceId => self.pipeline_value(op.register),
+            Register::PrimitiveId if self.reads_points() => self.pipeline_value(op.register),
             Register::Input => {
                 if self.index_of(op, 0)?.relative.is_some() {
                     return self.relative_register(op, false);

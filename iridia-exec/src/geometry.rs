@@ -21,7 +21,9 @@ use super::pixel::SlotBackend;
 use super::stage::{Bindings, Constants};
 use super::{Bound, Executable, Runner, Scratch};
 use crate::Sampler;
-use iridia::{FunctionSig, GeometryFacts, GsInput, GsOutput, Program, StageFacts, stage_functions};
+use iridia::{
+    FunctionSig, GeometryFacts, GsInput, GsOutput, Interface, Program, StageFacts, stage_functions,
+};
 
 /// The values of one vertex: a register (four 32-bit lanes) for each varying.
 pub type Vertex = Vec<[u32; 4]>;
@@ -161,7 +163,7 @@ impl Strip {
 /// A geometry program ready to run.
 #[derive(Debug)]
 pub struct GeometryShader {
-    program: Program,
+    interface: Interface,
     executable: Executable,
     signature: FunctionSig,
     facts: GeometryFacts,
@@ -173,17 +175,32 @@ pub struct GeometryShader {
 impl GeometryShader {
     /// Prepare `program`, a geometry program, to run.
     pub fn new(program: Program) -> Result<Self, String> {
-        let StageFacts::Geometry(facts) = program.interface.facts else {
-            return Err(format!("a {:?} program is not a geometry program", program.stage));
+        let executable = Executable::function(&program, "main").map_err(|e| e.to_string())?;
+        Self::assemble(program.interface, executable)
+    }
+
+    /// Prepare `program`, a geometry program on the IR, to run as [`GeometryShader::new`] runs its naga form: the same
+    /// vertices in, the same strips out.
+    pub fn from_ir(program: &iridia_ir::Program) -> Result<Self, String> {
+        let executable = Executable::function_from_ir(program, "main").map_err(|e| e.to_string())?;
+        Self::assemble(program.interface.clone(), executable)
+    }
+
+    /// The shader of a geometry program of `interface` compiled as `executable`.
+    fn assemble(interface: Interface, executable: Executable) -> Result<Self, String> {
+        let StageFacts::Geometry(facts) = interface.facts else {
+            return Err(format!(
+                "a {:?} program is not a geometry program",
+                interface.stage
+            ));
         };
-        let signature = stage_functions(&program.interface)?
+        let signature = stage_functions(&interface)?
             .and_then(|mut f| f.pop())
             .ok_or("a geometry program without its function")?;
-        let executable = Executable::function(&program, "main").map_err(|e| e.to_string())?;
-        let (inputs, outputs) = (program.interface.inputs.len(), program.interface.outputs.len());
-        let bindings = Bindings::new(&program)?;
+        let (inputs, outputs) = (interface.inputs.len(), interface.outputs.len());
+        let bindings = Bindings::new(&interface)?;
         Ok(Self {
-            program,
+            interface,
             executable,
             signature,
             facts,
@@ -193,9 +210,9 @@ impl GeometryShader {
         })
     }
 
-    /// The geometry program the shader runs.
-    pub fn program(&self) -> &Program {
-        &self.program
+    /// The interface of the geometry program the shader runs.
+    pub fn interface(&self) -> &Interface {
+        &self.interface
     }
 
     /// What the program states: the primitive it reads, what it emits, the most vertices an invocation emits and its

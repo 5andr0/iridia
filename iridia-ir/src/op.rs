@@ -158,7 +158,7 @@ pub enum Unary {
     FTanh,
     /// -1, 0 or 1 by the sign of a float (signed zero gives itself, NaN gives 0).
     FSign,
-    /// Clamp to 0..1, with the stated NaN rule.
+    /// Clamp to 0..1, with the stated NaN rule; below zero, -0 among it, gives +0.
     Saturate(SaturateNan),
     /// Clamp to `lo..=hi`, the bounds' f32 bits (finite, `lo <= hi`), with the stated NaN rule; `Zero` needs 0 within
     /// the range. A source's register range (D3D9 `ps_1_x` constants within -1..1 and colours within 0..1).

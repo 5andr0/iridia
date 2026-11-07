@@ -5,9 +5,10 @@
 //! functions (`exp2`, `log2`, `sin`, `cos`, `sqrt`, `inverseSqrt`, `pow`) in `f64` rounded once, a dot product summed
 //! left to right with each step rounded. Denormals are kept, or flushed to zero (sign kept) on the inputs and result
 //! of each float operation but the sign operations and the moves, by the program's float environment or, where it
-//! leaves them open, by the run's [`Bound::denormals`]. This subset runs 32-bit scalars and vectors, both
-//! control phases (every construct of a `Regions` body, the blocks of a `Cfg` one), constant buffer reads, pipeline
-//! state, samples (answered by the caller), kill and demotion; it refuses the rest by name.
+//! leaves them open, by the run's [`Bound::denormals`]; a double never is. This subset runs 32-bit scalars and
+//! vectors and 64-bit ones of up to two lanes ([`runs`]), both control phases (every construct of a `Regions` body,
+//! the blocks of a `Cfg` one), constant buffer reads, pipeline state, samples (answered by the caller), kill and
+//! demotion; it refuses the rest by name.
 //!
 //! [`run`] runs one invocation, which has no screen derivatives: it refuses a derivative and leaves an implicit-LOD
 //! sample's level to the sampler. [`run_quad`] runs a pixel program's 2 x 2 quad, whose derivatives are differences
@@ -22,6 +23,8 @@
         clippy::cast_possible_truncation
     )
 )]
+
+mod wide;
 
 use iridia_ir::{
     Axis, Binary, Block, Body, Cmp, Denormals, End, Fineness, FloatToInt, Function, LabelId, Level,
@@ -330,6 +333,32 @@ fn min_max(a: f32, b: f32, nan: MinMaxNan, max: bool) -> f32 {
     }
 }
 
+/// Whether values of `t` are run: a bool, a 32-bit scalar or vector, or a 64-bit one of at most two lanes (two words
+/// a lane, the low first). Values of 8 or 16 bits are not.
+pub fn runs(t: Type) -> bool {
+    match t.scalar.bits() {
+        32 => true,
+        64 => t.lanes <= 2,
+        _ => t.scalar == Scalar::Bool,
+    }
+}
+
+/// The words of a literal of type `t`: each 64-bit lane in two words, the low first; each other lane in its word.
+pub fn literal_words(bits: &[u64; 4], t: Type) -> Lanes {
+    let mut out = [0u32; 4];
+    if t.scalar.bits() == 64 {
+        for ([lo, hi], b) in out.as_chunks_mut::<2>().0.iter_mut().zip(bits) {
+            *lo = (b & 0xffff_ffff) as u32;
+            *hi = (b >> 32) as u32;
+        }
+    } else {
+        for (o, b) in out.iter_mut().zip(bits) {
+            *o = (b & 0xffff_ffff) as u32;
+        }
+    }
+    out
+}
+
 /// What an operation reads: its operands' lanes and types.
 pub trait Operands {
     /// The lanes of value `v`.
@@ -349,10 +378,30 @@ pub trait Operands {
 
 /// The lanes of a pure operation of type `t` (one that reads only its operands: the arithmetic, `select`, the lane
 /// moves, `dot`, the conversions and bitcasts), by the IR's definition; `None` for an operation that is not pure (a
-/// literal, a read, a derivative). Where `flush` holds, the `f32` operands and result of each float operation but the
-/// sign operations and the moves are flushed to zero (sign kept). Values wider than 32 bits are refused.
+/// literal, a read, a derivative). Where `flush` holds, the `f32` operands and result of each float operation (the sign
+/// operations among them, as a Direct3D `mov` with a source modifier) are flushed to zero (sign kept); a move, select
+/// or bitcast keeps its words. A 64-bit value (at most two lanes) is two words a
+/// lane, the low first; values of 8 or 16 bits are refused.
 pub fn eval(op: &Op, t: Type, ops: &dyn Operands, flush: bool) -> Result<Option<Lanes>, String> {
-    if t.scalar.bits() > 32 || (t.scalar.bits() < 32 && t.scalar != Scalar::Bool) {
+    // the operand whose type tells a 64-bit operation from a 32-bit one (the operands of each are of one width, but
+    // for a conversion's and a bitcast's result)
+    let first = match op {
+        Op::Unary(_, a)
+        | Op::Binary(_, a, _)
+        | Op::Ternary(_, a, _, _)
+        | Op::Select { accept: a, .. }
+        | Op::Swizzle(a, _)
+        | Op::Splat(a)
+        | Op::Dot(a, _)
+        | Op::Convert(a, _)
+        | Op::Bitcast(a) => Some(*a),
+        Op::Compose(parts) => parts.first().copied(),
+        _ => None,
+    };
+    if wide::wide(t) || first.map(|a| ops.ty(a)).transpose()?.is_some_and(wide::wide) {
+        return wide::eval(op, t, ops, flush);
+    }
+    if !runs(t) {
         return Err(format!("{t} values are not run yet"));
     }
     let n = t.lanes;
@@ -395,7 +444,7 @@ pub fn eval(op: &Op, t: Type, ops: &dyn Operands, flush: bool) -> Result<Option<
                     }
                 }),
                 Unary::Saturate(SaturateNan::Zero | SaturateNan::Any) => {
-                    float(m, &x, |f| if is_nan(f) { 0.0 } else { f.clamp(0.0, 1.0) })
+                    float(m, &x, |f| if is_nan(f) || f <= 0.0 { 0.0 } else { f.min(1.0) })
                 }
                 // NaN gives 0 under either rule (`Any` allows it)
                 Unary::ClampRange { lo, hi, .. } => {
@@ -752,7 +801,7 @@ impl Machine<'_, '_> {
             .value(v)
             .ok_or_else(|| format!("%{} is not a value", v.0))?;
         let t = def.ty;
-        if t.scalar.bits() > 32 || (t.scalar.bits() < 32 && t.scalar != Scalar::Bool) {
+        if !runs(t) {
             return Err(format!("{t} values are not run yet").into());
         }
         self.compute(v, &def.op, t)
@@ -767,7 +816,7 @@ impl Machine<'_, '_> {
         }
         let n = t.lanes;
         Ok(match op {
-            Op::Literal(bits) => bits.map(|b| u32::try_from(b & 0xffff_ffff).unwrap_or(0)),
+            Op::Literal(bits) => literal_words(bits, t),
             Op::Undef => [0; 4],
             Op::Param => return Err(format!("parameter %{} has no value here", v.0).into()),
             Op::Unary(Unary::Derivative(axis, fineness), a) => {

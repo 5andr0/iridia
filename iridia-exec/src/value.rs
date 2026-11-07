@@ -212,7 +212,7 @@ impl<'v, L: FnMut(NodeId, &Node, &[u32]) -> Option<u32>> Evaluator<'v, L> {
                 .ok_or_else(|| format!("{op:?} with {} operands", w.len()))
         };
         Ok(match op {
-            Op::Unary(u) => unary(unary_op(u, self.reads(id)?), lane(0)?),
+            Op::Unary(u) => unary(unary_op(u, self.reads(id)?), lane(0)?, ftz),
             Op::Binary(b) => {
                 if w.len() != 2 {
                     return Err("a matrix product is not evaluated".into());

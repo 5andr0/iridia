@@ -40,6 +40,7 @@ impl PixelShader for Uv {
             output_masks: vec![15],
             instructions: 1,
             samples: 0,
+            derivatives: 0,
         })
     }
 }

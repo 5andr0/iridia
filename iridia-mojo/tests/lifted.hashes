@@ -1,5 +1,5 @@
 # lifted fixtures of iridia-mojo
-# versions lifter=3 program=3
-gamma.ps	lifted	718b05e0e9181dd72f3a61030da44c1bf77ddd91f41c9caa2111b18257974571
-vertex.vs	lifted	d1a653079e27c107cf413a364b51bb59355813cc1e3efd68a3a4e25292e78ed9
-control.ps	lifted	a26f642bb4e2dc1d8c72713bd45aa1ceca95d4e41eba21390fbea2b6366c5331
+# versions lifter=3 program=4
+gamma.ps	lifted	d1d8d5b2a993af37acd1820b3908028cf7fadb1ef4e03fd95619bb0be2ba80ab
+vertex.vs	lifted	1c59ab0546edbcee3344fe758f7048d85cbe47f2434eaebffd5d91342029bb9e
+control.ps	lifted	bb00f746c27c4ff1a90705ddac18835f55b678c911608f9431a06727d8c3f763

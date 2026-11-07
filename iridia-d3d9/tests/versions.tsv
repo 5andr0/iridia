@@ -1,6 +1,6 @@
 # lifted fixtures of iridia-d3d9
-# versions lifter=3 program=3
-ctab	lifted	64a3761c9e97ab46215273ab27d77446784359fdfeba12c38f86d18d5dc87938
-normalize	lifted	9767336d46cb5c38073e39e8212988e8ccfe68d7ba60537a9f9e2bb2c2ebeabc
-texture	lifted	346108e8a78ac94746020ac4c4a3f0d9303a7e0a55a7e6f548c4553dde4412a4
+# versions lifter=3 program=4
+ctab	lifted	1c1abe8a7bf40d741cf0877a320cc5276e973d13482bac411bb02e9a96342572
+normalize	lifted	7cdff6e1e1a2f5ff69aeaeebc131621ae5fe3e8c485477aae779b052583df227
+texture	lifted	73cf09085a6fa03e212af886b8e769491ffea877d1227e1edc1a21580745f060
 relative	refused	D3D9 at word 3: relative addressing of a source without its address token: instruction's operand span extends past its stated length (it ends at word 4)

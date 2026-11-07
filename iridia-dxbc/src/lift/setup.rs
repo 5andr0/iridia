@@ -203,6 +203,8 @@ pub(crate) struct Setup {
     pub interface: Interface,
     pub io: EntryIo,
     pub early_depth_test: bool,
+    /// The program enables double precision (global flag 2), at the word that says so.
+    pub doubles: Option<usize>,
     /// Parallel to `interface.resources`.
     pub declarations: Vec<Declaration>,
     pub immediates: Vec<[u32; 4]>,
@@ -260,6 +262,7 @@ impl Setup {
                 results: Vec::new(),
             },
             early_depth_test: false,
+            doubles: None,
             declarations: Vec::new(),
             immediates: Vec::new(),
             shared: Vec::new(),
@@ -343,9 +346,7 @@ impl Setup {
                 }
                 Declared::GlobalFlags(flags) => {
                     if flags & 2 != 0 {
-                        return Err(at(
-                            "double precision is enabled (global flag): doubles are not lifted".into(),
-                        ));
+                        setup.doubles = Some(d.word);
                     }
                     if flags & 4 != 0 {
                         setup.early_depth_test = true;
@@ -473,6 +474,7 @@ impl Setup {
                         3 | 4 => (ImageDimension::D2, false),
                         5 => (ImageDimension::D3, false),
                         6 => (ImageDimension::Cube, false),
+                        7 => (ImageDimension::D1, true),
                         8 | 9 => (ImageDimension::D2, true),
                         10 => (ImageDimension::Cube, true),
                         other => return Err(at(format!("resource dimension {other}"))),
@@ -1273,7 +1275,7 @@ impl Setup {
                 default_name
             };
             let reflected = rdef.as_ref().and_then(|r| {
-                r.resources.iter().find(|r| {
+                r.iter().find(|r| {
                     r.provenance
                         .d3d
                         .is_some_and(|b| b.class == class && b.register == register && b.space == space)

@@ -7,7 +7,7 @@ const COMPUTE: &[u8] = include_bytes!("fixtures/bindings_sm51.cs.dxbc");
 
 #[test]
 fn reflection_retains_register_spaces_arrays_and_unused_constant_layout() {
-    let interface = iridia_dxbc::resource_reflection(PIXEL).unwrap().unwrap();
+    let interface = iridia_dxbc::reflection(PIXEL).unwrap();
     assert_eq!(interface.stage, Stage::Pixel);
     interface.verify().unwrap();
     let binding = |name: &str| {
@@ -49,7 +49,7 @@ fn reflection_retains_register_spaces_arrays_and_unused_constant_layout() {
 
 #[test]
 fn reflection_retains_constant_and_uav_arrays_and_an_unbounded_srv_range() {
-    let interface = iridia_dxbc::resource_reflection(COMPUTE).unwrap().unwrap();
+    let interface = iridia_dxbc::reflection(COMPUTE).unwrap();
     assert_eq!(interface.stage, Stage::Compute);
     interface.verify().unwrap();
     for (name, register, space, count) in [
@@ -88,7 +88,6 @@ fn lifting_resolves_sm51_declaration_ids_to_registers_and_spaces() {
         let reflected = iridia_dxbc::resource_reflection(bytes).unwrap().unwrap();
         for resource in &program.interface.resources {
             let reference = reflected
-                .resources
                 .iter()
                 .find(|r| r.provenance.name == resource.provenance.name)
                 .unwrap();

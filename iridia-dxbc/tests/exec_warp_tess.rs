@@ -4,7 +4,8 @@
 //! fixed-function tessellator, a domain program that writes each point's domain location, and a pass-through geometry
 //! program whose stream output WARP's buffer is read back from. The executor runs the same hull and domain programs
 //! (lifted from the same DXBC) and the primitives it makes are compared with the ones WARP wrote: every vertex of every
-//! point, line or triangle, in order, bit by bit.
+//! point, line or triangle, in order, bit by bit. The programs lifted onto the IR
+//! ([`TessellationShader::from_ir`]) must make the same patches as the older lift's, bit for bit.
 //!
 //! This checks the tessellator ([`iridia_exec::tessellator`]: which points, in which order, joined how, for
 //! every domain, partitioning and output topology and a spread of factors), the hull and domain stages around it
@@ -89,9 +90,9 @@ PC pc(InputPatch<CP, CPS> patch, uint id : SV_PrimitiveID) {
 [outputcontrolpoints(CPS)]
 [patchconstantfunc("pc")]
 [maxtessfactor(64.0)]
-CP hs(InputPatch<CP, CPS> patch, uint i : SV_OutputControlPointID) {
+CP hs(InputPatch<CP, CPS> patch, uint i : SV_OutputControlPointID, uint prim : SV_PrimitiveID) {
     CP o = patch[i];
-    o.p += float4(i, 0.5 * i, 0.25, 0);
+    o.p += float4(i, 0.5 * i, 0.25 + prim, 2 * prim);
     return o;
 }
 
@@ -330,6 +331,13 @@ fn tessellated_patches_are_the_ones_warp_makes() {
                     lift(&std::fs::read(&ds).unwrap()).unwrap_or_else(|e| panic!("{tag}: domain: {e}")),
                 )
                 .unwrap_or_else(|e| panic!("{tag}: {e}"));
+                // the same programs lifted onto the IR, which must make the same patches bit for bit
+                let ir = |path: &Path, what: &str| {
+                    iridia_dxbc::ir::lift(&std::fs::read(path).unwrap())
+                        .unwrap_or_else(|e| panic!("{tag}: {what} on the IR: {e}"))
+                };
+                let ir_shader = TessellationShader::from_ir(&ir(&hs, "hull"), &ir(&ds, "domain"))
+                    .unwrap_or_else(|e| panic!("{tag}: on the IR: {e}"));
                 // the vertex program's output for vertex k: (k + 1, 2k + 1, 3, 4)
                 let control_points_given: Vec<Vec<[u32; 4]>> = (0..control_points)
                     .map(|k| vec![[k as f32 + 1.0, 2.0 * k as f32 + 1.0, 3.0, 4.0].map(f32::to_bits)])
@@ -413,6 +421,18 @@ fn tessellated_patches_are_the_ones_warp_makes() {
                             0,
                         )
                         .unwrap_or_else(|e| panic!("{tag}.{k}: {e}"));
+                    let ir_patch = ir_shader
+                        .tessellate(
+                            &constants,
+                            &BTreeMap::new(),
+                            &mut NoSampler,
+                            &control_points_given,
+                            0,
+                        )
+                        .unwrap_or_else(|e| panic!("{tag}.{k}: on the IR: {e}"));
+                    if ir_patch != patch {
+                        failures.push(format!("{tag}.{k}: the IR lift's patch is not the older lift's"));
+                    }
                     let expected_topology = match output {
                         "line" => TessTopology::Line,
                         "point" => TessTopology::Point,

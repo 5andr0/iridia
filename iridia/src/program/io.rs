@@ -213,8 +213,8 @@ pub struct FunctionSig {
 /// point. The arguments carry no bindings: they are named after the varying they carry, as an entry point's are.
 ///
 /// - A vertex program whose outputs feed a tessellator: `main(inputs) -> Out`.
-/// - A hull program: `main(inputs as arrays of the input control points, SV_OutputControlPointID: u32) -> Out`, the
-///   control-point phase, run for each output control point; and `patch_constant(inputs as arrays of the input
+/// - A hull program: `main(inputs as arrays of the input control points, SV_OutputControlPointID: u32,
+///   SV_PrimitiveID: u32) -> Out`, the control-point phase, run for each output control point of the patch; and `patch_constant(inputs as arrays of the input
 ///   control points, outputs as arrays of the output control points under `out_` and the name, SV_PrimitiveID: u32) -> Out`,
 ///   the patch-constant phase, run once for a patch, its result the patch constants.
 /// - A domain program: `main(patch constants, inputs as arrays of the input control points, SV_DomainLocation:
@@ -268,6 +268,8 @@ pub fn stage_functions(interface: &Interface) -> Result<Option<Vec<FunctionSig>>
         (Stage::Hull, StageFacts::Hull(h)) => {
             let mut main_args = arrays(&interface.inputs, false, "", h.input_control_points, inputs);
             main_args.push(scalar("SV_OutputControlPointID", 1, ScalarType::Uint));
+            // the control-point phase may read the patch's number too (`vPrim`)
+            main_args.push(scalar("SV_PrimitiveID", 1, ScalarType::Uint));
             let mut constant_args = arrays(&interface.inputs, false, "", h.input_control_points, inputs);
             constant_args.extend(arrays(
                 &interface.outputs,

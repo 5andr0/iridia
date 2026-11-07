@@ -19,8 +19,8 @@ use std::sync::Arc;
 use super::pixel::SlotBackend;
 use super::rayquery::{Built, Hit, Query, Scene, flags, transform_point, transform_vector};
 use super::{
-    Backend, CallShader, Decision, Element, Executable, ImageAtomic, ImageLoad, ImageQuery, ImageSample,
-    ImageStore, ReportHit, Resources, Runner, TraceRay,
+    Backend, BufferAtomic, CallShader, Decision, Element, Executable, ImageAtomic, ImageLoad, ImageQuery,
+    ImageSample, ImageStore, ReportHit, Resources, Runner, TraceRay,
 };
 use crate::Sampler;
 use iridia::{
@@ -747,6 +747,9 @@ impl Backend for Host<'_, '_> {
     }
     fn atomic_add(&mut self, view: ResourceId, word: u32, value: u32) -> Result<u32, String> {
         self.slot_backend()?.atomic_add(view, word, value)
+    }
+    fn atomic_buffer(&mut self, r: BufferAtomic) -> Result<u32, String> {
+        self.slot_backend()?.atomic_buffer(r)
     }
 
     fn trace_ray(&mut self, r: TraceRay<'_>) -> Result<(), String> {

@@ -17,7 +17,8 @@ use super::tessellator::{
 use super::{Bound, Executable, Runner, Scratch};
 use crate::Sampler;
 use iridia::{
-    DomainFacts, FunctionSig, HullFacts, Program, StageFacts, TessDomain, TessTopology, stage_functions,
+    DomainFacts, FunctionSig, HullFacts, Interface, Program, StageFacts, TessDomain, TessTopology,
+    stage_functions,
 };
 
 /// What the tessellator made of a patch, with the programs' results.
@@ -42,13 +43,13 @@ pub struct Patch {
 /// A hull program and the domain program it feeds, ready to run.
 #[derive(Debug)]
 pub struct TessellationShader {
-    hull: Program,
+    hull: Interface,
     hull_bindings: Bindings,
     control: Executable,
     control_sig: FunctionSig,
     constant: Executable,
     hull_facts: HullFacts,
-    domain: Program,
+    domain: Interface,
     domain_bindings: Bindings,
     domain_exe: Executable,
     domain_sig: FunctionSig,
@@ -70,10 +71,42 @@ impl TessellationShader {
     /// Prepare `hull` and the `domain` program it feeds. The programs must agree on the domain and on the number of
     /// control points between them, and the domain program's inputs must be varyings the hull program writes.
     pub fn new(hull: Program, domain: Program) -> Result<Self, String> {
-        let StageFacts::Hull(hull_facts) = hull.interface.facts.clone() else {
+        let function = |p: &Program, name: &str| Executable::function(p, name).map_err(|e| e.to_string());
+        let (control, constant) = (function(&hull, "main")?, function(&hull, "patch_constant")?);
+        let domain_exe = function(&domain, "main")?;
+        Self::assemble(hull.interface, domain.interface, control, constant, domain_exe)
+    }
+
+    /// Prepare `hull` and `domain`, programs on the IR, to run as [`TessellationShader::new`] runs their naga forms:
+    /// the same control points in, the same patch out.
+    pub fn from_ir(hull: &iridia_ir::Program, domain: &iridia_ir::Program) -> Result<Self, String> {
+        let function = |p: &iridia_ir::Program, name: &str| {
+            Executable::function_from_ir(p, name).map_err(|e| e.to_string())
+        };
+        let (control, constant) = (function(hull, "main")?, function(hull, "patch_constant")?);
+        let domain_exe = function(domain, "main")?;
+        Self::assemble(
+            hull.interface.clone(),
+            domain.interface.clone(),
+            control,
+            constant,
+            domain_exe,
+        )
+    }
+
+    /// The shader of a hull program of interface `hull` and a domain program of interface `domain`, compiled as the
+    /// three functions they are made of.
+    fn assemble(
+        hull: Interface,
+        domain: Interface,
+        control: Executable,
+        constant: Executable,
+        domain_exe: Executable,
+    ) -> Result<Self, String> {
+        let StageFacts::Hull(hull_facts) = hull.facts.clone() else {
             return Err(format!("a {:?} program is not a hull program", hull.stage));
         };
-        let StageFacts::Domain(domain_facts) = domain.interface.facts.clone() else {
+        let StageFacts::Domain(domain_facts) = domain.facts.clone() else {
             return Err(format!("a {:?} program is not a domain program", domain.stage));
         };
         if hull_facts.domain != domain_facts.domain {
@@ -88,8 +121,7 @@ impl TessellationShader {
                 hull_facts.output_control_points, domain_facts.input_control_points
             ));
         }
-        let mut hull_sigs =
-            stage_functions(&hull.interface)?.ok_or("a hull program without its functions")?;
+        let mut hull_sigs = stage_functions(&hull)?.ok_or("a hull program without its functions")?;
         let constant_sig = hull_sigs
             .iter()
             .position(|s| s.name == "patch_constant")
@@ -99,12 +131,9 @@ impl TessellationShader {
             .into_iter()
             .find(|s| s.name == "main")
             .ok_or("a hull program without its control-point function")?;
-        let domain_sig = stage_functions(&domain.interface)?
+        let domain_sig = stage_functions(&domain)?
             .and_then(|mut f| f.pop())
             .ok_or("a domain program without its function")?;
-        let control = Executable::function(&hull, "main").map_err(|e| e.to_string())?;
-        let constant = Executable::function(&hull, "patch_constant").map_err(|e| e.to_string())?;
-        let domain_exe = Executable::function(&domain, "main").map_err(|e| e.to_string())?;
 
         let (edges, insides) = match hull_facts.domain {
             TessDomain::Triangle => (3, 1),
@@ -142,7 +171,7 @@ impl TessellationShader {
             .arguments
             .iter()
             .skip(constants_read)
-            .take(domain.interface.inputs.len())
+            .take(domain.inputs.len())
             .map(|a| {
                 find(&control_sig, &a.name).ok_or_else(|| {
                     format!("the domain program reads the control-point varying {} the hull program does not write", a.name)
@@ -169,13 +198,13 @@ impl TessellationShader {
         })
     }
 
-    /// The hull program.
-    pub fn hull(&self) -> &Program {
+    /// The hull program's interface.
+    pub fn hull(&self) -> &Interface {
         &self.hull
     }
 
-    /// The domain program.
-    pub fn domain(&self) -> &Program {
+    /// The domain program's interface.
+    pub fn domain(&self) -> &Interface {
         &self.domain
     }
 
@@ -192,13 +221,13 @@ impl TessellationShader {
     /// The names of the hull program's input varyings: the registers of the control points given to
     /// [`TessellationShader::tessellate`], in order.
     pub fn inputs(&self) -> impl Iterator<Item = &str> {
-        let n = self.hull.interface.inputs.len();
+        let n = self.hull.inputs.len();
         self.control_sig.arguments.iter().take(n).map(|a| a.name.as_str())
     }
 
     /// The names of the hull program's output varyings: the registers of [`Patch::control_points`].
     pub fn control_outputs(&self) -> impl Iterator<Item = &str> {
-        let n = self.hull.interface.outputs.len();
+        let n = self.hull.outputs.len();
         self.control_sig.result.iter().take(n).map(|a| a.name.as_str())
     }
 
@@ -225,7 +254,7 @@ impl TessellationShader {
                 control_points.len()
             ));
         }
-        let inputs = self.hull.interface.inputs.len();
+        let inputs = self.hull.inputs.len();
         let mut inputs_as_arrays = Vec::with_capacity(inputs.saturating_mul(input_count));
         for varying in 0..inputs {
             for (k, point) in control_points.iter().enumerate() {
@@ -244,12 +273,13 @@ impl TessellationShader {
         let constant_bound = self.hull_bindings.bind(&self.constant, hull_constants)?;
         let mut hull_backend = self.hull_bindings.backend(sampler);
         let output_count = self.hull_facts.output_control_points as usize;
-        let outputs = self.hull.interface.outputs.len();
+        let outputs = self.hull.outputs.len();
         let mut control_outputs: Vec<Vertex> = Vec::with_capacity(output_count);
         let mut scratch = Scratch::new(&self.control);
         for id in 0..output_count {
             let mut arguments = inputs_as_arrays.clone();
             arguments.push([u32::try_from(id).unwrap_or(u32::MAX), 0, 0, 0]);
+            arguments.push([primitive, 0, 0, 0]);
             let (values, kept) = call(&self.control, &hull_bound, &mut hull_backend, scratch, &arguments)?;
             scratch = kept;
             let members = values.get(..outputs).ok_or_else(|| {

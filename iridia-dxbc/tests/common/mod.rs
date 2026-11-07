@@ -89,6 +89,8 @@ pub enum Unstated {
     /// A small integer (0 to 2): a loop bound or an index read from a stripped buffer, which a float's bits would
     /// make run for billions of turns.
     Ints,
+    /// 0, and every word a reflection names 0 too: an unset parameter, a cleared buffer.
+    Zeros,
 }
 
 pub fn case(shader: &dyn PixelShader, c: u32) -> Case {
@@ -99,7 +101,7 @@ pub fn case(shader: &dyn PixelShader, c: u32) -> Case {
 pub fn case_with(shader: &dyn PixelShader, c: u32, unstated: Unstated) -> Case {
     let unknown = match unstated {
         Unstated::Floats => 3,
-        Unstated::Ints => 2,
+        Unstated::Ints | Unstated::Zeros => 2,
     };
     let interface = shader.interface();
     let mut inputs = vec![[0u32; 4]; shader.input_count().max(1)];
@@ -155,6 +157,7 @@ pub fn case_with(shader: &dyn PixelShader, c: u32, unstated: Unstated) -> Case {
                 let word = (r * 4 + k) as u32;
                 let h = mix(u64::from(c) << 44 ^ u64::from(slot) << 32 ^ u64::from(word) ^ 0x77);
                 *w = match classes.get(&word).copied().unwrap_or(unknown) {
+                    _ if unstated == Unstated::Zeros => 0,
                     1 => h & 1,
                     2 => h % 3,
                     _ => (unit(h) * 2.0 - 0.25).to_bits(),

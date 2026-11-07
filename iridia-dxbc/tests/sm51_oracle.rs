@@ -197,10 +197,10 @@ fn private_sm51_decoder_reflection_and_lift() {
         let asm = std::fs::read_to_string(path.with_extension("asm")).unwrap();
         compare(name, &bytes, &asm);
         match iridia_dxbc::resource_reflection(&bytes) {
-            Ok(Some(interface)) => println!(
+            Ok(Some(resources)) => println!(
                 "{name}: reflection {} resources; validation {:?}",
-                interface.resources.len(),
-                interface.verify()
+                resources.len(),
+                iridia_dxbc::reflection(&bytes).map(|i| i.verify())
             ),
             result => println!("{name}: reflection {result:?}"),
         }

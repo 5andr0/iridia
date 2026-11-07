@@ -12,18 +12,75 @@
   buffers and views, texel loads and stores of texture views, every atomic and its immediate form (compare-exchange
   takes the comparand first), `imm_atomic_alloc` and `imm_atomic_consume` as counters, thread-group memory as a workgroup
   variable, `sync` as a barrier; Shader Model 5.1 resource ranges as an element of an array resource (`nonuniform`
-  kept). A hull, domain or geometry program is still refused by name.
+  kept). Hull, domain and geometry programs lift too (below).
 - `iridia-dxbc/tests/ir_gate.rs`, the gate of the cut-over: every program of the Sekiro, Riders Republic and Unity
-  corpora and every fixture lifts both ways and runs in `iridia-exec`, the older lift (A), the IR lift (B) and the IR lift
-  after `promote`, `simplify` and `break_flags` (P), on seeded inputs, constants and textures; a pixel program with a
-  derivative or an implicit-level sample runs as a 2 x 2 quad, a compute program as two thread groups whose read-write
+  corpora and every fixture lifts both ways and runs in `iridia-exec`, the older lift (A), the IR lift (B) and the IR
+  lift after `promote`, `simplify` and `break_flags` (P), on seeded inputs, constants and textures; a pixel program with
+  a derivative or an implicit-level sample runs as a 2 x 2 quad, a compute program as two thread groups whose read-write
   buffers, texels and counters are compared after. Every written lane must agree bit for bit (a NaN with any NaN); any
   other refusal of the IR lift fails it. Planted bugs (an addition made a subtraction in a pixel and a compute program,
-  a derivative's axis swapped) are caught. No difference anywhere: Sekiro, 432 programs, A runs all 432 and B and P
-  agree on all; Riders Republic, 2,443 programs (26 refused by name: those made of functions), A runs 2,417 (736
-  compute) and B and P agree on 2,304, the other 113 A cannot evaluate on the seeded data (a loop past the executor's
-  budget, a request its backend does not answer); Unity, 4,854 programs, B and P agree on 4,802, the other 52 A cannot
-  evaluate (a quad whose lanes diverge at a derivative or an implicit-level sample, a store it is not given).
+  a derivative's axis swapped) are caught. No difference anywhere: Sekiro, 432 programs, B and P agree on all 432;
+  Riders Republic, 2,443 programs (736 compute, 26 made of functions), B and P agree on all 2,443; Unity, 4,854
+  programs, B and P agree on all 4,854; every fixture A runs. A vector A cannot evaluate is skipped and counted (Riders:
+  238 of its vectors, a loop past the executor's step budget on seeded constants in 235, a quad diverging at an
+  implicit-level sample in 3).
+- `iridia-dxbc`: the IR lift takes hull, domain and geometry programs (and a vertex program feeding a tessellator) as
+  the functions `iridia::stage_functions` states: a hull program's control-point phase as `main` and its fork and join
+  phases, each a loop over its instances, as `patch_constant`; a geometry program's `emit` and `cut` as the IR's `Emit`
+  and `Cut` (a stream other than 0 is refused by name). `iridia-exec`: `Executable::function_from_ir` runs one of an IR
+  program's functions; `GeometryShader::from_ir` and `TessellationShader::from_ir` run the stages from the IR.
+- `iridia::stage_functions`: a hull program's `main` takes `SV_PrimitiveID` after `SV_OutputControlPointID`, since its
+  control-point phase may read `vPrim`; `tests/exec_warp_tess.rs` writes it into each control point, against WARP.
+  `iridia::PROGRAM_VERSION` is 4 and the lifters' version tables are rewritten.
+- `tests/ir_gate.rs` runs each function of a program made of functions, A, B and P on the same seeded arguments: the
+  points of each array, the varyings, and pipeline values within the program's facts (an output point it has, a domain
+  location inside the patch, an instance it runs). `tests/exec_warp_tess.rs` and `tests/geometry.rs` run the IR beside
+  the older lift.
+- A `switch` case that falls into the next one after code of its own is refused by the IR lift, in every model, as a
+  program Direct3D 11 does not allow (the Direct3D 11.3 specification, 22.7.18; Direct3D 10 allowed it, HLSL never
+  wrote it): WARP runs such a case as if it ended with `break`, in a `ps_4_0` program and a `ps_5_0` one alike.
+  `switches_agree_with_warp_and_a_falling_case_is_refused` (in `tests/exec_warp.rs`) runs two switches against WARP
+  through both lifts and makes their cases fall by changing `break`s of `fxc`'s output to `nop`.
+- `Texture1DArray` (resource dimension 7) is taken by both DXBC lifts; `resinfo_agrees_with_warp` asks its size.
+- Reflection of every stage and of Shader Model 4: `resource_reflection` reads the RDEF of a hull, domain or geometry
+  program and of a Shader Model 4.0 or 4.1 program, and returns the resources alone (`Option<Vec<Resource>>`, was an
+  `Interface`); `reflection` takes Shader Model 4 pixel, vertex and compute programs too. The lifts name those
+  programs' resources and lay out their constant buffers from it. `every_stage_and_model_reflects_as_fxc_lists_it`
+  (in `tests/reflection.rs`) holds Sekiro's 87 hull, domain and geometry programs and the Unity corpus's 16 `ps_4_0`
+  programs to Microsoft's listing of each (`fxc /dumpbin`).
+- Shader Model 5 doubles on the IR: the IR lift takes every double-precision instruction (`dadd` to `utod`, the
+  comparisons, `dmovc`), a register's lane pair as a double, the low word first; the IR runners run 64-bit values
+  (`iridia-exec-ir`'s `wide`). `doubles_agree_with_warp` holds a program of all of them to WARP, through the IR lift.
+  The older lift refuses a program with the doubles flag by name; its `LIFTER_VERSION` is 11.
+- The older DXBC lift refuses, by name, a signed and an unsigned minimum or maximum on the same memory (naga's atomics
+  take the memory's one type, so one of them was lowered as the other); the IR lift takes both.
+  `a_buffer_takes_signed_and_unsigned_minimums` (in `tests/exec_warp.rs`) holds the IR lift to the four results
+  `InterlockedMin` and `InterlockedMax` give, each of which a signed and unsigned mix-up changes.
+- The gate's vectors: five (`CASES`), the unstated constants as floats (0, 1), small integers (2, 3) and zero (4, where
+  memory, texel and structured loads are 0 too, so a branch on a cleared value is taken). A quad whose lanes diverge at
+  a derivative runs again with coherent inputs (each interpolated input the first lane's plus steps of its own along x
+  and y), then with the first lane's in every lane. Of the programs that ran coherent quads, those whose coherent
+  vectors take no derivative (`Execution::derivatives`) and those that discard every lane taking one are counted: what
+  those vectors leave untested (Unity: 5 of its 46 take none and 26 discard every lane that takes one; Riders Republic:
+  84 of 91 take none). A vector A cannot evaluate (a loop past the step budget on seeded constants, a request its
+  sampler does not answer) is skipped and counted by reason, in every stage; a program is A's failure only where A
+  evaluates none of its vectors. The programs neither lift reads and those only the IR lifts are counted by reason.
+- The gate compares a pixel or vertex program's memory: every store and atomic (by view, element or texel, word), each
+  word's values in the order it is given them; and each texture request B makes (sample, texel load, query) must be one
+  A makes, so a texel the program asks for differently is caught even where a select then drops it.
+- `shader.outside`, a debug key (`GAME_DATA_DEBUG`): a folder of DXBC containers outside the configured corpora, which
+  the IR gate (`outside_programs`) and the WARP comparison (`outside_programs_agree_with_warp`) run.
+- `iridia-exec`: a discarded pixel changes no memory after its `discard` (the Direct3D 11.3 specification, 16.13): its
+  stores, texel stores and atomics are dropped, an atomic gives 0. Every buffer atomic reaches the sampler
+  (`Sampler::atomic`, `Atomic`), not only adds. A typed buffer's store and atomic address its element (`u[1]` is element
+  1, the lanes in it), as `Store` states. A vertex program's results are its entry's result items (`iridia::entry_io`),
+  each clip or cull distance its own member at its lane. A front-facing flag an IR program reads as an integer is
+  Direct3D's all ones for a front face (it was 1). `Saturate` gives +0 below zero, -0 among it, and a `mov` with a
+  source modifier flushes a denormal (both as WARP does); the older executor's negation and absolute value flush too.
+  `Execution::derivatives` counts the screen derivatives an evaluation took part in.
+- `tests/exec_warp.rs`: a discarded pixel's memory, outputs after several clip distances, a typed buffer's element, a
+  view at its register and not its id (Shader Model 5.0 and 5.1), a front-facing flag, denormals through moves; each
+  against WARP or the specification.
 - `iridia-ir`: the vocabulary the DXBC and DXIL lifts need: buffers (`Res`, `Address`), texel loads, gathers and
   resource queries, stores to buffers and images, atomics on buffers, images (a typed storage buffer's element too) and
   workgroup variables (`Memory`), counters, barriers, switches, arrays and workgroup variables, patch constants,

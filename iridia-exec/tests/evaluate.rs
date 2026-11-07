@@ -457,6 +457,7 @@ impl PixelShader for Loads {
             output_masks: vec![15],
             instructions: 1,
             samples: 0,
+            derivatives: 0,
             discarded: false,
         })
     }
