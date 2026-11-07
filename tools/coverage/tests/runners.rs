@@ -272,3 +272,15 @@ fn d3d9_draws_from_the_ir_as_from_its_wgsl() {
         assert_selected_pass(&vkd3d_runs("vkd3d/d3d9.json.gz", test));
     }
 }
+
+/// A sample reduces its coordinate to its address mode's range before scaling it to texels (7.18.6), and a NaN left
+/// is 0 (3.2.4.1): `tex2Dproj` with w = 0 samples at infinity, which clamps to the edge texel where linear filtering
+/// of the infinite coordinate itself gives NaN.
+#[test]
+fn an_infinite_coordinate_samples_the_edge_texel_it_clamps_to() {
+    assert_selected_pass(&vkd3d_runs("vkd3d/d3d9.json.gz", "sampler.shader_test"));
+    // the Shader Model 4 runs: 5.0's has a `sample_clamp_feedback` iridia does not lift
+    let mut runs = vkd3d_runs("vkd3d/dxbc.json.gz", "sampler.shader_test");
+    runs.retain(|r| r.model == "4.0");
+    assert_selected_pass(&runs);
+}

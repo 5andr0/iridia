@@ -220,6 +220,22 @@ fn address(mode: Address, i: i64, n: u32) -> Option<i64> {
     })
 }
 
+/// A normalized coordinate in the range its address mode keeps (7.18.6), as the sampler reduces it before scaling it
+/// by the texture's size: wrap's [0, 1), mirror's (-2, 2), and [-10, 10] for the rest. A NaN this leaves (an infinite
+/// coordinate that wraps or mirrors, or a NaN) is 0, as its conversion to fixed point makes it (3.2.4.1); so an
+/// infinite coordinate that clamps reads the edge texel.
+fn reduced(u: f32, mode: Address) -> f32 {
+    let r = match mode {
+        Address::Wrap => u - u.floor(),
+        Address::Mirror => {
+            let half = u * 0.5;
+            (half - half.trunc()) * 2.0
+        }
+        Address::Clamp | Address::Border | Address::MirrorOnce => u.clamp(-10.0, 10.0),
+    };
+    if r.is_nan() { 0.0 } else { r }
+}
+
 /// A coordinate's fraction truncated to 8 bits.
 fn subtexel(x: f64) -> f64 {
     (x * 256.0).floor() / 256.0
@@ -503,7 +519,7 @@ pub fn sample(r: &Resource, s: &Sampler, req: &Request, one_d: bool) -> [f32; 4]
             let (face, uv) = cube_face(req.coord);
             ([uv[0], uv[1], 0.0], Some(face))
         } else {
-            (req.coord, None)
+            ([0, 1, 2].map(|k| reduced(req.coord[k], s.address[k])), None)
         };
         let c = [
             f64::from(coord[0]) * f64::from(w),
