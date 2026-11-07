@@ -846,6 +846,19 @@ impl PixelShader for ProgramShader {
         buffers: &[(u32, &[[u32; 4]])],
         sampler: &mut dyn Sampler,
     ) -> Result<[Execution; 4], Error> {
+        self.execute_quad_masked(inputs, [false; 4], buffers, sampler)
+    }
+}
+
+impl ProgramShader {
+    /// Raster helpers evaluate for derivatives but cannot change external memory.
+    pub(crate) fn execute_quad_masked(
+        &self,
+        inputs: [&[[u32; 4]]; 4],
+        helpers: [bool; 4],
+        buffers: &[(u32, &[[u32; 4]])],
+        sampler: &mut dyn Sampler,
+    ) -> Result<[Execution; 4], Error> {
         let bound = self.bound(buffers)?;
         let arguments = [
             self.arguments_of(inputs[0])?,
@@ -856,7 +869,11 @@ impl PixelShader for ProgramShader {
         let mut backend = self.backend(sampler);
         let scratch = take(&self.quad_scratch).unwrap_or_else(|| Scratch::new(&self.executable));
         let mut runner = Runner::<4>::with_scratch(&self.executable, &bound, &mut backend, None, scratch);
-        let outputs = runner.run([&arguments[0], &arguments[1], &arguments[2], &arguments[3]]);
+        let outputs = runner.run_masked(
+            [&arguments[0], &arguments[1], &arguments[2], &arguments[3]],
+            4,
+            helpers,
+        );
         give_back(&self.quad_scratch, runner.into_scratch());
         Ok(outputs.map_err(error)?.map(|o| self.execution(o)))
     }

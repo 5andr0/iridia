@@ -1287,7 +1287,10 @@ impl<'a> Raster<'a> {
                         input2.as_slice(),
                         input3.as_slice(),
                     ];
-                    let quad: [Execution; 4] = self.pixel.execute_quad(inputs, buffers, sampler)?;
+                    let helpers = lanes.each_ref().map(|lane| lane.mask == 0);
+                    let quad: [Execution; 4] = self
+                        .pixel
+                        .execute_quad_masked(inputs, helpers, buffers, sampler)?;
                     for (e, lane) in quad.iter().zip(&lanes) {
                         let (px, py) = (lane.px, lane.py);
                         if lane.mask == 0 {

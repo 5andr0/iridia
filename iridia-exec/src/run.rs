@@ -12,6 +12,10 @@ use super::request::{
 };
 use iridia::ResourceId;
 
+#[cfg(test)]
+#[path = "run/helper_tests.rs"]
+mod helper_tests;
+
 /// The most operations and loop turns one invocation may execute: a program that does not end is refused.
 pub const STEP_LIMIT: u64 = 1 << 24;
 
@@ -713,6 +717,11 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
             }
         }
     }
+    /// A helper still writes its private locals; external writes do not even resolve an address.
+    fn can_store(&self, loc: Loc, lane: usize) -> bool {
+        matches!(loc, Loc::Local(_)) || !self.killed.has(lane)
+    }
+
     fn mem_put(&mut self, loc: Loc, lane: usize, extra: u32, n: u8, v: Reg) -> Result<(), String> {
         let count = n as usize;
         match loc {
@@ -1525,7 +1534,7 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                 }
                 St::Store { loc, src, n } => {
                     for l in 0..N {
-                        if active.has(l) {
+                        if active.has(l) && self.can_store(*loc, l) {
                             let v = self.rd(slot_at::<N>(*src), l)?;
                             self.mem_put(*loc, l, 0, *n, v)?;
                         }
@@ -1540,7 +1549,7 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                     n,
                 } => {
                     for l in 0..N {
-                        if active.has(l) {
+                        if active.has(l) && self.can_store(*loc, l) {
                             let i = self.rd(slot_at::<N>(*index), l)?[0];
                             if i < *len {
                                 let extra = i
@@ -1560,7 +1569,7 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                     n,
                 } => {
                     for l in 0..N {
-                        if active.has(l) {
+                        if active.has(l) && !self.killed.has(l) {
                             let first = self.rd(slot_at::<N>(*word), l)?[0];
                             let len = self.buffer_words(*g, *pick, l)?;
                             let v = self.rd(slot_at::<N>(*src), l)?;
@@ -1581,7 +1590,7 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                 }
                 St::StoreDyn { ptr, src, n } => {
                     for l in 0..N {
-                        if active.has(l) {
+                        if active.has(l) && self.can_store(ptr.loc, l) {
                             let x = self.dyn_extra(ptr, l)?;
                             let v = self.rd(slot_at::<N>(*src), l)?;
                             self.mem_put(ptr.loc, l, x, *n, v)?;
@@ -1672,6 +1681,15 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                 } => {
                     for l in 0..N {
                         if active.has(l) {
+                            if self.killed.has(l) {
+                                if let Some(r) = result {
+                                    self.wr(slot_at::<N>(*r), l, [0; 4])?;
+                                }
+                                if let Some(x) = exchanged {
+                                    self.wr(slot_at::<N>(*x), l, [0; 4])?;
+                                }
+                                continue;
+                            }
                             let (g, o, pick) = match ptr.loc {
                                 Loc::Global(g, o) => (g, o, Pick::One),
                                 Loc::Elem(g, o, pick) => (g, o, pick),
@@ -1684,14 +1702,9 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                                 Some(c) => self.rd(slot_at::<N>(*c), l)?[0],
                                 None => 0,
                             };
-                            // a killed invocation changes no memory; its results are 0
-                            let (old, swapped) = if self.killed.has(l) {
-                                (0, false)
-                            } else {
-                                let old =
-                                    self.atomic_buffer_word(g, pick, l, word, *fun, *signed, v, expected)?;
-                                (old, *fun != AtomOp::CompareExchange || old == expected)
-                            };
+                            let old =
+                                self.atomic_buffer_word(g, pick, l, word, *fun, *signed, v, expected)?;
+                            let swapped = *fun != AtomOp::CompareExchange || old == expected;
                             if let Some(r) = result {
                                 self.wr(slot_at::<N>(*r), l, [old; 4])?;
                             }
@@ -1901,7 +1914,7 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                 }
                 St::StoreAgg { loc, members } => {
                     for l in 0..N {
-                        if active.has(l) {
+                        if active.has(l) && self.can_store(*loc, l) {
                             let mut at = 0;
                             for &(s, n) in members {
                                 let v = self.rd(slot_at::<N>(s), l)?;
@@ -2245,7 +2258,17 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
 
     /// [`Runner::run`] with lanes `0..count` only; the outputs of the others are empty (independent invocations).
     pub fn run_first(&mut self, args: [&[[u32; 4]]; N], count: usize) -> Result<[Output; N], String> {
-        self.run_in_place(args, count)?;
+        self.run_masked(args, count, [false; N])
+    }
+
+    /// All invocations evaluate; helpers have no externally visible side effects, as discarded invocations do.
+    pub(super) fn run_masked(
+        &mut self,
+        args: [&[[u32; 4]]; N],
+        count: usize,
+        helpers: [bool; N],
+    ) -> Result<[Output; N], String> {
+        self.run_in_place_masked(args, count, helpers)?;
         let c: &'a Executable = self.c;
         let mut outputs = Vec::with_capacity(N);
         for l in 0..N {
@@ -2272,6 +2295,15 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
     /// [`Runner::run_first`] with the results left in the runner, for [`Runner::lane`] to read: a run that
     /// allocates nothing once the runner's room is grown.
     pub(super) fn run_in_place(&mut self, args: [&[[u32; 4]]; N], count: usize) -> Result<(), String> {
+        self.run_in_place_masked(args, count, [false; N])
+    }
+
+    fn run_in_place_masked(
+        &mut self,
+        args: [&[[u32; 4]]; N],
+        count: usize,
+        helpers: [bool; N],
+    ) -> Result<(), String> {
         if count > N || (count < N && self.grouping != Grouping::Independent) {
             return Err(format!(
                 "{count} of {N} lanes run: only independent invocations run fewer than all"
@@ -2283,6 +2315,11 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
         self.samples = [0; N];
         self.derivatives = [0; N];
         self.killed = M::none();
+        for (lane, helper) in helpers.into_iter().enumerate() {
+            if helper {
+                self.killed.insert(lane);
+            }
+        }
         self.queries.clear();
         self.decisions = [Decision::None; N];
         for o in self.outs.iter_mut() {

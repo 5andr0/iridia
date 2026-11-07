@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `iridia-exec`: raster helper invocations evaluate for derivatives and private variables but perform no external
+  writes, image or buffer atomics, or append/consume counter operations. A fullscreen triangle writes each covered
+  pixel once; helper lanes previously wrote UAVs too.
 - `iridia-dxbc`, `iridia-dxil`: the IR lifts have version gates, as the older lifts and `iridia-d3d9-ir` do: what
   `ir::lift` makes of each committed fixture is hashed with `iridia_ir::gate` under the IR lifter's `LIFTER_VERSION` in
   `tests/ir-lifted.hashes`, so a change to what the IR lift makes of a bytecode fails its tests until the version is
