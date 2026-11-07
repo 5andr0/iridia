@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "iridia": "0.5.0",
-  "dx": "d3d9-reader, dxbc-reader, dxil-reader 0.5.0",
+  "iridia": "0.6.0",
+  "dx": "d3d9-reader, dxbc-reader, dxil-reader 0.11.0",
   "features": [
     {
       "format": "d3d9",
@@ -26483,7 +26483,7 @@
           "id": "combined-samplers.shader_test:d3d12:5.1",
           "case": "combined-samplers.shader_test",
           "runner": "d3d12",
-          "format": "",
+          "format": "dxbc",
           "model": "5.1",
           "status": "compiler-refused",
           "detail": "line 66: combined-samplers.shader_test:56: ps_5_1 refused by the compiler (0x80004005)",
@@ -35232,7 +35232,7 @@
           "id": "object-field-offsets.shader_test:d3d12:5.1",
           "case": "object-field-offsets.shader_test",
           "runner": "d3d12",
-          "format": "",
+          "format": "dxbc",
           "model": "5.1",
           "status": "compiler-refused",
           "detail": "line 23: object-field-offsets.shader_test:4: ps_5_1: the compiler faulted (exception: access violation writing 0x0000000000000000)",
@@ -40692,7 +40692,7 @@
           "id": "texture-ordering.shader_test:d3d12:5.1",
           "case": "texture-ordering.shader_test",
           "runner": "d3d12",
-          "format": "",
+          "format": "dxbc",
           "model": "5.1",
           "status": "compiler-refused",
           "detail": "line 140: texture-ordering.shader_test:92: ps_5_1 refused by the compiler (0x80004005)",
@@ -57490,7 +57490,7 @@
         {
           "id": "Feature/ByteAddressBuffer/LegacyBufferMatrixOrderLoad.test",
           "case": "Feature/ByteAddressBuffer/LegacyBufferMatrixOrderLoad.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: Vulkan"
@@ -57498,7 +57498,7 @@
         {
           "id": "Feature/ByteAddressBuffer/LegacyBufferMatrixOrderStore.test",
           "case": "Feature/ByteAddressBuffer/LegacyBufferMatrixOrderStore.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: Vulkan"
@@ -60066,7 +60066,7 @@
         {
           "id": "Feature/HLSLLib/mul.fp64.test",
           "case": "Feature/HLSLLib/mul.fp64.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "xfail",
           "detail": "dxc: error: validation errors"
@@ -60442,7 +60442,7 @@
         {
           "id": "Feature/HLSLLib/select.struct.test",
           "case": "Feature/HLSLLib/select.struct.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "UNSUPPORTED: DXC"
@@ -60826,7 +60826,7 @@
         {
           "id": "Feature/InlineRT/aabb-procedural.test",
           "case": "Feature/InlineRT/aabb-procedural.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: acceleration-structure"
@@ -60834,7 +60834,7 @@
         {
           "id": "Feature/InlineRT/barycentrics.test",
           "case": "Feature/InlineRT/barycentrics.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: acceleration-structure"
@@ -60842,7 +60842,7 @@
         {
           "id": "Feature/InlineRT/cull-back-facing.test",
           "case": "Feature/InlineRT/cull-back-facing.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: acceleration-structure"
@@ -60850,7 +60850,7 @@
         {
           "id": "Feature/InlineRT/geometry-transform.test",
           "case": "Feature/InlineRT/geometry-transform.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: acceleration-structure"
@@ -60858,7 +60858,7 @@
         {
           "id": "Feature/InlineRT/indexed-triangle-setup.test",
           "case": "Feature/InlineRT/indexed-triangle-setup.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: acceleration-structure"
@@ -60866,7 +60866,7 @@
         {
           "id": "Feature/InlineRT/instance-contribution.test",
           "case": "Feature/InlineRT/instance-contribution.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: acceleration-structure"
@@ -60874,7 +60874,7 @@
         {
           "id": "Feature/InlineRT/instance-flags.test",
           "case": "Feature/InlineRT/instance-flags.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: acceleration-structure"
@@ -60882,7 +60882,7 @@
         {
           "id": "Feature/InlineRT/instance-mask.test",
           "case": "Feature/InlineRT/instance-mask.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: acceleration-structure"
@@ -60890,7 +60890,7 @@
         {
           "id": "Feature/InlineRT/miss-status.test",
           "case": "Feature/InlineRT/miss-status.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: acceleration-structure"
@@ -60898,7 +60898,7 @@
         {
           "id": "Feature/InlineRT/multi-instance.test",
           "case": "Feature/InlineRT/multi-instance.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: acceleration-structure"
@@ -60906,7 +60906,7 @@
         {
           "id": "Feature/InlineRT/primitive-index.test",
           "case": "Feature/InlineRT/primitive-index.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: acceleration-structure"
@@ -60914,7 +60914,7 @@
         {
           "id": "Feature/InlineRT/ray-t.test",
           "case": "Feature/InlineRT/ray-t.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: acceleration-structure"
@@ -60922,7 +60922,7 @@
         {
           "id": "Feature/InlineRT/tlas-array.test",
           "case": "Feature/InlineRT/tlas-array.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: acceleration-structure"
@@ -60930,7 +60930,7 @@
         {
           "id": "Feature/InlineRT/tmin-tmax-clip.test",
           "case": "Feature/InlineRT/tmin-tmax-clip.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: acceleration-structure"
@@ -60938,7 +60938,7 @@
         {
           "id": "Feature/InlineRT/triangle-setup.test",
           "case": "Feature/InlineRT/triangle-setup.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: acceleration-structure"
@@ -60946,7 +60946,7 @@
         {
           "id": "Feature/InlineRT/world-ray-echo.test",
           "case": "Feature/InlineRT/world-ray-echo.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: acceleration-structure"
@@ -61026,7 +61026,7 @@
         {
           "id": "Feature/PushConstant/array_of_matrices.test",
           "case": "Feature/PushConstant/array_of_matrices.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "UNSUPPORTED: Metal || DirectX"
@@ -61034,7 +61034,7 @@
         {
           "id": "Feature/PushConstant/arrays.test",
           "case": "Feature/PushConstant/arrays.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "UNSUPPORTED: Metal || DirectX"
@@ -61042,7 +61042,7 @@
         {
           "id": "Feature/PushConstant/bool.test",
           "case": "Feature/PushConstant/bool.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "UNSUPPORTED: Metal || DirectX"
@@ -61050,7 +61050,7 @@
         {
           "id": "Feature/PushConstant/explicit_offset.test",
           "case": "Feature/PushConstant/explicit_offset.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "UNSUPPORTED: Metal || DirectX"
@@ -61058,7 +61058,7 @@
         {
           "id": "Feature/PushConstant/matrix.test",
           "case": "Feature/PushConstant/matrix.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "UNSUPPORTED: Metal || DirectX"
@@ -61066,7 +61066,7 @@
         {
           "id": "Feature/PushConstant/methods.test",
           "case": "Feature/PushConstant/methods.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "UNSUPPORTED: Metal || DirectX"
@@ -61074,7 +61074,7 @@
         {
           "id": "Feature/PushConstant/mixed_types.test",
           "case": "Feature/PushConstant/mixed_types.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "UNSUPPORTED: Metal || DirectX"
@@ -61082,7 +61082,7 @@
         {
           "id": "Feature/PushConstant/multiple_values.test",
           "case": "Feature/PushConstant/multiple_values.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "UNSUPPORTED: Metal || DirectX"
@@ -61090,7 +61090,7 @@
         {
           "id": "Feature/PushConstant/multiple_values_offset.test",
           "case": "Feature/PushConstant/multiple_values_offset.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "UNSUPPORTED: Metal || DirectX"
@@ -61098,7 +61098,7 @@
         {
           "id": "Feature/PushConstant/nested_structs.test",
           "case": "Feature/PushConstant/nested_structs.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "UNSUPPORTED: Metal || DirectX"
@@ -61106,7 +61106,7 @@
         {
           "id": "Feature/PushConstant/padding.test",
           "case": "Feature/PushConstant/padding.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "UNSUPPORTED: Metal || DirectX"
@@ -61114,7 +61114,7 @@
         {
           "id": "Feature/PushConstant/simple.test",
           "case": "Feature/PushConstant/simple.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "UNSUPPORTED: Metal || DirectX"
@@ -61122,7 +61122,7 @@
         {
           "id": "Feature/PushConstant/static_member.test",
           "case": "Feature/PushConstant/static_member.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "UNSUPPORTED: Metal || DirectX"
@@ -61130,7 +61130,7 @@
         {
           "id": "Feature/PushConstant/struct_content.test",
           "case": "Feature/PushConstant/struct_content.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "UNSUPPORTED: Metal || DirectX"
@@ -61138,7 +61138,7 @@
         {
           "id": "Feature/PushConstant/types.test",
           "case": "Feature/PushConstant/types.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "UNSUPPORTED: Metal || DirectX"
@@ -61146,7 +61146,7 @@
         {
           "id": "Feature/PushConstant/types_16bit.test",
           "case": "Feature/PushConstant/types_16bit.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "UNSUPPORTED: Metal || DirectX"
@@ -61154,7 +61154,7 @@
         {
           "id": "Feature/PushConstant/types_64bit.test",
           "case": "Feature/PushConstant/types_64bit.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "UNSUPPORTED: Metal || DirectX"
@@ -61162,7 +61162,7 @@
         {
           "id": "Feature/RT/closest-hit-barycentrics.test",
           "case": "Feature/RT/closest-hit-barycentrics.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: raytracing-pipeline"
@@ -61170,7 +61170,7 @@
         {
           "id": "Feature/RT/closest-hit-primitive-index.test",
           "case": "Feature/RT/closest-hit-primitive-index.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: raytracing-pipeline"
@@ -61178,7 +61178,7 @@
         {
           "id": "Feature/RT/closest-hit-world-ray.test",
           "case": "Feature/RT/closest-hit-world-ray.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: raytracing-pipeline"
@@ -61186,7 +61186,7 @@
         {
           "id": "Feature/RT/dispatch-rays-dimensions.test",
           "case": "Feature/RT/dispatch-rays-dimensions.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: raytracing-pipeline"
@@ -61194,7 +61194,7 @@
         {
           "id": "Feature/RT/dispatch-rays-index.test",
           "case": "Feature/RT/dispatch-rays-index.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: raytracing-pipeline"
@@ -61202,7 +61202,7 @@
         {
           "id": "Feature/RT/miss-shader-index.test",
           "case": "Feature/RT/miss-shader-index.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: raytracing-pipeline"
@@ -61210,7 +61210,7 @@
         {
           "id": "Feature/RT/ray-contribution-to-hit-group-index.test",
           "case": "Feature/RT/ray-contribution-to-hit-group-index.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: raytracing-pipeline"
@@ -61218,7 +61218,7 @@
         {
           "id": "Feature/RT/raygen-roundtrip.test",
           "case": "Feature/RT/raygen-roundtrip.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: raytracing-pipeline"
@@ -61554,7 +61554,7 @@
         {
           "id": "Feature/Semantics/Barycentrics.test",
           "case": "Feature/Semantics/Barycentrics.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: Barycentrics"
@@ -61562,7 +61562,7 @@
         {
           "id": "Feature/Semantics/BarycentricsNoPerspective.test",
           "case": "Feature/Semantics/BarycentricsNoPerspective.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: Barycentrics"
@@ -61658,7 +61658,7 @@
         {
           "id": "Feature/Semantics/ShadingRate.test",
           "case": "Feature/Semantics/ShadingRate.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: FragmentShadingRate"
@@ -61674,7 +61674,7 @@
         {
           "id": "Feature/Semantics/StencilCompareOps.test",
           "case": "Feature/Semantics/StencilCompareOps.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: ShaderStencilRef"
@@ -61682,7 +61682,7 @@
         {
           "id": "Feature/Semantics/StencilRef.test",
           "case": "Feature/Semantics/StencilRef.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: ShaderStencilRef"
@@ -61698,7 +61698,7 @@
         {
           "id": "Feature/SpecializationConstant/duplicate_spec_id.test",
           "case": "Feature/SpecializationConstant/duplicate_spec_id.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: Vulkan"
@@ -61706,7 +61706,7 @@
         {
           "id": "Feature/SpecializationConstant/duplicate_spec_id_in_config.test",
           "case": "Feature/SpecializationConstant/duplicate_spec_id_in_config.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: Vulkan"
@@ -61714,7 +61714,7 @@
         {
           "id": "Feature/SpecializationConstant/invalid_bool.test",
           "case": "Feature/SpecializationConstant/invalid_bool.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: Vulkan"
@@ -61722,7 +61722,7 @@
         {
           "id": "Feature/SpecializationConstant/invalid_double.test",
           "case": "Feature/SpecializationConstant/invalid_double.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: Vulkan"
@@ -61730,7 +61730,7 @@
         {
           "id": "Feature/SpecializationConstant/invalid_float.test",
           "case": "Feature/SpecializationConstant/invalid_float.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: Vulkan"
@@ -61738,7 +61738,7 @@
         {
           "id": "Feature/SpecializationConstant/invalid_int16.test",
           "case": "Feature/SpecializationConstant/invalid_int16.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: Vulkan"
@@ -61746,7 +61746,7 @@
         {
           "id": "Feature/SpecializationConstant/invalid_int32.test",
           "case": "Feature/SpecializationConstant/invalid_int32.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: Vulkan"
@@ -61754,7 +61754,7 @@
         {
           "id": "Feature/SpecializationConstant/invalid_uint16.test",
           "case": "Feature/SpecializationConstant/invalid_uint16.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: Vulkan"
@@ -61762,7 +61762,7 @@
         {
           "id": "Feature/SpecializationConstant/invalid_uint32.test",
           "case": "Feature/SpecializationConstant/invalid_uint32.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: Vulkan"
@@ -61770,7 +61770,7 @@
         {
           "id": "Feature/SpecializationConstant/spec_const.f64.test",
           "case": "Feature/SpecializationConstant/spec_const.f64.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: Vulkan"
@@ -61778,7 +61778,7 @@
         {
           "id": "Feature/SpecializationConstant/spec_const_32_bits.test",
           "case": "Feature/SpecializationConstant/spec_const_32_bits.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: Vulkan"
@@ -61786,7 +61786,7 @@
         {
           "id": "Feature/SpecializationConstant/spec_const_other_sizes.test",
           "case": "Feature/SpecializationConstant/spec_const_other_sizes.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: Vulkan"
@@ -62178,7 +62178,7 @@
         {
           "id": "Feature/Vk.SampledTextures/Vk.SampledTexture2D/Vk.SampledTexture2D.CalculateLevelOfDetail.test.yaml",
           "case": "Feature/Vk.SampledTextures/Vk.SampledTexture2D/Vk.SampledTexture2D.CalculateLevelOfDetail.test.yaml",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "UNSUPPORTED: !Vulkan"
@@ -62186,7 +62186,7 @@
         {
           "id": "Feature/Vk.SampledTextures/Vk.SampledTexture2D/Vk.SampledTexture2D.Gather.test.yaml",
           "case": "Feature/Vk.SampledTextures/Vk.SampledTexture2D/Vk.SampledTexture2D.Gather.test.yaml",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "UNSUPPORTED: !Vulkan"
@@ -62194,7 +62194,7 @@
         {
           "id": "Feature/Vk.SampledTextures/Vk.SampledTexture2D/Vk.SampledTexture2D.GatherCmp.test.yaml",
           "case": "Feature/Vk.SampledTextures/Vk.SampledTexture2D/Vk.SampledTexture2D.GatherCmp.test.yaml",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "UNSUPPORTED: !Vulkan"
@@ -62202,7 +62202,7 @@
         {
           "id": "Feature/Vk.SampledTextures/Vk.SampledTexture2D/Vk.SampledTexture2D.GetDimensions.test.yaml",
           "case": "Feature/Vk.SampledTextures/Vk.SampledTexture2D/Vk.SampledTexture2D.GetDimensions.test.yaml",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "UNSUPPORTED: !Vulkan"
@@ -62210,7 +62210,7 @@
         {
           "id": "Feature/Vk.SampledTextures/Vk.SampledTexture2D/Vk.SampledTexture2D.Load.test.yaml",
           "case": "Feature/Vk.SampledTextures/Vk.SampledTexture2D/Vk.SampledTexture2D.Load.test.yaml",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "UNSUPPORTED: !Vulkan"
@@ -62218,7 +62218,7 @@
         {
           "id": "Feature/Vk.SampledTextures/Vk.SampledTexture2D/Vk.SampledTexture2D.Sample.test.yaml",
           "case": "Feature/Vk.SampledTextures/Vk.SampledTexture2D/Vk.SampledTexture2D.Sample.test.yaml",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "UNSUPPORTED: !Vulkan"
@@ -62226,7 +62226,7 @@
         {
           "id": "Feature/Vk.SampledTextures/Vk.SampledTexture2D/Vk.SampledTexture2D.SampleBias.test.yaml",
           "case": "Feature/Vk.SampledTextures/Vk.SampledTexture2D/Vk.SampledTexture2D.SampleBias.test.yaml",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "UNSUPPORTED: !Vulkan"
@@ -62234,7 +62234,7 @@
         {
           "id": "Feature/Vk.SampledTextures/Vk.SampledTexture2D/Vk.SampledTexture2D.SampleCmp.test.yaml",
           "case": "Feature/Vk.SampledTextures/Vk.SampledTexture2D/Vk.SampledTexture2D.SampleCmp.test.yaml",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "UNSUPPORTED: !Vulkan"
@@ -62242,7 +62242,7 @@
         {
           "id": "Feature/Vk.SampledTextures/Vk.SampledTexture2D/Vk.SampledTexture2D.SampleGrad.test.yaml",
           "case": "Feature/Vk.SampledTextures/Vk.SampledTexture2D/Vk.SampledTexture2D.SampleGrad.test.yaml",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "UNSUPPORTED: !Vulkan"
@@ -62250,7 +62250,7 @@
         {
           "id": "Feature/Vk.SampledTextures/Vk.SampledTexture2D/Vk.SampledTexture2D.Sampler.address.test.yaml",
           "case": "Feature/Vk.SampledTextures/Vk.SampledTexture2D/Vk.SampledTexture2D.Sampler.address.test.yaml",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "UNSUPPORTED: !Vulkan"
@@ -62258,7 +62258,7 @@
         {
           "id": "Feature/Vk.SampledTextures/Vk.SampledTexture2D/Vk.SampledTexture2D.Sampler.filter.test.yaml",
           "case": "Feature/Vk.SampledTextures/Vk.SampledTexture2D/Vk.SampledTexture2D.Sampler.filter.test.yaml",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "UNSUPPORTED: !Vulkan"
@@ -62266,7 +62266,7 @@
         {
           "id": "Feature/Vk.SampledTextures/Vk.SampledTexture2D/Vk.SampledTexture2D.Sampler.mips.test.yaml",
           "case": "Feature/Vk.SampledTextures/Vk.SampledTexture2D/Vk.SampledTexture2D.Sampler.mips.test.yaml",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "UNSUPPORTED: !Vulkan"
@@ -62274,7 +62274,7 @@
         {
           "id": "Feature/Vk.SampledTextures/Vk.SampledTexture2D/Vk.SampledTexture2D.mips.OperatorIndex.test.yaml",
           "case": "Feature/Vk.SampledTextures/Vk.SampledTexture2D/Vk.SampledTexture2D.mips.OperatorIndex.test.yaml",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "UNSUPPORTED: !Vulkan"
@@ -62402,7 +62402,7 @@
         {
           "id": "Graphics/MultipleViewports.test",
           "case": "Graphics/MultipleViewports.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: multi-viewport"
@@ -62530,7 +62530,7 @@
         {
           "id": "Tools/Offloader/ArraySliceValidation.test",
           "case": "Tools/Offloader/ArraySliceValidation.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "fail",
           "detail": "FileCheck: CHECK: expected string not found in input: Resource 'Tex' is not a texture array, so ArraySlices must be 1 (got 2)."
@@ -62626,7 +62626,7 @@
         {
           "id": "Tools/Offloader/BufferSizeValidation.test.yaml",
           "case": "Tools/Offloader/BufferSizeValidation.test.yaml",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "pass",
           "detail": ""
@@ -62674,7 +62674,7 @@
         {
           "id": "Tools/Offloader/invalid-sample-count.test",
           "case": "Tools/Offloader/invalid-sample-count.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: Vulkan"
@@ -62682,7 +62682,7 @@
         {
           "id": "Tools/Offloader/missing-counter-binding.test",
           "case": "Tools/Offloader/missing-counter-binding.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: Vulkan"
@@ -62698,7 +62698,7 @@
         {
           "id": "Tools/Offloader/stencil-state-validation.test",
           "case": "Tools/Offloader/stencil-state-validation.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "pass",
           "detail": ""
@@ -62706,7 +62706,7 @@
         {
           "id": "Tools/api-query/HostInfo.test",
           "case": "Tools/api-query/HostInfo.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "not-modelled",
           "detail": "the RUN line `%api_query`"
@@ -62922,7 +62922,7 @@
         {
           "id": "WaveOps/WaveActiveAllEqual.Wave128.test",
           "case": "WaveOps/WaveActiveAllEqual.Wave128.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: WaveSize_128"
@@ -62938,7 +62938,7 @@
         {
           "id": "WaveOps/WaveActiveAllEqual.Wave64.test",
           "case": "WaveOps/WaveActiveAllEqual.Wave64.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: WaveSize_64"
@@ -62978,7 +62978,7 @@
         {
           "id": "WaveOps/WaveActiveBallot.Modulo.Wave128.test",
           "case": "WaveOps/WaveActiveBallot.Modulo.Wave128.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: WaveSize_128"
@@ -62994,7 +62994,7 @@
         {
           "id": "WaveOps/WaveActiveBallot.Modulo.Wave64.test",
           "case": "WaveOps/WaveActiveBallot.Modulo.Wave64.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: WaveSize_64"
@@ -63002,7 +63002,7 @@
         {
           "id": "WaveOps/WaveActiveBallot.Wave128.test",
           "case": "WaveOps/WaveActiveBallot.Wave128.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: WaveSize_128"
@@ -63018,7 +63018,7 @@
         {
           "id": "WaveOps/WaveActiveBallot.Wave64.test",
           "case": "WaveOps/WaveActiveBallot.Wave64.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: WaveSize_64"
@@ -63258,7 +63258,7 @@
         {
           "id": "WaveOps/WavePrefixCountBits.Wave128.test",
           "case": "WaveOps/WavePrefixCountBits.Wave128.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: WaveSize_128"
@@ -63274,7 +63274,7 @@
         {
           "id": "WaveOps/WavePrefixCountBits.Wave64.test",
           "case": "WaveOps/WavePrefixCountBits.Wave64.test",
-          "format": "",
+          "format": "dxil",
           "model": "",
           "status": "unsupported",
           "detail": "REQUIRES: WaveSize_64"

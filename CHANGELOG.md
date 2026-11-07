@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- `iridia-coverage`: the table names the dx readers' versions as the build takes them (from `Cargo.lock`, where it
+  named 0.5.0 after 0.11.0 came in), and every row has a format: a vkd3d run with no program (the compiler refused
+  every shader) its runner's, an offload test with no program DXIL's (the suite is read for DirectX with DXC).
+
 ## 0.6.0 (2026-11-07)
 
 Breaking changes, for code that uses 0.5.0 (each is in its entry below):
