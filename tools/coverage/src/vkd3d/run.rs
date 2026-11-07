@@ -306,6 +306,11 @@ pub fn compare_double(got: u64, expected: u64, ulps: u32) -> bool {
     (i128::from(order(got)) - i128::from(order(expected))).unsigned_abs() <= u128::from(ulps)
 }
 
+/// The major shader model of a Direct3D 9 target (`vs_2_0`: 2).
+fn shader_model(target: &str) -> Option<u32> {
+    target.split('_').nth(1)?.chars().next()?.to_digit(10)
+}
+
 /// The bytes a probe of `kind` with `count` elements reads at each texel.
 fn probe_size(kind: &str, count: u32) -> usize {
     match kind {
@@ -1259,6 +1264,8 @@ fn draw_step(
         point_size: state.point_size,
         point_sprite: state.point_sprite,
         flat_colours: d3d9 && state.flat,
+        // shader models 1 and 2 pass colours through registers of [0, 1] (`oD#`), 3 through general ones
+        clamp_colours: d3d9 && shader_model(&vs.lifted.program.provenance.target).is_some_and(|m| m < 3),
     };
     let vs_constants = constant_rows(vsh, device);
     let ps_constants = constant_rows(psh, device);

@@ -74,7 +74,9 @@
 //!     which changed 1 pixel on the viewport's border. Points it draws as the GPU does.
 //! - **Interpolation.** At the pixel centre, from the snapped positions: perspective-correct (the default), linear in
 //!   screen space (`noperspective`) or the provoking vertex's value (`nointerpolation`, integers; the primitive's first
-//!   vertex). Direct3D 9's flat shade mode ([`Rasterizer::flat_colours`]) gives the colour inputs (`COLOR`) the
+//!   vertex). Direct3D 9's shader model 2 clamps each vertex's colours to [0, 1] first
+//!   ([`Rasterizer::clamp_colours`]). Direct3D 9's flat shade mode ([`Rasterizer::flat_colours`]) gives the colour
+//!   inputs (`COLOR`) the
 //!   provoking vertex's value and leaves the rest as they are. On a line the weight is the centre's place along the
 //!   line's major axis; on a point every value is the vertex's. Centroid and sample interpolation are the centre's (one
 //!   sample a pixel). Depth is linear in screen space; the depth test and write clamp it to the viewport's depth range,
@@ -199,6 +201,9 @@ pub struct Rasterizer {
     /// Direct3D 9's flat shade mode (`D3DSHADE_FLAT`): the pixel program's colour inputs (`COLOR`) are the provoking
     /// vertex's, whatever their interpolation; its other inputs are interpolated as they would be.
     pub flat_colours: bool,
+    /// Direct3D 9's shader models 1 and 2: a vertex program's colour outputs (`COLOR`, its `oD#` registers) reach the
+    /// pixel program clamped to [0, 1] (NaN to 0), each vertex's value before it is interpolated.
+    pub clamp_colours: bool,
 }
 
 /// Direct3D 9's point size: `D3DRS_POINTSIZE`, which a vertex program's `PSIZE` output replaces, held to
@@ -1039,12 +1044,20 @@ impl<'a> Raster<'a> {
                             continue;
                         }
                         let Some(from) = from_lanes.get(k) else { continue };
+                        let clamped = *colour && state.clamp_colours;
                         let word = |v: &Shaded| {
-                            v.outputs
+                            let w = v
+                                .outputs
                                 .get(*from_register)
                                 .and_then(|r| r.get(*from as usize))
                                 .copied()
-                                .unwrap_or(0)
+                                .unwrap_or(0);
+                            if !clamped {
+                                return w;
+                            }
+                            let x = f32::from_bits(w);
+                            // NaN and everything below 0 to 0
+                            if x > 0.0 { x.min(1.0).to_bits() } else { 0 }
                         };
                         // the primitive's own vertices only: a line's third weight and a point's others weigh nothing
                         let blend = |weights: [f64; 3]| {

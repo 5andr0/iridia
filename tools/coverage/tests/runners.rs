@@ -358,3 +358,16 @@ fn a_minimum_precision_constant_is_the_half_in_its_word() {
 fn a_hull_program_without_a_control_point_phase_passes_its_points_through() {
     assert_selected_pass(&vkd3d_runs("vkd3d/dxbc.json.gz", "tessellation.shader_test"));
 }
+
+/// Direct3D 9's shader model 2 clamps a vertex program's colours to [0, 1] on their way to the pixel program, and 3
+/// does not: color-clamping reads (-2, 1, 2, -1) / 10 as (0, 0.1, 0.1, 0) at 2.0 and as itself at 3.0.
+#[test]
+fn shader_model_2_clamps_colours_between_the_stages() {
+    let runs = vkd3d_runs("vkd3d/d3d9.json.gz", "color-clamping.shader_test");
+    assert_eq!(
+        runs.iter().filter(|r| r.selected()).count(),
+        2,
+        "the 2.0 and 3.0 runs"
+    );
+    assert_selected_pass(&runs);
+}
