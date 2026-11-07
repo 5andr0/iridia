@@ -2,7 +2,7 @@
 //! text of a value's name, and a lane-by-lane call of a helper function.
 
 use alloc::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     format,
     string::{String, ToString},
     vec::Vec,
@@ -17,6 +17,7 @@ use crate::flow::Construct;
 use crate::helpers::Helper;
 use crate::memory::Atomics;
 use crate::names::Names;
+use crate::origin::Sites;
 use crate::profile::Profile;
 use crate::text::{self, err};
 
@@ -64,7 +65,22 @@ pub(crate) struct Writer<'a> {
     pub next: u32,
     /// Whether each value has been defined yet.
     pub defined: Vec<bool>,
+    /// The values defined inside a region that has ended.
+    pub hidden: BTreeSet<usize>,
     pub constructs: Vec<Construct>,
+    /// Per vector value built of known scalars, the scalar of each lane (names of values already bound, or literals): a
+    /// lane read takes the scalar, so that a lane that is the same in every invocation stays so for a compiler's
+    /// uniformity analysis, which takes a whole vector as the least uniform of its lanes.
+    pub lanes: BTreeMap<u32, Vec<String>>,
+    /// The scalar of each lane of each value an `If` arm yielded (set where the arm ends in a yield, taken by the `If`).
+    pub gathered: Option<Vec<Vec<String>>>,
+    /// Where each lane of each value comes from, for the lanes a variable need not hold.
+    pub sites: Sites<'a>,
+    /// Per storage (a construct's result or a loop's parameter), the scalar each lane is in place of a variable: a lane the
+    /// construct leaves the same as a value bound before it.
+    pub forward: BTreeMap<String, Vec<Option<String>>>,
+    /// Per variable that holds a vector, the variable of each lane.
+    pub split: BTreeMap<String, Vec<String>>,
     /// The local of each output slot that a member carries.
     pub outputs: Vec<Option<String>>,
     /// Structure declarations the module needs besides the result's.
@@ -85,12 +101,24 @@ impl Writer<'_> {
     /// The text `f` writes at one level deeper, not yet in the body.
     pub(crate) fn capture(&mut self, f: impl FnOnce(&mut Self) -> R<()>) -> R<String> {
         let outer = core::mem::take(&mut self.out);
+        let before = self.defined.clone();
         self.depth = self.depth.saturating_add(1);
         let done = f(self);
         self.depth = self.depth.saturating_sub(1);
         let inner = core::mem::replace(&mut self.out, outer);
+        // what the text declares is out of scope after it (a region's braces close)
+        for (i, (now, was)) in self.defined.iter().zip(&before).enumerate() {
+            if *now && !*was {
+                self.hidden.insert(i);
+            }
+        }
         done?;
         Ok(inner)
+    }
+
+    /// Whether the name of `v` can be read here: it has been defined, and not inside a region that has ended.
+    pub(crate) fn visible(&self, v: ValueId) -> bool {
+        self.defined.get(v.0 as usize).copied().unwrap_or(false) && !self.hidden.contains(&(v.0 as usize))
     }
 
     /// A temporary made of `expr`, named for use more than once: `let x3 = expr;`.
@@ -136,6 +164,19 @@ impl Writer<'_> {
         let name = self.name(v);
         self.line(&format!("let {name} = {expr};"));
         self.mark(v)
+    }
+
+    /// The scalar of each lane of `v`: those known, or `v`'s own lanes.
+    pub(crate) fn lane_names(&self, v: ValueId) -> R<Vec<String>> {
+        if let Some(known) = self.lanes.get(&v.0) {
+            return Ok(known.clone());
+        }
+        let x = self.get(v)?;
+        let t = self.vty(v)?;
+        if t.lanes == 1 {
+            return Ok(alloc::vec![x]);
+        }
+        (0..t.lanes).map(|k| self.lane(&x, t, k)).collect()
     }
 
     /// Record that `v` has its name defined.

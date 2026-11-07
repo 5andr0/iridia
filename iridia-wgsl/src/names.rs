@@ -291,10 +291,17 @@ const PREFIXES: &[&str] = &[
 
 /// Whether `name` is of the shape of a name the writer makes: a value `v3`, a temporary `x7`, a parameter's storage `p2`.
 fn made_by_the_writer(name: &str) -> bool {
+    // `v3`, `x7`, `p2`, and a lane of one: `p2_1`, `q3_0`
     let mut chars = name.chars();
-    matches!(chars.next(), Some('v' | 'x' | 'p' | 'o' | 'a'))
-        && chars.as_str().chars().all(|c| c.is_ascii_digit())
-        && !chars.as_str().is_empty()
+    let (digits, lane) = match chars.next() {
+        Some('v' | 'x' | 'p' | 'o' | 'a' | 'q') => match chars.as_str().split_once('_') {
+            Some((d, l)) => (d, Some(l)),
+            None => (chars.as_str(), None),
+        },
+        _ => return false,
+    };
+    let all_digits = |s: &str| !s.is_empty() && s.chars().all(|c| c.is_ascii_digit());
+    all_digits(digits) && lane.is_none_or(all_digits)
 }
 
 /// Whether `name` may not be declared as it is.

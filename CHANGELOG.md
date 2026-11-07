@@ -15,7 +15,13 @@
   `Profile::BROWSER` writes standard WebGPU WGSL (a `diagnostic(off, derivative_uniformity);` where the program samples or
   differentiates, since the source program takes those derivatives where it takes them); `Profile::NAGA` binds Direct3D's registers
   and writes naga's dialect. Held to upstream naga's reader and validator, to Tint (`tools.tint`) and, run on WARP, to the IR
-  executor, by `iridia-dxbc`'s `exec_wgsl` (debug keys `shader.writer`, `shader.tint`).
+  executor, by `iridia-dxbc`'s `exec_wgsl` (debug keys `shader.writer`, `shader.tint`, `shader.tint_keep`, `shader.only`,
+  `shader.worst`, `shader.dump`). A vector that a loop or an `if` carries is kept a lane at a time, and a lane the construct leaves
+  the value it was before is that value, not a variable: Tint's uniformity analysis takes a variable assigned under a divergent
+  condition, or a vector with one thread-dependent lane, to differ between threads, and a barrier after it is refused. The
+  barrier programs of the Elden Ring and Riders Republic corpora are accepted by Tint, apart from four Elden Ring light
+  organisers whose counter starts at the thread's index and subtracts it again: uniform by arithmetic, which WGSL's analysis
+  cannot follow.
 - `iridia-dxil`: a switch several of whose cases (or a case and the default, or both ways of a branch) go to one
   block gives that block one set of arguments. dxc writes the block's phi with an entry per edge, the same value on
   each (`phi [7.0, %0]` three times); the IR lift made each edge's arguments afresh, so a constant became three

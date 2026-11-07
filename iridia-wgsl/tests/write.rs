@@ -337,3 +337,81 @@ fn main {
     let wgsl = iridia_wgsl::wgsl(&plain, &browser).unwrap();
     assert!(!wgsl.contains("enable"), "{wgsl}");
 }
+
+/// A pixel program writing `output 0.x` from a function of literals; its text is read back and validated by naga, whose
+/// constant evaluation refuses an operation on literals that comes to infinity or NaN.
+fn constants_only(body: &str) -> Program {
+    program(
+        &format!("iridia-ir 1\nfn main {{\n{body}  return\n}}\n"),
+        &[],
+        &[F4],
+        Vec::new(),
+    )
+}
+
+const SHOW_FOURS: &str = "SHOW";
+
+#[test]
+fn operations_on_literals_that_are_not_finite_are_written_so_naga_accepts_them() {
+    for (name, body) in [
+        (
+            "log of zero",
+            "  %0: f32 = f32(0.0)\n  %1: f32 = flog2 %0\n  output 0.x = %1\n",
+        ),
+        (
+            "1 over the inverse square root of zero",
+            "  %0: f32 = f32(0.0)\n  %1: f32 = finversesqrt %0\n  %2: f32 = f32(1.0)\n  %3: f32 = fdiv %2, %1\n  output 0.x = %3\n",
+        ),
+        (
+            "inverse square root of -1",
+            "  %0: f32 = f32(-1.0)\n  %1: f32 = finversesqrt %0\n  output 0.x = %1\n",
+        ),
+        (
+            "1 over zero",
+            "  %0: f32 = f32(1.0)\n  %1: f32 = f32(0.0)\n  %2: f32 = fdiv %0, %1\n  output 0.x = %2\n",
+        ),
+    ] {
+        let p = constants_only(body);
+        for profile in [&Profile::NAGA, &Profile::BROWSER] {
+            let wgsl = written(&p, profile);
+            // where the texts are wanted outside the test (for another validator), `SHOW` names a folder for them
+            if let Some(dir) = std::env::var_os(SHOW_FOURS) {
+                let which = if profile.directives == iridia_wgsl::Directives::Naga {
+                    "naga"
+                } else {
+                    "browser"
+                };
+                let file = format!(
+                    "{}/{}-{which}.wgsl",
+                    dir.to_string_lossy(),
+                    name.replace(' ', "_")
+                );
+                std::fs::write(file, &wgsl).unwrap();
+            }
+        }
+    }
+}
+
+/// The control of the test above: the same operations with the literals written in them are what naga refuses, so the
+/// fixtures there can fail.
+#[test]
+fn naga_refuses_the_operations_on_literals_when_they_are_written_inline() {
+    for inline in [
+        "log2(0.0f)",
+        "1.0f / 0.0f",
+        "inverseSqrt(-1.0f)",
+        "1.0f / inverseSqrt(0.0f)",
+    ] {
+        let text = format!("fn f() -> f32 {{\n    return {inline};\n}}\n");
+        let refused = match naga::front::wgsl::parse_str(&text) {
+            Err(_) => true,
+            Ok(module) => naga::valid::Validator::new(
+                naga::valid::ValidationFlags::all(),
+                naga::valid::Capabilities::all(),
+            )
+            .validate(&module)
+            .is_err(),
+        };
+        assert!(refused, "{inline}");
+    }
+}

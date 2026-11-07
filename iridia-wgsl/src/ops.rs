@@ -32,7 +32,17 @@ impl Writer<'_> {
         let t = def.ty;
         let op = def.op.clone();
         let expr = match op {
-            Op::Literal(bits) => text::value(t, bits)?,
+            Op::Literal(bits) => {
+                if t.lanes > 1 {
+                    let scalars = bits
+                        .iter()
+                        .take(usize::from(t.lanes))
+                        .map(|b| text::literal(t.scalar, *b))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    self.lanes.insert(v.0, scalars);
+                }
+                text::value(t, bits)?
+            }
             Op::Undef => format!("{}()", self.ty(t)?),
             Op::Param => return Err(err(format!("parameter %{} has no value here", v.0))),
             Op::Unary(u, a) => self.unary(u, a)?,
@@ -68,11 +78,37 @@ impl Writer<'_> {
                 )
             }
             Op::Compose(parts) => {
-                let parts = parts
+                let mut scalars = Vec::new();
+                for p in &parts {
+                    scalars.extend(self.lane_names(*p)?);
+                }
+                let text = format!("{}({})", self.ty(t)?, scalars.join(", "));
+                if scalars.len() == usize::from(t.lanes) {
+                    self.lanes.insert(v.0, scalars);
+                }
+                text
+            }
+            Op::Swizzle(a, lanes) if self.lanes.contains_key(&a.0) => {
+                let known = self.lane_names(a)?;
+                let picked = lanes
                     .iter()
-                    .map(|p| self.get(*p))
+                    .copied()
+                    .take(usize::from(t.lanes))
+                    .map(|k| {
+                        known
+                            .get(usize::from(k))
+                            .cloned()
+                            .ok_or_else(|| err("a lane past the vector's"))
+                    })
                     .collect::<Result<Vec<_>, _>>()?;
-                format!("{}({})", self.ty(t)?, parts.join(", "))
+                match picked.as_slice() {
+                    [one] => one.clone(),
+                    _ => {
+                        let text = format!("{}({})", self.ty(t)?, picked.join(", "));
+                        self.lanes.insert(v.0, picked);
+                        text
+                    }
+                }
             }
             Op::Swizzle(a, lanes) => {
                 let x = self.get(a)?;
@@ -91,6 +127,10 @@ impl Writer<'_> {
             }
             Op::Splat(a) => {
                 let x = self.get(a)?;
+                if self.vty(a)?.lanes == 1 {
+                    self.lanes
+                        .insert(v.0, alloc::vec![x.clone(); usize::from(t.lanes)]);
+                }
                 format!("{}({x})", self.ty(t)?)
             }
             Op::Dot(a, b) => format!("dot({}, {})", self.get(a)?, self.get(b)?),

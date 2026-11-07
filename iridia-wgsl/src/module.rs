@@ -2,7 +2,7 @@
 //! interface, and the helper functions its operations call.
 
 use alloc::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     format,
     string::{String, ToString},
     vec::Vec,
@@ -180,7 +180,13 @@ impl<'a> Writer<'a> {
             depth: 1,
             next: 0,
             defined: alloc::vec![false; f.values.len()],
+            hidden: BTreeSet::new(),
             constructs: Vec::new(),
+            lanes: BTreeMap::new(),
+            split: BTreeMap::new(),
+            gathered: None,
+            sites: crate::origin::Sites::of(f, body),
+            forward: BTreeMap::new(),
             outputs: alloc::vec![None; program.interface.outputs.len()],
             decls: Vec::new(),
         };

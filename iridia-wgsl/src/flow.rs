@@ -37,6 +37,37 @@ pub(crate) enum Yield<'a> {
     Fall(&'a [String]),
     /// A loop body: store the results and leave the loop.
     Break(&'a [String]),
+    /// An `If` arm: record the scalar of each lane of what it yields, for the `If` to give its results.
+    Gather,
+}
+
+/// The variable of lane `k` of the result `r` of `lanes` lanes.
+fn lane_var(r: ValueId, lanes: u8, k: usize) -> String {
+    if lanes == 1 {
+        format!("p{}", r.0)
+    } else {
+        format!("p{}_{k}", r.0)
+    }
+}
+
+/// Whether the scalar `s` (a name, a name's lane, or a literal) means the same after the arms `texts` as before them: a
+/// literal does, and a name does unless an arm declares it.
+fn outer_scalar(s: &str, texts: &[&str]) -> bool {
+    let base = s.split('.').next().unwrap_or(s);
+    let name = !base.is_empty() && base.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+    if name && !base.starts_with(|c: char| c.is_ascii_digit()) {
+        return !texts
+            .iter()
+            .any(|t| t.contains(&format!("let {base} ")) || t.contains(&format!("var {base}")));
+    }
+    // a literal: `0u`, `(-1i)`, `bitcast<f32>(5u)`, `true`
+    s.starts_with(|c: char| c.is_ascii_digit())
+        || s.starts_with("(-")
+        || s == "true"
+        || s == "false"
+        || s.starts_with("bitcast<f32>(")
+        || s.starts_with("iridia_f32_from_bits(")
+        || s.starts_with("i32(-")
 }
 
 impl Writer<'_> {
@@ -72,20 +103,109 @@ impl Writer<'_> {
 
     /// A variable for each value, of the value's type, and its name.
     fn storage_for(&mut self, vs: &[ValueId]) -> R<Vec<String>> {
+        self.storage_for_with(vs, &[])
+    }
+
+    /// The scalar each lane of `vs` is where it is the same as a value bound before the construct (`None` where a variable
+    /// holds it): the lanes a loop leaves unchanged, and the lanes every exit of a loop gives the same value.
+    fn forwards_of(&self, vs: &[ValueId]) -> R<Vec<Vec<Option<String>>>> {
         vs.iter()
             .map(|v| {
                 let t = self.vty(*v)?;
+                (0..t.lanes)
+                    .map(|k| {
+                        let (x, l) = self.sites.origin(*v, k);
+                        if (x, l) == (*v, k) || !self.visible(x) {
+                            return Ok(None);
+                        }
+                        Ok(self.lane_names(x)?.get(usize::from(l)).cloned())
+                    })
+                    .collect()
+            })
+            .collect()
+    }
+
+    /// [`Writer::storage_for`], with `forwards` (per value, per lane) the lanes that need no variable.
+    fn storage_for_with(&mut self, vs: &[ValueId], forwards: &[Vec<Option<String>>]) -> R<Vec<String>> {
+        vs.iter()
+            .enumerate()
+            .map(|(i, v)| {
+                let t = self.vty(*v)?;
                 let name = format!("p{}", v.0);
-                self.line(&format!("var {name}: {};", text::ty(t)?));
+                let fwd = forwards.get(i).filter(|f| f.iter().any(Option::is_some)).cloned();
+                if let Some(fwd) = fwd {
+                    let mut lanes = Vec::new();
+                    for (k, f) in fwd.iter().enumerate() {
+                        let var = lane_var(*v, t.lanes, k);
+                        if f.is_none() {
+                            self.line(&format!("var {var}: {};", text::scalar(t.scalar)?));
+                        }
+                        lanes.push(var);
+                    }
+                    self.forward.insert(name.clone(), fwd);
+                    self.split.insert(name.clone(), lanes);
+                } else if t.lanes > 1 {
+                    // a variable of a vector is a variable a lane: a compiler's uniformity analysis takes a whole vector
+                    // as the least uniform of its lanes, and a loop's counter often shares a register with a thread's
+                    // index
+                    let lanes: Vec<String> = (0..t.lanes).map(|k| format!("{name}_{k}")).collect();
+                    for l in &lanes {
+                        self.line(&format!("var {l}: {};", text::scalar(t.scalar)?));
+                    }
+                    self.split.insert(name.clone(), lanes);
+                } else {
+                    self.line(&format!("var {name}: {};", text::ty(t)?));
+                }
                 Ok(name)
             })
             .collect()
     }
 
+    /// Assign `v` to the storage `s`: a lane at a time where the variable is split.
+    fn assign(&mut self, s: &str, v: ValueId) -> R<()> {
+        if let Some(lanes) = self.split.get(s).cloned() {
+            let values = self.lane_names(v)?;
+            let fwd = self.forward.get(s).cloned().unwrap_or_default();
+            for (k, (l, x)) in lanes.iter().zip(&values).enumerate() {
+                if fwd.get(k).is_some_and(Option::is_some) {
+                    continue;
+                }
+                self.line(&format!("{l} = {x};"));
+            }
+        } else {
+            let value = self.get(v)?;
+            self.line(&format!("{s} = {value};"));
+        }
+        Ok(())
+    }
+
     /// The construct's values read the variables they were stored in: `let v3 = p3;`.
     fn load_storage(&mut self, vs: &[ValueId], storage: &[String]) -> R<()> {
         for (v, s) in vs.iter().zip(storage) {
-            self.define(*v, s)?;
+            if let Some(lanes) = self.split.get(s).cloned() {
+                // each lane read once into a value of its own, so a lane read later is that scalar
+                let t = self.vty(*v)?;
+                let fwd = self.forward.get(s).cloned().unwrap_or_default();
+                let mut scalars = Vec::new();
+                for (k, l) in lanes.iter().enumerate() {
+                    let from = fwd.get(k).cloned().flatten().unwrap_or_else(|| l.clone());
+                    if t.lanes == 1 {
+                        scalars.push(from);
+                    } else {
+                        let q = format!("q{}_{k}", v.0);
+                        self.line(&format!("let {q} = {from};"));
+                        scalars.push(q);
+                    }
+                }
+                if t.lanes == 1 {
+                    self.define(*v, scalars.first().map_or("", String::as_str))?;
+                } else {
+                    self.define(*v, &format!("{}({})", text::ty(t)?, scalars.join(", ")))?;
+                    self.lanes.insert(v.0, scalars);
+                }
+            } else {
+                self.define(*v, s)?;
+            }
         }
         Ok(())
     }
@@ -99,8 +219,123 @@ impl Writer<'_> {
             ));
         }
         for (s, v) in storage.iter().zip(vs) {
-            let value = self.get(*v)?;
-            self.line(&format!("{s} = {value};"));
+            self.assign(s, *v)?;
+        }
+        Ok(())
+    }
+
+    /// What each result of an `If` is after it, lane by lane: the scalar both arms yield where it is one that was bound
+    /// before the `If` (a lane the arms agree on needs no variable, and a variable assigned under a condition that differs
+    /// between invocations is, to a compiler's uniformity analysis, as different as the condition, whatever is stored), or
+    /// `None` where a variable holds it.
+    fn arms_give(
+        &self,
+        results: &[ValueId],
+        from_a: Option<&[Vec<String>]>,
+        from_b: Option<&[Vec<String>]>,
+        a: &str,
+        b: &str,
+    ) -> R<Vec<Vec<Option<String>>>> {
+        let before = |s: &str| outer_scalar(s, &[a, b]);
+        results
+            .iter()
+            .enumerate()
+            .map(|(i, r)| {
+                let n = usize::from(self.vty(*r)?.lanes);
+                Ok((0..n)
+                    .map(|k| {
+                        let lane = |from: Option<&[Vec<String>]>| {
+                            from.and_then(|f| f.get(i)).and_then(|l| l.get(k)).cloned()
+                        };
+                        // the value both arms come to, where that is one bound before the `If`
+                        let (x, l) = self.sites.origin(*r, u8::try_from(k).unwrap_or(0));
+                        let bound = self
+                            .visible(x)
+                            .then(|| {
+                                self.lane_names(x)
+                                    .ok()
+                                    .and_then(|ls| ls.get(usize::from(l)).cloned())
+                            })
+                            .flatten()
+                            .filter(|name| (x, l) != (*r, u8::try_from(k).unwrap_or(0)) && before(name));
+                        if bound.is_some() {
+                            return bound;
+                        }
+                        match (lane(from_a), lane(from_b)) {
+                            (Some(x), Some(y)) if x == y && before(&x) => Some(x),
+                            (Some(x), None) | (None, Some(x)) if before(&x) => Some(x),
+                            _ => None,
+                        }
+                    })
+                    .collect())
+            })
+            .collect()
+    }
+
+    /// Declare the variables of the lanes that no scalar is given for, and give for each arm the assignments that end it.
+    fn assign_arms(
+        &mut self,
+        results: &[ValueId],
+        given: &[Vec<Option<String>>],
+        from_a: Option<&[Vec<String>]>,
+        from_b: Option<&[Vec<String>]>,
+    ) -> R<(String, String)> {
+        let mut for_a = Vec::new();
+        let mut for_b = Vec::new();
+        for (i, r) in results.iter().enumerate() {
+            let t = self.vty(*r)?;
+            for (k, g) in given.get(i).into_iter().flatten().enumerate() {
+                if g.is_some() {
+                    continue;
+                }
+                let var = lane_var(*r, t.lanes, k);
+                self.line(&format!("var {var}: {};", text::scalar(t.scalar)?));
+                let from =
+                    |f: Option<&[Vec<String>]>| f.and_then(|f| f.get(i)).and_then(|l| l.get(k)).cloned();
+                if let Some(x) = from(from_a) {
+                    for_a.push(format!("{var} = {x};"));
+                }
+                if let Some(x) = from(from_b) {
+                    for_b.push(format!("{var} = {x};"));
+                }
+            }
+        }
+        let text = |lines: Vec<String>, w: &mut Self| {
+            w.capture(|w| {
+                for l in &lines {
+                    w.line(l);
+                }
+                Ok(())
+            })
+        };
+        let a = text(for_a, self)?;
+        let b = text(for_b, self)?;
+        Ok((a, b))
+    }
+
+    /// The results of an `If`: each lane read once into a value of its own, from the scalar both arms gave or from its
+    /// variable.
+    fn define_results(&mut self, results: &[ValueId], given: &[Vec<Option<String>>]) -> R<()> {
+        for (i, r) in results.iter().enumerate() {
+            let t = self.vty(*r)?;
+            let mut scalars = Vec::new();
+            for (k, g) in given.get(i).into_iter().flatten().enumerate() {
+                let from = g.clone().unwrap_or_else(|| lane_var(*r, t.lanes, k));
+                if t.lanes == 1 {
+                    scalars.push(from);
+                } else {
+                    let q = format!("q{}_{k}", r.0);
+                    self.line(&format!("let {q} = {from};"));
+                    scalars.push(q);
+                }
+            }
+            if t.lanes == 1 {
+                let only = scalars.first().cloned().unwrap_or_default();
+                self.define(*r, &only)?;
+            } else {
+                self.define(*r, &format!("{}({})", text::ty(t)?, scalars.join(", ")))?;
+                self.lanes.insert(r.0, scalars);
+            }
         }
         Ok(())
     }
@@ -120,6 +355,10 @@ impl Writer<'_> {
                 Yield::Top if vs.is_empty() => {}
                 Yield::Top => return Err(err("a yield of values at the end of the function")),
                 Yield::Fall(storage) => self.store_all(storage, vs)?,
+                Yield::Gather => {
+                    let lanes = vs.iter().map(|v| self.lane_names(*v)).collect::<R<Vec<_>>>()?;
+                    self.gathered = Some(lanes);
+                }
                 Yield::Break(storage) => {
                     self.store_all(storage, vs)?;
                     self.line("break;");
@@ -217,9 +456,17 @@ impl Writer<'_> {
                 results,
             } => {
                 let condition = self.get(*cond)?;
-                let storage = self.storage_for(results)?;
-                let a = self.capture(|w| w.region(accept, Yield::Fall(&storage)))?;
-                let b = self.capture(|w| w.region(reject, Yield::Fall(&storage)))?;
+                self.gathered = None;
+                let mut a = self.capture(|w| w.region(accept, Yield::Gather))?;
+                let from_a = self.gathered.take();
+                let mut b = self.capture(|w| w.region(reject, Yield::Gather))?;
+                let from_b = self.gathered.take();
+                let given = self.arms_give(results, from_a.as_deref(), from_b.as_deref(), &a, &b)?;
+                // the lanes the arms do not agree on are variables, assigned where each arm ends
+                let (assign_a, assign_b) =
+                    self.assign_arms(results, &given, from_a.as_deref(), from_b.as_deref())?;
+                a.push_str(&assign_a);
+                b.push_str(&assign_b);
                 self.line(&format!("if ({condition}) {{"));
                 self.out.push_str(&a);
                 if b.is_empty() {
@@ -229,7 +476,7 @@ impl Writer<'_> {
                     self.out.push_str(&b);
                     self.line("}");
                 }
-                self.load_storage(results, &storage)?;
+                self.define_results(results, &given)?;
             }
             Node::Switch {
                 label,
@@ -311,12 +558,15 @@ impl Writer<'_> {
                 body,
                 results,
             } => {
-                let param_storage = self.storage_for(params)?;
+                // the lanes of the state a `continue` always hands back unchanged, and of the results every exit gives alike,
+                // are values from before the loop
+                let param_forwards = self.forwards_of(params)?;
+                let result_forwards = self.forwards_of(results)?;
+                let param_storage = self.storage_for_with(params, &param_forwards)?;
                 for (s, v) in param_storage.iter().zip(inits) {
-                    let value = self.get(*v)?;
-                    self.line(&format!("{s} = {value};"));
+                    self.assign(s, *v)?;
                 }
-                let storage = self.storage_for(results)?;
+                let storage = self.storage_for_with(results, &result_forwards)?;
                 self.constructs.push(Construct {
                     label: *label,
                     results: storage.clone(),
