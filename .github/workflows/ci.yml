@@ -68,14 +68,38 @@ jobs:
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: "1.99.0"
-      - uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5.148
+      - name: Check whether any package enables releases
+        id: releases
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          import tomllib
+
+          with open('release-plz.toml', 'rb') as source:
+              config = tomllib.load(source)
+          default = config.get('workspace', {}).get('release', True)
+          overrides = {p['name']: p.get('release', default) for p in config.get('package', [])}
+          metadata = json.loads(subprocess.check_output(
+              ['cargo', 'metadata', '--locked', '--no-deps', '--format-version', '1']))
+          members = set(metadata['workspace_members'])
+          enabled = any(
+              p['id'] in members and p.get('publish') != [] and overrides.get(p['name'], default)
+              for p in metadata['packages'])
+          print('Releases enabled' if enabled else 'No package enables releases; release steps skipped')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              print(f'enabled={str(enabled).lower()}', file=output)
+          PY
+      - if: steps.releases.outputs.enabled == 'true'
+        uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5.148
         with:
           command: release
         env:
           GITHUB_TOKEN: ${{ github.token }}
       # a tag pushed with this job's token starts no workflow, so this starts the binaries' (release.yml) for each
       # Release of this commit that is still a draft (also when a rerun finishes a release)
-      - if: hashFiles('.github/workflows/release.yml') != ''
+      - if: steps.releases.outputs.enabled == 'true' && hashFiles('.github/workflows/release.yml') != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
