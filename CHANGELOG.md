@@ -111,6 +111,7 @@
 - Breaking: `iridia_passes::specialise` is now material feature specialisation, taking a program and known constant-buffer words and returning `Result<Specialised, SpecialiseError>`. `Specialised` is `#[must_use]`. The previous pipeline-state API is `specialise_state`.
 
 - New crate `iridia-analysis` (`no_std` with `alloc`, no `unsafe`): the `iridia` crate's analyses on the IR.
+  - `matrix::lines` and `matrix::lines_at` recover matrix row/column use, including indexed palettes; graph refusals use `GraphError`.
   - `flow::Values` is the value graph, lane by lane.
   - `flow::Flow` is what may reach each output lane and the discard, and via what (`Via`).
   - `flow::VertexDemand` is a vertex and pixel pair's vertex input lanes.

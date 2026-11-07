@@ -9,6 +9,7 @@ Part of [iridia](https://github.com/Kalmarv/iridia), which turns compiled shader
 - `flow::Values`: the program as a value graph, lane by lane: each output lane, each discard's conditions and each write as a graph of input lanes, texels, buffer words and the operations between them. Variables are followed through their loads and stores, branches meet in merges decided by their conditions, and loop headers carry values through one walk of each body. Headers that carry one unchanged value are removed afterwards.
 - `flow::Flow`: what may reach each output lane and the discard, and how: through its value, only as what decides which texel is read, or only through a condition (`flow::Via`).
 - `flow::VertexDemand`: the vertex input lanes a vertex and pixel program pair needs, the pixel program's reads followed back through the vertex outputs of the same label.
+- `matrix::lines` and `matrix::lines_at`: whether constant-buffer lines are rows or columns of the matrix applied to column vectors. `lines_at` takes `Result<&ProgramGraph, &GraphError>` and finds the buffer by its D3D binding, including a buffer whose sole array is a palette.
 - `reads::WordsRead`: the words of each constant buffer a program's results are made of, and which buffers it reads at an index it computes. `reads::ProgramGraph` is the value graph with its interface and its reads.
 
 ## Example
@@ -91,6 +92,10 @@ assert_eq!(
 ## Tests
 
 `cargo test -p iridia-analysis` runs the unit and property tests with no game files. The oracle tests compare each analysis with the one of the `iridia` crate on every program both read: the DXBC and DXIL fixtures, the slim corpus and Elden Ring's programs, which [`primase-testdata`](https://github.com/Kalmarv/primase) finds; with none of them present they skip.
+
+The matrix oracle compares 34 fixture constants and 24 constants in six slim DXBC programs, including integer
+matrix products expanded as multiplies and adds or lowered from multiply-add instructions. Integer and floating
+arithmetic show the same row/column structure.
 
 ## Licence
 

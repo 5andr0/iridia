@@ -5,6 +5,7 @@
 //!   write as a graph of inputs, texels, constants and the operations between them) and what may reach each output
 //!   lane and the discard, and how ([`flow::Flow`]); [`flow::VertexDemand`] is the vertex input lanes a pixel program
 //!   needs.
+//! - [`matrix`]: how constant-buffer lines form rows or columns of the applied matrix.
 //! - [`reads`]: the words of its constant buffers a program's results are made of ([`reads::WordsRead`]).
 //!
 //! An analysis reads a [`iridia_ir::Program`] as a lifter gives it: a body that is a control flow graph is structured
@@ -26,6 +27,7 @@
 extern crate alloc;
 
 pub mod flow;
+pub mod matrix;
 pub mod reads;
 
 pub use reads::{GraphError, ProgramGraph, WordsRead};
