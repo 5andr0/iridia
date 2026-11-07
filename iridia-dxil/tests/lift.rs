@@ -15,6 +15,10 @@ fn fixture(name: &str) -> Vec<u8> {
 /// float, so the lifter refuses each by name. The refusal is the outcome asserted, not a skipped file.
 const DOUBLE_FIXTURES: [&str; 1] = ["structured_tail.dxil"];
 
+/// Fixtures whose program reads and writes 16-bit lanes of raw or structured buffers, which this lifter refuses by name
+/// (the IR lift takes them: tests/ir_warp.rs). The refusal is the outcome asserted, not a skipped file.
+const SIXTEEN_BIT_LANE_FIXTURES: [&str; 1] = ["buffer_lanes16.dxil"];
+
 /// Fixtures that are a library of several programs, whose programs are the per-export fixtures beside them.
 const WHOLE_LIBRARIES: [&str; 1] = ["ray_subobjects.dxil"];
 
@@ -48,6 +52,15 @@ fn every_fixture_lifts() {
                 Err(e) if e.to_string().contains("double-precision floats are not lifted") => {}
                 other => failures.push(format!(
                     "{name}: expected the refusal of double-precision floats, got {other:?}"
+                )),
+            }
+            continue;
+        }
+        if SIXTEEN_BIT_LANE_FIXTURES.contains(&name.as_str()) {
+            match lift(&fixture(name)) {
+                Err(e) if e.to_string().contains("16-bit lanes of a raw or structured buffer are not lifted") => {}
+                other => failures.push(format!(
+                    "{name}: expected the refusal of 16-bit buffer lanes, got {other:?}"
                 )),
             }
             continue;

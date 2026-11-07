@@ -15,11 +15,13 @@ publish.workspace = true
 [dependencies]
 dxcontainer.workspace = true
 iridia.workspace = true
+iridia-ir.workspace = true
 dxil-reader.workspace = true
 naga.workspace = true
 half.workspace = true
 
 [dev-dependencies]
+iridia-passes.workspace = true
 primase-testdata.workspace = true
 serde_json.workspace = true
 

@@ -5,8 +5,9 @@
 //!
 //! - `A`, the older lift (`iridia_dxbc::lift`, `iridia_dxil::lift`, `iridia_d3d9::lift`): validated, written as WGSL
 //!   (a program of a stage WGSL has no entry point for, as its functions) and read back and validated by naga;
-//! - `IR`, the IR lift where the family has one (`iridia_dxbc::ir::lift`, `iridia_d3d9_ir::lift`): after `promote`,
-//!   `simplify` and `break_flags`, validated, each function's text printed, parsed back and printed again the same;
+//! - `IR`, the IR lift (`iridia_dxbc::ir::lift`, `iridia_dxil::ir::lift`, `iridia_d3d9_ir::lift`): after
+//!   `structurize` (a lift that builds a control flow graph), `promote`, `simplify` and `break_flags`, validated, each
+//!   function's text printed, parsed back and printed again the same;
 //! - `IR WGSL`, that program lowered to stock naga (`iridia_naga`, naga's own dialect) and written as WGSL, read back
 //!   and validated by naga.
 //!
@@ -98,10 +99,12 @@ fn ir(lifted: Result<iridia_ir::Program, iridia_ir::Refusal>) -> [Outcome; 2] {
         Err(e) => return [stop("lift", e.group()), not_reached()],
     };
     for f in std::iter::once(&mut program.entry).chain(program.patch.as_mut()) {
-        let passed = iridia_passes::promote(f).and_then(|()| {
-            iridia_passes::simplify(f);
-            iridia_passes::break_flags(f)
-        });
+        let passed = iridia_passes::structurize(f)
+            .and_then(|()| iridia_passes::promote(f))
+            .and_then(|()| {
+                iridia_passes::simplify(f);
+                iridia_passes::break_flags(f)
+            });
         if let Err(e) = passed {
             return [stop("passes", e), not_reached()];
         }
@@ -291,7 +294,10 @@ fn dxbc() {
 
 #[test]
 fn dxil() {
-    gate("dxil", &["A"], |bytes| vec![older(iridia_dxil::lift(bytes))]);
+    gate("dxil", &["A", "IR", "IR WGSL"], |bytes| {
+        let [b, c] = ir(iridia_dxil::ir::lift(bytes));
+        vec![older(iridia_dxil::lift(bytes)), b, c]
+    });
 }
 
 #[test]

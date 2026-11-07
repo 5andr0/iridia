@@ -357,6 +357,8 @@ dependencies = [
  "half",
  "iridia",
  "iridia-exec",
+ "iridia-ir",
+ "iridia-passes",
  "primase-naga",
  "primase-testdata",
  "serde_json",

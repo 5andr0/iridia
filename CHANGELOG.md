@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- `iridia-dxil::ir`: a lift of DXIL onto the IR, its body a control flow graph (block parameters for LLVM's phis,
+  blocks in reverse post-order) that `iridia_passes::structurize` makes structured. It lifts vertex (one that writes no
+  position too), pixel and compute programs, with the older lift's resource semantics carried over: constant buffer
+  rows (a minimum-precision row of 16-bit lanes reads each lane's low half), samples, gathers, texel loads and stores,
+  typed, raw and structured buffers, sizes and sample counts, sample positions, atomics, hidden counters (one per
+  element of an array of views), the interface edits the older lift makes (a texture sampled with a comparison is a
+  depth texture, a typed buffer four lanes an element, a view's access what the program does with it), 32-bit
+  denormals flushed unless the entry's `fp32-denorm-mode` is `preserve`, and `MakeDouble`, `SplitDouble` and
+  `Coverage`. A 16-bit lane of a raw or structured buffer is half of a word: read with a shift and a mask, written with
+  an atomic and and or, so another invocation's half of the word is never overwritten; `tests/ir_warp.rs` holds such a
+  program (`fixtures/buffer_lanes16`) to the memory Direct3D 12 WARP leaves, word for word. Hull, domain, geometry,
+  mesh, amplification and ray tracing programs, wave and quad operations and ray queries are refused by name for now.
+  `iridia-dxbc/tests/ir_gate.rs` takes DXIL containers: on the slim set's 4,059 DXIL programs, of the 796 the older
+  lift runs the IR agrees with it on 713 (the rest are refused by name: waves, other stages), and 586 agree again
+  through `iridia-naga`'s WGSL; none differ. The slim pre-push gate has the `IR` and `IR WGSL` columns for DXIL.
+- `iridia-dxil`: a structured buffer whose element holds native 16-bit members (`-enable-16bit-types`) is no longer
+  refused for a layout the interface reads as 32-bit lanes: its layout, which the interface's types cannot state, is
+  left out.
 - `iridia-naga` refuses a 1D array texture or storage image by name (WGSL has none; it wrote `texture_1d_array`, which
   naga does not read back), folds a conversion of an integer literal (naga's front end does not evaluate one of a 64-bit
   literal), and returns at the end of a function whose last block cannot be reached (naga wants the return).

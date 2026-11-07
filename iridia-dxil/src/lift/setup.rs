@@ -14,7 +14,7 @@ use dxil_reader::module::{Constant, Function, Module, Op, Value, ValueId};
 use dxil_reader::reflection::{self as records, Element, Range};
 
 /// The constant integer a value is, if it is one.
-pub(super) fn const_int(m: &Module, f: &Function, v: ValueId) -> Option<i64> {
+pub(crate) fn const_int(m: &Module, f: &Function, v: ValueId) -> Option<i64> {
     let value = match v.checked_sub(f.first) {
         None => m.values.get(v)?,
         Some(local) => f.locals.get(local)?,
@@ -28,7 +28,7 @@ pub(super) fn const_int(m: &Module, f: &Function, v: ValueId) -> Option<i64> {
 
 /// The range a `CreateHandleFromBinding` names: its class, lower bound and register space (the binding constant
 /// `{ lower, upper, space, class }`), and the offset into the range (the call's index is the register itself).
-pub(super) fn binding_of(m: &Module, f: &Function, bind: ValueId) -> Option<(u8, u32, u32)> {
+pub(crate) fn binding_of(m: &Module, f: &Function, bind: ValueId) -> Option<(u8, u32, u32)> {
     let value = match bind.checked_sub(f.first) {
         None => m.values.get(bind)?,
         Some(local) => f.locals.get(local)?,
@@ -48,7 +48,7 @@ pub(super) fn binding_of(m: &Module, f: &Function, bind: ValueId) -> Option<(u8,
 
 /// The system value a ray tracing `dx.op` reads (`InstanceID` 141 to `RayTCurrent` 154 except the matrices, and
 /// `PrimitiveIndex` 161 and `GeometryIndex` 213).
-pub(super) fn ray_system_value(code: u64) -> Option<SystemValue> {
+pub(crate) fn ray_system_value(code: u64) -> Option<SystemValue> {
     Some(match code {
         141 => SystemValue::InstanceId,
         142 => SystemValue::InstanceIndex,
@@ -70,7 +70,7 @@ pub(super) fn ray_system_value(code: u64) -> Option<SystemValue> {
 
 /// The module global whose value `v` is: the load of a global (or of a cast of one) that a library's handle is made
 /// from.
-pub(super) fn variable_loaded(m: &Module, f: &Function, v: ValueId) -> Option<ValueId> {
+pub(crate) fn variable_loaded(m: &Module, f: &Function, v: ValueId) -> Option<ValueId> {
     let load = f
         .instructions
         .iter()
@@ -93,7 +93,7 @@ pub(super) fn variable_loaded(m: &Module, f: &Function, v: ValueId) -> Option<Va
 }
 
 /// The `dx.op` opcode a call makes: the callee is a `dx.op.*` declaration and the first argument a constant.
-pub(super) fn dx_opcode(m: &Module, f: &Function, function: ValueId, args: &[ValueId]) -> Option<u64> {
+pub(crate) fn dx_opcode(m: &Module, f: &Function, function: ValueId, args: &[ValueId]) -> Option<u64> {
     if !m.name(function)?.starts_with("dx.op.") {
         return None;
     }
@@ -124,7 +124,7 @@ pub(crate) struct Setup {
 impl Setup {
     /// The setup of a program whose instructions are those of `functions` (the entry function, and a hull program's
     /// patch-constant function).
-    pub(super) fn new(chunks: &[Chunk<'_>], m: &Module, functions: &[&Function]) -> Result<Self> {
+    pub(crate) fn new(chunks: &[Chunk<'_>], m: &Module, functions: &[&Function]) -> Result<Self> {
         let named = dxil_reader::module(chunks, b"STAT").map_err(read)?;
         let mut interface = reflection::reflection(chunks, m, named.as_ref())?;
         if !matches!(
@@ -504,29 +504,29 @@ impl Setup {
     }
 
     /// The input varying whose register and lanes hold this cell, and the lane's position in its value.
-    pub(super) fn input_cell(&self, register: u32, lane: u8) -> Option<(usize, u8)> {
+    pub(crate) fn input_cell(&self, register: u32, lane: u8) -> Option<(usize, u8)> {
         cell(&self.interface.inputs, register, lane)
     }
-    pub(super) fn output_cell(&self, register: u32, lane: u8) -> Option<(usize, u8)> {
+    pub(crate) fn output_cell(&self, register: u32, lane: u8) -> Option<(usize, u8)> {
         cell(&self.interface.outputs, register, lane)
     }
 
     /// The kept resource of a binding's class, lower bound and register space.
-    pub(super) fn resource_by_binding(&self, class: u8, lower: u32, space: u32) -> Option<usize> {
+    pub(crate) fn resource_by_binding(&self, class: u8, lower: u32, space: u32) -> Option<usize> {
         self.ranges
             .iter()
             .position(|r| r.class == class && r.lower == lower && r.space == space)
     }
 
     /// The kept resource of a handle's class and range id.
-    pub(super) fn resource(&self, class: u8, id: u32) -> Option<usize> {
+    pub(crate) fn resource(&self, class: u8, id: u32) -> Option<usize> {
         self.ranges.iter().position(|r| r.class == class && r.id == id)
     }
     /// The kept resource a library names by this module global.
-    pub(super) fn resource_of_variable(&self, global: ValueId) -> Option<usize> {
+    pub(crate) fn resource_of_variable(&self, global: ValueId) -> Option<usize> {
         self.ranges.iter().position(|r| r.variable == Some(global))
     }
-    pub(super) fn kind(&self, resource: usize) -> &ResourceKind {
+    pub(crate) fn kind(&self, resource: usize) -> &ResourceKind {
         self.interface
             .resources
             .get(resource)

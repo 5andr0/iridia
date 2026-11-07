@@ -13,7 +13,7 @@
 //! and constant tables.
 
 mod compute;
-mod dxop;
+pub(crate) mod dxop;
 mod flow;
 mod memory;
 mod mesh;
@@ -21,7 +21,7 @@ mod ops;
 mod rayquery;
 mod raytracing;
 mod resources;
-mod setup;
+pub(crate) mod setup;
 mod stages;
 mod values;
 mod wide;

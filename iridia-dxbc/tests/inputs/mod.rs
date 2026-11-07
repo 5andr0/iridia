@@ -60,6 +60,12 @@ primase_testdata::inputs! {
             about: r#"Sekiro's 390 pixel programs (`.ppo`), Microsoft's disassembly of each (`.ppo.asm`) and the bindings, inputs and constant layout read from that text (`.ppo.reflection.json`); iridia-dxbc/tests/disassembly.rs, reflection.rs; schema in iridia-dxbc/README.md"#,
             source: r#"independent: the game's own programs (`corpus.sekiro/shaders`) disassembled by Microsoft's fxc 10.0.26100 (`fxc /nologo /dumpbin`), the reflection read from the disassembly's text by iridia-dxbc/tests/oracles/dxbc_corpus.py"#,
         },
+        Query::Oracle(OracleSet::Corpus, Game::General, "slim") => {
+            status: Live,
+            gate: true,
+            about: r#"the slim shader set: 8,287 DXBC, DXIL and Direct3D 9 programs (`programs/<family>/<sha256>.<family>`, Microsoft's listing beside each, `slim.tsv` saying why each is there) that reach every region and branch side of the lifters the full pool of 108,394 reaches; tests/ir_gate.rs gates its DXIL programs"#,
+            source: r#"independent: primase-oracles' `producers/slim-set`, a set cover of the disassembly features of the oracle home's game corpora, its disassembler sets, ten outside projects' test corpora and FidelityFX SDK v1.1.4"#,
+        },
         Query::Oracle(OracleSet::Corpus, Game::Riders, "shaders") => {
             status: Live,
             gate: false,

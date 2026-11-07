@@ -257,6 +257,56 @@ impl Cx<'_> {
         Ok((g, self.res(r)?.pick))
     }
 
+    /// The position of sample `index` of a multisampled texture in Direct3D's standard pattern for its sample count
+    /// (`iridia_ir::standard_sample_position`), (0, 0) past its samples: each position of the table chosen where the
+    /// count and the index are its own.
+    fn sample_position(&mut self, texture: &ir::Res, index: ValueId) -> Result<Op, String> {
+        let (dim, _, _, _) = self.texture(texture)?;
+        let count = self.fresh(Type::U32)?;
+        let query = Op::Query {
+            tex: self.res(texture)?,
+            dim: dim_of(dim),
+            kind: QueryKind::Samples,
+            level: None,
+        };
+        self.ops.push((count, query));
+        let v2 = Type::vector(Scalar::F32, 2);
+        let mut position = self.literal(v2, [0; 4])?;
+        for n in [1u32, 2, 4, 8, 16] {
+            let is_count = {
+                let n = self.literal(Type::U32, [n, 0, 0, 0])?;
+                self.compute(
+                    Type::BOOL,
+                    ir::Op::Binary(ir::Binary::UCmp(ir::Cmp::Eq), ValueId(count), ValueId(n)),
+                )?
+            };
+            for s in 0..n {
+                let Some([x, y]) = ir::standard_sample_position(n, s) else {
+                    continue;
+                };
+                let at = self.literal(v2, [x.to_bits(), y.to_bits(), 0, 0])?;
+                let s = self.literal(Type::U32, [s, 0, 0, 0])?;
+                let is_index = self.compute(
+                    Type::BOOL,
+                    ir::Op::Binary(ir::Binary::UCmp(ir::Cmp::Eq), index, ValueId(s)),
+                )?;
+                let both = self.compute(
+                    Type::BOOL,
+                    ir::Op::Binary(ir::Binary::And, ValueId(is_count), ValueId(is_index)),
+                )?;
+                position = self.compute(
+                    v2,
+                    ir::Op::Select {
+                        cond: ValueId(both),
+                        accept: ValueId(at),
+                        reject: ValueId(position),
+                    },
+                )?;
+            }
+        }
+        Ok(Op::Ir(Box::new(ir::Op::Swizzle(ValueId(position), [0, 1, 0, 0]))))
+    }
+
     /// The integer layer of an array sample: the coordinate's lane `at` rounded to the nearest even and clamped to 0 or
     /// more, as `u32`.
     fn layer_of(&mut self, coord: ValueId, at: u8) -> Result<u32, String> {
@@ -572,9 +622,8 @@ impl Cx<'_> {
                     let elem_words = match kind {
                         BufferKind::Structured { stride } => stride / 4,
                         BufferKind::Raw => 1,
-                        BufferKind::Typed(_) => {
-                            return Err("the elements of a typed buffer are not compiled yet".into());
-                        }
+                        // four 32-bit lanes an element
+                        BufferKind::Typed(_) => 4,
                     };
                     let count = Op::ArrLen {
                         gid: g,
@@ -597,6 +646,12 @@ impl Cx<'_> {
                     } else {
                         count
                     }
+                }
+                _ if matches!(query, ir::Query::SamplePosition(_)) => {
+                    let ir::Query::SamplePosition(index) = *query else {
+                        return Err("a sample position without its index".into());
+                    };
+                    self.sample_position(texture, index)?
                 }
                 _ => {
                     let (dim, _, _, _) = self.texture(texture)?;

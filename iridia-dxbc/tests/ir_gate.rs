@@ -1,5 +1,6 @@
 #![allow(clippy::unwrap_used)]
-//! The IR lifter against the lifter it replaces: every DXBC container of a corpus is lifted both ways, and each
+//! The IR lifters against the lifters they replace: every DXBC or DXIL container of a corpus is lifted both ways (by
+//! `iridia_dxbc` or `iridia_dxil`, as the container holds Shader Model 4 and 5 code or a `DXIL` part), and each
 //! vertex or pixel program both lift is run in the executor on the same deterministic inputs, constant buffers and
 //! textures. Column A is the old lift, B the IR lift as lifted, P the IR lift after `promote`, `simplify` and
 //! `break_flags`, and C that program lowered to stock naga (`iridia_naga`), written as WGSL and read back by naga's
@@ -25,6 +26,38 @@ use iridia_exec::{
 };
 
 mod common;
+
+/// Whether a container holds a part of this kind (`DXIL`): its part table read as `dxcontainer` lays it out (the
+/// count at byte 28, then each part's offset; at each, the part's kind).
+fn has_part(bytes: &[u8], kind: &[u8; 4]) -> bool {
+    let word = |at: usize| -> Option<usize> {
+        let b = bytes.get(at..at.checked_add(4)?)?;
+        usize::try_from(u32::from_le_bytes(b.try_into().ok()?)).ok()
+    };
+    let Some(count) = word(28) else {
+        return false;
+    };
+    (0..count.min(64)).any(|k| {
+        word(32 + 4 * k)
+            .and_then(|at| bytes.get(at..at.checked_add(4)?))
+            .is_some_and(|k| k == kind)
+    })
+}
+
+/// A container lifted both ways: by the older lift (A) and the IR lift (B) of its family, DXIL's for a container with
+/// a `DXIL` part and DXBC's otherwise.
+fn lift_both(
+    bytes: &[u8],
+) -> (
+    Result<iridia::Program, iridia::Refusal>,
+    Result<iridia_ir::Program, iridia::Refusal>,
+) {
+    if has_part(bytes, b"DXIL") {
+        (iridia_dxil::lift(bytes), iridia_dxil::ir::lift(bytes))
+    } else {
+        (iridia_dxbc::lift(bytes), iridia_dxbc::ir::lift(bytes))
+    }
+}
 
 /// The vectors each program is run on: the first two seed the constants no reflection names as floats, the next two
 /// as small integers, and the last ([`ZEROED`]) is every constant and every unordered-access word 0.
@@ -548,6 +581,18 @@ fn canonical(w: u32) -> u32 {
 }
 
 /// The IR lift's program after the passes the cut-over runs, on each of its functions.
+/// A program whose functions are graphs made regions (`structurize`, then `break_flags`), as the executor takes them; a
+/// program of regions as it is.
+fn structured(mut p: iridia_ir::Program) -> Result<iridia_ir::Program, String> {
+    for f in std::iter::once(&mut p.entry).chain(p.patch.as_mut()) {
+        if matches!(f.body, iridia_ir::Body::Cfg(_)) {
+            iridia_passes::structurize(f)?;
+            iridia_passes::break_flags(f)?;
+        }
+    }
+    Ok(p)
+}
+
 fn passed(mut p: iridia_ir::Program) -> Result<iridia_ir::Program, String> {
     for f in std::iter::once(&mut p.entry).chain(p.patch.as_mut()) {
         iridia_passes::promote(f)?;
@@ -741,6 +786,10 @@ struct Gate {
     a_fails: BTreeMap<String, (usize, String)>,
     /// The vectors A cannot evaluate of programs B agrees with on the others, by reason: not compared.
     skipped: BTreeMap<String, (usize, String)>,
+    /// The vectors of compute programs a column ran past the executor's step limit on where A finished, by column:
+    /// not compared. The limit is of the operations a run executes, which a program's other form takes more or fewer
+    /// of for the same result.
+    over_budget: BTreeMap<String, (usize, String)>,
     /// Disagreements: program and the first difference.
     differ: Vec<String>,
     /// Programs the IR lifter lifts and A does not, by A's reason.
@@ -783,6 +832,7 @@ impl Gate {
             unrun,
             a_fails,
             skipped,
+            over_budget,
             differ,
             only_ir,
             neither,
@@ -813,6 +863,7 @@ impl Gate {
             (&mut self.unrun, unrun),
             (&mut self.a_fails, a_fails),
             (&mut self.skipped, skipped),
+            (&mut self.over_budget, over_budget),
             (&mut self.only_ir, only_ir),
             (&mut self.neither, neither),
             (&mut self.c_unlowered, c_unlowered),
@@ -822,6 +873,15 @@ impl Gate {
                 mine.entry(why).or_insert((0, e)).0 += n;
             }
         }
+    }
+
+    /// A vector `column` ran past the executor's step limit on where A finished.
+    fn past_budget(&mut self, column: &str, at: &str) {
+        tally(
+            &mut self.over_budget,
+            &format!("{column} ran past the executor's step limit on, where A finished: not compared"),
+            at,
+        );
     }
 
     /// C's program of `p` ([`lower_c`]), or `None` with why tallied.
@@ -933,7 +993,7 @@ fn check(g: &mut Gate, path: &std::path::Path, at: &str, took: &mut Took) {
     let mut mark = Instant::now();
     let bytes = std::fs::read(path).unwrap();
     g.programs += 1;
-    let (old, p) = match (iridia_dxbc::lift(&bytes), iridia_dxbc::ir::lift(&bytes)) {
+    let (old, p) = match lift_both(&bytes) {
         (Ok(old), Ok(p)) => (old, p),
         (Ok(_), Err(e)) => {
             tally(&mut g.refused, &e.to_string(), at);
@@ -945,6 +1005,15 @@ fn check(g: &mut Gate, path: &std::path::Path, at: &str, took: &mut Took) {
         }
         (Err(_), Err(e)) => {
             tally(&mut g.neither, &e.to_string(), at);
+            return;
+        }
+    };
+    // a graph (DXIL's) runs as the regions `structurize` makes of it, each exit leaving its innermost construct, as
+    // the older lift structures it as it lifts
+    let p = match structured(p) {
+        Ok(p) => p,
+        Err(e) => {
+            tally(&mut g.unrun, &format!("B not structured: {e}"), at);
             return;
         }
     };
@@ -1133,6 +1202,21 @@ enum Unlowered {
 /// C's program for `iridia-exec`: `p` lowered for naga's own dialect and written as WGSL, read back by naga's front
 /// end, with the older lift's interface and each of its resources bound to the global its binding plan names.
 fn lower_c(old: &iridia::Program, p: &iridia_ir::Program) -> Result<iridia::Program, Unlowered> {
+    // C runs where A does, in the executor of naga-path programs, which validates no 64-bit value
+    let wide = |s: iridia_ir::Scalar| {
+        matches!(
+            s,
+            iridia_ir::Scalar::U64 | iridia_ir::Scalar::I64 | iridia_ir::Scalar::F64
+        )
+    };
+    if std::iter::once(&p.entry)
+        .chain(p.patch.as_ref())
+        .any(|f| f.values.iter().any(|d| wide(d.ty.scalar)))
+    {
+        return Err(Unlowered::Refused(
+            "a 64-bit value, which the executor of naga-path programs does not validate".into(),
+        ));
+    }
     // a diagnostic: C's text from a file (`one`), to try a change to it
     let wgsl = match std::env::var("IR_GATE_C_WGSL") {
         Ok(path) => std::fs::read_to_string(path).unwrap(),
@@ -1151,7 +1235,21 @@ fn lower_c(old: &iridia::Program, p: &iridia_ir::Program) -> Result<iridia::Prog
     normalise(&mut module, &old.module).map_err(unbuilt)?;
     let mut bindings = Vec::new();
     for r in &old.interface.resources {
-        let d = r
+        // the older DXIL lift's buffer of a view's hidden counter is the plan's counter of that view
+        let (owner, suffix) = match r.provenance.counter_of {
+            Some(view) => (
+                old.interface
+                    .resources
+                    .iter()
+                    .find(|v| v.id == view)
+                    .ok_or_else(|| {
+                        unbuilt(format!("{} counts a view the interface lacks", r.provenance.name))
+                    })?,
+                "_counter",
+            ),
+            None => (r, ""),
+        };
+        let d = owner
             .provenance
             .d3d
             .ok_or_else(|| unbuilt(format!("resource {} has no D3D binding", r.provenance.name)))?;
@@ -1163,9 +1261,9 @@ fn lower_c(old: &iridia::Program, p: &iridia_ir::Program) -> Result<iridia::Prog
         };
         // the binding plan's names (`iridia_naga::BindingPlan::d3d`)
         let name = if d.space == 0 {
-            format!("{prefix}{}", d.register)
+            format!("{prefix}{}{suffix}", d.register)
         } else {
-            format!("{prefix}{}_space{}", d.register, d.space)
+            format!("{prefix}{}_space{}{suffix}", d.register, d.space)
         };
         let g = module
             .global_variables
@@ -1259,6 +1357,9 @@ fn gate_over(name: &str, paths: &[std::path::PathBuf], not_yet: &[&str]) {
     }
     for (why, (n, e)) in &g.skipped {
         println!("  skipped {n:5}  vectors of agreeing programs A cannot evaluate: {why}  (e.g. {e})");
+    }
+    for (why, (n, e)) in &g.over_budget {
+        println!("  skipped {n:5}  vectors {why}  (e.g. {e})");
     }
     for (why, (n, e)) in &g.only_ir {
         println!("  IR only {n:5}  A: {why}  (e.g. {e})");
@@ -1451,13 +1552,11 @@ impl Backend for Group {
         ))
     }
     fn counter(&mut self, view: Element, decrement: bool) -> Result<u32, String> {
-        let c = self.counters.entry((view.id.0, view.index)).or_insert_with(|| {
-            if self.hashed.zeroed {
-                0
-            } else {
-                common::mix(hash_words(&[6, view.id.0, view.index])) % 64
-            }
-        });
+        let zeroed = self.hashed.zeroed;
+        let c = self
+            .counters
+            .entry((view.id.0, view.index))
+            .or_insert_with(|| counter_start(zeroed, view.id.0, view.index));
         if decrement {
             *c = c.wrapping_sub(1);
             Ok(*c)
@@ -1466,6 +1565,15 @@ impl Backend for Group {
             *c = c.wrapping_add(1);
             Ok(before)
         }
+    }
+}
+
+/// The count a view's hidden counter starts at: 0 in the zeroed vector, else a hash of the view.
+fn counter_start(zeroed: bool, view: u32, element: u32) -> u32 {
+    if zeroed {
+        0
+    } else {
+        common::mix(hash_words(&[6, view, element])) % 64
     }
 }
 
@@ -1525,6 +1633,13 @@ fn seeded(program: &iridia::Program, c: u32) -> Seeded {
             }
             _ => continue,
         };
+        // a counter the older DXIL lift makes a buffer of its own (a word per element of an array of views) starts
+        // where the backend's counter of its view does
+        if let Some(view) = r.provenance.counter_of {
+            let v = (0..256).map(|k| counter_start(c == ZEROED, view.0, k)).collect();
+            s.buffers.insert(r.id, v);
+            continue;
+        }
         let words = match kind {
             BufferKind::Typed(_) => 64 * 4,
             BufferKind::Structured { stride } => 64 * stride.div_ceil(4),
@@ -1566,13 +1681,32 @@ fn dispatch(exe: &Executable, program: &iridia::Program, c: u32) -> Result<Memor
     let bound = exe.bind_resources(&s.resources)?;
     let mut backend = Group::for_case(c);
     exe.dispatch_elements(&bound, &mut backend, &mut s.buffers, &mut s.elements, GROUPS, 32)?;
+    // a counter kept in a buffer of its own (the older DXIL lift's, a word per element) is that view's counter, as the
+    // backend keeps an IR program's; a counter left where it started is not told from one the run never touched
+    let mut counters = backend.counters;
+    for r in &program.interface.resources {
+        if let Some(view) = r.provenance.counter_of
+            && let Some(words) = s.buffers.remove(&r.id)
+        {
+            for (k, w) in (0..).zip(words) {
+                counters.entry((view.0, k)).or_insert(w);
+            }
+        }
+    }
+    let zeroed = c == ZEROED;
+    counters.retain(|&(view, element), count| *count != counter_start(zeroed, view, element));
     Ok(Memory {
         buffers: s.buffers,
         elements: s.elements,
         texels: backend.texels,
-        counters: backend.counters,
+        counters,
     }
     .canonical())
+}
+
+/// Whether a run stopped at the executor's step limit ([`iridia_exec::STEP_LIMIT`]).
+fn past_budget(run: &Result<Memory, String>) -> bool {
+    matches!(run, Err(e) if e.ends_with("execution budget exceeded"))
 }
 
 /// A compute program: A, B and P dispatched on the same seeded memory must leave the same memory.
@@ -1606,6 +1740,10 @@ fn compute(g: &mut Gate, old: &iridia::Program, p: iridia_ir::Program, at: &str,
                 continue;
             }
             let y = dispatch(&b, old, c);
+            if past_budget(&y) {
+                g.past_budget(column, at);
+                continue;
+            }
             if *x != y {
                 let d = format!("case {c}: A {x:x?}\n  but {y:x?}");
                 let d: String = d.chars().take(4000).collect();
@@ -1626,6 +1764,10 @@ fn compute(g: &mut Gate, old: &iridia::Program, p: iridia_ir::Program, at: &str,
         Some(Ok(c)) => {
             let differs = (0..).zip(&older).find_map(|(n, x)| {
                 let y = dispatch(&c, old, n);
+                if x.is_ok() && past_budget(&y) {
+                    g.past_budget("C", at);
+                    return None;
+                }
                 (x.is_ok() && *x != y).then(|| format!("case {n}: A {x:x?}\n  but {y:x?}"))
             });
             match differs {
@@ -1879,6 +2021,47 @@ fn unity_programs() {
     gate(Game::Sledding);
 }
 
+/// What the DXIL IR lifter does not lift yet, which the older lift does: a refusal naming one of these is not a
+/// regression (each piece of the lifter that lands takes its words out).
+const DXIL_NOT_YET: &[&str] = &["onto the IR yet"];
+
+/// The DXIL fixtures of `iridia-dxil` (`dxc` output from the HLSL beside each).
+#[test]
+fn dxil_fixture_programs() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../iridia-dxil/tests/fixtures");
+    let mut paths = Vec::new();
+    common::containers(&root, &mut paths);
+    paths.retain(|p| std::fs::read(p).is_ok_and(|b| has_part(&b, b"DXIL")));
+    assert!(paths.len() >= 50, "{} DXIL fixtures", paths.len());
+    gate_over("dxil fixtures", &paths, DXIL_NOT_YET);
+}
+
+/// The slim set's DXIL programs (`oracles.corpus.general/slim`, `programs/dxil`).
+#[test]
+fn slim_dxil_programs() {
+    let query = inputs::Query::Oracle(inputs::OracleSet::Corpus, Game::General, "slim");
+    let Some(root) = inputs::oracle(inputs::OracleSet::Corpus, Game::General, "slim") else {
+        return;
+    };
+    let mut paths: Vec<std::path::PathBuf> = std::fs::read_dir(root.join("programs").join("dxil"))
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.extension().is_some_and(|x| x == "dxil"))
+        .collect();
+    paths.sort();
+    inputs::expect_found(query, "DXIL programs", paths.len());
+    gate_over("slim dxil", &paths, DXIL_NOT_YET);
+}
+
+/// Elden Ring's DXIL containers (`oracles.corpus.elden/shaders`).
+#[test]
+fn elden_programs() {
+    let Some((name, paths)) = common::corpus(Game::Elden) else {
+        return;
+    };
+    gate_over(&name, &paths, DXIL_NOT_YET);
+}
+
 /// The gate over a folder of containers outside the configured corpora, named by the debug key `shader.outside` and
 /// walked as the fixtures are; without it, nothing to run.
 #[test]
@@ -1894,13 +2077,15 @@ fn outside_programs() {
 /// One program's lifts and runs, for a disagreement the gate prints: `IR_GATE_ONE=<container> cargo test -p
 /// iridia-dxbc --test ir_gate one -- --ignored --nocapture`. A and B as text (not with `IR_GATE_QUIET`), then each
 /// vector's runs of A, B and C, the first request C makes otherwise than A, and C on a quad of the first lane's inputs;
-/// `IR_GATE_C_WGSL=<file>` runs that WGSL as C instead of the lowering's (to try a change to it).
+/// `IR_GATE_C_WGSL=<file>` runs that WGSL as C instead of the lowering's (to try a change to it); `IR_GATE_P=1` prints
+/// P as text and the lowering's WGSL.
 #[test]
 #[ignore = "a diagnostic: names its program in IR_GATE_ONE"]
 fn one() {
     let path = std::env::var("IR_GATE_ONE").expect("IR_GATE_ONE names a container");
     let bytes = std::fs::read(&path).unwrap();
-    let old = iridia_dxbc::lift(&bytes).unwrap();
+    let (old, p) = lift_both(&bytes);
+    let old = old.unwrap();
     let quiet = std::env::var_os("IR_GATE_QUIET").is_some();
     if !quiet {
         println!(
@@ -1908,9 +2093,29 @@ fn one() {
             iridia::emit::wgsl(&old).unwrap_or_else(|e| e.to_string())
         );
     }
-    let p = iridia_dxbc::ir::lift(&bytes).unwrap();
+    let p = p.unwrap();
     if !quiet {
         println!("B (IR lift):\n{}", iridia_ir::text::print(&p.entry));
+    }
+    let p = structured(p).unwrap();
+    if std::env::var_os("IR_GATE_P").is_some() {
+        match passed(p.clone()) {
+            Ok(pp) => {
+                println!(
+                    "P (after the passes):
+{}",
+                    iridia_ir::text::print(&pp.entry)
+                );
+                match iridia_naga::wgsl(&pp, &iridia_naga::Profile::NAGA) {
+                    Ok(w) => println!(
+                        "C's WGSL:
+{w}"
+                    ),
+                    Err(e) => println!("C's WGSL: {}", e.0),
+                }
+            }
+            Err(e) => println!("P: {e}"),
+        }
     }
     // C, where the lowering takes the program
     let c_program = passed(p.clone()).ok().and_then(|pp| match lower_c(&old, &pp) {
@@ -1920,6 +2125,9 @@ fn one() {
             None
         }
     });
+    if old.interface.stage == Stage::Compute {
+        return one_compute(&old, &p, c_program.as_ref());
+    }
     let a = ProgramShader::new(old).unwrap();
     let b = ProgramShader::from_ir(p).unwrap();
     let c_shader = c_program.map(|c| ProgramShader::new(c).unwrap());
@@ -1970,6 +2178,83 @@ fn one() {
         if sa.asked.len() != sb.asked.len() {
             println!("  A made {} requests, B {}", sa.asked.len(), sb.asked.len());
         }
+    }
+}
+
+/// [`one`] for a compute program: each case's memory after A, B and C, and the first words where B or C leaves
+/// other memory than A.
+fn one_compute(old: &iridia::Program, p: &iridia_ir::Program, c: Option<&iridia::Program>) {
+    let a = Executable::new(old).unwrap();
+    let b = Executable::from_ir(p).unwrap();
+    let c = c.map(|c| (Executable::new(c).unwrap(), c));
+    for case in 0..CASES {
+        let x = dispatch(&a, old, case);
+        let y = dispatch(&b, old, case);
+        let z = c.as_ref().map(|(c, program)| dispatch(c, program, case));
+        println!("case {case}:");
+        let Ok(x) = x else {
+            println!("  A {x:?}");
+            continue;
+        };
+        for (column, y) in [("B", Some(y)), ("C", z)] {
+            match y {
+                None => {}
+                Some(Err(e)) => println!("  {column} {e}"),
+                Some(Ok(y)) => memory_differences(column, &x, &y),
+            }
+        }
+    }
+}
+
+/// Up to a few of the places where `y` leaves other memory than `x`.
+fn memory_differences(column: &str, x: &Memory, y: &Memory) {
+    let mut lines = Vec::new();
+    for (id, words) in &x.buffers {
+        match y.buffers.get(id) {
+            None => lines.push(format!("buffer {id:?}: missing")),
+            Some(other) => {
+                for (k, (p, q)) in words.iter().zip(other).enumerate() {
+                    if p != q {
+                        lines.push(format!("buffer {id:?} word {k}: A {p:x} {column} {q:x}"));
+                    }
+                }
+            }
+        }
+    }
+    for (key, words) in &x.elements {
+        if y.elements.get(key) != Some(words) {
+            lines.push(format!(
+                "element {key:?}: A {words:x?} {column} {:x?}",
+                y.elements.get(key)
+            ));
+        }
+    }
+    for (key, texel) in &x.texels {
+        if y.texels.get(key) != Some(texel) {
+            lines.push(format!(
+                "texel {key:?}: A {texel:x?} {column} {:x?}",
+                y.texels.get(key)
+            ));
+        }
+    }
+    for key in y.texels.keys().filter(|k| !x.texels.contains_key(k)) {
+        lines.push(format!("texel {key:?}: only {column} wrote it"));
+    }
+    if x.counters != y.counters {
+        lines.push(format!(
+            "counters: A {:x?} {column} {:x?}",
+            x.counters, y.counters
+        ));
+    }
+    let total = lines.len();
+    for l in lines.iter().take(12) {
+        println!("  {l}");
+    }
+    if total > 12 {
+        println!("  ... {total} differences in all");
+    }
+    if total == 0 {
+        println!("  {column} agrees");
     }
 }
 

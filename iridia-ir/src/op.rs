@@ -437,6 +437,54 @@ pub enum GatherOffset {
     Dynamic(ValueId),
 }
 
+/// Direct3D's standard sample positions in sixteenths of a pixel from its centre (x right, y down), for 1, 2, 4, 8 and
+/// 16 samples one after the other: the positions of a count start at `count - 1` (D3D11's
+/// `D3D11_STANDARD_MULTISAMPLE_PATTERN`).
+const STANDARD_POSITIONS: [(i8, i8); 31] = [
+    (0, 0),
+    (4, 4),
+    (-4, -4),
+    (-2, -6),
+    (6, -2),
+    (-6, 2),
+    (2, 6),
+    (1, -3),
+    (-1, 3),
+    (5, 1),
+    (-3, -5),
+    (-5, 5),
+    (-7, -1),
+    (3, 7),
+    (7, -7),
+    (1, 1),
+    (-1, -3),
+    (-3, 2),
+    (4, -1),
+    (-5, -2),
+    (2, 5),
+    (5, 3),
+    (3, -5),
+    (-2, 6),
+    (0, -7),
+    (-4, -6),
+    (-6, 4),
+    (-8, 0),
+    (7, -4),
+    (6, 7),
+    (-7, -8),
+];
+
+/// The position of sample `index` of a texture of `count` samples in Direct3D's standard pattern, in pixels from the
+/// pixel's centre (x right, y down): `None` for an index past the count, or a count other than 1, 2, 4, 8 or 16.
+pub fn standard_sample_position(count: u32, index: u32) -> Option<[f32; 2]> {
+    if !matches!(count, 1 | 2 | 4 | 8 | 16) || index >= count {
+        return None;
+    }
+    let row = usize::try_from(count.checked_sub(1)?.checked_add(index)?).ok()?;
+    let (x, y) = *STANDARD_POSITIONS.get(row)?;
+    Some([f32::from(x) / 16.0, f32::from(y) / 16.0])
+}
+
 /// What a resource query asks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
 pub enum Query {
@@ -450,8 +498,9 @@ pub enum Query {
     Levels,
     /// The samples per texel of a multisampled texture, `u32`.
     Samples,
-    /// The position of sample `index` (a `u32`) within the pixel, relative to its centre, `vec2<f32>`; (0, 0) for an
-    /// index past the texture's samples.
+    /// The position of sample `index` (a `u32`) within the pixel, relative to its centre (x right, y down), in
+    /// Direct3D's standard pattern for the texture's sample count ([`standard_sample_position`]), `vec2<f32>`; (0, 0)
+    /// for an index past the texture's samples or a count with no standard pattern.
     SamplePosition(ValueId),
     /// The elements of a buffer (its bytes for a raw buffer), `u32`.
     Elements,

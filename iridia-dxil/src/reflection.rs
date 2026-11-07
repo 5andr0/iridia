@@ -630,6 +630,19 @@ pub(crate) fn resource_of(
     })
 }
 
+/// Whether LLVM type `t` is or holds a half or a 16-bit integer.
+fn holds_16_bit(m: &Module, t: TypeId, depth: usize) -> bool {
+    depth <= 16
+        && match m.types.get(t) {
+            Some(Type::Half | Type::Integer(16)) => true,
+            Some(Type::Vector(_, e) | Type::Array(_, e)) => holds_16_bit(m, *e, depth.saturating_add(1)),
+            Some(Type::Struct { elements, .. }) => elements
+                .iter()
+                .any(|&e| holds_16_bit(m, e, depth.saturating_add(1))),
+            _ => false,
+        }
+}
+
 /// A structured resource's wrapper has one element field. Names and orientation come from STAT annotations;
 /// its storage offsets do not: annotation tag 3 contains the cbuffer layout even for host-layout LLVM types.
 fn structured_layout(source: &Module, ty: Option<TypeId>, stride: u32) -> Result<Option<BufferLayout>> {
@@ -653,6 +666,11 @@ fn structured_layout(source: &Module, ty: Option<TypeId>, stride: u32) -> Result
         .and_then(|n| n.checked_next_multiple_of(d3d::Packing::Structured.alignment(&ty)))
         .ok_or_else(|| error(0, "structured element extent overflow"))?;
     if size != stride {
+        // native 16-bit members (`-enable-16bit-types`) take two bytes, which the interface's types (a half read as a
+        // float) cannot state: the layout is left out, as for a source that names no contents
+        if holds_16_bit(source, *element, 0) {
+            return Ok(None);
+        }
         return Err(error(
             0,
             format!("structured layout size {size} disagrees with stride {stride}"),
