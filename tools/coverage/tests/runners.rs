@@ -329,3 +329,10 @@ fn sixteen_bit_lanes_of_a_structured_buffer_are_refused() {
 fn a_multisampled_texture_states_its_sample_count() {
     assert_selected_pass(&vkd3d_runs("vkd3d/dxil.json.gz", "getdimensions.shader_test"));
 }
+
+/// A dispatch's store to a typed buffer reaches every lane it marks: the executor's word `4 * element + lane` is that
+/// lane of that element (barriers.shader_test's `u[0] = 42` writes all four lanes).
+#[test]
+fn a_dispatch_stores_every_lane_of_a_typed_buffer_element() {
+    assert_selected_pass(&vkd3d_runs("vkd3d/dxil.json.gz", "barriers.shader_test"));
+}

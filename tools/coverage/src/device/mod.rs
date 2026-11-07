@@ -836,8 +836,16 @@ impl iridia_exec::Backend for IdRequests<'_> {
         let Some(res) = self.resource_mut(view)? else {
             return Ok(());
         };
-        // a typed buffer's element is four lanes of the executor's words
-        store_to(res, [word / 4, 0, 0], None, value, mask);
+        // a typed buffer's element is four lanes of the executor's words: word `word + k` is lane (word + k) % 4 of
+        // element (word + k) / 4
+        for (k, v) in value.into_iter().enumerate() {
+            if mask >> k & 1 == 1 {
+                let w = word.saturating_add(k as u32);
+                let mut lanes = [0; 4];
+                lanes[(w % 4) as usize] = v;
+                store_to(res, None, [w / 4, 0, 0], None, lanes, 1 << (w % 4));
+            }
+        }
         Ok(())
     }
 
