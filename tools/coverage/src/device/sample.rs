@@ -578,3 +578,60 @@ pub fn load(
     r.sample_texel(level as u32, layer, at, sample)
         .map_or([0; 4], |t| r.mapped(t))
 }
+
+/// Properties of the sampler's rules, on generated inputs.
+#[cfg(test)]
+mod properties {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        /// Wrap keeps a coordinate's fraction, `u` less the whole number below it, in [0, 1] (1 only where a small
+        /// negative `u` rounds up to it).
+        #[test]
+        fn wrap_keeps_the_fraction(u in -1e6f32..1e6) {
+            let r = reduced(u, Address::Wrap);
+            prop_assert!((0.0..=1.0).contains(&r), "{u} -> {r}");
+            let whole = f64::from(u) - f64::from(r);
+            prop_assert!((whole - f64::from(u.floor())).abs() <= f64::from(u.abs().max(1.0)) * 1e-6, "{u} -> {r}");
+        }
+
+        /// Mirror keeps `u` less the even number toward zero from it, in (-2, 2) and of `u`'s sign.
+        #[test]
+        fn mirror_keeps_the_remainder_of_two(u in -1e6f32..1e6) {
+            let r = reduced(u, Address::Mirror);
+            prop_assert!(r.abs() < 2.0, "{u} -> {r}");
+            prop_assert!(r == 0.0 || r.signum() == u.signum(), "{u} -> {r}");
+            let even = f64::from(u) - f64::from(r);
+            prop_assert_eq!(even, 2.0 * (f64::from(u) / 2.0).trunc());
+        }
+
+        /// The other modes hold a coordinate to [-10, 10], leaving one inside as it is.
+        #[test]
+        fn the_other_modes_hold_the_coordinate_to_ten(u in proptest::num::f32::NORMAL | proptest::num::f32::ZERO) {
+            for mode in [Address::Clamp, Address::Border, Address::MirrorOnce] {
+                prop_assert_eq!(reduced(u, mode), u.clamp(-10.0, 10.0));
+            }
+        }
+    }
+
+    /// What no range holds is 0: a NaN in every mode, and an infinity that wraps or mirrors; an infinity that clamps
+    /// is held to the edge.
+    #[test]
+    fn a_coordinate_without_a_place_is_zero() {
+        for mode in [
+            Address::Wrap,
+            Address::Mirror,
+            Address::Clamp,
+            Address::Border,
+            Address::MirrorOnce,
+        ] {
+            assert_eq!(reduced(f32::NAN, mode), 0.0);
+        }
+        for inf in [f32::INFINITY, f32::NEG_INFINITY] {
+            assert_eq!(reduced(inf, Address::Wrap), 0.0);
+            assert_eq!(reduced(inf, Address::Mirror), 0.0);
+            assert_eq!(reduced(inf, Address::Clamp), inf.clamp(-10.0, 10.0));
+        }
+    }
+}

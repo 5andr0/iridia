@@ -295,6 +295,7 @@ dependencies = [
  "iridia-naga",
  "iridia-passes",
  "primase-naga",
+ "proptest",
  "serde",
  "serde_json",
  "sha2",
@@ -374,6 +375,7 @@ dependencies = [
  "iridia-ir",
  "primase-foundations",
  "primase-naga",
+ "proptest",
  "thiserror",
 ]
 

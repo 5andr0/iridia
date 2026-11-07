@@ -2375,3 +2375,138 @@ mod tests {
         assert_eq!(fixed(f64::NAN), 0);
     }
 }
+
+/// Properties of the draw's rules, on generated inputs, against reference formulas.
+#[cfg(test)]
+mod properties {
+    use super::*;
+    use proptest::prelude::*;
+
+    /// Whether `got` is within `rel` of `want`, relative to the larger of 1 and `want`.
+    fn near(got: f32, want: f64, rel: f64) -> bool {
+        (f64::from(got) - want).abs() <= rel * want.abs().max(1.0)
+    }
+
+    fn compare() -> impl Strategy<Value = Compare> {
+        prop_oneof![
+            Just(Compare::Never),
+            Just(Compare::Less),
+            Just(Compare::Equal),
+            Just(Compare::LessEqual),
+            Just(Compare::Greater),
+            Just(Compare::NotEqual),
+            Just(Compare::GreaterEqual),
+            Just(Compare::Always),
+        ]
+    }
+
+    /// A sorted set of lanes, at least one.
+    fn lanes() -> impl Strategy<Value = Vec<u8>> {
+        (1u8..16).prop_map(|mask| (0..4).filter(|l| mask >> l & 1 != 0).collect())
+    }
+
+    proptest! {
+        /// Each fog factor, saturated as fog uses it, is its formula worked in f64 and saturated: the coordinate,
+        /// `(end - c) / (end - start)`, `e^(-c d)` and `e^(-(c d)^2)`, to a few f32 roundings (an exponent past f32's
+        /// range is infinite, which saturates as the f64 value does).
+        #[test]
+        fn the_fog_factors_are_their_formulas(
+            c in -100f32..100.,
+            start in -100f32..100.,
+            span in 0.01f32..100.,
+            density in 0f32..4.,
+        ) {
+            let end = start + span;
+            let (cf, sf, ef, df) = (f64::from(c), f64::from(start), f64::from(end), f64::from(density));
+            prop_assert_eq!(FogFactor::Coordinate.of(c), c);
+            let sat = |x: f32| x.clamp(0.0, 1.0);
+            let linear = FogFactor::Linear { start, end }.of(c);
+            let exp = sat(FogFactor::Exp { density }.of(c));
+            let exp2 = sat(FogFactor::Exp2 { density }.of(c));
+            prop_assert!(near(linear, (ef - cf) / (ef - sf), 1e-4), "linear {linear}");
+            prop_assert!(near(exp, (-cf * df).exp().clamp(0.0, 1.0), 1e-4), "exp {exp}");
+            prop_assert!(near(exp2, (-(cf * df).powi(2)).exp().clamp(0.0, 1.0), 1e-4), "exp2 {exp2}");
+        }
+
+        /// Fog moves each lane of a colour toward the fog colour's by the saturated factor, `(colour - fog) * f +
+        /// fog` as vkd3d-shader works it: the result is that blend and lies between the two, to the rounding of
+        /// the larger of them, and a NaN factor gives the fog colour.
+        #[test]
+        fn fog_blends_each_lane_between_the_colour_and_the_fog(
+            colour in proptest::array::uniform4(-1000f32..1000.),
+            fog_colour in proptest::array::uniform4(-1000f32..1000.),
+            c in -2f32..3.,
+        ) {
+            let fog = Fog { colour: fog_colour, source: FogSource::Output, factor: FogFactor::Coordinate };
+            let out = fog.apply(colour.map(f32::to_bits), c).map(f32::from_bits);
+            let f = f64::from(c).clamp(0.0, 1.0);
+            for ((&got, &a), &b) in out.iter().zip(&colour).zip(&fog_colour) {
+                let (a, b) = (f64::from(a), f64::from(b));
+                // the subtraction and the add round at the larger of the two
+                let slack = 1e-6 * a.abs().max(b.abs()).max(1.0);
+                prop_assert!((f64::from(got) - ((a - b) * f + b)).abs() <= slack, "{got} from {a} and {b} at {f}");
+                prop_assert!(f64::from(got) >= a.min(b) - slack && f64::from(got) <= a.max(b) + slack);
+            }
+            let nan = fog.apply(colour.map(f32::to_bits), f32::NAN).map(f32::from_bits);
+            prop_assert_eq!(nan, fog_colour);
+        }
+
+        /// The depth bounds test is the comparison and `min <= stored <= max`, the ends included.
+        #[test]
+        fn the_depth_test_is_the_comparison_within_the_bounds(
+            compare in compare(),
+            depth in -1f32..2.,
+            stored in -1f32..2.,
+            a in -1f32..2.,
+            b in -1f32..2.,
+            bounded in any::<bool>(),
+        ) {
+            let bounds = bounded.then(|| [a.min(b), a.max(b)]);
+            let test = DepthState { compare, write: false, bounds };
+            let within = bounds.is_none_or(|[min, max]| min <= stored && stored <= max);
+            prop_assert_eq!(test.passes(depth, stored), within && compare.passes(depth, stored));
+            if let Some([min, max]) = bounds {
+                let always = DepthState { compare: Compare::Always, write: false, bounds };
+                prop_assert!(always.passes(depth, min) && always.passes(depth, max));
+            }
+        }
+
+        /// A pixel input lane reads the output lane as far past the output's first as it is past the input's first,
+        /// and nothing where the output has no such lane.
+        #[test]
+        fn an_input_lane_reads_the_output_lane_of_its_place(from in lanes(), to in lanes()) {
+            let got = component_lanes(&from, &to);
+            prop_assert_eq!(got.len(), to.len());
+            for (&t, read) in to.iter().zip(&got) {
+                let place = i16::from(t) - i16::from(to[0]) + i16::from(from[0]);
+                let want = u8::try_from(place).ok().filter(|l| from.contains(l));
+                prop_assert_eq!(*read, want);
+            }
+        }
+
+        /// A sample count other than 1, 2, 4, 8 and 16 has no standard pattern.
+        #[test]
+        fn only_the_standard_counts_have_positions(samples in any::<u32>()) {
+            prop_assert_eq!(sample_positions(samples).is_ok(), [1, 2, 4, 8, 16].contains(&samples));
+        }
+    }
+
+    /// Each standard pattern has as many positions as samples, all different, inside the pixel (sixteenths from -8 to
+    /// 7 of its centre), and the single sample is the centre.
+    #[test]
+    fn the_standard_positions_are_distinct_and_inside_the_pixel() {
+        for samples in [1u32, 2, 4, 8, 16] {
+            let positions = sample_positions(samples).unwrap();
+            assert_eq!(positions.len(), samples as usize);
+            let distinct: std::collections::BTreeSet<_> = positions.iter().collect();
+            assert_eq!(distinct.len(), positions.len(), "{samples}: {positions:?}");
+            for p in &positions {
+                assert!(
+                    p.iter().all(|&x| (-128..128).contains(&x) && x % 16 == 0),
+                    "{samples}: {p:?}"
+                );
+            }
+        }
+        assert_eq!(sample_positions(1).unwrap(), [[0, 0]]);
+    }
+}

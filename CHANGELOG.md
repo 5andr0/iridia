@@ -116,6 +116,9 @@
 - `iridia-dxbc`: `ld` with an immediate texel offset (`ld_aoffimmi`) reads the texel the offset moves to, where it
   dropped the offset; a hull program without a control-point phase passes its input control points through to its
   outputs, where they were left unwritten. `LIFTER_VERSION` is 12.
+- Tests: property tests (proptest, a dev-dependency of `iridia-exec` and `iridia-coverage`) on generated inputs
+  against reference formulas: the draw's fog factors and blend, the depth test within its bounds, the standard sample
+  positions and the input lane mapping, and the coverage sampler's address-mode range reduction.
 - Tests: the oracle tools (vkd3d's programs, WARP, dxc) run through primase-testdata 0.1.14's `program(Tool::X)` with a
   time limit (`output_within`): a tool that hangs is killed and the test fails naming it, instead of hanging. A minute
   per vkd3d call, two per dxc compile, ten per WARP batch. vkd3d's tools are its Linux programs, so the vkd3d
