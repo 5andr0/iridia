@@ -964,6 +964,7 @@ fn raster(
         width,
         height,
         layers: 1,
+        samples: 1,
         targets: vec![Some(texels)],
         depth: Some(vec![1.0; (width * height) as usize]),
     };

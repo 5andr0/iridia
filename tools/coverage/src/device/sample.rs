@@ -549,9 +549,19 @@ pub fn sample(r: &Resource, s: &Sampler, req: &Request, one_d: bool) -> [f32; 4]
     at_level((lod + 0.5).floor().min(last) as u32)
 }
 
-/// A texel load (`ld`): the lanes as the view returns them (f32 bits or integers), 0 outside the resource (D3D11.3
-/// 22.4.6).
-pub fn load(r: &Resource, texel: [i32; 3], layer: Option<i32>, level: i32, offset: [i32; 3]) -> [u32; 4] {
+/// A texel load (`ld`, and `ld2dms` with its sample): the lanes as the view returns them (f32 bits or integers), 0
+/// outside the resource (D3D11.3 22.4.6), a sample past a multisampled texture's among it.
+pub fn load(
+    r: &Resource,
+    texel: [i32; 3],
+    layer: Option<i32>,
+    level: i32,
+    sample: Option<i32>,
+    offset: [i32; 3],
+) -> [u32; 4] {
+    let Ok(sample) = u32::try_from(sample.unwrap_or(0)) else {
+        return [0; 4];
+    };
     if level < 0 {
         return [0; 4];
     }
@@ -565,5 +575,6 @@ pub fn load(r: &Resource, texel: [i32; 3], layer: Option<i32>, level: i32, offse
         Some(l) => l as u32,
         None => 0,
     };
-    r.texel(level as u32, layer, at).map_or([0; 4], |t| r.mapped(t))
+    r.sample_texel(level as u32, layer, at, sample)
+        .map_or([0; 4], |t| r.mapped(t))
 }

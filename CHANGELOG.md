@@ -68,7 +68,9 @@
   whatever the view's, a vector probe steps 16 bytes as vkd3d's readback does, and a dispatch's typed buffer store
   reaches every lane of its element. A Direct3D 9 program that reads its texture stage's state (a `ps_1_x` `tex`:
   the projection flag, the bound texture's dimension), which WGSL cannot read, is specialised by each draw's state
-  (`iridia_passes::specialise`) and made again for it; the table shows it at Direct3D 9's defaults. CI makes the table again (`docs/coverage`) and fails when it differs from the one
+  (`iridia_passes::specialise`) and made again for it; the table shows it at Direct3D 9's defaults. The device
+  holds multisampled resources (a texel's samples together), loads a multisampled texture's sample, and a probe
+  reads a multisampled target resolved, as vkd3d's runners do. CI makes the table again (`docs/coverage`) and fails when it differs from the one
   committed.
 - `iridia-exec`: `draw` draws points and lines as well as triangles (every list and strip topology), each primitive
   numbered for `SV_PrimitiveID`; an aliased line by the diamond exit rule (3.4.3), which an NVIDIA RTX 5070 Ti draws
@@ -97,6 +99,11 @@
   `DepthState::bounds` is Direct3D 12's depth bounds test, on the depth buffer's value, ends included; a pixel
   program that forces early tests (`[earlydepthstencil]`, naga's `early_depth_test`) runs only where the depth test
   and bounds pass, and writes its depth before it runs, where the tests ran after every program.
+  `draw` draws on multisampled targets (`Surface::samples`: 2, 4, 8 or 16 at Direct3D's standard positions, a
+  pixel's samples together): a triangle covers each sample it holds, the depth test and write are each sample's, a
+  centroid input is read at the first covered sample where the triangle does not cover them all, `SV_Coverage` is
+  the covered samples the sample mask keeps, and a program that reads `SV_SampleIndex` or a `sample` input runs once
+  a sample. A multisampled line or point is refused.
 - `iridia-dxil`: a boolean converts to a float as 1 or 0 (`uitofp`) and -1 or 0 (`sitofp`), where it converted its
   all-ones word; and extended to a 16-bit integer (`zext`, `sext`), it is cut to the 16 bits. An array of read-write
   views keeps a counter per element, the element's word at its index (`counter_of`, documented in `iridia-ir`). A

@@ -93,7 +93,7 @@
 //!   that passes writes every target lane the program writes and, when the state writes depth, its depth. Primitives are drawn in order, so a later one overwrites an earlier one where both pass.
 use crate::geometry::Topology;
 use crate::{Error, Execution, PixelShader, ProgramShader, Sampler};
-use iridia::{InterpMode, SystemValue, Varying};
+use iridia::{InterpMode, InterpSampling, SystemValue, Varying};
 
 fn error(detail: impl Into<String>) -> Error {
     Error {
@@ -195,7 +195,7 @@ pub struct Rasterizer {
     /// Where clip space lands in the targets: the viewports by index, which a primitive picks
     /// (`SV_ViewportArrayIndex`), the first by default. At least one.
     pub viewports: Vec<Viewport>,
-    /// The sample mask: a draw's one sample is written where bit 0 is set, and `SV_Coverage` is ANDed with it.
+    /// The sample mask: sample `n` of a pixel is written where bit `n` is set, and `SV_Coverage` is ANDed with it.
     pub sample_mask: u32,
     /// Which facing is dropped.
     pub cull: Cull,
@@ -345,9 +345,12 @@ pub struct Surface {
     /// Slices of every target (an array target's), which a primitive picks (`SV_RenderTargetArrayIndex`). At least
     /// one.
     pub layers: u32,
-    /// By output register; `None` for a register the draw does not write.
+    /// Samples a pixel of every target and the depth buffer: 1, or 2, 4, 8 or 16 at Direct3D's standard positions.
+    pub samples: u32,
+    /// By output register; `None` for a register the draw does not write. `width * height * layers * samples`
+    /// texels, slice by slice and row by row, a pixel's samples together.
     pub targets: Vec<Option<Vec<[u32; 4]>>>,
-    /// `width * height * layers` depths, when the state tests depth.
+    /// `width * height * layers * samples` depths, when the state tests depth.
     pub depth: Option<Vec<f32>>,
 }
 
@@ -480,6 +483,7 @@ enum Source {
         to_register: usize,
         to_lanes: Vec<u8>,
         mode: InterpMode,
+        centroid: bool,
         texcoord: bool,
         colour: bool,
     },
@@ -502,11 +506,93 @@ enum Source {
         lane: u8,
         word: u32,
     },
-    /// The pixel's coverage (`SV_Coverage`).
+    /// The pixel's coverage (`SV_Coverage`): the samples it covers that the sample mask keeps.
     Coverage {
         register: usize,
         lane: u8,
     },
+    /// The sample a program that runs per sample runs for (`SV_SampleIndex`), 0 where it runs per pixel.
+    SampleIndex {
+        register: usize,
+        lane: u8,
+    },
+}
+
+/// A lane of a quad as the pixel program's inputs read it: the fragment its inputs are interpolated at, the fragment
+/// a centroid input is, the pixel's centre, the samples it covers (none for a helper) and the sample it runs for.
+struct Lane<'f> {
+    at: &'f Fragment,
+    centroid: &'f Fragment,
+    centre: [f32; 2],
+    coverage: u32,
+    sample: u32,
+}
+
+/// The bit of sample `s` in a coverage mask.
+fn bit(s: usize) -> u32 {
+    u32::try_from(s)
+        .ok()
+        .and_then(|s| 1u32.checked_shl(s))
+        .unwrap_or(0)
+}
+
+/// A lane of a quad as the rasterizer keeps it: the pixel, its fragment at the centre, the samples the primitive
+/// covers, those the pass runs it for that pass the early tests, and its fog coordinate.
+#[derive(Clone, Copy, Debug, Default)]
+struct QuadLane {
+    px: i64,
+    py: i64,
+    centre: Fragment,
+    covered_by: u32,
+    mask: u32,
+    fog: f32,
+}
+
+/// The standard sample positions of a target of `samples` samples a pixel (Direct3D's
+/// `D3D11_STANDARD_MULTISAMPLE_PATTERN`, in sixteenths of a pixel from its centre), in the rasterizer's 1/256 pixels.
+fn sample_positions(samples: u32) -> Result<Vec<[i64; 2]>, Error> {
+    let sixteenths: &[[i64; 2]] = match samples {
+        1 => &[[0, 0]],
+        2 => &[[4, 4], [-4, -4]],
+        4 => &[[-2, -6], [6, -2], [-6, 2], [2, 6]],
+        8 => &[
+            [1, -3],
+            [-1, 3],
+            [5, 1],
+            [-3, -5],
+            [-5, 5],
+            [-7, -1],
+            [3, 7],
+            [7, -7],
+        ],
+        16 => &[
+            [1, 1],
+            [-1, -3],
+            [-3, 2],
+            [4, -1],
+            [-5, -2],
+            [2, 5],
+            [5, 3],
+            [3, -5],
+            [-2, 6],
+            [0, -7],
+            [-4, -6],
+            [-6, 4],
+            [-8, 0],
+            [7, -4],
+            [6, 7],
+            [-7, -8],
+        ],
+        _ => {
+            return Err(error(format!(
+                "{samples} samples a pixel, which has no standard pattern"
+            )));
+        }
+    };
+    Ok(sixteenths
+        .iter()
+        .map(|&[x, y]| [x.saturating_mul(16), y.saturating_mul(16)])
+        .collect())
 }
 
 fn lanes_of(mask: u8) -> Vec<u8> {
@@ -641,6 +727,8 @@ struct Raster<'a> {
     sources: Vec<Source>,
     /// How many input registers a pixel's inputs take.
     inputs: usize,
+    /// Whether the program runs per sample on a multisampled target (it reads `SV_SampleIndex` or a `sample` input).
+    per_sample: bool,
 }
 
 /// A vertex after the vertex program: its clip-space position, its output registers, its clip and cull distances,
@@ -713,6 +801,7 @@ impl<'a> Raster<'a> {
         linkage: Linkage,
     ) -> Result<Self, Error> {
         let mut sources = Vec::new();
+        let mut per_sample = false;
         let mut inputs = pixel.input_count();
         for v in pixel.interface().inputs.iter().filter(|v| v.used) {
             let name = || format!("{}{}", v.label.name, v.label.index);
@@ -757,6 +846,7 @@ impl<'a> Raster<'a> {
                             to_register: register,
                             to_lanes: vec![lane],
                             mode: InterpMode::Flat,
+                            centroid: false,
                             texcoord: false,
                             colour: false,
                         });
@@ -764,6 +854,10 @@ impl<'a> Raster<'a> {
                     None => sources.push(match system {
                         SystemValue::PrimitiveIndex => Source::Primitive { register, lane },
                         SystemValue::Coverage => Source::Coverage { register, lane },
+                        SystemValue::SampleIndex => {
+                            per_sample = true;
+                            Source::SampleIndex { register, lane }
+                        }
                         _ => Source::Word {
                             register,
                             lane,
@@ -845,12 +939,15 @@ impl<'a> Raster<'a> {
                 None if v.value.scalar == iridia::ScalarType::Float => InterpMode::Perspective,
                 None => InterpMode::Flat,
             };
+            let sampling = v.interp.map(|i| i.sampling);
+            per_sample |= sampling == Some(InterpSampling::Sample);
             sources.push(Source::Varying {
                 from_register,
                 from_lanes,
                 to_register,
                 to_lanes,
                 mode,
+                centroid: sampling == Some(InterpSampling::Centroid),
                 texcoord: v.label.name.eq_ignore_ascii_case("TEXCOORD"),
                 colour: v.label.name.eq_ignore_ascii_case("COLOR"),
             });
@@ -859,14 +956,17 @@ impl<'a> Raster<'a> {
             pixel,
             sources,
             inputs,
+            per_sample,
         })
     }
 
     /// Check `surface` against `state` before a draw.
     fn check(state: &Rasterizer, surface: &Surface) -> Result<(), Error> {
+        sample_positions(surface.samples)?;
         let n = (surface.width as usize)
             .saturating_mul(surface.height as usize)
-            .saturating_mul(surface.layers as usize);
+            .saturating_mul(surface.layers as usize)
+            .saturating_mul(surface.samples as usize);
         if surface.layers == 0 {
             return Err(error("a surface of no slices"));
         }
@@ -874,7 +974,7 @@ impl<'a> Raster<'a> {
             || surface.depth.as_ref().is_some_and(|d| d.len() != n)
         {
             return Err(error(
-                "a target or the depth buffer is not width x height x layers",
+                "a target or the depth buffer is not width x height x layers x samples",
             ));
         }
         if state.viewports.is_empty() {
@@ -1037,7 +1137,9 @@ impl<'a> Raster<'a> {
     }
 
     /// Run the pixel program over the pixels `cover` covers, in 2 x 2 quads aligned to even pixels, and write the
-    /// pixels that pass.
+    /// samples that pass: once a pixel, its inputs at the centre (a centroid input at its first covered sample where
+    /// the primitive does not cover them all), or once a covered sample where the program runs per sample
+    /// (`SV_SampleIndex`, a `sample` input), its inputs at the sample.
     #[allow(clippy::too_many_arguments)]
     fn quads(
         &self,
@@ -1056,9 +1158,21 @@ impl<'a> Raster<'a> {
             return Ok(());
         };
         let depth_range = (vp.min_depth.min(vp.max_depth), vp.max_depth.max(vp.min_depth));
-        // the pixel is inside the surface: the bounds are clamped to its width and height
-        let index = |px: i64, py: i64| {
+        let positions = sample_positions(surface.samples)?;
+        let samples = positions.len();
+        if samples > 1 && !matches!(cover, Cover::Triangle(..)) {
+            return Err(error(
+                "a multisampled line or point (quadrilateral lines) is not modelled",
+            ));
+        }
+        let all = u32::MAX
+            .checked_shr(u32::try_from(32usize.saturating_sub(samples)).unwrap_or(32))
+            .unwrap_or(0);
+        // the sample's word in a target or the depth buffer: the pixel is inside the surface (the bounds are clamped
+        // to its width and height), and its samples are together
+        let index = |px: i64, py: i64, sample: usize| {
             usize::try_from(slice.saturating_add(py.saturating_mul(w)).saturating_add(px))
+                .map(|pixel| pixel.saturating_mul(samples).saturating_add(sample))
                 .map_err(|_| error(format!("pixel ({px}, {py}) is outside the surface")))
         };
         // a program that forces early tests (`[earlydepthstencil]`) runs only where they pass
@@ -1067,136 +1181,193 @@ impl<'a> Raster<'a> {
             .program()
             .and_then(|p| p.module.entry_points.first())
             .is_some_and(|e| e.early_depth_test.is_some());
+        // a pass for the pixel, or one a sample where the program runs per sample
+        let passes: Vec<Option<usize>> = if self.per_sample && samples > 1 {
+            (0..samples).map(Some).collect()
+        } else {
+            vec![None]
+        };
+        // a sample's depth, clamped to the viewport's range
+        let depth_at = |lane: &QuadLane, sample: usize| {
+            let depth = match positions.get(sample) {
+                Some(&offset) if samples > 1 => cover.fragment_at(lane.px, lane.py, offset).depth,
+                _ => lane.centre.depth,
+            };
+            depth.clamp(depth_range.0, depth_range.1)
+        };
+        let in_mask = |mask: u32| (0..samples).filter(move |&s| mask & bit(s) != 0);
         let qx0 = min_x & !1;
         let qy0 = min_y & !1;
         let mut lane_inputs: [Vec<[u32; 4]>; 4] = Default::default();
         for qy in (qy0..max_y).step_by(2) {
             for qx in (qx0..max_x).step_by(2) {
                 let (qx1, qy1) = (qx.saturating_add(1), qy.saturating_add(1));
-                let lanes = [(qx, qy), (qx1, qy), (qx, qy1), (qx1, qy1)];
-                let mut covered = [false; 4];
-                let mut depths = [0f32; 4];
-                let mut fogs = [0f32; 4];
-                for ((((&(px, py), covered), depth), fog), lane_input) in lanes
-                    .iter()
-                    .zip(covered.iter_mut())
-                    .zip(depths.iter_mut())
-                    .zip(fogs.iter_mut())
-                    .zip(lane_inputs.iter_mut())
-                {
-                    // the pixel program reads the depth as interpolated; the depth test and write take it clamped
-                    let f = cover.fragment(px, py);
-                    *covered = f.covered && px < w && py < h;
-                    *depth = f.depth.clamp(depth_range.0, depth_range.1);
-                    if early
-                        && *covered
-                        && let (Some(test), Some(buffer)) = (state.depth, surface.depth.as_mut())
-                    {
-                        let stored = buffer.get_mut(index(px, py)?).ok_or_else(|| {
-                            error(format!("pixel ({px}, {py}) is outside the depth buffer"))
-                        })?;
-                        if !test.passes(*depth, *stored) {
-                            stats.depth_failed = stats.depth_failed.saturating_add(1);
-                            *covered = false;
-                        } else if test.write {
-                            *stored = *depth;
-                        }
+                // each lane's fragment at the centre and the samples the primitive covers
+                let mut lanes = [(qx, qy), (qx1, qy), (qx, qy1), (qx1, qy1)].map(|(px, py)| {
+                    let centre = cover.fragment(px, py);
+                    let covered_by = match px < w && py < h {
+                        false => 0,
+                        true if samples == 1 => u32::from(centre.covered),
+                        true => positions
+                            .iter()
+                            .enumerate()
+                            .filter(|&(_, &offset)| cover.fragment_at(px, py, offset).covered)
+                            .fold(0u32, |m, (s, _)| m | bit(s)),
+                    };
+                    QuadLane {
+                        px,
+                        py,
+                        centre,
+                        covered_by,
+                        ..QuadLane::default()
                     }
-                    if let Some(state_fog) = state.fog.filter(|_| *covered) {
-                        *fog = fog_coordinate(state_fog.source, drawn, &f)?;
-                    }
-                    let centre = [px as f32 + 0.5, py as f32 + 0.5];
-                    self.inputs_at(drawn, &f, centre, *covered, state, lane_input);
-                }
-                if !covered.iter().any(|c| *c) {
+                });
+                if lanes.iter().all(|l| l.covered_by == 0) {
                     continue;
                 }
-                let [input0, input1, input2, input3] = &lane_inputs;
-                let inputs = [
-                    input0.as_slice(),
-                    input1.as_slice(),
-                    input2.as_slice(),
-                    input3.as_slice(),
-                ];
-                let quad: [Execution; 4] = self.pixel.execute_quad(inputs, buffers, sampler)?;
-                for ((((e, &covered), &(px, py)), &depth), &fog_at) in
-                    quad.iter().zip(&covered).zip(&lanes).zip(&depths).zip(&fogs)
-                {
-                    if !covered {
-                        continue;
-                    }
-                    stats.shaded = stats.shaded.saturating_add(1);
-                    if e.discarded {
-                        stats.discarded = stats.discarded.saturating_add(1);
-                        continue;
-                    }
-                    if let Some(test) = state.alpha_test {
-                        let alpha = e.outputs.first().map_or(0., |o| f32::from_bits(o[3]));
-                        if !test.compare.passes(alpha, test.reference) {
-                            stats.alpha_failed = stats.alpha_failed.saturating_add(1);
-                            continue;
-                        }
-                    }
-                    if state.sample_mask & 1 == 0 {
-                        stats.masked = stats.masked.saturating_add(1);
-                        continue;
-                    }
-                    let mut outputs = std::borrow::Cow::Borrowed(&e.outputs);
-                    if let Some(fog) = &state.fog
-                        && let Some(first) = outputs.to_mut().first_mut()
-                    {
-                        *first = fog.apply(*first, fog_at);
-                    }
-                    let at = index(px, py)?;
-                    if !early && let (Some(test), Some(buffer)) = (state.depth, surface.depth.as_mut()) {
-                        let stored = buffer.get_mut(at).ok_or_else(|| {
-                            error(format!("pixel ({px}, {py}) is outside the depth buffer"))
-                        })?;
-                        if !test.passes(depth, *stored) {
-                            stats.depth_failed = stats.depth_failed.saturating_add(1);
-                            continue;
-                        }
-                        if test.write {
-                            *stored = depth;
-                        }
-                    }
-                    for (register, target) in surface.targets.iter_mut().enumerate() {
-                        let Some(target) = target else { continue };
-                        let mask = e.output_masks.get(register).copied().unwrap_or(0);
-                        let value = outputs.get(register).copied().unwrap_or([0; 4]);
-                        let texel = target.get_mut(at).ok_or_else(|| {
-                            error(format!("pixel ({px}, {py}) is outside target {register}"))
-                        })?;
-                        for (lane, (stored, &written)) in texel.iter_mut().zip(&value).enumerate() {
-                            if mask >> lane & 1 != 0 {
-                                *stored = written;
+                for &pass in &passes {
+                    for (lane, lane_input) in lanes.iter_mut().zip(lane_inputs.iter_mut()) {
+                        let (px, py) = (lane.px, lane.py);
+                        lane.mask = match pass {
+                            None => lane.covered_by,
+                            Some(s) => lane.covered_by & bit(s),
+                        };
+                        if early
+                            && lane.mask != 0
+                            && let (Some(test), Some(buffer)) = (state.depth, surface.depth.as_mut())
+                        {
+                            for s in in_mask(lane.mask) {
+                                let depth = depth_at(lane, s);
+                                let stored = buffer.get_mut(index(px, py, s)?).ok_or_else(|| {
+                                    error(format!("pixel ({px}, {py}) is outside the depth buffer"))
+                                })?;
+                                if !test.passes(depth, *stored) {
+                                    stats.depth_failed = stats.depth_failed.saturating_add(1);
+                                    lane.mask &= !bit(s);
+                                } else if test.write {
+                                    *stored = depth;
+                                }
                             }
                         }
+                        // where the inputs are read: the sample of the pass, else the centre and, for a centroid
+                        // input, the first covered sample where the primitive does not cover them all
+                        let (at, centroid) = match pass.and_then(|s| positions.get(s)) {
+                            Some(&offset) if samples > 1 => {
+                                let f = cover.fragment_at(px, py, offset);
+                                (f, f)
+                            }
+                            _ if lane.covered_by == 0 || lane.covered_by == all => (lane.centre, lane.centre),
+                            _ => {
+                                let first = lane.covered_by.trailing_zeros() as usize;
+                                let f = positions
+                                    .get(first)
+                                    .map_or(lane.centre, |&offset| cover.fragment_at(px, py, offset));
+                                (lane.centre, f)
+                            }
+                        };
+                        if let Some(fog) = state.fog.filter(|_| lane.mask != 0) {
+                            lane.fog = fog_coordinate(fog.source, drawn, &at)?;
+                        }
+                        let inputs = Lane {
+                            at: &at,
+                            centroid: &centroid,
+                            centre: [px as f32 + 0.5, py as f32 + 0.5],
+                            coverage: lane.mask,
+                            sample: pass.and_then(|s| u32::try_from(s).ok()).unwrap_or(0),
+                        };
+                        self.inputs_at(drawn, &inputs, state, lane_input);
                     }
-                    stats.written = stats.written.saturating_add(1);
+                    if lanes.iter().all(|l| l.mask == 0) {
+                        continue;
+                    }
+                    let [input0, input1, input2, input3] = &lane_inputs;
+                    let inputs = [
+                        input0.as_slice(),
+                        input1.as_slice(),
+                        input2.as_slice(),
+                        input3.as_slice(),
+                    ];
+                    let quad: [Execution; 4] = self.pixel.execute_quad(inputs, buffers, sampler)?;
+                    for (e, lane) in quad.iter().zip(&lanes) {
+                        let (px, py) = (lane.px, lane.py);
+                        if lane.mask == 0 {
+                            continue;
+                        }
+                        stats.shaded = stats.shaded.saturating_add(1);
+                        if e.discarded {
+                            stats.discarded = stats.discarded.saturating_add(1);
+                            continue;
+                        }
+                        if let Some(test) = state.alpha_test {
+                            let alpha = e.outputs.first().map_or(0., |o| f32::from_bits(o[3]));
+                            if !test.compare.passes(alpha, test.reference) {
+                                stats.alpha_failed = stats.alpha_failed.saturating_add(1);
+                                continue;
+                            }
+                        }
+                        let write = lane.mask & state.sample_mask;
+                        if write == 0 {
+                            stats.masked = stats.masked.saturating_add(1);
+                            continue;
+                        }
+                        let mut outputs = std::borrow::Cow::Borrowed(&e.outputs);
+                        if let Some(fog) = &state.fog
+                            && let Some(first) = outputs.to_mut().first_mut()
+                        {
+                            *first = fog.apply(*first, lane.fog);
+                        }
+                        let mut wrote = false;
+                        for s in in_mask(write) {
+                            let at = index(px, py, s)?;
+                            if !early
+                                && let (Some(test), Some(buffer)) = (state.depth, surface.depth.as_mut())
+                            {
+                                let depth = depth_at(lane, s);
+                                let stored = buffer.get_mut(at).ok_or_else(|| {
+                                    error(format!("pixel ({px}, {py}) is outside the depth buffer"))
+                                })?;
+                                if !test.passes(depth, *stored) {
+                                    stats.depth_failed = stats.depth_failed.saturating_add(1);
+                                    continue;
+                                }
+                                if test.write {
+                                    *stored = depth;
+                                }
+                            }
+                            for (register, target) in surface.targets.iter_mut().enumerate() {
+                                let Some(target) = target else { continue };
+                                let mask = e.output_masks.get(register).copied().unwrap_or(0);
+                                let value = outputs.get(register).copied().unwrap_or([0; 4]);
+                                let texel = target.get_mut(at).ok_or_else(|| {
+                                    error(format!("pixel ({px}, {py}) is outside target {register}"))
+                                })?;
+                                for (lane, (stored, &written)) in texel.iter_mut().zip(&value).enumerate() {
+                                    if mask >> lane & 1 != 0 {
+                                        *stored = written;
+                                    }
+                                }
+                            }
+                            wrote = true;
+                        }
+                        if wrote {
+                            stats.written = stats.written.saturating_add(1);
+                        }
+                    }
                 }
             }
         }
         Ok(())
     }
 
-    /// The pixel program's input registers at a pixel `f` of the primitive `drawn`, whose centre is `centre`, which
-    /// it covers where `covered` (not a helper), drawn with the sample mask `sample_mask`.
-    fn inputs_at(
-        &self,
-        drawn: Drawn<'_>,
-        f: &Fragment,
-        centre: [f32; 2],
-        covered: bool,
-        state: &Rasterizer,
-        into: &mut Vec<[u32; 4]>,
-    ) {
+    /// The pixel program's input registers at a lane of a quad of the primitive `drawn`.
+    fn inputs_at(&self, drawn: Drawn<'_>, lane: &Lane<'_>, state: &Rasterizer, into: &mut Vec<[u32; 4]>) {
+        let f = lane.at;
         into.clear();
         into.resize(self.inputs, [0; 4]);
         for s in &self.sources {
             match s {
                 Source::Position { register, lanes } => {
-                    let [x, y] = centre;
+                    let [x, y] = lane.centre;
                     let value = [x, y, f.depth, f.w];
                     for (lane, value) in lanes.iter().zip(value) {
                         put(into, *register, *lane as usize, value.to_bits());
@@ -1212,23 +1383,22 @@ impl<'a> Raster<'a> {
                 }
                 Source::Primitive { register, lane } => put(into, *register, *lane as usize, drawn.id),
                 Source::Word { register, lane, word } => put(into, *register, *lane as usize, *word),
-                Source::Coverage { register, lane } => {
-                    put(
-                        into,
-                        *register,
-                        *lane as usize,
-                        u32::from(covered) & state.sample_mask,
-                    );
+                Source::Coverage { register, lane: at } => {
+                    put(into, *register, *at as usize, lane.coverage & state.sample_mask);
                 }
+                Source::SampleIndex { register, lane: at } => put(into, *register, *at as usize, lane.sample),
                 Source::Varying {
                     from_register,
                     from_lanes,
                     to_register,
                     to_lanes,
                     mode,
+                    centroid,
                     texcoord,
                     colour,
                 } => {
+                    // a centroid input's weights are its centroid's
+                    let f = if *centroid { lane.centroid } else { f };
                     let mode = if *colour && state.flat_colours {
                         InterpMode::Flat
                     } else {
@@ -1500,9 +1670,17 @@ impl Cover<'_> {
     /// The pixel `(px, py)`: whether it is covered, its depth (before the clamp to the viewport's range) and the
     /// weights of its inputs on the primitive's vertices (extrapolated for a pixel the primitive does not cover).
     fn fragment(&self, px: i64, py: i64) -> Fragment {
+        self.fragment_at(px, py, [0, 0])
+    }
+
+    /// [`fragment`](Self::fragment) at a point `offset` (1/256 pixels) from the pixel's centre: a sample of a
+    /// multisampled target, which only triangles are drawn on (a line's or point's is its centre's).
+    fn fragment_at(&self, px: i64, py: i64, offset: [i64; 2]) -> Fragment {
         match self {
             Cover::Triangle(setup, tri, corner_w) => {
-                let (b, covered) = setup.weights(px, py);
+                let [ox, oy] = offset;
+                let at = |p: i64, o: i64| p.saturating_mul(256).saturating_add(128).saturating_add(o);
+                let (b, covered) = setup.weights_at([at(px, ox), at(py, oy)]);
                 let z = b[0] * setup.screen[0][2] + b[1] * setup.screen[1][2] + b[2] * setup.screen[2][2];
                 on_primitive(covered, crate::narrow(z), b, setup.inv_w, *tri, *corner_w)
             }
@@ -1669,11 +1847,10 @@ impl Setup {
         bounds_of(&self.fixed, 0, w, h)
     }
 
-    /// The barycentrics of a pixel centre from the snapped positions (the weight of each vertex of the triangle), and
-    /// whether the triangle covers it.
+    /// The barycentrics of the point `p` (1/256 pixels; a pixel's centre or a sample) from the snapped positions (the
+    /// weight of each vertex of the triangle), and whether the triangle covers it.
     #[allow(clippy::indexing_slicing, clippy::arithmetic_side_effects)] // the edges' indices are 0..3; pixel and edge values stay within the 16.8 range
-    fn weights(&self, px: i64, py: i64) -> ([f64; 3], bool) {
-        let p = [px * 256 + 128, py * 256 + 128];
+    fn weights_at(&self, p: [i64; 2]) -> ([f64; 3], bool) {
         let mut inside = true;
         let mut b = [0f64; 3];
         for (e, &(a, c)) in self.edges.iter().enumerate() {
@@ -2053,7 +2230,7 @@ mod tests {
             };
             for py in y0..y1 {
                 for px in x0..x1 {
-                    if setup.weights(px, py).1 {
+                    if setup.weights_at([px * 256 + 128, py * 256 + 128]).1 {
                         count[(py * SIZE + px) as usize] += 1;
                     }
                 }

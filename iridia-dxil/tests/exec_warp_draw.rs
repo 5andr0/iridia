@@ -426,6 +426,7 @@ fn surface_of(c: &DrawCase) -> Surface {
         width: SIZE,
         height: SIZE,
         layers: 1,
+        samples: 1,
         targets: (0..highest)
             .map(|r| {
                 c.targets

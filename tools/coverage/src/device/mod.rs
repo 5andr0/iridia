@@ -376,7 +376,7 @@ impl iridia_exec::Sampler for SlotRequests<'_> {
             let x = i64::from(request.texel[0]);
             return Ok(r.texel(0, 0, [x, 0, 0]).map_or([0; 4], |t| r.mapped(t)));
         }
-        Ok(sample::load(r, request.texel, None, request.mip, [0; 3]))
+        Ok(sample::load(r, request.texel, None, request.mip, None, [0; 3]))
     }
 
     fn load_image(&mut self, request: ImageLoad<u32>) -> Result<[u32; 4], String> {
@@ -396,7 +396,14 @@ impl iridia_exec::Sampler for SlotRequests<'_> {
                 request.layer.or(Some(request.texel[2])),
             )
         };
-        Ok(sample::load(r, texel, layer, request.mip.unwrap_or(0), [0; 3]))
+        Ok(sample::load(
+            r,
+            texel,
+            layer,
+            request.mip.unwrap_or(0),
+            request.sample,
+            [0; 3],
+        ))
     }
 
     fn query_image(&mut self, request: ImageQuery<u32>) -> Result<[u32; 4], String> {
@@ -647,7 +654,16 @@ impl<'a> IdRequests<'a> {
         let r = self.view_of(b, element)?;
         Some(match b.held {
             Held::Lanes => (0..r.width)
-                .flat_map(|i| sample::load(r, [i32::try_from(i).unwrap_or(i32::MAX), 0, 0], None, 0, [0; 3]))
+                .flat_map(|i| {
+                    sample::load(
+                        r,
+                        [i32::try_from(i).unwrap_or(i32::MAX), 0, 0],
+                        None,
+                        0,
+                        None,
+                        [0; 3],
+                    )
+                })
                 .collect(),
             Held::Words | Held::No => r
                 .data
@@ -799,7 +815,14 @@ impl iridia_exec::Backend for IdRequests<'_> {
         } else {
             ([r.texel[0], r.texel[1], 0], r.layer.or(Some(r.texel[2])))
         };
-        Ok(sample::load(res, texel, layer, r.mip.unwrap_or(0), [0; 3]))
+        Ok(sample::load(
+            res,
+            texel,
+            layer,
+            r.mip.unwrap_or(0),
+            r.sample,
+            [0; 3],
+        ))
     }
 
     fn query(&mut self, r: ImageQuery<Element>) -> Result<[u32; 4], String> {

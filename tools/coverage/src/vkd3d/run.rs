@@ -1097,6 +1097,19 @@ fn probe_step(
     let Some(r) = device.resources.get(&key) else {
         return Outcome::NotModelled(format!("a probe of {target}, which the run never defined"));
     };
+    // a multisampled target is read resolved, as vkd3d's runners read it
+    let resolved;
+    let r = if r.samples > 1 {
+        match r.resolved() {
+            Ok(one) => {
+                resolved = one;
+                &resolved
+            }
+            Err(e) => return Outcome::NotModelled(e),
+        }
+    } else {
+        r
+    };
     let size = probe_size(kind, count);
     let step = probe_step_bytes(kind, count);
     let [w, h, _] = r.level_dims(0);
@@ -1381,11 +1394,24 @@ fn draw_step(
         return Err(Outcome::NotModelled("targets of different array sizes".into()));
     }
     let layers = layers.first().copied().unwrap_or(1).max(1);
-    let texel_count = (width as usize) * (height as usize) * (layers as usize);
+    // the samples a pixel of the targets and the depth buffer, alike
+    let samples = device
+        .resources
+        .iter()
+        .filter(|(k, _)| k.0 == Kind::Rtv || k.0 == Kind::Dsv)
+        .map(|(_, r)| r.samples)
+        .collect::<std::collections::BTreeSet<u32>>();
+    if samples.len() > 1 {
+        return Err(Outcome::NotModelled("targets of different sample counts".into()));
+    }
+    let samples = samples.first().copied().unwrap_or(1).max(1);
+    let pixel_count = (width as usize) * (height as usize) * (layers as usize);
+    let texel_count = pixel_count * samples as usize;
     let mut surface = Surface {
         width,
         height,
         layers,
+        samples,
         targets: Vec::new(),
         depth: None,
     };
@@ -1393,9 +1419,6 @@ fn draw_step(
     surface.targets = vec![None; rt_count];
     for (slot, _) in &targets {
         let r = &device.resources[&(Kind::Rtv, *slot)];
-        if r.samples > 1 {
-            return Err(Outcome::NotModelled("a multisampled target".into()));
-        }
         let size = r.format.size as usize;
         let read = r
             .data
@@ -1539,7 +1562,7 @@ fn draw_step(
         for (t, bytes) in texels.iter().zip(r.data.chunks_mut(size)) {
             format.write(*t, 0xf, bytes);
         }
-        if written >= texel_count {
+        if written >= pixel_count {
             state.taint.remove(&(Kind::Rtv, slot as u32));
         }
     }

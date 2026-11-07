@@ -202,7 +202,6 @@ impl Resource {
         (0..self.levels)
             .map(|l| self.level_bytes(l).saturating_mul(self.layers as usize))
             .sum::<usize>()
-            .saturating_mul(self.samples as usize)
     }
 
     /// The size of level `level`: width, height, depth.
@@ -223,9 +222,10 @@ impl Resource {
     }
 
     /// Bytes of one layer of level `level`.
+    /// The bytes of one layer of level `level`: a multisampled texture's texel is its samples, together.
     fn level_bytes(&self, level: u32) -> usize {
         let [w, h, d] = self.level_dims(level);
-        (w as usize) * (h as usize) * (d as usize) * (self.element_size() as usize)
+        (w as usize) * (h as usize) * (d as usize) * (self.element_size() as usize) * (self.samples as usize)
     }
 
     /// The byte offset of subresource (`level`, `layer`): the runner's order is every layer of a level before the
@@ -237,9 +237,15 @@ impl Resource {
         before + self.level_bytes(level) * layer as usize
     }
 
-    /// The byte offset of texel (x, y, z) of subresource (`level`, `layer`), or `None` outside it.
+    /// The byte offset of texel (x, y, z) of subresource (`level`, `layer`), or `None` outside it; a multisampled
+    /// texture's first sample.
     pub fn texel_offset(&self, level: u32, layer: u32, at: [i64; 3]) -> Option<usize> {
-        if level >= self.levels || layer >= self.layers {
+        self.sample_offset(level, layer, at, 0)
+    }
+
+    /// The byte offset of sample `sample` of texel (x, y, z) of subresource (`level`, `layer`), or `None` outside it.
+    pub fn sample_offset(&self, level: u32, layer: u32, at: [i64; 3], sample: u32) -> Option<usize> {
+        if level >= self.levels || layer >= self.layers || sample >= self.samples {
             return None;
         }
         let [w, h, d] = self.level_dims(level);
@@ -249,7 +255,44 @@ impl Resource {
         }
         let size = self.element_size() as usize;
         let index = (z as usize * h as usize + y as usize) * w as usize + x as usize;
-        Some(self.subresource(level, layer) + index * size)
+        let samples = self.samples as usize;
+        Some(self.subresource(level, layer) + (index * samples + sample as usize) * size)
+    }
+
+    /// The resource resolved to one sample a texel, as vkd3d's runners resolve a multisampled target before they
+    /// read it back (`ResolveSubresource`, Direct3D 9's `StretchRect`): each texel the average of its samples, a
+    /// float or UNORM format's lanes as floats. An integer, typeless or depth format has no average and is refused.
+    pub fn resolved(&self) -> Result<Resource, String> {
+        if self.samples <= 1 {
+            return Ok(self.clone());
+        }
+        if !matches!(self.format.class, Class::Float | Class::Unorm) {
+            return Err(format!("a resolve of a multisampled {} target", self.format.name));
+        }
+        let size = self.format.size as usize;
+        let samples = self.samples as usize;
+        let mut out = self.clone();
+        out.samples = 1;
+        out.data = vec![0; out.total_bytes()];
+        for (texel, into) in self.data.chunks(size * samples).zip(out.data.chunks_mut(size)) {
+            let mut sum = [0f64; 4];
+            for sample in texel.chunks(size) {
+                for (total, lane) in sum.iter_mut().zip(self.format.read(sample)) {
+                    *total += f64::from(f32::from_bits(lane));
+                }
+            }
+            let lanes = sum.map(|total| ((total / samples as f64) as f32).to_bits());
+            self.format.write(lanes, 0xf, into);
+        }
+        Ok(out)
+    }
+
+    /// The four lanes a view reads of sample `sample` of texel (x, y, z) of subresource (`level`, `layer`) before
+    /// its component mapping; `None` outside it.
+    pub fn sample_texel(&self, level: u32, layer: u32, at: [i64; 3], sample: u32) -> Option<[u32; 4]> {
+        let at = self.sample_offset(level, layer, at, sample)?;
+        let size = self.format.size as usize;
+        self.data.get(at..at + size).map(|b| self.format.read(b))
     }
 
     /// The four lanes a view reads of texel (x, y, z) of subresource (`level`, `layer`) before its component mapping;

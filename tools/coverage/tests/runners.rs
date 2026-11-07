@@ -480,3 +480,33 @@ fn direct3d_9_fogs_the_first_target_by_its_mode_and_source() {
 fn the_depth_bounds_and_early_tests_hold_back_a_pixel_and_its_program() {
     assert_selected_pass(&vkd3d_runs("vkd3d/dxbc.json.gz", "depth-bounds.shader_test"));
 }
+
+/// A multisampled target is drawn sample by sample at Direct3D's standard positions: a centroid input is read at the
+/// first covered sample where the primitive does not cover the pixel's every sample (sm1-centroid, whose expected
+/// offsets are the 4x pattern's), the sample mask and the covered samples make `SV_Coverage` and the samples written,
+/// a probe reads the target resolved (coverage.shader_test's input section, lines 49 to 77), and a load of a
+/// multisampled texture reads its sample (texture-load's `Texture2DMS` loads, lines 171 to 200).
+#[test]
+fn a_multisampled_target_is_drawn_and_read_by_its_samples() {
+    assert_selected_pass(&vkd3d_runs("vkd3d/d3d9.json.gz", "sm1-centroid.shader_test"));
+    assert_selected_pass(&vkd3d_runs("vkd3d/dxbc.json.gz", "texture-load.shader_test"));
+    let mut seen = Vec::new();
+    for r in vkd3d_runs("vkd3d/dxil.json.gz", "coverage.shader_test") {
+        // lines 18 and 22 read the coverage a program writes, which the executor does not hand the draw yet
+        for p in r.probes.iter().filter(|p| p.selected && p.line >= 49) {
+            assert_eq!(
+                p.outcome.class(),
+                "pass",
+                "{} {} line {}: {:?}",
+                r.file,
+                r.model,
+                p.line,
+                p.outcome
+            );
+            seen.push(p.line);
+        }
+    }
+    for line in [49, 50, 72, 77] {
+        assert!(seen.contains(&line), "the probe at line {line} is selected");
+    }
+}
