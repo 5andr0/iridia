@@ -302,7 +302,9 @@ pub trait Backend {
         let _ = request;
         Err("no ray tracing pipeline given".into())
     }
-    /// An atomic operation on one texel; its result the word as it was before.
+    /// An atomic operation on one texel; its result the word as it was before. The backend owns the view's bounds:
+    /// an address outside the view changes nothing. Direct3D leaves its returned value undefined; a backend may
+    /// choose zero, as the tested WARP implementation does.
     fn atomic_image(&mut self, request: ImageAtomic<ResourceId>) -> Result<u32, String> {
         Err(format!("resource {}: no image atomics given", request.view.0))
     }

@@ -510,7 +510,8 @@ pub trait Sampler {
         Err(format!("t{}: no queries given", request.texture))
     }
     /// An atomic operation on a texel of a single-channel 32-bit unordered-access texture; its result is the word as it
-    /// was before.
+    /// was before. The sampler owns the view's bounds: an address outside the view changes nothing. Direct3D leaves
+    /// its returned value undefined; a sampler may choose zero, as the tested WARP implementation does.
     fn atomic_image(&mut self, request: ImageAtomic<u32>) -> std::result::Result<u32, String> {
         Err(format!("u{}: no image atomics given", request.view))
     }

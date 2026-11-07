@@ -455,6 +455,9 @@ impl Sampler for Hashed {
     }
     fn atomic_image(&mut self, r: ImageAtomic<u32>) -> Result<u32, String> {
         self.asked.push(format!("{r:?}"));
+        if !texel_inside(r.view, r.dim, r.texel, r.layer, None, None) {
+            return Ok(0);
+        }
         let [x, y, z] = r.texel;
         let layer = r.layer.unwrap_or(u32::MAX);
         self.reads.push(vec![
@@ -1262,6 +1265,83 @@ fn gate_over(corpus: &common::Corpus, not_yet: &[&str]) {
 /// Unordered-access texels by view, element, texel and layer: their four lanes.
 type Texels = BTreeMap<(u32, u32, [u32; 3], Option<u32>), [u32; 4]>;
 
+/// WARP on a 2x2 R32_UINT image returns zero for atomics at (width, 0), (0, height), and (-1, 0), including
+/// compare-exchange, and changes no texel. Both gate backends must apply that view behavior to every atomic op.
+#[test]
+fn image_atomics_outside_the_view_return_zero_and_change_nothing() {
+    use iridia_exec::ImageAtomicOp as Op;
+    let view = Element {
+        id: ResourceId(4),
+        index: 3,
+    };
+    let word = element_word(view);
+    for op in [
+        Op::Add,
+        Op::Sub,
+        Op::And,
+        Op::Or,
+        Op::Xor,
+        Op::Min,
+        Op::Max,
+        Op::Exchange,
+        Op::CompareExchange,
+    ] {
+        for dim in [Dim::D1, Dim::D2, Dim::D3] {
+            let mut pixel = Hashed::for_case(ZEROED);
+            let mut group = Group::for_case(ZEROED);
+            let request = ImageAtomic {
+                view: word,
+                index: 0,
+                dim,
+                texel: [0; 3],
+                layer: None,
+                op,
+                signed: false,
+                value: 7,
+                compare: 0,
+            };
+            let compute = |r: ImageAtomic<u32>| ImageAtomic {
+                view: view.id,
+                index: view.index,
+                dim: r.dim,
+                texel: r.texel,
+                layer: r.layer,
+                op: r.op,
+                signed: r.signed,
+                value: r.value,
+                compare: r.compare,
+            };
+            // A control on a valid texel proves these backends execute the request and record its effect.
+            assert_eq!(pixel.atomic_image(request).unwrap(), 0);
+            assert_eq!(group.atomic_image(compute(request)).unwrap(), 0);
+            assert_eq!(pixel.written.writes.len(), 1);
+            assert_eq!(group.texels.len(), 1);
+            let before_pixel = pixel.written.writes.clone();
+            let before_group = group.texels.clone();
+            let axes = match dim {
+                Dim::D1 => 1,
+                Dim::D2 => 2,
+                Dim::D3 => 3,
+                Dim::Cube => unreachable!(),
+            };
+            for (axis, outside) in texture_size(0).into_iter().enumerate().take(axes) {
+                for address in [outside, u32::MAX, 0xbe493788] {
+                    let mut r = request;
+                    r.texel[axis] = address;
+                    assert_eq!(pixel.atomic_image(r).unwrap(), 0);
+                    assert_eq!(group.atomic_image(compute(r)).unwrap(), 0);
+                }
+            }
+            let mut r = request;
+            r.layer = Some(texture_layers(word, dim));
+            assert_eq!(pixel.atomic_image(r).unwrap(), 0);
+            assert_eq!(group.atomic_image(compute(r)).unwrap(), 0);
+            assert_eq!(pixel.written.writes, before_pixel);
+            assert_eq!(group.texels, before_group);
+        }
+    }
+}
+
 /// The memory a compute dispatch leaves: each read-write buffer's words, each texel its stores and atomic operations
 /// reached, and each counter.
 #[derive(Debug, PartialEq, Eq)]
@@ -1434,6 +1514,13 @@ impl Backend for Group {
         Ok(())
     }
     fn atomic_image(&mut self, r: ImageAtomic<ResourceId>) -> Result<u32, String> {
+        let word = element_word(Element {
+            id: r.view,
+            index: r.index,
+        });
+        if !texel_inside(word, r.dim, r.texel, r.layer, None, None) {
+            return Ok(0);
+        }
         let key = (r.view.0, r.index, r.texel, r.layer);
         let fresh = if self.hashed.zeroed {
             0
