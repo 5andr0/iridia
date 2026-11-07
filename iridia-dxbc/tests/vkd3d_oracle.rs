@@ -205,9 +205,10 @@ fn compare(game: Game) {
     let (Some(dxbc), Some(compiler)) = (program(Tool::Vkd3dDxbc), program(Tool::Vkd3dCompiler)) else {
         return;
     };
-    let Some((name, paths)) = common::corpus(game) else {
+    let Some(corpus) = common::corpus(game) else {
         return;
     };
+    let name = &corpus.name;
     let limit = match debug("vkd3d.limit").as_deref() {
         Some("all") => usize::MAX,
         Some(n) => n.parse().unwrap(),
@@ -217,9 +218,9 @@ fn compare(game: Game) {
     let mut sections = 0;
     let (mut signatures, mut instructions, mut refused_digests) = (0, 0, 0);
     let mut differences: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for path in sample(&paths, limit) {
-        let bytes = std::fs::read(&path).unwrap();
-        let here = path.display().to_string();
+    for file in sample(&corpus.names, limit) {
+        let bytes = corpus.read(&file);
+        let here = corpus.at(&file);
         let mut differ = |what: &str, detail: String| {
             differences
                 .entry(what.to_owned())

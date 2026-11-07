@@ -707,13 +707,13 @@ fn report(title: &str, t: &Tally) {
 }
 
 fn corpus(game: Game) {
-    if let Some((name, paths)) = common::corpus(game) {
-        corpus_over(&name, &paths);
+    if let Some(corpus) = common::corpus(game) {
+        corpus_over(&corpus);
     }
 }
 
-/// The pixel programs of the containers `paths` (`name` in the report) against WARP, the older lift beside the IR's.
-fn corpus_over(name: &str, paths: &[PathBuf]) {
+/// The pixel programs of `corpus`'s containers against WARP, the older lift beside the IR's.
+fn corpus_over(corpus: &common::Corpus) {
     let (Some(fxc), Some(warp)) = (program(Tool::Fxc), program(Tool::Warp)) else {
         return;
     };
@@ -721,11 +721,11 @@ fn corpus_over(name: &str, paths: &[PathBuf]) {
     let all = debug("shader.warp_all").is_some_and(|v| v == "1");
     let tools = (fxc, warp, scratch);
     let mut t = Tally::default();
-    for path in paths.iter().take(common::diff_limit()) {
-        let bytes = std::fs::read(path).unwrap();
-        run_program(&path.display().to_string(), &bytes, 3, all, &tools, &mut t);
+    for file in corpus.names.iter().take(common::diff_limit()) {
+        let bytes = corpus.read(file);
+        run_program(&corpus.at(file), &bytes, 3, all, &tools, &mut t);
     }
-    report(name, &t);
+    report(&corpus.name, &t);
     // Direct3D leaves exp2, log2, sin, cos and rsqrt to the implementation within a few ulp, and a program that raises
     // a value to a large power through them turns that into more than 1e-3; only the textures that are not plain 2D are
     // asserted, the everything-bindable run (the debug key `shader.warp_all=1`) reports
@@ -767,9 +767,7 @@ fn outside_programs_agree_with_warp() {
     let Some(root) = debug("shader.outside").map(PathBuf::from) else {
         return;
     };
-    let mut paths = Vec::new();
-    common::containers(&root, &mut paths);
-    corpus_over(&root.display().to_string(), &paths);
+    corpus_over(&common::folder(&root));
 }
 
 /// A pixel program asking `resinfo` of a texture of each shape the oracle binds, at the level its input chooses (0, or

@@ -3,8 +3,8 @@
 //! and 5 program of a corpus has the operand count its opcode's format gives (`dxbc_reader::decode` refuses any other),
 //! the operands of a `Resource` slot are resource, sampler, view, shared-memory or stream registers and no other slot's
 //! are, and the float modifiers (negate, absolute value) sit on float slots only. Needs the corpus oracle set's
-//! `sekiro/shaders`, `riders/shaders` or `sledding/shaders` (each a folder, searched recursively, of containers as the game
-//! ships them).
+//! `sekiro/shaders`, `riders/shaders` or `sledding/shaders` (each a folder, searched recursively, or an archive, of
+//! containers as the game ships them).
 mod inputs;
 
 use std::collections::BTreeMap;
@@ -40,10 +40,12 @@ struct Census {
 }
 
 fn census(game: Game) -> Option<(String, Census)> {
-    let (name, paths) = common::corpus(game)?;
+    let corpus = common::corpus(game)?;
+    let name = corpus.name.clone();
     let mut c = Census::default();
-    for path in &paths {
-        let bytes = std::fs::read(path).unwrap();
+    for file in &corpus.names {
+        let bytes = corpus.read(file);
+        let path = corpus.at(file);
         let words = match dxbc_reader::code(&bytes) {
             Ok(words) => words,
             Err(e) => {
@@ -80,12 +82,7 @@ fn census(game: Game) -> Option<(String, Census)> {
                         .map(|(o, class)| (o, class, false)),
                 );
             for (operand, class, destination) in slots {
-                let here = format!(
-                    "{}: {} at word {}",
-                    path.display(),
-                    opcode_name(ins.opcode),
-                    ins.word
-                );
+                let here = format!("{}: {} at word {}", path, opcode_name(ins.opcode), ins.word);
                 assert_eq!(
                     is_resource(operand.register),
                     *class == OperandClass::Resource,

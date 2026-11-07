@@ -1,14 +1,15 @@
 #![allow(clippy::unwrap_used)]
 //! Every distinct vertex and pixel program of Shaun White Skateboarding's three SDB2 bundles against Microsoft's
 //! D3DDisassemble: the executable instructions the reader decodes (opcode, modifiers, destination, sources with their
-//! swizzles, negation, absolute value and relative addressing) equal the disassembly's, line for line; every program the
-//! lifter takes validates and writes as WGSL; every program it refuses is counted by reason. Needs the oracle set
-//! `d3d-disassembler/shaun-white/sdb2` (a folder of `<hash>.vs|.ps` raw token streams with `.asm` listings).
+//! swizzles, negation, absolute value and relative addressing) equal the disassembly's, line for line; every program
+//! the lifter takes validates and writes as WGSL; every program it refuses is counted by reason. Needs the oracle set
+//! `d3d-disassembler/shaun-white/sdb2` (a folder or an archive of `<hash>.vs|.ps` raw token streams with `.asm`
+//! listings).
 mod inputs;
 
 use std::collections::BTreeMap;
 
-use inputs::{Game, OracleSet, oracle};
+use inputs::{Game, OracleSet, oracle_tree};
 use iridia_d3d9::{Opcode, Register, Source, lift, read};
 
 fn register(r: Register) -> String {
@@ -120,18 +121,18 @@ struct Census {
 }
 
 fn census(extension: &str) -> Option<Census> {
-    let folder = oracle(OracleSet::D3dDisassembler, Game::ShaunWhite, "sdb2")?;
-    let mut paths: Vec<_> = std::fs::read_dir(&folder)
-        .unwrap()
-        .map(|e| e.unwrap().path())
-        .filter(|p| p.extension().is_some_and(|e| e == extension))
+    let tree = oracle_tree(OracleSet::D3dDisassembler, Game::ShaunWhite, "sdb2")?;
+    // the programs at the top of the set, each with Microsoft's listing beside it
+    let suffix = format!(".{extension}");
+    let names: Vec<&str> = tree
+        .names()
+        .into_iter()
+        .filter(|n| !n.contains('/') && n.ends_with(&suffix))
         .collect();
-    paths.sort();
     let mut c = Census::default();
-    for path in &paths {
-        let bytes = std::fs::read(path).unwrap();
-        let asm = std::fs::read_to_string(path.with_extension(format!("{extension}.asm"))).unwrap();
-        let name = path.file_name().unwrap().to_string_lossy().into_owned();
+    for name in names {
+        let bytes = tree.read(name).unwrap();
+        let asm = String::from_utf8(tree.read(&format!("{name}.asm")).unwrap()).unwrap();
         c.programs += 1;
         let shader = read(&bytes).unwrap_or_else(|e| panic!("{name}: {e}"));
         let (actual, expected) = (listing(&shader), instructions(&asm));
@@ -157,7 +158,7 @@ fn census(extension: &str) -> Option<Census> {
                 c.lifted += 1;
             }
             Err(e) => {
-                c.refused.entry(e.group()).or_insert((0, name)).0 += 1;
+                c.refused.entry(e.group()).or_insert((0, name.to_owned())).0 += 1;
             }
         }
     }

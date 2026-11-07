@@ -48,10 +48,11 @@ fn sync_bits(s: SyncFlags) -> u8 {
 }
 
 fn census(game: Game) -> Option<(String, Census)> {
-    let (name, paths) = common::corpus(game)?;
+    let corpus = common::corpus(game)?;
+    let name = corpus.name.clone();
     let mut c = Census::default();
-    for path in &paths {
-        let bytes = std::fs::read(path).unwrap();
+    for file in &corpus.names {
+        let bytes = corpus.read(file);
         let program = decode(&dxbc_reader::code(&bytes).unwrap()).unwrap();
         c.programs += 1;
         for ins in &program.instructions {

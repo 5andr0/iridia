@@ -22,10 +22,8 @@ mod harness;
 mod inputs;
 mod tally;
 
-use std::path::PathBuf;
-
 use harness::{Rng, Texels, View, ir_texels, lanes_of, round_trip};
-use inputs::{Game, OracleSet, oracle};
+use inputs::{Game, OracleSet, oracle_tree};
 use iridia_exec::ProgramShader;
 use iridia_ir::interface::{Interface, ResourceId, ResourceKind};
 use tally::{Tally, class};
@@ -34,22 +32,13 @@ use tally::{Tally, class};
 const RUNS: u64 = 16;
 
 fn programs() -> Option<Vec<(String, Vec<u8>)>> {
-    let folder = oracle(OracleSet::D3dDisassembler, Game::ShaunWhite, "sdb2")?;
-    let mut paths: Vec<PathBuf> = std::fs::read_dir(&folder)
-        .unwrap()
-        .map(|e| e.unwrap().path())
-        .filter(|p| p.extension().is_some_and(|e| e == "vs" || e == "ps"))
-        .collect();
-    paths.sort();
+    let tree = oracle_tree(OracleSet::D3dDisassembler, Game::ShaunWhite, "sdb2")?;
+    // the programs at the top of the set (Microsoft's listings, `.asm`, beside them are not programs)
     Some(
-        paths
+        tree.names()
             .into_iter()
-            .map(|p| {
-                (
-                    p.file_name().unwrap().to_string_lossy().into_owned(),
-                    std::fs::read(&p).unwrap(),
-                )
-            })
+            .filter(|n| !n.contains('/') && (n.ends_with(".vs") || n.ends_with(".ps")))
+            .map(|n| (n.to_owned(), tree.read(n).unwrap()))
             .collect(),
     )
 }

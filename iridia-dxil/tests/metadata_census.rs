@@ -1,36 +1,22 @@
 #![allow(clippy::unwrap_used)]
-//! What the metadata accessors of `dxil_reader` find in the games' own Shader Model 6 programs: the attribute groups and
-//! the string attributes of the functions, the metadata attached to instructions by kind, the entry point's properties
-//! (tags and the values of the ray tracing and library ones), the trailing tags of the signature elements, and the
-//! optional fields of the resource records. The expected totals are those of a second reader of the same containers (a
-//! Python walker of the bitcode written for the census, sharing no code with `dxil-reader`); they pin down what the
-//! stock programs use, and in particular what they never use: no `fp32-denorm-mode` attribute, no element tag but the
-//! usage mask, no resource record with coherence, rasterizer ordering, sampler feedback or 64-bit atomics. Needs the
-//! corpus oracle set's `skate/shaders` or `elden/shaders` (each a folder, searched recursively, of containers as the
-//! game ships them).
+//! What the metadata accessors of `dxil_reader` find in the games' own Shader Model 6 programs: the attribute groups
+//! and the string attributes of the functions, the metadata attached to instructions by kind, the entry point's
+//! properties (tags and the values of the ray tracing and library ones), the trailing tags of the signature elements,
+//! and the optional fields of the resource records. The expected totals are those of a second reader of the same
+//! containers (a Python walker of the bitcode written for the census, sharing no code with `dxil-reader`); they pin
+//! down what the stock programs use, and in particular what they never use: no `fp32-denorm-mode` attribute, no element
+//! tag but the usage mask, no resource record with coherence, rasterizer ordering, sampler feedback or 64-bit atomics.
+//! Needs the corpus oracle set's `skate/shaders` or `elden/shaders` (each a folder, searched recursively, or an
+//! archive, of containers as the game ships them).
 mod inputs;
 
+mod common;
+
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
 
 use dxil_reader::module::{Attribute, Value};
 use dxil_reader::reflection;
-use inputs::{Game, OracleSet, Query, expect_found, resolve};
-
-fn containers(root: &Path, out: &mut Vec<PathBuf>) {
-    let mut entries: Vec<_> = std::fs::read_dir(root)
-        .unwrap()
-        .map(|e| e.unwrap().path())
-        .collect();
-    entries.sort();
-    for path in entries {
-        if path.is_dir() {
-            containers(&path, out);
-        } else if std::fs::read(&path).is_ok_and(|b| b.starts_with(b"DXBC")) {
-            out.push(path);
-        }
-    }
-}
+use inputs::Game;
 
 #[derive(Default)]
 struct Census {
@@ -69,15 +55,11 @@ struct Census {
 }
 
 fn census(game: Game) -> Option<(String, Census)> {
-    let query = Query::Oracle(OracleSet::Corpus, game, "shaders");
-    let root = resolve(query)?;
-    let mut paths = Vec::new();
-    containers(&root, &mut paths);
-    expect_found(query, "DXBC containers", paths.len());
+    let corpus = common::corpus(game)?;
     let mut c = Census::default();
-    for path in &paths {
-        let bytes = std::fs::read(path).unwrap();
-        let name = path.display();
+    for file in &corpus.names {
+        let bytes = corpus.read(file);
+        let name = corpus.at(file);
         let chunks = dxil_reader::parts(&bytes).unwrap_or_else(|e| panic!("{name}: {e}"));
         let m = dxil_reader::module(&chunks, b"DXIL")
             .unwrap_or_else(|e| panic!("{name}: {e}"))
@@ -176,8 +158,8 @@ fn census(game: Game) -> Option<(String, Census)> {
             }
         }
     }
-    println!("{}: {} modules", query.key(), c.modules);
-    Some((query.key().to_string(), c))
+    println!("{}: {} modules", corpus.name, c.modules);
+    Some((corpus.name.clone(), c))
 }
 
 fn counts<K: Ord + Clone, const N: usize>(pairs: [(K, usize); N]) -> BTreeMap<K, usize> {

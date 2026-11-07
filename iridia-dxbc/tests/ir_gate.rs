@@ -933,10 +933,10 @@ impl Gate {
 }
 
 fn gate(game: Game) {
-    let Some((name, paths)) = common::corpus(game) else {
+    let Some(corpus) = common::corpus(game) else {
         return;
     };
-    gate_over(&name, &paths, &[]);
+    gate_over(&corpus, &[]);
 }
 
 /// What checking one program took: lifting both ways and building A and B, A's runs, B's runs and their comparison,
@@ -993,11 +993,10 @@ fn report_times(took: &mut [(Took, String)], workers: usize) {
 }
 
 /// One program of a corpus through the gate, tallied in `g`.
-fn check(g: &mut Gate, path: &std::path::Path, at: &str, took: &mut Took) {
+fn check(g: &mut Gate, bytes: &[u8], at: &str, took: &mut Took) {
     let mut mark = Instant::now();
-    let bytes = std::fs::read(path).unwrap();
     g.programs += 1;
-    let (old, p) = match lift_both(&bytes) {
+    let (old, p) = match lift_both(bytes) {
         (Ok(old), Ok(p)) => (old, p),
         (Ok(_), Err(e)) => {
             tally(&mut g.refused, &e.to_string(), at);
@@ -1283,27 +1282,27 @@ fn lower_c(old: &iridia::Program, p: &iridia_ir::Program) -> Result<iridia::Prog
     Ok(c)
 }
 
-/// The gate over the containers `paths` (`name` in its report): a refusal is a failure unless its reason contains one
-/// of `not_yet`.
-fn gate_over(name: &str, paths: &[std::path::PathBuf], not_yet: &[&str]) {
+/// The gate over `corpus`'s containers: a refusal is a failure unless its reason contains one of `not_yet`.
+fn gate_over(corpus: &common::Corpus, not_yet: &[&str]) {
+    let name = &corpus.name;
     let limit = common::diff_limit();
     let trace = std::env::var_os("IR_GATE_TRACE").is_some();
-    let paths = &paths[..paths.len().min(limit)];
+    let files = &corpus.names[..corpus.names.len().min(limit)];
     // each program is checked on its own, as many at a time as the machine runs threads; their tallies are merged in
     // the corpus's order, so the report (the first example of each reason among them) is the one a serial run gives
     let next = std::sync::atomic::AtomicUsize::new(0);
     let checked: Vec<std::sync::Mutex<Option<(Gate, Took)>>> =
-        paths.iter().map(|_| Default::default()).collect();
+        files.iter().map(|_| Default::default()).collect();
     let workers = std::thread::available_parallelism().map_or(1, std::num::NonZero::get);
     std::thread::scope(|s| {
         for _ in 0..workers {
             s.spawn(|| {
                 loop {
                     let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    let Some(path) = paths.get(i) else {
+                    let Some(file) = files.get(i) else {
                         break;
                     };
-                    let at = path.display().to_string();
+                    let at = corpus.at(file);
                     if trace {
                         eprintln!("  {name} {}: {at}", i + 1);
                     } else if (i + 1).is_multiple_of(500) {
@@ -1311,7 +1310,9 @@ fn gate_over(name: &str, paths: &[std::path::PathBuf], not_yet: &[&str]) {
                     }
                     let (mut g, mut took) = (Gate::default(), Took::default());
                     let started = Instant::now();
-                    check(&mut g, path, &at, &mut took);
+                    // a folder's files are read one at a time ([`common::Corpus`]); the checks run at once
+                    let bytes = corpus.read(file);
+                    check(&mut g, &bytes, &at, &mut took);
                     // what a program left uncompared took (its lift refused, A not built) counts as lifting
                     took.lift += started.elapsed().saturating_sub(took.total());
                     *checked[i].lock().unwrap() = Some((g, took));
@@ -1320,11 +1321,11 @@ fn gate_over(name: &str, paths: &[std::path::PathBuf], not_yet: &[&str]) {
         }
     });
     let mut g = Gate::default();
-    let mut took = Vec::with_capacity(paths.len());
-    for (path, c) in paths.iter().zip(checked) {
+    let mut took = Vec::with_capacity(files.len());
+    for (file, c) in files.iter().zip(checked) {
         let (one, t) = c.into_inner().unwrap().expect("every program is checked");
         g.absorb(one);
-        took.push((t, path.display().to_string()));
+        took.push((t, corpus.at(file)));
     }
     if std::env::var_os("IR_GATE_TIMES").is_some() {
         report_times(&mut took, workers);
@@ -2006,10 +2007,10 @@ fn functions(
 #[test]
 fn fixture_programs() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
-    let mut paths = Vec::new();
-    common::containers(&root, &mut paths);
-    assert!(paths.len() >= 20, "{} fixtures", paths.len());
-    gate_over("fixtures", &paths, &[]);
+    let mut fixtures = common::folder(&root);
+    fixtures.name = "fixtures".into();
+    assert!(fixtures.names.len() >= 20, "{} fixtures", fixtures.names.len());
+    gate_over(&fixtures, &[]);
 }
 
 /// What `b` does on the gate's vectors with coherent quad inputs (a vector it cannot run does nothing, as [`compare`]
@@ -2064,37 +2065,39 @@ const DXIL_NOT_YET: &[&str] = &["onto the IR yet"];
 #[test]
 fn dxil_fixture_programs() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../iridia-dxil/tests/fixtures");
-    let mut paths = Vec::new();
-    common::containers(&root, &mut paths);
-    paths.retain(|p| std::fs::read(p).is_ok_and(|b| has_part(&b, b"DXIL")));
-    assert!(paths.len() >= 50, "{} DXIL fixtures", paths.len());
-    gate_over("dxil fixtures", &paths, DXIL_NOT_YET);
+    let mut fixtures = common::folder(&root);
+    fixtures.name = "dxil fixtures".into();
+    fixtures.retain(|b| has_part(b, b"DXIL"));
+    assert!(
+        fixtures.names.len() >= 50,
+        "{} DXIL fixtures",
+        fixtures.names.len()
+    );
+    gate_over(&fixtures, DXIL_NOT_YET);
 }
 
 /// The slim set's DXIL programs (`oracles.corpus.general/slim`, `programs/dxil`).
 #[test]
 fn slim_dxil_programs() {
     let query = inputs::Query::Oracle(inputs::OracleSet::Corpus, Game::General, "slim");
-    let Some(root) = inputs::oracle(inputs::OracleSet::Corpus, Game::General, "slim") else {
+    let Some(tree) = inputs::oracle_tree(inputs::OracleSet::Corpus, Game::General, "slim") else {
         return;
     };
-    let mut paths: Vec<std::path::PathBuf> = std::fs::read_dir(root.join("programs").join("dxil"))
-        .unwrap()
-        .map(|e| e.unwrap().path())
-        .filter(|p| p.extension().is_some_and(|x| x == "dxil"))
-        .collect();
-    paths.sort();
-    inputs::expect_found(query, "DXIL programs", paths.len());
-    gate_over("slim dxil", &paths, DXIL_NOT_YET);
+    let programs = common::Corpus::matching("slim dxil".into(), tree, |n| {
+        n.strip_prefix("programs/dxil/")
+            .is_some_and(|f| !f.contains('/') && f.ends_with(".dxil"))
+    });
+    inputs::expect_found(query, "DXIL programs", programs.names.len());
+    gate_over(&programs, DXIL_NOT_YET);
 }
 
 /// Elden Ring's DXIL containers (`oracles.corpus.elden/shaders`).
 #[test]
 fn elden_programs() {
-    let Some((name, paths)) = common::corpus(Game::Elden) else {
+    let Some(corpus) = common::corpus(Game::Elden) else {
         return;
     };
-    gate_over(&name, &paths, DXIL_NOT_YET);
+    gate_over(&corpus, DXIL_NOT_YET);
 }
 
 /// The gate over a folder of containers outside the configured corpora, named by the debug key `shader.outside` and
@@ -2104,9 +2107,7 @@ fn outside_programs() {
     let Some(root) = inputs::debug("shader.outside").map(std::path::PathBuf::from) else {
         return;
     };
-    let mut paths = Vec::new();
-    common::containers(&root, &mut paths);
-    gate_over(&root.display().to_string(), &paths, &[]);
+    gate_over(&common::folder(&root), &[]);
 }
 
 /// One program's lifts and runs, for a disagreement the gate prints: `IR_GATE_ONE=<container> cargo test -p

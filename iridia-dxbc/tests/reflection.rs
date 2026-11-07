@@ -179,22 +179,22 @@ fn leaves<'a>(
 
 #[test]
 fn reflected_bindings_match_independent_disassembly() -> Result<(), Box<dyn std::error::Error>> {
-    let Some(root) = inputs::oracle(inputs::OracleSet::Corpus, inputs::Game::General, "dxbc") else {
+    let Some(tree) = inputs::oracle_tree(inputs::OracleSet::Corpus, inputs::Game::General, "dxbc") else {
         return Ok(());
     };
     let (mut shaders, mut fields, mut bindings, mut inputs) = (0, 0, 0, 0);
     let mut refused: BTreeMap<String, usize> = BTreeMap::new();
-    for entry in std::fs::read_dir(root)? {
-        let path = entry?.path();
-        if path.extension().is_none_or(|x| x != "ppo") {
+    // the programs at the top of the set, not in a folder of it
+    for path in tree.names() {
+        if path.contains('/') || !path.ends_with(".ppo") {
             continue;
         }
-        let oracle = path.with_extension("ppo.reflection.json");
-        if !oracle.exists() {
+        let oracle = format!("{path}.reflection.json");
+        if tree.size(&oracle).is_none() {
             continue;
         }
-        let j: serde_json::Value = serde_json::from_slice(&std::fs::read(oracle)?)?;
-        let r = match iridia_dxbc::reflection(&std::fs::read(&path)?) {
+        let j: serde_json::Value = serde_json::from_slice(&tree.read(&oracle)?)?;
+        let r = match iridia_dxbc::reflection(&tree.read(path)?) {
             Ok(r) => r,
             Err(e) => {
                 *refused.entry(common::reason(&e.to_string())).or_default() += 1;
@@ -244,7 +244,7 @@ fn reflected_bindings_match_independent_disassembly() -> Result<(), Box<dyn std:
             for (name, expected) in expected.as_object().unwrap() {
                 let (offset, ty) = actual
                     .get(name)
-                    .unwrap_or_else(|| panic!("{} {buffer}.{name}", path.display()));
+                    .unwrap_or_else(|| panic!("{path} {buffer}.{name}"));
                 assert_eq!(
                     *offset as u64,
                     expected["offset"].as_u64().unwrap(),
@@ -489,17 +489,15 @@ fn every_stage_and_model_reflects_as_fxc_lists_it() {
     let Some(fxc) = inputs::program(inputs::Tool::Fxc) else {
         return;
     };
-    let sekiro = inputs::oracle(inputs::OracleSet::Corpus, inputs::Game::Sekiro, "d3d11-shaders");
-    let unity = inputs::oracle(inputs::OracleSet::Corpus, inputs::Game::Sledding, "shaders");
+    let sekiro = common::corpus_at(inputs::Game::Sekiro, "d3d11-shaders");
+    let unity = common::corpus(inputs::Game::Sledding);
     let both = sekiro.is_some() && unity.is_some();
     let scratch = inputs::own_scratch("fxc-reflection");
     let mut by_target: BTreeMap<String, usize> = BTreeMap::new();
     let (mut bindings, mut leaves_checked, mut structs_rebased) = (0, 0, 0);
-    for root in [sekiro, unity].into_iter().flatten() {
-        let mut paths = Vec::new();
-        common::containers(&root, &mut paths);
-        for path in paths {
-            let bytes = std::fs::read(&path).unwrap();
+    for corpus in [sekiro, unity].into_iter().flatten() {
+        for file in &corpus.names {
+            let bytes = corpus.read(file);
             let Some(target) = dxbc_reader::rdef_target(&bytes).unwrap() else {
                 continue;
             };
@@ -507,14 +505,17 @@ fn every_stage_and_model_reflects_as_fxc_lists_it() {
             if !(other_stage || target & 0xffff < 0x0500) {
                 continue;
             }
-            let at = path.display();
+            let at = corpus.at(file);
             let program = iridia_dxbc::ir::lift(&bytes).unwrap_or_else(|e| panic!("{at}: {e}"));
+            // fxc reads a file: the container as the corpus holds it, a folder's file or an archive's member
+            let program_path = scratch.join("program.dxbc");
+            std::fs::write(&program_path, &bytes).unwrap();
             let listing_path = scratch.join("listing.asm");
             let out = fxc
                 .command()
                 .args(["/nologo", "/dumpbin", "/Fc"])
                 .path_arg(&listing_path)
-                .path_arg(&path)
+                .path_arg(&program_path)
                 .output_within(inputs::COMPILE_LIMIT)
                 .unwrap_or_else(|e| panic!("{e}"));
             assert!(

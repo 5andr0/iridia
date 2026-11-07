@@ -1,9 +1,9 @@
 #![allow(clippy::unwrap_used)]
 //! Lifting real programs: every DXBC container in a folder of extracted programs (the user's own install) is lifted,
-//! the lifted program validated and written as WGSL. A program the lifter refuses is counted by reason (the
-//! refusals are by name, never silent); a program it lifts must validate and write, or the lifter is wrong.
-//! Needs the corpus oracle set's `sekiro/shaders`, `riders/shaders` or `sledding/shaders` (each a folder, searched
-//! recursively, of containers as the game ships them).
+//! the lifted program validated and written as WGSL. A program the lifter refuses is counted by reason (the refusals
+//! are by name, never silent); a program it lifts must validate and write, or the lifter is wrong. Needs the corpus
+//! oracle set's `sekiro/shaders`, `riders/shaders` or `sledding/shaders` (each a folder, searched recursively, or an
+//! archive, of containers as the game ships them).
 mod inputs;
 
 use std::collections::BTreeMap;
@@ -30,20 +30,19 @@ struct Census {
 }
 
 fn census(game: Game) {
-    let Some((name, paths)) = common::corpus(game) else {
+    let Some(corpus) = common::corpus(game) else {
         return;
     };
+    let name = &corpus.name;
     let mut c = Census::default();
-    for path in &paths {
-        let bytes = std::fs::read(path).unwrap();
+    for file in &corpus.names {
+        let bytes = corpus.read(file);
+        let path = corpus.at(file);
         c.programs += 1;
         let program = match iridia_dxbc::lift(&bytes) {
             Ok(p) => p,
             Err(e) => {
-                c.refused
-                    .entry(e.group())
-                    .or_insert((0, path.display().to_string()))
-                    .0 += 1;
+                c.refused.entry(e.group()).or_insert((0, path.clone())).0 += 1;
                 continue;
             }
         };
@@ -53,7 +52,7 @@ fn census(game: Game) {
             Err(problems) => {
                 c.invalid.push(format!(
                     "{}: {}",
-                    path.display(),
+                    path,
                     problems
                         .iter()
                         .map(ToString::to_string)
@@ -73,13 +72,10 @@ fn census(game: Game) {
             Ok(_) => c.written += 1,
             // a program the validator accepts and a writer says it cannot write is counted, not wrong
             Err(iridia::ProgramError::Unsupported { detail, .. }) => {
-                let entry = c
-                    .unwritten
-                    .entry(detail)
-                    .or_insert((0, path.display().to_string()));
+                let entry = c.unwritten.entry(detail).or_insert((0, path.clone()));
                 entry.0 += 1;
             }
-            Err(e) => c.invalid.push(format!("{}: {e}", path.display())),
+            Err(e) => c.invalid.push(format!("{}: {e}", path)),
         }
         // the executor compiles it too (as an entry point, or as its functions), or refuses it by name
         let compiled = match iridia_exec::Executable::functions(&program) {
@@ -93,10 +89,7 @@ fn census(game: Game) {
             Err(e) => Err(e),
         };
         if let Err(e) = compiled {
-            let entry = c
-                .unrunnable
-                .entry(e.to_string())
-                .or_insert((0, path.display().to_string()));
+            let entry = c.unrunnable.entry(e.to_string()).or_insert((0, path.clone()));
             entry.0 += 1;
         }
     }

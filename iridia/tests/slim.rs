@@ -21,12 +21,13 @@ mod inputs;
 
 use std::collections::BTreeMap;
 use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
 use std::time::Instant;
 
-use inputs::{Game, OracleSet, Query, expect_found, oracle};
+use inputs::{Game, OracleSet, Query, expect_found, oracle_tree};
+use primase_testdata::Tree;
 
 /// What one column of one program gives: `ok`, or the step it stopped at and why.
 type Outcome = String;
@@ -138,40 +139,51 @@ fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
         .unwrap_or_else(|| "a panic without a message".into())
 }
 
-/// The family's programs in the slim set, by name (their sha256), and the set's folder; `None` where it is not
-/// configured (the gate configuration requires it).
-fn programs(family: &str) -> Option<(PathBuf, Vec<PathBuf>)> {
-    let root = oracle(OracleSet::Corpus, Game::General, "slim")?;
-    let mut paths: Vec<PathBuf> = std::fs::read_dir(root.join("programs").join(family))
-        .unwrap()
-        .map(|e| e.unwrap().path())
-        .filter(|p| p.extension().is_some_and(|x| x == family))
+/// The slim set (a folder or an archive) and the names in it of the family's programs (`programs/<family>/<sha256>
+/// .<family>`), sorted; `None` where it is not configured (the gate configuration requires it).
+fn programs(family: &str) -> Option<(Tree, Vec<String>)> {
+    let tree = oracle_tree(OracleSet::Corpus, Game::General, "slim")?;
+    let folder = format!("programs/{family}/");
+    let extension = format!(".{family}");
+    let names: Vec<String> = tree
+        .names()
+        .into_iter()
+        .filter(|n| {
+            n.strip_prefix(&folder)
+                .is_some_and(|f| !f.contains('/') && f.ends_with(&extension))
+        })
+        .map(str::to_owned)
         .collect();
-    paths.sort();
     expect_found(
         Query::Oracle(OracleSet::Corpus, Game::General, "slim"),
         &format!("{family} programs"),
-        paths.len(),
+        names.len(),
     );
-    Some((root, paths))
+    Some((tree, names))
 }
 
 /// Every program of `family` through `columns` (each column's outcome, in the order `names` gives them), held to
 /// tests/slim/`family`.tsv.
 fn gate(family: &str, names: &[&str], columns: impl Fn(&[u8]) -> Vec<Outcome> + Sync) {
-    let Some((root, paths)) = programs(family) else {
+    let Some((tree, files)) = programs(family) else {
         return;
     };
+    // a folder's files are read one at a time: files of the NAS's SMB share opened at once on several threads fail at
+    // random with Windows error 1450 (ERROR_NO_SYSTEM_RESOURCES); an archive is read at positions of one open file
+    let folder_reads = tree.as_folder().map(|_| Mutex::new(()));
     let started = Instant::now();
     let next = AtomicUsize::new(0);
-    let results: Vec<Mutex<Vec<Outcome>>> = paths.iter().map(|_| Mutex::default()).collect();
+    let results: Vec<Mutex<Vec<Outcome>>> = files.iter().map(|_| Mutex::default()).collect();
     std::thread::scope(|s| {
         for _ in 0..inputs::threads().get() {
             s.spawn(|| {
                 loop {
                     let i = next.fetch_add(1, Relaxed);
-                    let Some(path) = paths.get(i) else { break };
-                    let bytes = inputs::read_input(path).unwrap();
+                    let Some(file) = files.get(i) else { break };
+                    let bytes = {
+                        let _one_at_a_time = folder_reads.as_ref().map(|m| m.lock().unwrap());
+                        tree.read(file).unwrap()
+                    };
                     let outcomes = catch_unwind(AssertUnwindSafe(|| columns(&bytes)))
                         .unwrap_or_else(|p| vec![format!("panic: {}", panic_message(&*p)); names.len()]);
                     *results[i].lock().unwrap() = outcomes;
@@ -180,11 +192,15 @@ fn gate(family: &str, names: &[&str], columns: impl Fn(&[u8]) -> Vec<Outcome> + 
         }
     });
     let took = started.elapsed();
-    let name = |path: &Path| path.file_stem().unwrap().to_string_lossy().into_owned();
-    let outcomes: Vec<(String, Vec<Outcome>)> = paths
+    // a program's name: its sha256, the file's name without the folder and the extension
+    let name = |file: &str| {
+        let stem = file.rsplit('/').next().unwrap_or(file);
+        stem.rsplit_once('.').map_or(stem, |(s, _)| s).to_owned()
+    };
+    let outcomes: Vec<(String, Vec<Outcome>)> = files
         .iter()
         .zip(results)
-        .map(|(path, r)| (name(path), r.into_inner().unwrap()))
+        .map(|(file, r)| (name(file), r.into_inner().unwrap()))
         .collect();
 
     // the report: each column's count of ok, and of each step and reason it stopped at
@@ -193,7 +209,7 @@ fn gate(family: &str, names: &[&str], columns: impl Fn(&[u8]) -> Vec<Outcome> + 
         outcomes.len(),
         inputs::threads(),
         took.as_secs_f64(),
-        root.display()
+        tree.path().display()
     );
     for (c, column) in names.iter().enumerate() {
         let mut by: BTreeMap<&str, (usize, &str)> = BTreeMap::new();

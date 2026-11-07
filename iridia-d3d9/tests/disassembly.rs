@@ -4,7 +4,7 @@
 //! validation and WGSL emission check the resulting IR. This is reflection/token evidence, not a rendered-pixel oracle.
 mod inputs;
 
-use inputs::{Game, OracleSet, oracle};
+use inputs::{Game, OracleSet, oracle_tree};
 use iridia_d3d9::{Destination, Opcode, Register, Source, lift, read};
 use primase_testdata::gate::{GateReport, Tolerance};
 
@@ -225,11 +225,11 @@ fn check(bytes: &[u8], asm: &str) -> iridia_d3d9::Shader {
 
 #[test]
 fn shipped_pixel_shader_matches_microsofts_disassembly() {
-    let Some(folder) = oracle(OracleSet::D3dDisassembler, Game::General, "sm3") else {
+    let Some(tree) = oracle_tree(OracleSet::D3dDisassembler, Game::General, "sm3") else {
         return;
     };
-    let bytes = std::fs::read(folder.join("pixel.bin")).unwrap();
-    let asm = std::fs::read_to_string(folder.join("pixel.asm")).unwrap();
+    let bytes = tree.read("pixel.bin").unwrap();
+    let asm = String::from_utf8(tree.read("pixel.asm").unwrap()).unwrap();
     assert_eq!(
         iridia::source_hash(&bytes),
         "sha256:82ffb69b8dced07b67e74ed481349f1c68ede096add5379c7b5749ea9b809c0e"
@@ -248,12 +248,12 @@ fn shipped_pixel_shader_matches_microsofts_disassembly() {
 
 #[test]
 fn shipped_vertex_shaders_match_microsofts_disassembly() {
-    let Some(folder) = oracle(OracleSet::D3dDisassembler, Game::General, "sm3") else {
+    let Some(tree) = oracle_tree(OracleSet::D3dDisassembler, Game::General, "sm3") else {
         return;
     };
     for (name, inputs, outputs, instructions) in [("vertex", 3, 6, 48), ("vertex-layered", 5, 8, 71)] {
-        let bytes = std::fs::read(folder.join(format!("{name}.bin"))).unwrap();
-        let asm = std::fs::read_to_string(folder.join(format!("{name}.asm"))).unwrap();
+        let bytes = tree.read(&format!("{name}.bin")).unwrap();
+        let asm = String::from_utf8(tree.read(&format!("{name}.asm")).unwrap()).unwrap();
         let shader = check(&bytes, &asm);
         assert_eq!(shader.stage, iridia::Stage::Vertex);
         assert_eq!(

@@ -55,24 +55,24 @@ const PINNED_REFUSALS: &[(&str, usize)] = &[];
 /// reason, not failed.
 #[test]
 fn independent_disassembly_counts() -> Result<(), Box<dyn std::error::Error>> {
-    let Some(root) = inputs::oracle(inputs::OracleSet::Corpus, inputs::Game::General, "dxbc") else {
+    let Some(tree) = inputs::oracle_tree(inputs::OracleSet::Corpus, inputs::Game::General, "dxbc") else {
         return Ok(());
     };
     let mut count = 0;
     let (mut exact, mut within, mut nan, mut executed) = (0, 0, 0, 0);
     let mut refused: BTreeMap<String, usize> = BTreeMap::new();
-    for entry in std::fs::read_dir(root)? {
-        let path = entry?.path();
-        if path.extension().is_none_or(|x| x != "ppo") {
+    // the programs at the top of the set, not in a folder of it
+    for path in tree.names() {
+        if path.contains('/') || !path.ends_with(".ppo") {
             continue;
         }
-        let asm_path = path.with_extension("ppo.asm");
-        if !asm_path.exists() {
+        let asm_path = format!("{path}.asm");
+        if tree.size(&asm_path).is_none() {
             continue;
         }
-        let asm = std::fs::read_to_string(asm_path)?;
-        let bytes = std::fs::read(&path)?;
-        let program = decoded(&bytes).map_err(|e| format!("{}: {e}", path.display()))?;
+        let asm = String::from_utf8(tree.read(&asm_path)?)?;
+        let bytes = tree.read(path)?;
+        let program = decoded(&bytes).map_err(|e| format!("{}: {e}", path))?;
         let instructions: Vec<_> = asm
             .lines()
             .skip_while(|l| !matches!(l.trim(), "ps_4_0" | "ps_4_1" | "ps_5_0"))
@@ -80,12 +80,7 @@ fn independent_disassembly_counts() -> Result<(), Box<dyn std::error::Error>> {
             .map(str::trim)
             .filter(|l| !l.is_empty() && !l.starts_with("//") && !l.starts_with("dcl_"))
             .collect();
-        assert_eq!(
-            program.instructions.len(),
-            instructions.len(),
-            "{}",
-            path.display()
-        );
+        assert_eq!(program.instructions.len(), instructions.len(), "{}", path);
         for (a, b) in program.instructions.iter().zip(instructions) {
             let name = b.split_whitespace().next().unwrap();
             // an indexable resource's form (`sample_d_indexable(texture2d)(float,float,float,float)`) is its opcode's
@@ -96,11 +91,11 @@ fn independent_disassembly_counts() -> Result<(), Box<dyn std::error::Error>> {
                 Some((op @ ("if" | "breakc" | "continuec" | "discard" | "retc" | "callc"), "nz" | "z")) => op,
                 _ => name,
             };
-            assert_eq!(a.name(), name, "{} word {}", path.display(), a.word);
+            assert_eq!(a.name(), name, "{} word {}", path, a.word);
         }
         count += 1;
-        let state_path = path.with_extension("ppo.state.json");
-        if !state_path.exists() {
+        let state_path = format!("{path}.state.json");
+        if tree.size(&state_path).is_none() {
             continue;
         }
         let shader = match lift(&bytes)
@@ -113,7 +108,7 @@ fn independent_disassembly_counts() -> Result<(), Box<dyn std::error::Error>> {
                 continue;
             }
         };
-        let j: serde_json::Value = serde_json::from_slice(&std::fs::read(state_path)?)?;
+        let j: serde_json::Value = serde_json::from_slice(&tree.read(&state_path)?)?;
         let vectors = |j: &serde_json::Value| -> Vec<[u32; 4]> {
             j.as_array()
                 .unwrap()
@@ -137,7 +132,7 @@ fn independent_disassembly_counts() -> Result<(), Box<dyn std::error::Error>> {
         // differences"), so trace equality is not a gate; the instruction stream and final outputs are.
         let result = shader
             .execute(&inputs, &refs, &mut |_: Sample| Ok([0.25, 0.5, 0.75, 1.0]))
-            .map_err(|e| format!("{}: {e}", path.display()))?;
+            .map_err(|e| format!("{}: {e}", path))?;
         executed += 1;
         let expected = vectors(&j["outputs"]);
         for (i, a) in result.outputs.iter().enumerate() {
@@ -154,7 +149,7 @@ fn independent_disassembly_counts() -> Result<(), Box<dyn std::error::Error>> {
                     assert!(
                         (x - y).abs() <= 4.0 * f32::EPSILON * y.abs().max(1.0),
                         "{} o{i}.{c}: {x} != {y}",
-                        path.display()
+                        path
                     );
                     within += 1;
                 }
@@ -360,7 +355,7 @@ fn disassembled_immediates(text: &str) -> Vec<[String; 4]> {
 /// views, and its immediate constant buffer equal to the disassembly's (each value printed as the disassembler prints it).
 #[test]
 fn pack_against_microsoft_disassembly() {
-    let Some(root) = inputs::oracle(
+    let Some(tree) = inputs::oracle_tree(
         inputs::OracleSet::D3dDisassembler,
         inputs::Game::Riders,
         "shader-pack",
@@ -368,28 +363,26 @@ fn pack_against_microsoft_disassembly() {
         return;
     };
     let mut read = 0;
-    let mut paths: Vec<_> = std::fs::read_dir(&root)
-        .unwrap()
-        .map(|e| e.unwrap().path())
-        .filter(|p| p.extension().is_some_and(|x| x == "dxbc"))
-        .collect();
-    paths.sort();
-    for path in paths {
-        let bytes = std::fs::read(&path).unwrap();
+    // the containers at the top of the set, each with Microsoft's disassembly beside it (`.txt` for `.dxbc`)
+    for path in tree.names() {
+        let Some(stem) = path.strip_suffix(".dxbc").filter(|s| !s.contains('/')) else {
+            continue;
+        };
+        let bytes = tree.read(path).unwrap();
         assert_eq!(
             dxcontainer::checksum(&bytes).unwrap()[..],
             bytes[4..20],
             "{}",
-            path.display()
+            path
         );
-        let text = String::from_utf8(std::fs::read(path.with_extension("txt")).unwrap())
+        let text = String::from_utf8(tree.read(&format!("{stem}.txt")).unwrap())
             .unwrap()
             .replace('\0', "");
         let lines: Vec<&str> = text.lines().map(str::trim).collect();
         let Some(start) = lines.iter().position(|l| *l == "ps_5_0") else {
             continue;
         };
-        let program = decoded(&bytes).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        let program = decoded(&bytes).unwrap_or_else(|e| panic!("{}: {e}", path));
         let body = &lines[start + 1..];
         let names: Vec<&str> = body
             .iter()
@@ -399,7 +392,7 @@ fn pack_against_microsoft_disassembly() {
             .map(|l| disassembled_name(l.split_whitespace().next().unwrap()))
             .collect();
         let ours: Vec<&str> = program.instructions.iter().map(|i| i.name()).collect();
-        assert_eq!(ours, names, "{}", path.display());
+        assert_eq!(ours, names, "{}", path);
         // and the offsets the instructions carry are the ones the disassembly prints
         let offsets: Vec<Option<[i32; 3]>> = body
             .iter()
@@ -409,7 +402,7 @@ fn pack_against_microsoft_disassembly() {
             .map(|l| disassembled_offset(l.split_whitespace().next().unwrap()))
             .collect();
         let ours: Vec<Option<[i32; 3]>> = program.instructions.iter().map(|i| i.sample_offset()).collect();
-        assert_eq!(ours, offsets, "{}", path.display());
+        assert_eq!(ours, offsets, "{}", path);
         let (mut resources, mut views) = (Vec::new(), Vec::new());
         for (kind, d) in body.iter().filter_map(|l| disassembled_declaration(l)) {
             if kind == 't' {
@@ -422,8 +415,8 @@ fn pack_against_microsoft_disassembly() {
         for v in [&mut resources, &mut views, &mut ours_resources, &mut ours_views] {
             v.sort();
         }
-        assert_eq!(ours_resources, resources, "{}", path.display());
-        assert_eq!(ours_views, views, "{}", path.display());
+        assert_eq!(ours_resources, resources, "{}", path);
+        assert_eq!(ours_views, views, "{}", path);
         let immediates = program
             .declarations
             .iter()
@@ -446,7 +439,7 @@ fn pack_against_microsoft_disassembly() {
                 })
             })
             .collect();
-        assert_eq!(printed, disassembled_immediates(&text), "{}", path.display());
+        assert_eq!(printed, disassembled_immediates(&text), "{}", path);
         read += 1;
     }
     println!("pixel containers read, matching the disassembly: {read}");
