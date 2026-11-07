@@ -505,6 +505,17 @@ impl<'m> Lift<'m> {
         })
     }
 
+    /// [`Self::target`] of the branch from `from` to `to`, made the first time a terminator names `to` and the same
+    /// target (block and argument values) every later time it does.
+    fn target_once(&mut self, from: usize, to: usize, made: &mut Vec<(usize, Target)>) -> Result<Target> {
+        if let Some((_, t)) = made.iter().find(|(b, _)| *b == to) {
+            return Ok(t.clone());
+        }
+        let t = self.target(from, to)?;
+        made.push((to, t.clone()));
+        Ok(t)
+    }
+
     fn terminate(&mut self, term: Terminator) {
         self.g.block().term = term;
     }
@@ -538,8 +549,10 @@ impl<'m> Lift<'m> {
                 otherwise,
             } => {
                 let cond = self.value_as(*condition, Type::BOOL)?;
-                let accept = self.target(from, *then)?;
-                let reject = self.target(from, *otherwise)?;
+                // both ways to one block carry one set of arguments, as a switch's edges do
+                let mut made = Vec::new();
+                let accept = self.target_once(from, *then, &mut made)?;
+                let reject = self.target_once(from, *otherwise, &mut made)?;
                 self.terminate(Terminator::Branch { cond, accept, reject });
                 Ok(())
             }
@@ -549,15 +562,19 @@ impl<'m> Lift<'m> {
                 cases,
             } => {
                 let selector = self.value_as(*value, Type::U32)?;
+                // a block several cases (or a case and the default) go to takes one set of arguments from this
+                // block: its phis have the same value for every edge from it (LLVM's rule), so each target is made
+                // once and every edge to it carries the same values
+                let mut made: Vec<(usize, Target)> = Vec::new();
                 let mut out = Vec::new();
                 for &(c, b) in cases {
                     let Some(k) = crate::lift::setup::const_int(self.m, self.f, c) else {
                         return self.refuse("a switch case that is not a constant");
                     };
-                    let t = self.target(from, b)?;
+                    let t = self.target_once(from, b, &mut made)?;
                     out.push((crate::lift::low32(k as u64), t));
                 }
-                let default = self.target(from, *default)?;
+                let default = self.target_once(from, *default, &mut made)?;
                 self.terminate(Terminator::Switch {
                     selector,
                     cases: out,

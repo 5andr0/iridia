@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `iridia-dxil`: a switch several of whose cases (or a case and the default, or both ways of a branch) go to one
+  block gives that block one set of arguments. dxc writes the block's phi with an entry per edge, the same value on
+  each (`phi [7.0, %0]` three times); the IR lift made each edge's arguments afresh, so a constant became three
+  values and `iridia_passes::structurize` refused the program ("block N's switch gives block M two sets of
+  arguments").
 - `iridia-passes`: `prepare(&mut Program)`, the passes every output and executor takes a lifted program through, on
   each of its functions: `structurize`, `promote`, `simplify` and `break_flags`. What it gives is what `iridia-exec`'s
   `::from_ir` constructors and `iridia-naga` take, so a caller no longer copies the sequence (the slim gate and the IR
