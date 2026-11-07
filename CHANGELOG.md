@@ -133,8 +133,10 @@
   (`iridia_exec::mesh`) and draws the primitives they emit with the pixel program; an amplification program and a
   pixel program reading primitive outputs are refused by name. The offload-test-suite's mesh pipelines run as the
   offloader's D3D12 mesh pipeline state has them (its default rasterizer: back faces culled, clockwise front faces),
-  and its raster pipelines draw on multisampled targets, resolved before they are read back. CI makes the table again (`docs/coverage`) and fails
-  when it differs from the one committed.
+  and its raster pipelines draw on multisampled targets, resolved before they are read back. Every atomic operation
+  of an unordered-access view reaches the device (and, or, xor, minimum and maximum, exchange and compare-exchange,
+  of a view in an array too), where it took adds alone. CI makes the table again (`docs/coverage`) and fails when it
+  differs from the one committed.
 - `iridia-exec`: `draw` draws points and lines as well as triangles (every list and strip topology), each primitive
   numbered for `SV_PrimitiveID`; an aliased line by the diamond exit rule (3.4.3), which an NVIDIA RTX 5070 Ti draws
   exactly on every pixel of 10,640 recorded lines and WARP differs from in four classes the tests name and count;

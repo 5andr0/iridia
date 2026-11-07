@@ -1659,7 +1659,7 @@
       },
       "executed": {
         "pass": 14,
-        "fail": 2
+        "fail": 0
       },
       "proved_by": [
         "vkd3d"
@@ -2249,7 +2249,7 @@
       },
       "executed": {
         "pass": 1844,
-        "fail": 12
+        "fail": 10
       },
       "proved_by": [
         "vkd3d"
@@ -2281,7 +2281,7 @@
       },
       "executed": {
         "pass": 2698,
-        "fail": 59
+        "fail": 57
       },
       "proved_by": [
         "vkd3d"
@@ -2503,7 +2503,7 @@
       },
       "executed": {
         "pass": 293,
-        "fail": 5
+        "fail": 3
       },
       "proved_by": [
         "vkd3d"
@@ -3047,7 +3047,7 @@
       },
       "executed": {
         "pass": 1469,
-        "fail": 28
+        "fail": 26
       },
       "proved_by": [
         "vkd3d"
@@ -3175,7 +3175,7 @@
       },
       "executed": {
         "pass": 69,
-        "fail": 2
+        "fail": 0
       },
       "proved_by": [
         "vkd3d"
@@ -3303,7 +3303,7 @@
       },
       "executed": {
         "pass": 21,
-        "fail": 2
+        "fail": 0
       },
       "proved_by": [
         "vkd3d"
@@ -4945,7 +4945,7 @@
       },
       "executed": {
         "pass": 28,
-        "fail": 8
+        "fail": 6
       },
       "proved_by": [
         "vkd3d"
@@ -5161,7 +5161,7 @@
       },
       "executed": {
         "pass": 42,
-        "fail": 2
+        "fail": 0
       },
       "proved_by": [
         "vkd3d"
@@ -5825,7 +5825,7 @@
       },
       "executed": {
         "pass": 2550,
-        "fail": 53
+        "fail": 51
       },
       "proved_by": [
         "vkd3d"
@@ -6081,7 +6081,7 @@
       },
       "executed": {
         "pass": 3556,
-        "fail": 60
+        "fail": 58
       },
       "proved_by": [
         "vkd3d"
@@ -7163,7 +7163,7 @@
       },
       "executed": {
         "pass": 40,
-        "fail": 1
+        "fail": 0
       },
       "proved_by": [
         "vkd3d"
@@ -7195,7 +7195,7 @@
       },
       "executed": {
         "pass": 25,
-        "fail": 1
+        "fail": 0
       },
       "proved_by": [
         "vkd3d"
@@ -7768,8 +7768,8 @@
         "failed": 18
       },
       "executed": {
-        "pass": 404,
-        "fail": 63
+        "pass": 405,
+        "fail": 61
       },
       "proved_by": [
         "offload",
@@ -7801,8 +7801,8 @@
         "failed": 1
       },
       "executed": {
-        "pass": 6,
-        "fail": 16
+        "pass": 12,
+        "fail": 5
       },
       "proved_by": [
         "offload",
@@ -7924,8 +7924,8 @@
         "failed": 4
       },
       "executed": {
-        "pass": 36,
-        "fail": 42
+        "pass": 42,
+        "fail": 36
       },
       "proved_by": [
         "offload",
@@ -8822,8 +8822,8 @@
         "failed": 8
       },
       "executed": {
-        "pass": 93,
-        "fail": 88
+        "pass": 94,
+        "fail": 87
       },
       "proved_by": [
         "offload",
@@ -8948,8 +8948,8 @@
         "failed": 8
       },
       "executed": {
-        "pass": 121,
-        "fail": 162
+        "pass": 127,
+        "fail": 156
       },
       "proved_by": [
         "offload",
@@ -9168,7 +9168,7 @@
       },
       "executed": {
         "pass": 397,
-        "fail": 38
+        "fail": 33
       },
       "proved_by": [
         "offload",
@@ -9290,8 +9290,8 @@
         "failed": 75
       },
       "executed": {
-        "pass": 2039,
-        "fail": 236
+        "pass": 2044,
+        "fail": 227
       },
       "proved_by": [
         "offload",
@@ -9413,8 +9413,8 @@
         "failed": 18
       },
       "executed": {
-        "pass": 404,
-        "fail": 63
+        "pass": 405,
+        "fail": 61
       },
       "proved_by": [
         "offload",
@@ -10219,7 +10219,7 @@
       },
       "executed": {
         "pass": 61,
-        "fail": 202
+        "fail": 197
       },
       "proved_by": [
         "offload",
@@ -10345,7 +10345,7 @@
       },
       "executed": {
         "pass": 9,
-        "fail": 29
+        "fail": 24
       },
       "proved_by": [
         "offload",
@@ -11404,8 +11404,8 @@
         "failed": 5
       },
       "executed": {
-        "pass": 73,
-        "fail": 7
+        "pass": 77,
+        "fail": 3
       },
       "proved_by": [
         "offload",
@@ -11589,8 +11589,8 @@
         "failed": 8
       },
       "executed": {
-        "pass": 101,
-        "fail": 26
+        "pass": 107,
+        "fail": 20
       },
       "proved_by": [
         "offload",
@@ -13832,10 +13832,11 @@
         "failed": 16
       },
       "executed": {
-        "pass": 20,
-        "fail": 16
+        "pass": 21,
+        "fail": 15
       },
       "proved_by": [
+        "offload",
         "vkd3d"
       ]
     },
@@ -13897,10 +13898,11 @@
         "failed": 6
       },
       "executed": {
-        "pass": 20,
-        "fail": 16
+        "pass": 26,
+        "fail": 10
       },
       "proved_by": [
+        "offload",
         "vkd3d"
       ]
     },
@@ -13962,8 +13964,8 @@
         "failed": 5
       },
       "executed": {
-        "pass": 66,
-        "fail": 6
+        "pass": 72,
+        "fail": 0
       },
       "proved_by": [
         "offload",
@@ -18505,8 +18507,8 @@
         "failed": 16
       },
       "executed": {
-        "pass": 440,
-        "fail": 219
+        "pass": 446,
+        "fail": 208
       },
       "proved_by": [
         "offload",
@@ -18748,33 +18750,33 @@
       "licence": "LGPL-2.1-or-later",
       "description": "Each test file run at each shader model on each of vkd3d's Windows runners (d3d9, d3d11, d3d12 with fxc, d3d12 with dxc), every step in order, every probe compared as vkd3d compares it. A row is one run: pass when every probe holds that vkd3d's runner runs at that model (selected); a run it runs none of is extended (selected false), its status that of all its probes, and the probes vkd3d leaves out of the others are their extended_status: the same expectations at a model vkd3d's own runs leave out, which need not hold on any device.",
       "totals": {
-        "error": 10,
+        "error": 7,
         "fail": 19,
         "not-modelled": 7,
         "pass": 842,
-        "refused": 59
+        "refused": 62
       },
       "probe_totals": {
-        "error": 794,
+        "error": 680,
         "fail": 138,
         "not-modelled": 11,
-        "pass": 7797,
+        "pass": 7911,
         "refused": 665
       },
       "extended_totals": {
         "compiler-refused": 7,
-        "error": 30,
+        "error": 25,
         "fail": 41,
         "not-modelled": 18,
         "pass": 1800,
-        "refused": 99
+        "refused": 104
       },
       "extended_probe_totals": {
         "compiler-refused": 43,
-        "error": 2846,
+        "error": 2642,
         "fail": 265,
         "not-modelled": 29,
-        "pass": 17653,
+        "pass": 17857,
         "refused": 1670
       },
       "rows": [
@@ -41066,8 +41068,8 @@
           "runner": "d3d11",
           "format": "dxbc",
           "model": "5.0",
-          "status": "error",
-          "detail": "line 39: 519297d490e195d8: group [0, 0, 0]: resource 1: no atomic And given",
+          "status": "refused",
+          "detail": "line 125: 2598d7045d72b25c: DXBC at word 28: atomic_cmp_store: atomic operation cmp_store on a texture view",
           "probes": 59,
           "selected": true,
           "selected_probes": 59,
@@ -41079,8 +41081,8 @@
           "runner": "d3d12",
           "format": "dxbc",
           "model": "5.0",
-          "status": "error",
-          "detail": "line 39: 519297d490e195d8: group [0, 0, 0]: resource 1: no atomic And given",
+          "status": "refused",
+          "detail": "line 125: 2598d7045d72b25c: DXBC at word 28: atomic_cmp_store: atomic operation cmp_store on a texture view",
           "probes": 59,
           "selected": true,
           "selected_probes": 59,
@@ -41092,8 +41094,8 @@
           "runner": "d3d12",
           "format": "dxbc",
           "model": "5.1",
-          "status": "error",
-          "detail": "line 39: 4b1f1a7eb7735152: group [0, 0, 0]: resource 1: no atomic And given",
+          "status": "refused",
+          "detail": "line 125: de8ac6c383d0ed60: DXBC at word 36: atomic_cmp_store: atomic operation cmp_store on a texture view",
           "probes": 59,
           "selected": false,
           "selected_probes": 0,
@@ -55600,8 +55602,8 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.0",
-          "status": "error",
-          "detail": "line 39: e32e735753b19e68: group [0, 0, 0]: resource 0: no atomic And given",
+          "status": "refused",
+          "detail": "line 125: 5a0af4c3419b96bb: DXIL at bit 10846: a buffer operation on something that is not an unordered-access buffer",
           "probes": 59,
           "selected": true,
           "selected_probes": 59,
@@ -55613,8 +55615,8 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.1",
-          "status": "error",
-          "detail": "line 39: bd62fe0648d705e4: group [0, 0, 0]: resource 0: no atomic And given",
+          "status": "refused",
+          "detail": "line 125: dbc9ee3eff12b2d2: DXIL at bit 10846: a buffer operation on something that is not an unordered-access buffer",
           "probes": 59,
           "selected": false,
           "selected_probes": 0,
@@ -55626,8 +55628,8 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.2",
-          "status": "error",
-          "detail": "line 39: d51b759619ec56df: group [0, 0, 0]: resource 0: no atomic And given",
+          "status": "refused",
+          "detail": "line 125: 04ffefc5a80bb5d7: DXIL at bit 10846: a buffer operation on something that is not an unordered-access buffer",
           "probes": 59,
           "selected": false,
           "selected_probes": 0,
@@ -55639,8 +55641,8 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.5",
-          "status": "error",
-          "detail": "line 39: ae373fe39e883963: group [0, 0, 0]: resource 0: no atomic And given",
+          "status": "refused",
+          "detail": "line 125: 2ac24bd5bdd5dc47: DXIL at bit 10846: a buffer operation on something that is not an unordered-access buffer",
           "probes": 59,
           "selected": false,
           "selected_probes": 0,
@@ -55652,8 +55654,8 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.6",
-          "status": "error",
-          "detail": "line 39: 46b2744b8934777a: group [0, 0, 0]: resource 0: no atomic And given",
+          "status": "refused",
+          "detail": "line 125: 0db7b6c56658b5e5: DXIL at bit 12138: a buffer operation on something that is not an unordered-access buffer",
           "probes": 59,
           "selected": false,
           "selected_probes": 0,
@@ -56904,9 +56906,9 @@
       "licence": "Apache-2.0 WITH LLVM-exception",
       "description": "Each test run as lit runs it for DirectX with DXC: its RUN lines in order, the offloader's pipeline on iridia's executor, its Results rules, FileCheck lines and golden images checked as the suite's own tools check them; REQUIRES, UNSUPPORTED and XFAIL against the executor's features.",
       "totals": {
-        "fail": 13,
+        "fail": 7,
         "not-modelled": 30,
-        "pass": 372,
+        "pass": 378,
         "refused": 304,
         "unsupported": 85,
         "xfail": 3
@@ -57789,8 +57791,8 @@
           "case": "Feature/HLSLLib/InterlockedAnd.resources.32.test",
           "format": "dxil",
           "model": "cs_6",
-          "status": "fail",
-          "detail": "gpu-exec: error: 05739995a56ffe42: group [0, 0, 0]: resource 2: no atomic And given"
+          "status": "pass",
+          "detail": ""
         },
         {
           "id": "Feature/HLSLLib/InterlockedAnd.resources.int64.test",
@@ -57949,8 +57951,8 @@
           "case": "Feature/HLSLLib/InterlockedExchange.resources.32.test",
           "format": "dxil",
           "model": "cs_6",
-          "status": "fail",
-          "detail": "gpu-exec: error: b7a28619dc4f061c: group [0, 0, 0]: resource 2: no atomic Exchange given"
+          "status": "pass",
+          "detail": ""
         },
         {
           "id": "Feature/HLSLLib/InterlockedExchange.resources.int64.test",
@@ -57989,8 +57991,8 @@
           "case": "Feature/HLSLLib/InterlockedMax.resources.32.test",
           "format": "dxil",
           "model": "cs_6",
-          "status": "fail",
-          "detail": "gpu-exec: error: a1a106e7de0411bf: group [0, 0, 0]: resource 2: no atomic Max given"
+          "status": "pass",
+          "detail": ""
         },
         {
           "id": "Feature/HLSLLib/InterlockedMax.resources.int64.test",
@@ -58029,8 +58031,8 @@
           "case": "Feature/HLSLLib/InterlockedMin.resources.32.test",
           "format": "dxil",
           "model": "cs_6",
-          "status": "fail",
-          "detail": "gpu-exec: error: 5cd1195785bd4154: group [0, 0, 0]: resource 2: no atomic Min given"
+          "status": "pass",
+          "detail": ""
         },
         {
           "id": "Feature/HLSLLib/InterlockedMin.resources.int64.test",
@@ -58069,8 +58071,8 @@
           "case": "Feature/HLSLLib/InterlockedOr.resources.32.test",
           "format": "dxil",
           "model": "cs_6",
-          "status": "fail",
-          "detail": "gpu-exec: error: 61127547f73ab9f1: group [0, 0, 0]: resource 2: no atomic Or given"
+          "status": "pass",
+          "detail": ""
         },
         {
           "id": "Feature/HLSLLib/InterlockedOr.resources.int64.test",
@@ -58109,8 +58111,8 @@
           "case": "Feature/HLSLLib/InterlockedXor.resources.32.test",
           "format": "dxil",
           "model": "cs_6",
-          "status": "fail",
-          "detail": "gpu-exec: error: 6ba6dba737e6fba5: group [0, 0, 0]: resource 2: no atomic Xor given"
+          "status": "pass",
+          "detail": ""
         },
         {
           "id": "Feature/HLSLLib/InterlockedXor.resources.int64.test",

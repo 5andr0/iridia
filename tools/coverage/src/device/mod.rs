@@ -13,8 +13,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use iridia::{D3dClass, Interface, ResourceKind, StorageTarget, TextureDim};
 use iridia_exec::{
-    AtomicAdd, Dim as ExecDim, Element, ImageAtomic, ImageAtomicOp, ImageLoad, ImageLod, ImageQuery,
-    ImageSample, ImageStore, Load, QueryKind, Store,
+    Atomic, AtomicAdd, BufferAtomic, Dim as ExecDim, Element, ImageAtomic, ImageAtomicOp, ImageLoad,
+    ImageLod, ImageQuery, ImageSample, ImageStore, Load, QueryKind, Store,
 };
 
 use crate::vkd3d::cases::Descriptor;
@@ -189,23 +189,22 @@ fn query_of(r: Option<&Resource>, kind: QueryKind, level: Option<u32>, dim: Exec
     }
 }
 
-/// An atomic operation on a word, `compare` the comparand of a compare-exchange: the word as it was, and as it is after.
-fn atomic_word(old: u32, op: ImageAtomicOp, signed: bool, value: u32, compare: u32) -> (u32, u32) {
-    let new = match op {
-        ImageAtomicOp::Add => old.wrapping_add(value),
-        ImageAtomicOp::Sub => old.wrapping_sub(value),
-        ImageAtomicOp::And => old & value,
-        ImageAtomicOp::Or => old | value,
-        ImageAtomicOp::Xor => old ^ value,
-        ImageAtomicOp::Min if signed => (old as i32).min(value as i32) as u32,
-        ImageAtomicOp::Max if signed => (old as i32).max(value as i32) as u32,
-        ImageAtomicOp::Min => old.min(value),
-        ImageAtomicOp::Max => old.max(value),
-        ImageAtomicOp::Exchange => value,
-        ImageAtomicOp::CompareExchange if old == compare => value,
-        ImageAtomicOp::CompareExchange => old,
+/// An atomic operation on the 32-bit word at byte `at` of `r` (`compare` the comparand of a compare-exchange): the word
+/// as it was. An operation past the end (`at` is `None`) changes nothing and returns 0, D3D's rule.
+fn atomic_on(
+    r: &mut Resource,
+    at: Option<usize>,
+    op: ImageAtomicOp,
+    signed: bool,
+    value: u32,
+    compare: u32,
+) -> u32 {
+    let Some(at) = at else {
+        return 0;
     };
-    (old, new)
+    let old = r.word(at);
+    r.set_word(at, op.apply(old, value, compare, signed));
+    old
 }
 
 /// A store of `value`'s lanes `mask` marks to a texel or buffer element of a resource: typed through its format, a
@@ -434,34 +433,45 @@ impl iridia_exec::Sampler for SlotRequests<'_> {
     }
 
     fn atomic_add(&mut self, request: AtomicAdd) -> Result<u32, String> {
+        self.atomic(Atomic {
+            view: request.view,
+            address: request.address,
+            op: ImageAtomicOp::Add,
+            signed: false,
+            value: request.value,
+            compare: 0,
+        })
+    }
+
+    fn atomic(&mut self, request: Atomic) -> Result<u32, String> {
         let program = self.strides.get(&request.view).copied();
         let Some(r) = self.device.view_mut(Kind::Uav, request.view, 0) else {
             return Ok(0);
         };
-        let Some(at) = atomic_offset(r, program.or(r.stride), request.address, None) else {
-            return Ok(0);
-        };
-        let old = r.word(at);
-        r.set_word(at, old.wrapping_add(request.value));
-        Ok(old)
+        let at = atomic_offset(r, program.or(r.stride), request.address, None);
+        Ok(atomic_on(
+            r,
+            at,
+            request.op,
+            request.signed,
+            request.value,
+            request.compare,
+        ))
     }
 
     fn atomic_image(&mut self, request: ImageAtomic<u32>) -> Result<u32, String> {
         let Some(r) = self.device.view_mut(Kind::Uav, request.view, 0) else {
             return Ok(0);
         };
-        let Some(at) = atomic_offset(r, r.stride, request.texel, request.layer) else {
-            return Ok(0);
-        };
-        let (old, new) = atomic_word(
-            r.word(at),
+        let at = atomic_offset(r, r.stride, request.texel, request.layer);
+        Ok(atomic_on(
+            r,
+            at,
             request.op,
             request.signed,
             request.value,
             request.compare,
-        );
-        r.set_word(at, new);
-        Ok(old)
+        ))
     }
 
     fn structured(&mut self, slot: u32, element: u32, offset: u32) -> Result<u32, String> {
@@ -841,12 +851,8 @@ impl iridia_exec::Backend for IdRequests<'_> {
         let Some(res) = self.element_mut(r.view, r.index)? else {
             return Ok(0);
         };
-        let Some(at) = atomic_offset(res, res.stride, r.texel, r.layer) else {
-            return Ok(0);
-        };
-        let (old, new) = atomic_word(res.word(at), r.op, r.signed, r.value, r.compare);
-        res.set_word(at, new);
-        Ok(old)
+        let at = atomic_offset(res, res.stride, r.texel, r.layer);
+        Ok(atomic_on(res, at, r.op, r.signed, r.value, r.compare))
     }
 
     fn store_buffer(
@@ -892,15 +898,22 @@ impl iridia_exec::Backend for IdRequests<'_> {
     }
 
     fn atomic_add(&mut self, view: iridia::ResourceId, word: u32, value: u32) -> Result<u32, String> {
-        let Some(res) = self.resource_mut(view)? else {
+        self.atomic_buffer(BufferAtomic {
+            view: Element { id: view, index: 0 },
+            word,
+            op: ImageAtomicOp::Add,
+            signed: false,
+            value,
+            compare: 0,
+        })
+    }
+
+    fn atomic_buffer(&mut self, r: BufferAtomic) -> Result<u32, String> {
+        let Some(res) = self.element_mut(r.view.id, r.view.index)? else {
             return Ok(0);
         };
-        let Some(at) = atomic_offset(res, None, [word / 4, 0, 0], None) else {
-            return Ok(0);
-        };
-        let old = res.word(at);
-        res.set_word(at, old.wrapping_add(value));
-        Ok(old)
+        let at = atomic_offset(res, None, [r.word / 4, 0, 0], None);
+        Ok(atomic_on(res, at, r.op, r.signed, r.value, r.compare))
     }
 }
 

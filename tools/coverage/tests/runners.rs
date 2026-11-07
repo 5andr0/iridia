@@ -84,6 +84,69 @@ fn the_offload_mesh_and_multisampled_pipelines_draw_to_their_image_comparisons()
     }
 }
 
+/// Every atomic operation of an unordered-access view, not the add alone, reaches the device: vkd3d's uav-atomics
+/// (InterlockedAnd, Or, Xor, Min and Max signed and unsigned, Exchange, CompareExchange and CompareStore, of typed and
+/// structured views) held to its expected values, recorded from Direct3D on Windows, on every DXBC and DXIL run, and
+/// the offload suite's `Interlocked*.resources.32` tests (each operation through an array of views) held to theirs.
+/// Refused by name, by the lifters the runners execute (`iridia_dxbc::lift` and `iridia_dxil::lift`, not the IR's):
+/// the section at line 122, a compare-exchange and compare-store of a `RWTexture2D` (neither lifter has an atomic
+/// compare of a texture, only of a buffer), and the section at line 149, which carries on
+/// with the texture it leaves (until line 161 binds a buffer in its place); and on the DXBC runs the section at line
+/// 197, `atomic_umax` and `atomic_umin` of an `RWBuffer<int>`, the DXBC lifter taking an atomic's signedness from its
+/// view (the IR's lowering to WGSL writes such a minimum or maximum as a compare-exchange loop).
+#[test]
+fn every_atomic_operation_of_a_view_reaches_the_device() {
+    let mut seen = Vec::new();
+    let mut wrong = Vec::new();
+    for format in ["dxbc", "dxil"] {
+        for r in vkd3d_runs(&format!("vkd3d/{format}.json.gz"), "uav-atomics.shader_test") {
+            for p in &r.probes {
+                let (class, why) = match p.line {
+                    122..161 if format == "dxbc" => ("refused", "on a texture view"),
+                    122..161 => ("refused", "not an unordered-access buffer"),
+                    197..249 if format == "dxbc" => ("refused", "on memory whose atomics are signed"),
+                    _ => ("pass", ""),
+                };
+                if p.outcome.class() != class || !p.outcome.detail().contains(why) {
+                    wrong.push(format!(
+                        "{} {} line {}: {:?}",
+                        r.runner, r.model, p.line, p.outcome
+                    ));
+                }
+                seen.push((format, p.line));
+            }
+        }
+    }
+    assert!(
+        wrong.is_empty(),
+        "{}",
+        wrong.join(
+            "
+"
+        )
+    );
+    // the first probe of each of the seven sections, on both formats
+    for format in ["dxbc", "dxil"] {
+        for line in [39, 86, 125, 153, 201, 253, 375] {
+            assert!(
+                seen.contains(&(format, line)),
+                "the {format} probe at line {line} is run"
+            );
+        }
+    }
+    let outcomes = offload_outcomes(&[
+        "Feature/HLSLLib/InterlockedAnd.resources.32.test",
+        "Feature/HLSLLib/InterlockedExchange.resources.32.test",
+        "Feature/HLSLLib/InterlockedMax.resources.32.test",
+        "Feature/HLSLLib/InterlockedMin.resources.32.test",
+        "Feature/HLSLLib/InterlockedOr.resources.32.test",
+        "Feature/HLSLLib/InterlockedXor.resources.32.test",
+    ]);
+    for (test, outcome) in &outcomes {
+        assert_eq!(outcome, "pass: ", "{test}");
+    }
+}
+
 /// The runs of vkd3d test file `test` in case file `cases`.
 fn vkd3d_runs(cases: &str, test: &str) -> Vec<vkd3d::run::RunResult> {
     let text = read_text(&suite(cases)).expect("the vkd3d case file");
