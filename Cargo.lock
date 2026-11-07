@@ -375,6 +375,8 @@ dependencies = [
  "iridia-exec-ir",
  "iridia-interface",
  "iridia-ir",
+ "iridia-naga",
+ "iridia-passes",
  "primase-foundations",
  "primase-naga",
  "proptest",

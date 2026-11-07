@@ -9,6 +9,9 @@
   arguments").
 - The dx readers are 0.12.0 (`d3d9-reader`, `dxbc-reader`, `dxil-reader`, `dxcontainer`; before, 0.11.0). Nothing a
   lift reads changes; the `d3d9-reader` types `iridia-d3d9` and `iridia-d3d9-ir` re-export are 0.12.0's.
+- `iridia-exec`: a scalar evaluation of an IR program takes the derivative of an input it reads through bitcasts and
+  composes (as a DXBC lift reads registers as bits) from the derivatives it is given, as it does a plain read; it was
+  refused as "a derivative of a computed value".
 - `iridia-passes`: `prepare(&mut Program)`, the passes every output and executor takes a lifted program through, on
   each of its functions: `structurize`, `promote`, `simplify` and `break_flags`. What it gives is what `iridia-exec`'s
   `::from_ir` constructors and `iridia-naga` take, so a caller no longer copies the sequence (the slim gate and the IR

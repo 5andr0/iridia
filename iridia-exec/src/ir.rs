@@ -429,6 +429,20 @@ impl Cx<'_> {
                 }
                 Some(p)
             }
+            // a bitcast keeps each lane's bits (a DXBC lift reads registers as bits and casts them back)
+            ir::Op::Bitcast(x) => self.provenance(*x),
+            ir::Op::Compose(parts) => {
+                let mut p = [(0u32, 0u8); 4];
+                let mut to = p.iter_mut();
+                for &part in parts {
+                    let from = self.provenance(part)?;
+                    let lanes = usize::from(self.f.value(part)?.ty.lanes);
+                    for &lane in from.get(..lanes)? {
+                        *to.next()? = lane;
+                    }
+                }
+                Some(p)
+            }
             _ => None,
         }
     }

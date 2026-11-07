@@ -22,18 +22,21 @@ type Registers = Vec<[u32; 4]>;
 type Derivatives = Vec<[[u32; 4]; 2]>;
 
 fn shaders() -> Vec<(&'static str, ProgramShader)> {
-    let executor = |program: iridia::Program| {
-        program.validate().unwrap_or_else(|p| panic!("{p:?}"));
-        ProgramShader::new(program).unwrap()
+    // a program as the IR lifts give it, taken through the passes every executor expects
+    let executor = |lifted: iridia_ir::Program| {
+        let mut program = lifted;
+        iridia_passes::prepare(&mut program).unwrap();
+        iridia_ir::validate(&program).unwrap_or_else(|p| panic!("{p:?}"));
+        ProgramShader::from_ir(program).unwrap()
     };
     vec![
         (
             "DXBC",
-            executor(iridia_dxbc::lift(include_bytes!("fixtures/lanes.dxbc")).unwrap()),
+            executor(iridia_dxbc::ir::lift(include_bytes!("fixtures/lanes.dxbc")).unwrap()),
         ),
         (
             "DXIL",
-            executor(iridia_dxil::lift(include_bytes!("fixtures/lanes.dxil")).unwrap()),
+            executor(iridia_dxil::ir::lift(include_bytes!("fixtures/lanes.dxil")).unwrap()),
         ),
     ]
 }

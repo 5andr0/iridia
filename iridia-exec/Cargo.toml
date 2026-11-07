@@ -26,6 +26,9 @@ half.workspace = true
 # The implementations, to run one fixture through each bytecode (a dev-dependency cycle cargo allows).
 iridia-dxbc = { path = "../iridia-dxbc" }
 iridia-dxil = { path = "../iridia-dxil" }
+# the IR's passes and its WGSL, for the tests that run programs of the IR
+iridia-naga = { path = "../iridia-naga", default-features = false, features = ["wgsl"] }
+iridia-passes = { path = "../iridia-passes" }
 proptest.workspace = true
 
 [lints]
