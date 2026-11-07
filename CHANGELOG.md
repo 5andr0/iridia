@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `iridia-naga` refuses a 1D array texture or storage image by name (WGSL has none; it wrote `texture_1d_array`, which
+  naga does not read back), folds a conversion of an integer literal (naga's front end does not evaluate one of a 64-bit
+  literal), and returns at the end of a function whose last block cannot be reached (naga wants the return).
 - `iridia-naga` lowers compute programs and the memory of every stage: the thread group size and the invocation ids
   as built-ins; workgroup variables; barriers (WGSL's are execution barriers of the workgroup, so a memory barrier
   without execution and a device-wide one are lowered as the workgroup's); raw, structured and typed buffers, read and

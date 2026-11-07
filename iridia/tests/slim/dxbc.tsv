@@ -128,7 +128,7 @@
 164af34515febd77c079c668998112e7b22d4f1f7c23a1bef8a2605279443c4e	IR WGSL	lower: a Domain program is not lowered yet
 16f5f80b22db7977da5f9f0b6024eee03ac6cdfc67d2dc605c708b8485d7246a	IR WGSL	lower: a read of an element of an array of buffers is not lowered yet
 16fcf5de21aca18013aa1f7e094481c2988b6d192a7230f6417f16bad053a699	A	lift: atomic_cmp_store: atomic operation cmp_store on a texture view
-16fcf5de21aca18013aa1f7e094481c2988b6d192a7230f6417f16bad053a699	IR WGSL	lower: an atomic of an image is not lowered yet
+16fcf5de21aca18013aa1f7e094481c2988b6d192a7230f6417f16bad053a699	IR WGSL	lower: a ND array storage image has no WGSL form
 1713ae33bb91a16254a789d2725daf49a42de37cfcaa1e09648c6e39f24b60ac	A	lift: double precision is enabled (global flag): doubles are not lifted
 176a081f1807f550015e26e012477c7d5c545c6c67c1953cbd1dd4fb74d10dc0	IR WGSL	lower: a read of an element of an array of buffers is not lowered yet
 178bb97e307c618f286b5a827da0e24f1d6f22af793b5ac955aa8011dffd2652	IR WGSL	lower: a Geometry program is not lowered yet
@@ -169,7 +169,7 @@
 1f905b31346d72befeef7bcd61f6123153424b6d3b8d6db206da5fc1feb5dec7	IR WGSL	not reached
 201b7a955e9e37da6cdd56a30802d23947cc80e55ac0ce0b8d94e4f89cd32d88	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 203262dbea3b44218a22a1503b577e6a252a14e08a1b18090e334ce935ffd3f0	A	WGSL read back: error: no definition in scope for identifier: `texture_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: texture_Nd_array<fN>;   │          ^^^^^^^^^^^^^^^^ unknown identifier  
-203262dbea3b44218a22a1503b577e6a252a14e08a1b18090e334ce935ffd3f0	IR WGSL	lower: a multisampled array texture has no WGSL form
+203262dbea3b44218a22a1503b577e6a252a14e08a1b18090e334ce935ffd3f0	IR WGSL	lower: a ND array texture has no WGSL form
 20853fbb82e5bd59217d06d0f38374804c154a42a06952937fc9e420ad68f46b	IR WGSL	lower: a Hull program is not lowered yet
 210ed3f0f27b58aa9b3c6d9563db1ef2e0dee9cd3870ec8afbdb4813f7574834	IR WGSL	lower: a Geometry program is not lowered yet
 2125ebd1d6b553348cac2c44284ad1b06d98db941865d5ae18218f737e9caf01	IR WGSL	lower: a Domain program is not lowered yet
@@ -194,7 +194,7 @@
 23c4220cab88e135f052261db94e5c6bf2732e950bed3d3febbdb9450ca3bf50	IR	lift: a declared input of register type OutputControlPoint
 23c4220cab88e135f052261db94e5c6bf2732e950bed3d3febbdb9450ca3bf50	IR WGSL	not reached
 24283b53f2148df93120121fc7ae0372711c9ad554398d07d117b4ac7f485ac7	A	WGSL read back: error: no definition in scope for identifier: `texture_storage_Nd_array`   ┌─ wgsl:N:N   │ N │ var uN_: texture_storage_Nd_array<rgbaNfloat,read>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
-24283b53f2148df93120121fc7ae0372711c9ad554398d07d117b4ac7f485ac7	IR WGSL	WGSL read back: error: no definition in scope for identifier: `texture_storage_Nd_array`   ┌─ wgsl:N:N   │ N │ var uN_: texture_storage_Nd_array<rgbaNfloat,read>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
+24283b53f2148df93120121fc7ae0372711c9ad554398d07d117b4ac7f485ac7	IR WGSL	lower: a ND array storage image has no WGSL form
 25eb3d1b0ef4ae18bf97888d45a7bd1f5ea22d5a4209c4980dd27ed2ed555445	A	WGSL: wgsl cannot write this program: Unsupported texture atomic result (WGSL's texture atomics return nothing): [N]
 25eb3d1b0ef4ae18bf97888d45a7bd1f5ea22d5a4209c4980dd27ed2ed555445	IR WGSL	lower: an atomic of an image is not lowered yet
 260bada5f1dbe1e4c546410176dfa6143673e2d39195c5868c0cbc4cda866df1	A	lift: a declared input of register type OutputControlPoint
@@ -303,12 +303,12 @@
 399263061e9aec9746ba9782bc38b0c995097c00160ba776df8490edb2addd29	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 3992ebffd684237b93e9b23ef7ae81b88611d2654646fb20e0ccdcee1d596794	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 399cd85a2562ded863067c2437919ac3a44d203b82236485d8769c2764cf0e82	A	WGSL read back: error: no definition in scope for identifier: `texture_storage_Nd_array`    ┌─ wgsl:N:N    │ N │ var uN_: texture_storage_Nd_array<rgbaNfloat,read>;    │          ^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
-399cd85a2562ded863067c2437919ac3a44d203b82236485d8769c2764cf0e82	IR WGSL	WGSL read back: error: no definition in scope for identifier: `texture_storage_Nd_array`    ┌─ wgsl:N:N    │ N │ var uN_: texture_storage_Nd_array<rgbaNfloat,read>;    │          ^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
+399cd85a2562ded863067c2437919ac3a44d203b82236485d8769c2764cf0e82	IR WGSL	lower: a ND array storage image has no WGSL form
 39e31d7a073fb65917aa8d5a4c50a18bd0aed92af762c22b3b14b584d9ea7991	A	lift: imm_atomic_alloc: append and consume buffer counters are not lifted
 39e31d7a073fb65917aa8d5a4c50a18bd0aed92af762c22b3b14b584d9ea7991	IR WGSL	lower: a write of an element of an array of buffers is not lowered yet
 3a4d17ced17798b9d8fbd14e28aa80e8361e9809e8047aa662cabeb0c4dcccc6	IR WGSL	lower: a Hull program is not lowered yet
 3a8f00ccfad757217f231ce5b0800a2bba185014e1a5795f7bbdebedbaff2c76	A	WGSL read back: error: no definition in scope for identifier: `texture_storage_Nd_array`   ┌─ wgsl:N:N   │ N │ var uN_: texture_storage_Nd_array<rgbaNfloat,read>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
-3a8f00ccfad757217f231ce5b0800a2bba185014e1a5795f7bbdebedbaff2c76	IR WGSL	WGSL read back: error: no definition in scope for identifier: `texture_storage_Nd_array`   ┌─ wgsl:N:N   │ N │ var uN_: texture_storage_Nd_array<rgbaNfloat,read>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
+3a8f00ccfad757217f231ce5b0800a2bba185014e1a5795f7bbdebedbaff2c76	IR WGSL	lower: a ND array storage image has no WGSL form
 3ab1cd546735faa31751d6cd3c6ee4dc5cb1a3570e1e6814d93be9d7997f34e3	IR WGSL	lower: an atomic of an element of an array of buffers is not lowered yet
 3ad87e95534413389c7280a63e48fcc7742e8d2775a8dbbfa955c91939b493b3	A	lift: reflection: DXBC at word N: variable ba is N bytes, its type packs to Some(N)
 3ad87e95534413389c7280a63e48fcc7742e8d2775a8dbbfa955c91939b493b3	IR	lift: reflection: DXBC at word N: variable ba is N bytes, its type packs to Some(N)
@@ -581,7 +581,7 @@
 75aeae131f63af61a6fc37ff8eb2b1b186a8171bd8c252be228b2f81e38209dc	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 76189aaea6f288135672c5e18917f9e4b1eae6b51bf5f90ae8109f689ec20298	IR WGSL	lower: a Geometry program is not lowered yet
 765c2cd6e8a343230ffa1af92aec8f2d52b393bf8f0ae9edca2a6420dbb554bf	A	WGSL read back: error: no definition in scope for identifier: `texture_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: binding_array<texture_Nd_array<fN>>;   │                        ^^^^^^^^^^^^^^^^ unknown identifier  
-765c2cd6e8a343230ffa1af92aec8f2d52b393bf8f0ae9edca2a6420dbb554bf	IR WGSL	lower: an element of an array of resources is not lowered yet
+765c2cd6e8a343230ffa1af92aec8f2d52b393bf8f0ae9edca2a6420dbb554bf	IR WGSL	lower: a ND array texture has no WGSL form
 769ca5cd382b97c55433dc4cc2c79fa17fe5b4e269c4af4411ccec4f55eef2b0	A	lift: gatherN_po: opcode N is not lifted
 769ca5cd382b97c55433dc4cc2c79fa17fe5b4e269c4af4411ccec4f55eef2b0	IR	lift: gatherN_po: opcode N is not lifted to the IR yet
 769ca5cd382b97c55433dc4cc2c79fa17fe5b4e269c4af4411ccec4f55eef2b0	IR WGSL	not reached
@@ -629,11 +629,11 @@
 7d2ac3549b4090be4fe95c191626e67bf5fdc3f5b995b2bf3c19d04096950747	IR WGSL	not reached
 7d879a5fe732b9ef06752c71474654755d54abe589a44edb4bfb9e26ebe21cb4	IR WGSL	lower: a Geometry program is not lowered yet
 7e608b04018dcd3f250c2f5ec857675fceb4d9f16941dba17b851bc141acea98	A	WGSL read back: error: no definition in scope for identifier: `texture_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: texture_Nd_array<fN>;   │          ^^^^^^^^^^^^^^^^ unknown identifier  
-7e608b04018dcd3f250c2f5ec857675fceb4d9f16941dba17b851bc141acea98	IR WGSL	WGSL read back: error: no definition in scope for identifier: `texture_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: texture_Nd_array<fN>;   │          ^^^^^^^^^^^^^^^^ unknown identifier  
+7e608b04018dcd3f250c2f5ec857675fceb4d9f16941dba17b851bc141acea98	IR WGSL	lower: a ND array texture has no WGSL form
 7f263ff3f91433fe3d12f7a144cca693773105bddffc85c335de719f60f9e7b7	A	lift: atomic_cmp_store: atomic operation cmp_store on a texture view
 7f263ff3f91433fe3d12f7a144cca693773105bddffc85c335de719f60f9e7b7	IR WGSL	lower: an atomic of an image is not lowered yet
 7f36719956078e9e7e7a91fd90d33d0381d818c0713c0d5926f7e8d3383b44f9	A	WGSL read back: error: no definition in scope for identifier: `texture_storage_Nd_array`   ┌─ wgsl:N:N   │ N │ var uN_: binding_array<texture_storage_Nd_array<rgbaNfloat,read>>;   │                        ^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
-7f36719956078e9e7e7a91fd90d33d0381d818c0713c0d5926f7e8d3383b44f9	IR WGSL	lower: an element of an array of resources is not lowered yet
+7f36719956078e9e7e7a91fd90d33d0381d818c0713c0d5926f7e8d3383b44f9	IR WGSL	lower: a ND array storage image has no WGSL form
 8063a51f4cddeff0b1a7784d9774516a765e091346090fec211c3e82f223db6d	IR WGSL	lower: an element of an array of resources is not lowered yet
 8077c6b721a72c9c51c29d4e99403d5d342055d65cdb02b9d34896c95260b46e	A	lift: double precision is enabled (global flag): doubles are not lifted
 8077c6b721a72c9c51c29d4e99403d5d342055d65cdb02b9d34896c95260b46e	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
@@ -662,9 +662,9 @@
 8510220740bc7ca11ec018f212bc03b0f2d3c038edc7734045a7424ffc2aad21	A	lift: double precision is enabled (global flag): doubles are not lifted
 8510220740bc7ca11ec018f212bc03b0f2d3c038edc7734045a7424ffc2aad21	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 8595c2a9e14c04d41650bfbb820ed8f8d0dee1b63622fd2ca25bb6d5287db65d	A	WGSL read back: error: no definition in scope for identifier: `texture_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: binding_array<texture_Nd_array<fN>>;   │                        ^^^^^^^^^^^^^^^^ unknown identifier  
-8595c2a9e14c04d41650bfbb820ed8f8d0dee1b63622fd2ca25bb6d5287db65d	IR WGSL	lower: an element of an array of resources is not lowered yet
+8595c2a9e14c04d41650bfbb820ed8f8d0dee1b63622fd2ca25bb6d5287db65d	IR WGSL	lower: a ND array texture has no WGSL form
 859f8eb4074b62bb02f616ee47d1e5c20a0d2fa077689f868fe36ad4276b4df9	A	WGSL read back: error: no definition in scope for identifier: `texture_storage_Nd_array`   ┌─ wgsl:N:N   │ N │ var uN_: texture_storage_Nd_array<rgbaNfloat,read>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
-859f8eb4074b62bb02f616ee47d1e5c20a0d2fa077689f868fe36ad4276b4df9	IR WGSL	WGSL read back: error: no definition in scope for identifier: `texture_storage_Nd_array`   ┌─ wgsl:N:N   │ N │ var uN_: texture_storage_Nd_array<rgbaNfloat,read>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
+859f8eb4074b62bb02f616ee47d1e5c20a0d2fa077689f868fe36ad4276b4df9	IR WGSL	lower: a ND array storage image has no WGSL form
 85dcc2a05a5a0f36032ac1746718b4cf5bbf740bad32d98fa0d40bdfa9b03868	IR WGSL	lower: a Domain program is not lowered yet
 85f7198a1a3362e52554d05df07f12760e6211fa8a4a83b1f10b3b881272b9f3	IR WGSL	lower: a Geometry program is not lowered yet
 8661ca1ab1fc024ae901f4389b245557a57a46bb4b0796aa3211c169ef255e30	A	validate: module: Entry point main at Compute is invalid: Expression [N] is invalid: Expected selection argument types to match, but reject value of type Scalar(Scalar { kind: Uint, width: N }) does not match accept value of value Scalar(Scalar { kind: Sint, width: N })
@@ -749,7 +749,7 @@
 920316a0bc75671b2bd6716bb1930fda86cac335d9c314cbd6a42157742ee734	IR WGSL	not reached
 9235659667838b532e0db11c593eea2000dde4721139c596b93fe02e9247c594	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 92378b2bcb3ca927636ede14685ce332b2c55bdb19c996f5949351c0d018247e	A	WGSL read back: error: no definition in scope for identifier: `texture_storage_Nd_array`   ┌─ wgsl:N:N   │ N │ var uN_: texture_storage_Nd_array<rgbaNfloat,read>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
-92378b2bcb3ca927636ede14685ce332b2c55bdb19c996f5949351c0d018247e	IR WGSL	WGSL read back: error: no definition in scope for identifier: `texture_storage_Nd_array`   ┌─ wgsl:N:N   │ N │ var uN_: texture_storage_Nd_array<rgbaNfloat,read>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
+92378b2bcb3ca927636ede14685ce332b2c55bdb19c996f5949351c0d018247e	IR WGSL	lower: a ND array storage image has no WGSL form
 931f3ca35f412c5694ecc509fe16838eba6d0f62a241b9da23f3baee8cdb1bc5	A	lift: ld_feedback: opcode N is not lifted
 931f3ca35f412c5694ecc509fe16838eba6d0f62a241b9da23f3baee8cdb1bc5	IR	lift: ld_feedback: opcode N is not lifted to the IR yet
 931f3ca35f412c5694ecc509fe16838eba6d0f62a241b9da23f3baee8cdb1bc5	IR WGSL	not reached
@@ -789,7 +789,7 @@
 9876e5f22a97d52a2e879ab4caa011c3efa02c47ffa04caec656b688214126c0	IR	lift: dcl_index_range of operand register type InputControlPoint: only inputs and outputs are lifted
 9876e5f22a97d52a2e879ab4caa011c3efa02c47ffa04caec656b688214126c0	IR WGSL	not reached
 988779324b665e612e3ecc6220805934ee1332f7462705a666c62936858bfff6	A	WGSL read back: error: no definition in scope for identifier: `texture_storage_Nd_array`    ┌─ wgsl:N:N    │ N │ var uN_: texture_storage_Nd_array<rgbaNfloat,write>;    │          ^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
-988779324b665e612e3ecc6220805934ee1332f7462705a666c62936858bfff6	IR WGSL	WGSL read back: error: no definition in scope for identifier: `texture_storage_Nd_array`    ┌─ wgsl:N:N    │ N │ var uN_: texture_storage_Nd_array<rgbaNfloat,write>;    │          ^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
+988779324b665e612e3ecc6220805934ee1332f7462705a666c62936858bfff6	IR WGSL	lower: a ND array storage image has no WGSL form
 988ccf5a17328f65b6e051b4344ba1b280c2424887abee9efa1235489ea123da	IR WGSL	lower: a Geometry program is not lowered yet
 98d8533ccf4f64636c3b5f2d2674030c1466128de9255fe17cb3661dc242ab7a	A	validate: module: Entry point main at Compute is invalid: Expression [N] is invalid: Expected selection argument types to match, but reject value of type Scalar(Scalar { kind: Uint, width: N }) does not match accept value of value Scalar(Scalar { kind: Sint, width: N })
 98dd9b1c622c2341e9044e77566e9e078c59506bba9aadb5969e9f6e81a8b284	IR WGSL	lower: a Geometry program is not lowered yet
@@ -921,7 +921,7 @@ b04f216ff62f003186a5c7dce0bf2111cf660a30fccc20087d93eb063d4a45d1	IR WGSL	not rea
 b08c941d6342da46350b46c19609fd7d4c60539f3b66bbbf4b65e7254117b305	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 b0f5cb1b661d9b94d5b706b03e3e6bddc85e3c9eeb419f5e70888687d26d003c	IR WGSL	lower: a read of an element of an array of buffers is not lowered yet
 b1fec1df737ece22f5704510941607797fb29bd5afab85d68fe1a94f2c389437	A	WGSL read back: error: no definition in scope for identifier: `texture_storage_Nd_array`   ┌─ wgsl:N:N   │ N │ var uN_: texture_storage_Nd_array<rgbaNfloat,read>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
-b1fec1df737ece22f5704510941607797fb29bd5afab85d68fe1a94f2c389437	IR WGSL	WGSL read back: error: no definition in scope for identifier: `texture_storage_Nd_array`   ┌─ wgsl:N:N   │ N │ var uN_: texture_storage_Nd_array<rgbaNfloat,read>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
+b1fec1df737ece22f5704510941607797fb29bd5afab85d68fe1a94f2c389437	IR WGSL	lower: a ND array storage image has no WGSL form
 b263a2f7d3e0a3424e6a3e6f52ccfeb752a6bad9e81172e43128540001a6d054	A	lift: bufinfo: opcode N is not lifted
 b263a2f7d3e0a3424e6a3e6f52ccfeb752a6bad9e81172e43128540001a6d054	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 b263a2f7d3e0a3424e6a3e6f52ccfeb752a6bad9e81172e43128540001a6d054	IR WGSL	not reached
@@ -950,7 +950,7 @@ b6ab04e870897cac220a874d9607a691cb511760a10b37d49857b2da8481b723	IR WGSL	not rea
 b70f2c9e3cbb4392554b0e9764e00a6272a04ab148e83b409ae856413600754f	A	validate: module: Entry point main at Fragment is invalid: Expression [N] is invalid: Gather component Y doesn't exist in the image
 b70f2c9e3cbb4392554b0e9764e00a6272a04ab148e83b409ae856413600754f	IR WGSL	lower: a gather of lane N of a depth texture
 b845bc0eb01fb40ddbf83e82613d25daf5bcb12a71fbcd66d265713505e0c985	A	WGSL read back: error: no definition in scope for identifier: `texture_Nd_array`    ┌─ wgsl:N:N    │ N │ var tN_: texture_Nd_array<fN>;    │          ^^^^^^^^^^^^^^^^ unknown identifier  
-b845bc0eb01fb40ddbf83e82613d25daf5bcb12a71fbcd66d265713505e0c985	IR WGSL	lower: a sample of a ND texture at an explicit level has no WGSL form
+b845bc0eb01fb40ddbf83e82613d25daf5bcb12a71fbcd66d265713505e0c985	IR WGSL	lower: a ND array texture has no WGSL form
 b8aa24011e796622a71759420d2aececaf8155a0c9be64841a40ea0c913c9601	A	WGSL read back: error: no definition in scope for identifier: `texture_multisampled_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: texture_multisampled_Nd_array<fN>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
 b8aa24011e796622a71759420d2aececaf8155a0c9be64841a40ea0c913c9601	IR WGSL	lower: a multisampled array texture has no WGSL form
 ba2109e9101dafdee2ad4f404a7aba4b77e9d8c249ac2a8999dd38ebb6a50f7f	IR WGSL	lower: a Hull program is not lowered yet
@@ -1102,7 +1102,7 @@ db942e4f95e2e67292f4f115c5b1c741731c40b26d02691c6364f20cc7194d3c	IR WGSL	lower: 
 dbe59d23fee0924cad8559b271de0bb8381be0e412f397a623bf346c9173798e	IR WGSL	lower: a Hull program is not lowered yet
 dc280fa1549f473901a2befa898efd680c3aa658efdd57087996e9e9c441c84e	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 dc9292f8836b846491dcad94598ab8fd5dd3ed0f0b1a24dc1649fbf086cea221	A	WGSL read back: error: no definition in scope for identifier: `texture_storage_Nd_array`   ┌─ wgsl:N:N   │ N │ var uN_: binding_array<texture_storage_Nd_array<rgbaNfloat,read>>;   │                        ^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
-dc9292f8836b846491dcad94598ab8fd5dd3ed0f0b1a24dc1649fbf086cea221	IR WGSL	lower: an element of an array of resources is not lowered yet
+dc9292f8836b846491dcad94598ab8fd5dd3ed0f0b1a24dc1649fbf086cea221	IR WGSL	lower: a ND array storage image has no WGSL form
 dd1104a786437edcb0a4b0c9d1bab78f9a802f6caf8f893108af28a186069660	A	lift: ld_structured_feedback: opcode N is not lifted
 dd1104a786437edcb0a4b0c9d1bab78f9a802f6caf8f893108af28a186069660	IR	lift: ld_structured_feedback: opcode N is not lifted to the IR yet
 dd1104a786437edcb0a4b0c9d1bab78f9a802f6caf8f893108af28a186069660	IR WGSL	not reached
@@ -1145,7 +1145,7 @@ e3268b03a98bb03327cc9ae73cebdb5391b91888b56425d894f24f33010202d5	IR	lift: call: 
 e3268b03a98bb03327cc9ae73cebdb5391b91888b56425d894f24f33010202d5	IR WGSL	not reached
 e401d4cad4da423a0b0dbdd933e358c7837d21a8b2894e741d095a3cd9766ef0	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 e406a6b7cc86f04d223c5c8991ce18d58c1fabb5cd4cc1b77371b3bf6f0c165c	A	WGSL read back: error: no definition in scope for identifier: `texture_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: texture_Nd_array<fN>;   │          ^^^^^^^^^^^^^^^^ unknown identifier  
-e406a6b7cc86f04d223c5c8991ce18d58c1fabb5cd4cc1b77371b3bf6f0c165c	IR WGSL	lower: a multisampled array texture has no WGSL form
+e406a6b7cc86f04d223c5c8991ce18d58c1fabb5cd4cc1b77371b3bf6f0c165c	IR WGSL	lower: a ND array texture has no WGSL form
 e410c08731c098fd51450338d97a5b47f397edf10b3a15709c0379360296456e	IR WGSL	lower: a write of an element of an array of buffers is not lowered yet
 e4d47a92daadc96ee4312ccc664f1db6ed475f41ceaf92371bec3285250915c3	A	WGSL: wgsl cannot write this program: Unsupported texture atomic result (WGSL's texture atomics return nothing): [N]
 e4d47a92daadc96ee4312ccc664f1db6ed475f41ceaf92371bec3285250915c3	IR WGSL	lower: an atomic of an image is not lowered yet
@@ -1195,7 +1195,7 @@ f117737024d6ea09ebb746948e2efc578f16f2b12cace587d7dad027e829f20f	A	lift: gatherN
 f117737024d6ea09ebb746948e2efc578f16f2b12cace587d7dad027e829f20f	IR	lift: gatherN_feedback: opcode N is not lifted to the IR yet
 f117737024d6ea09ebb746948e2efc578f16f2b12cace587d7dad027e829f20f	IR WGSL	not reached
 f176af135386df76099e67759c86bb8f00ecd5fddf448d3b005561bc8706facc	A	validate: module: Entry point main at Fragment is invalid: Expression [N] is invalid: Bias can't be done for image dimension DN
-f176af135386df76099e67759c86bb8f00ecd5fddf448d3b005561bc8706facc	IR WGSL	lower: a sample of a ND texture at an explicit level has no WGSL form
+f176af135386df76099e67759c86bb8f00ecd5fddf448d3b005561bc8706facc	IR WGSL	lower: a ND array texture has no WGSL form
 f1e752938d01b5366635e8a40a81e08633eed7be96d127319e57c49778115651	A	lift: gatherN_feedback: opcode N is not lifted
 f1e752938d01b5366635e8a40a81e08633eed7be96d127319e57c49778115651	IR	lift: gatherN_feedback: opcode N is not lifted to the IR yet
 f1e752938d01b5366635e8a40a81e08633eed7be96d127319e57c49778115651	IR WGSL	not reached
@@ -1235,7 +1235,7 @@ f7c80eab78d147ae43d39e8b36b9d785cc2e11d318977fcf8c5047bb7b8d2f13	A	lift: ld_ms_f
 f7c80eab78d147ae43d39e8b36b9d785cc2e11d318977fcf8c5047bb7b8d2f13	IR	lift: ld_ms_feedback: opcode N is not lifted to the IR yet
 f7c80eab78d147ae43d39e8b36b9d785cc2e11d318977fcf8c5047bb7b8d2f13	IR WGSL	not reached
 f841707c5d693f17f2bdb3391074e3cdeac3cf898fb75c53902f374865135859	A	WGSL read back: error: no definition in scope for identifier: `texture_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: texture_Nd_array<fN>;   │          ^^^^^^^^^^^^^^^^ unknown identifier  
-f841707c5d693f17f2bdb3391074e3cdeac3cf898fb75c53902f374865135859	IR WGSL	WGSL read back: error: no definition in scope for identifier: `texture_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: texture_Nd_array<fN>;   │          ^^^^^^^^^^^^^^^^ unknown identifier  
+f841707c5d693f17f2bdb3391074e3cdeac3cf898fb75c53902f374865135859	IR WGSL	lower: a ND array texture has no WGSL form
 f8485c26e296c1bf19a41a4581640f6c97f9301d59ef6d6d5001eda847bdad3f	A	lift: bufinfo: opcode N is not lifted
 f8485c26e296c1bf19a41a4581640f6c97f9301d59ef6d6d5001eda847bdad3f	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 f8485c26e296c1bf19a41a4581640f6c97f9301d59ef6d6d5001eda847bdad3f	IR WGSL	not reached
@@ -1262,7 +1262,7 @@ fd441391a3dfc8c78477e6a4171403deee2dd86148dca7a46d89d7dc59a3da55	A	lift: a decla
 fd441391a3dfc8c78477e6a4171403deee2dd86148dca7a46d89d7dc59a3da55	IR	lift: a declared input of register type GsInstanceId
 fd441391a3dfc8c78477e6a4171403deee2dd86148dca7a46d89d7dc59a3da55	IR WGSL	not reached
 fdf282323c0a8b47402d976795d886b170b795f9b9cf71f23337c53fad7b0c5a	A	WGSL read back: error: no definition in scope for identifier: `texture_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: texture_Nd_array<fN>;   │          ^^^^^^^^^^^^^^^^ unknown identifier  
-fdf282323c0a8b47402d976795d886b170b795f9b9cf71f23337c53fad7b0c5a	IR WGSL	lower: a multisampled array texture has no WGSL form
+fdf282323c0a8b47402d976795d886b170b795f9b9cf71f23337c53fad7b0c5a	IR WGSL	lower: a ND array texture has no WGSL form
 fe0c17e5789cb02125a6f326734f152658ca88baae88200305654c7c01d561c3	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 fe2a941f013b523d6cd4c0fe266ce7d2b983ca5e6f497ee624a62ea4de3cf1f9	A	lift: double precision is enabled (global flag): doubles are not lifted
 fe8d527b3a4e0bc0013f1df43f6b2297044659b6119f9f0a4587e2e1f359a081	A	lift: ret: a return inside the control flow of a hull phase

@@ -41,6 +41,22 @@ fn err(message: impl Into<String>) -> Error {
     Error(message.into())
 }
 
+/// The bits of an integer literal of `from` as `to` holds them: truncated to a narrower type, sign- or zero-extended
+/// (by `from`'s signedness) to a wider one.
+fn int_converted(bits: u64, from: Scalar, to: Scalar) -> u64 {
+    // the low `w` bits of `x` (all of them from 64 on)
+    let low = |x: u64, w: u32| u64::MAX.checked_shl(w).map_or(x, |high| x & !high);
+    let width = from.bits();
+    let value = if from.is_signed() && width < 64 {
+        let spare = 64u32.saturating_sub(width);
+        let up = bits.checked_shl(spare).unwrap_or(0).cast_signed();
+        up.checked_shr(spare).unwrap_or(0).cast_unsigned()
+    } else {
+        low(bits, width)
+    };
+    low(value, to.bits())
+}
+
 fn naga_scalar(s: Scalar) -> Result<naga::Scalar, Error> {
     Ok(match s {
         Scalar::Bool => naga::Scalar::BOOL,
@@ -235,6 +251,40 @@ impl Lower<'_> {
     }
 
     // literals and the small expansions
+
+    /// A literal of type `t`: each lane's bits.
+    fn literal_value(&mut self, t: Type, bits: [u64; 4]) -> Result<Handle<E>, Error> {
+        let lanes: Vec<Handle<E>> = bits
+            .iter()
+            .take(usize::from(t.lanes))
+            .map(|b| self.literal_bits(t.scalar, *b))
+            .collect::<Result<_, _>>()?;
+        Ok(match lanes.as_slice() {
+            [one] => *one,
+            _ => {
+                let ty = self.ty_of(t)?;
+                self.expr(E::Compose {
+                    ty,
+                    components: lanes,
+                })
+            }
+        })
+    }
+
+    /// `a` (of type `from`) converted to `t`: a float to an integer by `rule`, anything else by naga's conversion.
+    fn convert(&mut self, a: ValueId, from: Type, t: Type, rule: FloatToInt) -> Result<Handle<E>, Error> {
+        let x = self.get(a)?;
+        if from.scalar.is_float() && t.scalar.is_integer() {
+            self.float_to_int(x, from, t, rule)
+        } else {
+            let s = naga_scalar(t.scalar)?;
+            Ok(self.expr(E::As {
+                expr: x,
+                kind: s.kind,
+                convert: Some(s.width),
+            }))
+        }
+    }
 
     /// A literal of `scalar` with these bits, `lanes` times (a splat for a vector).
     fn literal_bits(&mut self, scalar: Scalar, bits: u64) -> Result<Handle<E>, Error> {
@@ -1108,23 +1158,7 @@ impl Lower<'_> {
         let t = def.ty;
         let op = def.op.clone();
         Ok(match op {
-            Op::Literal(bits) => {
-                let lanes: Vec<Handle<E>> = bits
-                    .iter()
-                    .take(usize::from(t.lanes))
-                    .map(|b| self.literal_bits(t.scalar, *b))
-                    .collect::<Result<_, _>>()?;
-                match lanes.as_slice() {
-                    [one] => *one,
-                    _ => {
-                        let ty = self.ty_of(t)?;
-                        self.expr(E::Compose {
-                            ty,
-                            components: lanes,
-                        })
-                    }
-                }
-            }
+            Op::Literal(bits) => self.literal_value(t, bits)?,
             Op::Undef => {
                 let ty = self.ty_of(t)?;
                 self.expr(E::ZeroValue(ty))
@@ -1347,16 +1381,16 @@ impl Lower<'_> {
             }
             Op::Convert(a, rule) => {
                 let from = self.vty(a)?;
-                let x = self.get(a)?;
-                if from.scalar.is_float() && t.scalar.is_integer() {
-                    self.float_to_int(x, from, t, rule)?
+                // an integer literal converted to another integer type is that type's literal: naga's front end does
+                // not evaluate a 64-bit literal's conversion
+                if from.scalar.is_integer()
+                    && t.scalar.is_integer()
+                    && let Some(Op::Literal(bits)) = self.f.value(a).map(|d| &d.op)
+                {
+                    let bits = bits.map(|b| int_converted(b, from.scalar, t.scalar));
+                    self.literal_value(t, bits)?
                 } else {
-                    let s = naga_scalar(t.scalar)?;
-                    self.expr(E::As {
-                        expr: x,
-                        kind: s.kind,
-                        convert: Some(s.width),
-                    })
+                    self.convert(a, from, t, rule)?
                 }
             }
             Op::Bitcast(a) => {
@@ -1793,6 +1827,9 @@ impl Lower<'_> {
                 self.statement(Statement::Kill)?;
                 self.ret()?;
             }
+            // naga takes the end of a function that returns a value as a return of none: the function's unreachable
+            // end returns its outputs, which no invocation reaches
+            Some(End::Unreachable) if matches!(yields, Yield::Top) => self.ret()?,
             Some(End::Unreachable) => {}
         }
         Ok(())
@@ -2172,6 +2209,9 @@ pub fn module(program: &Program, plan: &BindingPlan) -> Result<naga::Module, Err
                 if *multisampled && *arrayed {
                     return Err(err("a multisampled array texture has no WGSL form"));
                 }
+                if dim == ImageDimension::D1 && *arrayed {
+                    return Err(err("a 1D array texture has no WGSL form"));
+                }
                 let class = match sample {
                     SampleType::Float => ImageClass::Sampled {
                         kind: ScalarKind::Float,
@@ -2432,6 +2472,9 @@ impl Lower<'_> {
         sample: SampleType,
         access: Access,
     ) -> Result<Handle<naga::Type>, Error> {
+        if dim == TextureDim::D1 && arrayed {
+            return Err(err("a 1D array storage image has no WGSL form"));
+        }
         let atomic = self.atomics.resources.contains_key(&id);
         let format = match (sample, atomic) {
             (SampleType::Sint, true) => naga::StorageFormat::R32Sint,
@@ -2608,4 +2651,53 @@ fn name_shared(
         f.named_expressions.insert(h, name);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Scalar, int_converted};
+    use proptest::prelude::*;
+
+    const INTEGERS: [Scalar; 8] = [
+        Scalar::I8,
+        Scalar::I16,
+        Scalar::I32,
+        Scalar::I64,
+        Scalar::U8,
+        Scalar::U16,
+        Scalar::U32,
+        Scalar::U64,
+    ];
+
+    /// The bits of a literal of `to` that Rust's `as` makes of the value of a literal of `from` with these bits (the
+    /// low bits of `from`'s width are its value), as a literal of `to` holds them: its low bits, the rest zero.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap, clippy::cast_sign_loss)]
+    fn cast(bits: u64, from: Scalar, to: Scalar) -> u64 {
+        let v: i128 = match from {
+            Scalar::I8 => i128::from(bits as i8),
+            Scalar::I16 => i128::from(bits as i16),
+            Scalar::I32 => i128::from(bits as i32),
+            Scalar::I64 => i128::from(bits as i64),
+            Scalar::U8 => i128::from(bits as u8),
+            Scalar::U16 => i128::from(bits as u16),
+            Scalar::U32 => i128::from(bits as u32),
+            _ => i128::from(bits),
+        };
+        match to {
+            Scalar::I8 | Scalar::U8 => u64::from(v as u8),
+            Scalar::I16 | Scalar::U16 => u64::from(v as u16),
+            Scalar::I32 | Scalar::U32 => u64::from(v as u32),
+            _ => v as u64,
+        }
+    }
+
+    proptest! {
+        /// A folded conversion of an integer literal is the conversion Rust's `as` makes, between every pair of
+        /// integer types, whatever bits lie above the literal's width.
+        #[test]
+        fn a_folded_integer_conversion_is_the_conversion(bits: u64, from in 0usize..8, to in 0usize..8) {
+            let (from, to) = (INTEGERS[from], INTEGERS[to]);
+            prop_assert_eq!(int_converted(bits, from, to), cast(bits, from, to), "{:?} -> {:?}", from, to);
+        }
+    }
 }
