@@ -308,13 +308,10 @@ impl Lower<'_> {
             }
             _ => None,
         });
-        match stated {
-            Some(level) if level.fract() == 0.0 && (0.0..=16.0).contains(&level) =>
-            {
-                #[allow(clippy::cast_possible_truncation, reason = "a whole level of 0 to 16")]
-                self.literal_bits(Scalar::I32, u64::from(level as u32))
-            }
-            _ => Err(err(
+        // a whole level of 0 to 16 (no texture has more)
+        match stated.and_then(|level| (0u8..=16).find(|&n| f32::from(n) == level)) {
+            Some(n) => self.literal_bits(Scalar::I32, u64::from(n)),
+            None => Err(err(
                 "a depth sample at a computed or fractional level has no WGSL form",
             )),
         }
