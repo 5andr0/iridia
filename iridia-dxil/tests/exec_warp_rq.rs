@@ -129,7 +129,8 @@ fn scene(seed: u64, with_instance_flags: bool, procedural: bool) -> Scene {
             InstanceFlags {
                 cull_disable: f & 1 != 0,
                 front_counter_clockwise: f & 2 != 0,
-                force_opaque: f & 4 != 0,
+                // DXR's FORCE_OPAQUE and FORCE_NON_OPAQUE instance flags are mutually exclusive.
+                force_opaque: f & 4 != 0 && f != 7,
                 force_non_opaque: f == 7,
             }
         } else {
@@ -357,7 +358,7 @@ fn gate(fixture_name: &str, procedural: bool) {
                 .map(|w| u32::from_str_radix(w.as_str().unwrap(), 16).unwrap())
                 .collect();
             assert_eq!(words.len(), 640, "{name}: WARP word count");
-            for hit in words.chunks_exact_mut(10) {
+            for hit in words.as_chunks_mut::<10>().0 {
                 if hit[0] == 0 {
                     hit[1..].fill(0);
                 }
@@ -374,7 +375,7 @@ fn gate(fixture_name: &str, procedural: bool) {
     for (name, theirs) in &first {
         let mine = &ours[name];
         let rays = &cases.iter().find(|c| &c.0 == name).unwrap().1;
-        for i in 0..64 {
+        for (i, (o, d, f, m)) in rays.iter().enumerate() {
             let range = 10 * i..10 * i + 10;
             let a = &mine[range.clone()];
             let mut b = &theirs[range.clone()];
@@ -391,7 +392,6 @@ fn gate(fixture_name: &str, procedural: bool) {
                 }
             }
             if a[0] != b[0] {
-                let (o, d, f, m) = &rays[i];
                 mismatches.push(format!(
                     "{name} ray {i} (origin {o:?}, direction {d:?}, flags {f:#x}, mask {m:#x}): status executor {}, WARP {}",
                     a[0], b[0]
@@ -412,7 +412,6 @@ fn gate(fixture_name: &str, procedural: bool) {
                 && close(a[1], b[1])
                 && (a[0] != 1 || (close(a[7], b[7]) && close(a[8], b[8])));
             if !same {
-                let (o, d, f, m) = &rays[i];
                 mismatches.push(format!(
                     "{name} ray {i} (origin {o:?}, direction {d:?}, flags {f:#x}, mask {m:#x}):\n    executor {a:08x?}\n    WARP     {b:08x?}"
                 ));
