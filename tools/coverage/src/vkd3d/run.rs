@@ -20,7 +20,7 @@ use iridia_exec::tessellation::TessellationShader;
 use iridia_exec::{PixelShader, ProgramShader};
 use iridia_ir::interface::{StateParam, TextureDim};
 
-use super::cases::{File, InputElement, Run, What};
+use super::cases::{File, InputElement, Run, What, Winbug};
 use crate::device::format::{Class, named};
 use crate::device::resource::{Counter, Dim, Kind, Resource};
 use crate::device::sample::{Address, Compare, Reduction, Sampler};
@@ -97,6 +97,25 @@ pub struct Probe {
     pub selected: bool,
     /// What it found.
     pub outcome: Outcome,
+    /// The test's `winbug` qualifier of the probe, if it has one.
+    pub winbug: Option<Winbug>,
+}
+
+impl Probe {
+    /// Whether the probe is one vkd3d found Windows itself reads otherwise (a `winbug` that is not a driver's bug):
+    /// it is reported apart, as `winbug`, and decides no run's class.
+    pub fn apart(&self) -> bool {
+        self.winbug.as_ref().is_some_and(|w| !w.driver)
+    }
+
+    /// The probe's class: `winbug` where it is [apart](Self::apart), otherwise its outcome's.
+    pub fn class(&self) -> &'static str {
+        if self.apart() {
+            "winbug"
+        } else {
+            self.outcome.class()
+        }
+    }
 }
 
 /// A run's results.
@@ -135,11 +154,13 @@ impl RunResult {
         if !self.selected() || self.probes.iter().all(|p| p.selected) {
             return None;
         }
+        let extended = || self.probes.iter().filter(|p| !p.selected);
+        if extended().all(Probe::apart) {
+            return Some("winbug");
+        }
         Some(
-            self.probes
-                .iter()
-                .filter(|p| !p.selected)
-                .filter(|p| p.outcome.class() != "pass")
+            extended()
+                .filter(|p| !p.apart() && p.outcome.class() != "pass")
                 .min_by_key(|p| Self::rank(&p.outcome))
                 .map_or("pass", |p| p.outcome.class()),
         )
@@ -149,7 +170,7 @@ impl RunResult {
     fn deciding_among(&self, all: bool) -> Option<&Probe> {
         self.probes
             .iter()
-            .filter(|p| all || p.selected)
+            .filter(|p| (all || p.selected) && !p.apart())
             .filter(|p| Self::rank(&p.outcome) < 6)
             .min_by_key(|p| Self::rank(&p.outcome))
     }
@@ -167,8 +188,14 @@ impl RunResult {
         }
     }
 
-    /// The run's class: `pass` where every probe holds, otherwise the [`deciding`](Self::deciding) probe's.
+    /// The run's class: `pass` where every probe holds, otherwise the [`deciding`](Self::deciding) probe's; `winbug`
+    /// where every probe it is classed by is [apart](Probe::apart).
     pub fn class(&self) -> &'static str {
+        let all = !self.selected();
+        let mut classed_by = self.probes.iter().filter(|p| all || p.selected).peekable();
+        if classed_by.peek().is_some() && classed_by.all(Probe::apart) {
+            return "winbug";
+        }
         self.deciding().map_or("pass", |p| p.outcome.class())
     }
 }
@@ -1017,6 +1044,7 @@ fn run_as(programs: &Programs<'_>, run: &Run, flushed: bool) -> RunResult {
                 expect,
                 ulps,
                 layer,
+                winbug,
             } => {
                 let outcome = probe_step(
                     &device, &state, target, *probe, kind, *count, expect, *ulps, *layer,
@@ -1025,6 +1053,7 @@ fn run_as(programs: &Programs<'_>, run: &Run, flushed: bool) -> RunResult {
                     line: step.line,
                     selected,
                     outcome,
+                    winbug: winbug.clone(),
                 });
             }
         }
@@ -1750,6 +1779,7 @@ mod tests {
                 line,
                 selected: true,
                 outcome: outcome.clone(),
+                winbug: None,
             })
             .collect()
     }
@@ -1781,6 +1811,42 @@ mod tests {
         let r = run(probes);
         assert!(!r.selected());
         assert_eq!((r.class(), r.extended_class()), ("fail", None));
+    }
+
+    #[test]
+    fn a_probe_windows_itself_reads_otherwise_is_apart_and_a_driver_bug_is_not() {
+        let fail = || Outcome::Fail("differs".into());
+        let winbug = |qualifier: &str, driver| {
+            Some(Winbug {
+                qualifier: qualifier.into(),
+                driver,
+            })
+        };
+        let run = |probes: Vec<Probe>| RunResult {
+            file: "t.shader_test".into(),
+            runner: "d3d12-dxc".into(),
+            model: "6.5".into(),
+            probes,
+            programs: BTreeMap::new(),
+        };
+        // a plain winbug that differs, selected or extended: counted as winbug, and the run passes
+        let mut probes = probes_of(&[Outcome::Pass, fail(), fail()]);
+        probes[1].winbug = winbug("", false);
+        probes[2].winbug = winbug("sm>=6 & !amd", false);
+        probes[2].selected = false;
+        let r = run(probes);
+        assert_eq!((r.probes[1].class(), r.probes[2].class()), ("winbug", "winbug"));
+        assert_eq!((r.class(), r.extended_class()), ("pass", Some("winbug")));
+        // a driver's bug that differs is a probe like any other: the run fails
+        let mut probes = probes_of(&[Outcome::Pass, fail()]);
+        probes[1].winbug = winbug("amd", true);
+        let r = run(probes);
+        assert_eq!((r.probes[1].class(), r.class()), ("fail", "fail"));
+        // a run whose probes are all apart: winbug, whatever they found
+        let mut probes = probes_of(&[fail()]);
+        probes[0].winbug = winbug("", false);
+        probes[0].selected = false;
+        assert_eq!(run(probes).class(), "winbug");
     }
 
     #[test]

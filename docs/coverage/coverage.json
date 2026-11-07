@@ -45,10 +45,10 @@
         "ok": 401,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 378,
-        "differs": 20,
+        "exact": 398,
+        "differs": 0,
         "unchecked": 3
       },
       "lifted": {
@@ -109,10 +109,10 @@
         "ok": 273,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 267,
-        "differs": 6,
+        "exact": 273,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -141,10 +141,10 @@
         "ok": 202,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 172,
-        "differs": 29,
+        "exact": 201,
+        "differs": 0,
         "unchecked": 1
       },
       "lifted": {
@@ -173,10 +173,10 @@
         "ok": 989,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 949,
-        "differs": 35,
+        "exact": 984,
+        "differs": 0,
         "unchecked": 5
       },
       "lifted": {
@@ -365,10 +365,10 @@
         "ok": 9,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 7,
-        "differs": 2,
+        "exact": 9,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -397,10 +397,10 @@
         "ok": 13,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 11,
-        "differs": 2,
+        "exact": 13,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -525,10 +525,10 @@
         "ok": 140,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 132,
-        "differs": 8,
+        "exact": 140,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -557,10 +557,10 @@
         "ok": 13,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 11,
-        "differs": 2,
+        "exact": 13,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -653,10 +653,10 @@
         "ok": 153,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 140,
-        "differs": 13,
+        "exact": 153,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -749,10 +749,10 @@
         "ok": 1238,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 1191,
-        "differs": 41,
+        "exact": 1232,
+        "differs": 0,
         "unchecked": 6
       },
       "lifted": {
@@ -813,10 +813,10 @@
         "ok": 290,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 276,
-        "differs": 13,
+        "exact": 289,
+        "differs": 0,
         "unchecked": 1
       },
       "lifted": {
@@ -1133,10 +1133,10 @@
         "ok": 54,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 24,
-        "differs": 25,
+        "exact": 49,
+        "differs": 0,
         "unchecked": 5
       },
       "lifted": {
@@ -1229,10 +1229,10 @@
         "ok": 2,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 1,
-        "differs": 1,
+        "exact": 2,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -1261,10 +1261,10 @@
         "ok": 6,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 3,
-        "differs": 3,
+        "exact": 6,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -1357,10 +1357,10 @@
         "ok": 580,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 558,
-        "differs": 21,
+        "exact": 579,
+        "differs": 0,
         "unchecked": 1
       },
       "lifted": {
@@ -1389,10 +1389,10 @@
         "ok": 643,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 615,
-        "differs": 28,
+        "exact": 643,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -1517,10 +1517,10 @@
         "ok": 588,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 587,
-        "differs": 1,
+        "exact": 588,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -1549,10 +1549,10 @@
         "ok": 310,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 305,
-        "differs": 4,
+        "exact": 309,
+        "differs": 0,
         "unchecked": 1
       },
       "lifted": {
@@ -2015,10 +2015,10 @@
         "ok": 6,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 4,
-        "differs": 2,
+        "exact": 6,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -2233,10 +2233,10 @@
         "ok": 1994,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 1958,
-        "differs": 33,
+        "exact": 1991,
+        "differs": 0,
         "unchecked": 3
       },
       "lifted": {
@@ -2265,10 +2265,10 @@
         "ok": 3118,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 3078,
-        "differs": 36,
+        "exact": 3114,
+        "differs": 0,
         "unchecked": 4
       },
       "lifted": {
@@ -2280,8 +2280,8 @@
         "failed": 61
       },
       "executed": {
-        "pass": 2698,
-        "fail": 57
+        "pass": 2696,
+        "fail": 59
       },
       "proved_by": [
         "vkd3d"
@@ -2487,10 +2487,10 @@
         "ok": 363,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 356,
-        "differs": 5,
+        "exact": 361,
+        "differs": 0,
         "unchecked": 2
       },
       "lifted": {
@@ -2615,10 +2615,10 @@
         "ok": 151,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 149,
-        "differs": 2,
+        "exact": 151,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -2743,10 +2743,10 @@
         "ok": 3755,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 3712,
-        "differs": 36,
+        "exact": 3748,
+        "differs": 0,
         "unchecked": 7
       },
       "lifted": {
@@ -2758,8 +2758,8 @@
         "failed": 26
       },
       "executed": {
-        "pass": 3430,
-        "fail": 54
+        "pass": 3428,
+        "fail": 56
       },
       "proved_by": [
         "vkd3d"
@@ -2839,10 +2839,10 @@
         "ok": 392,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 389,
-        "differs": 1,
+        "exact": 390,
+        "differs": 0,
         "unchecked": 2
       },
       "lifted": {
@@ -2871,10 +2871,10 @@
         "ok": 454,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 450,
-        "differs": 4,
+        "exact": 454,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -2886,8 +2886,8 @@
         "failed": 8
       },
       "executed": {
-        "pass": 351,
-        "fail": 13
+        "pass": 349,
+        "fail": 15
       },
       "proved_by": [
         "vkd3d"
@@ -2967,10 +2967,10 @@
         "ok": 256,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 252,
-        "differs": 4,
+        "exact": 256,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -2982,8 +2982,8 @@
         "failed": 8
       },
       "executed": {
-        "pass": 199,
-        "fail": 0
+        "pass": 197,
+        "fail": 2
       },
       "proved_by": [
         "vkd3d"
@@ -3031,10 +3031,10 @@
         "ok": 1705,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 1686,
-        "differs": 16,
+        "exact": 1702,
+        "differs": 0,
         "unchecked": 3
       },
       "lifted": {
@@ -3159,10 +3159,10 @@
         "ok": 104,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 100,
-        "differs": 4,
+        "exact": 104,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -3191,10 +3191,10 @@
         "ok": 16,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 14,
-        "differs": 2,
+        "exact": 16,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -3223,10 +3223,10 @@
         "ok": 14,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 12,
-        "differs": 2,
+        "exact": 14,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -3255,10 +3255,10 @@
         "ok": 38,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 34,
-        "differs": 4,
+        "exact": 38,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -3667,10 +3667,10 @@
         "ok": 82,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 80,
-        "differs": 2,
+        "exact": 82,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -4041,10 +4041,10 @@
         "ok": 193,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 191,
-        "differs": 2,
+        "exact": 193,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -4137,10 +4137,10 @@
         "ok": 45,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 44,
-        "differs": 1,
+        "exact": 45,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -4594,8 +4594,8 @@
         "failed": 8
       },
       "executed": {
-        "pass": 4,
-        "fail": 0
+        "pass": 2,
+        "fail": 2
       },
       "proved_by": [
         "vkd3d"
@@ -4611,10 +4611,10 @@
         "ok": 2,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 0,
-        "differs": 2,
+        "exact": 2,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -4769,10 +4769,10 @@
         "ok": 333,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 329,
-        "differs": 4,
+        "exact": 333,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -4801,10 +4801,10 @@
         "ok": 91,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 89,
-        "differs": 2,
+        "exact": 91,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -4833,10 +4833,10 @@
         "ok": 193,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 191,
-        "differs": 2,
+        "exact": 193,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -4929,10 +4929,10 @@
         "ok": 36,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 32,
-        "differs": 4,
+        "exact": 36,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -5177,10 +5177,10 @@
         "ok": 48,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 46,
-        "differs": 2,
+        "exact": 48,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -5241,10 +5241,10 @@
         "ok": 91,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 83,
-        "differs": 8,
+        "exact": 91,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -5335,10 +5335,10 @@
         "ok": 286,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 274,
-        "differs": 12,
+        "exact": 286,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -5491,10 +5491,10 @@
         "ok": 23,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 21,
-        "differs": 2,
+        "exact": 23,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -5523,10 +5523,10 @@
         "ok": 48,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 46,
-        "differs": 2,
+        "exact": 48,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -5713,10 +5713,10 @@
         "ok": 344,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 341,
-        "differs": 2,
+        "exact": 343,
+        "differs": 0,
         "unchecked": 1
       },
       "lifted": {
@@ -5809,10 +5809,10 @@
         "ok": 2851,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 2829,
-        "differs": 16,
+        "exact": 2845,
+        "differs": 0,
         "unchecked": 6
       },
       "lifted": {
@@ -5841,10 +5841,10 @@
         "ok": 305,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 300,
-        "differs": 4,
+        "exact": 304,
+        "differs": 0,
         "unchecked": 1
       },
       "lifted": {
@@ -5873,10 +5873,10 @@
         "ok": 504,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 500,
-        "differs": 3,
+        "exact": 503,
+        "differs": 0,
         "unchecked": 1
       },
       "lifted": {
@@ -5905,10 +5905,10 @@
         "ok": 87,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 86,
-        "differs": 1,
+        "exact": 87,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -6065,10 +6065,10 @@
         "ok": 3999,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 3950,
-        "differs": 41,
+        "exact": 3991,
+        "differs": 0,
         "unchecked": 8
       },
       "lifted": {
@@ -6080,8 +6080,8 @@
         "failed": 74
       },
       "executed": {
-        "pass": 3556,
-        "fail": 58
+        "pass": 3554,
+        "fail": 60
       },
       "proved_by": [
         "vkd3d"
@@ -6417,10 +6417,10 @@
         "ok": 4,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 2,
-        "differs": 2,
+        "exact": 4,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -6637,10 +6637,10 @@
         "ok": 40,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 36,
-        "differs": 4,
+        "exact": 40,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -6669,10 +6669,10 @@
         "ok": 53,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 51,
-        "differs": 2,
+        "exact": 53,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -6765,10 +6765,10 @@
         "ok": 34,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 30,
-        "differs": 4,
+        "exact": 34,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -7019,10 +7019,10 @@
         "ok": 184,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 181,
-        "differs": 2,
+        "exact": 183,
+        "differs": 0,
         "unchecked": 1
       },
       "lifted": {
@@ -7051,10 +7051,10 @@
         "ok": 42,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 40,
-        "differs": 2,
+        "exact": 42,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -7147,10 +7147,10 @@
         "ok": 51,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 49,
-        "differs": 2,
+        "exact": 51,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -7179,10 +7179,10 @@
         "ok": 49,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 47,
-        "differs": 2,
+        "exact": 49,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -7467,10 +7467,10 @@
         "ok": 813,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 805,
-        "differs": 5,
+        "exact": 810,
+        "differs": 0,
         "unchecked": 3
       },
       "lifted": {
@@ -7499,10 +7499,10 @@
         "ok": 828,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 811,
-        "differs": 16,
+        "exact": 827,
+        "differs": 0,
         "unchecked": 1
       },
       "lifted": {
@@ -7531,10 +7531,10 @@
         "ok": 955,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 945,
-        "differs": 8,
+        "exact": 953,
+        "differs": 0,
         "unchecked": 2
       },
       "lifted": {
@@ -7563,10 +7563,10 @@
         "ok": 907,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 900,
-        "differs": 7,
+        "exact": 907,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -7578,8 +7578,8 @@
         "failed": 4
       },
       "executed": {
-        "pass": 733,
-        "fail": 34
+        "pass": 731,
+        "fail": 36
       },
       "proved_by": [
         "vkd3d"
@@ -7627,10 +7627,10 @@
         "ok": 79,
         "failed": 0
       },
-      "listed": "differs",
+      "listed": "exact",
       "listed_counts": {
-        "exact": 78,
-        "differs": 1,
+        "exact": 79,
+        "differs": 0,
         "unchecked": 0
       },
       "lifted": {
@@ -7747,29 +7747,29 @@
       "format": "dxil",
       "kind": "opcode",
       "name": "dx.op.annotateHandle (op 216)",
-      "programs": 918,
+      "programs": 919,
       "decoded": "yes",
       "decoded_counts": {
-        "ok": 918,
+        "ok": 919,
         "failed": 0
       },
       "listed": "exact",
       "listed_counts": {
-        "exact": 795,
+        "exact": 796,
         "differs": 0,
         "unchecked": 123
       },
       "lifted": {
         "ok": 677,
-        "refused": 231
+        "refused": 232
       },
       "wgsl": {
         "ok": 659,
         "failed": 18
       },
       "executed": {
-        "pass": 405,
-        "fail": 61
+        "pass": 403,
+        "fail": 63
       },
       "proved_by": [
         "offload",
@@ -7903,21 +7903,21 @@
       "format": "dxil",
       "kind": "opcode",
       "name": "dx.op.barrier (op 80)",
-      "programs": 140,
+      "programs": 142,
       "decoded": "yes",
       "decoded_counts": {
-        "ok": 140,
+        "ok": 142,
         "failed": 0
       },
       "listed": "exact",
       "listed_counts": {
-        "exact": 78,
+        "exact": 80,
         "differs": 0,
         "unchecked": 62
       },
       "lifted": {
         "ok": 95,
-        "refused": 45
+        "refused": 47
       },
       "wgsl": {
         "ok": 91,
@@ -9146,21 +9146,21 @@
       "format": "dxil",
       "kind": "opcode",
       "name": "dx.op.cbufferLoadLegacy.i32 (op 59)",
-      "programs": 909,
+      "programs": 911,
       "decoded": "yes",
       "decoded_counts": {
-        "ok": 909,
+        "ok": 911,
         "failed": 0
       },
       "listed": "exact",
       "listed_counts": {
-        "exact": 866,
+        "exact": 868,
         "differs": 0,
         "unchecked": 43
       },
       "lifted": {
         "ok": 769,
-        "refused": 123
+        "refused": 125
       },
       "wgsl": {
         "ok": 739,
@@ -9269,29 +9269,29 @@
       "format": "dxil",
       "kind": "opcode",
       "name": "dx.op.createHandle (op 57)",
-      "programs": 3640,
+      "programs": 3641,
       "decoded": "yes",
       "decoded_counts": {
-        "ok": 3640,
+        "ok": 3641,
         "failed": 0
       },
       "listed": "exact",
       "listed_counts": {
-        "exact": 3042,
+        "exact": 3043,
         "differs": 0,
         "unchecked": 598
       },
       "lifted": {
         "ok": 2976,
-        "refused": 613
+        "refused": 614
       },
       "wgsl": {
         "ok": 2901,
         "failed": 75
       },
       "executed": {
-        "pass": 2044,
-        "fail": 227
+        "pass": 2036,
+        "fail": 235
       },
       "proved_by": [
         "offload",
@@ -9392,29 +9392,29 @@
       "format": "dxil",
       "kind": "opcode",
       "name": "dx.op.createHandleFromBinding (op 217)",
-      "programs": 916,
+      "programs": 917,
       "decoded": "yes",
       "decoded_counts": {
-        "ok": 916,
+        "ok": 917,
         "failed": 0
       },
       "listed": "exact",
       "listed_counts": {
-        "exact": 793,
+        "exact": 794,
         "differs": 0,
         "unchecked": 123
       },
       "lifted": {
         "ok": 675,
-        "refused": 231
+        "refused": 232
       },
       "wgsl": {
         "ok": 657,
         "failed": 18
       },
       "executed": {
-        "pass": 405,
-        "fail": 61
+        "pass": 403,
+        "fail": 63
       },
       "proved_by": [
         "offload",
@@ -9488,21 +9488,21 @@
       "format": "dxil",
       "kind": "opcode",
       "name": "dx.op.discard (op 82)",
-      "programs": 167,
+      "programs": 169,
       "decoded": "yes",
       "decoded_counts": {
-        "ok": 167,
+        "ok": 169,
         "failed": 0
       },
       "listed": "exact",
       "listed_counts": {
-        "exact": 165,
+        "exact": 167,
         "differs": 0,
         "unchecked": 2
       },
       "lifted": {
         "ok": 167,
-        "refused": 0
+        "refused": 2
       },
       "wgsl": {
         "ok": 167,
@@ -9551,6 +9551,66 @@
       "format": "dxil",
       "kind": "opcode",
       "name": "dx.op.dispatchMesh.struct.payload_data (op 173)",
+      "programs": 4,
+      "decoded": "yes",
+      "decoded_counts": {
+        "ok": 4,
+        "failed": 0
+      },
+      "listed": "exact",
+      "listed_counts": {
+        "exact": 4,
+        "differs": 0,
+        "unchecked": 0
+      },
+      "lifted": {
+        "ok": 0,
+        "refused": 4
+      },
+      "wgsl": {
+        "ok": 0,
+        "failed": 0
+      },
+      "executed": {
+        "pass": 0,
+        "fail": 0
+      },
+      "proved_by": []
+    },
+    {
+      "format": "dxil",
+      "kind": "opcode",
+      "name": "dx.op.dispatchMesh.struct.payload_data.0 (op 173)",
+      "programs": 20,
+      "decoded": "yes",
+      "decoded_counts": {
+        "ok": 20,
+        "failed": 0
+      },
+      "listed": "exact",
+      "listed_counts": {
+        "exact": 20,
+        "differs": 0,
+        "unchecked": 0
+      },
+      "lifted": {
+        "ok": 0,
+        "refused": 20
+      },
+      "wgsl": {
+        "ok": 0,
+        "failed": 0
+      },
+      "executed": {
+        "pass": 0,
+        "fail": 0
+      },
+      "proved_by": []
+    },
+    {
+      "format": "dxil",
+      "kind": "opcode",
+      "name": "dx.op.dispatchMesh.struct.payload_data.2 (op 173)",
       "programs": 2,
       "decoded": "yes",
       "decoded_counts": {
@@ -9580,22 +9640,22 @@
     {
       "format": "dxil",
       "kind": "opcode",
-      "name": "dx.op.dispatchMesh.struct.payload_data.0 (op 173)",
-      "programs": 6,
+      "name": "dx.op.dispatchMesh.struct.payload_data.6 (op 173)",
+      "programs": 2,
       "decoded": "yes",
       "decoded_counts": {
-        "ok": 6,
+        "ok": 2,
         "failed": 0
       },
       "listed": "exact",
       "listed_counts": {
-        "exact": 6,
+        "exact": 2,
         "differs": 0,
         "unchecked": 0
       },
       "lifted": {
         "ok": 0,
-        "refused": 6
+        "refused": 2
       },
       "wgsl": {
         "ok": 0,
@@ -10072,21 +10132,21 @@
       "format": "dxil",
       "kind": "opcode",
       "name": "dx.op.emitIndices (op 169)",
-      "programs": 20,
+      "programs": 34,
       "decoded": "yes",
       "decoded_counts": {
-        "ok": 20,
+        "ok": 34,
         "failed": 0
       },
       "listed": "exact",
       "listed_counts": {
-        "exact": 16,
+        "exact": 30,
         "differs": 0,
         "unchecked": 4
       },
       "lifted": {
         "ok": 11,
-        "refused": 8
+        "refused": 22
       },
       "wgsl": {
         "ok": 11,
@@ -10197,21 +10257,21 @@
       "format": "dxil",
       "kind": "opcode",
       "name": "dx.op.flattenedThreadIdInGroup.i32 (op 96)",
-      "programs": 426,
+      "programs": 440,
       "decoded": "yes",
       "decoded_counts": {
-        "ok": 426,
+        "ok": 440,
         "failed": 0
       },
       "listed": "exact",
       "listed_counts": {
-        "exact": 360,
+        "exact": 374,
         "differs": 0,
         "unchecked": 66
       },
       "lifted": {
         "ok": 292,
-        "refused": 121
+        "refused": 135
       },
       "wgsl": {
         "ok": 290,
@@ -10292,6 +10352,36 @@
     {
       "format": "dxil",
       "kind": "opcode",
+      "name": "dx.op.getMeshPayload.struct.payload_data (op 170)",
+      "programs": 12,
+      "decoded": "yes",
+      "decoded_counts": {
+        "ok": 12,
+        "failed": 0
+      },
+      "listed": "exact",
+      "listed_counts": {
+        "exact": 12,
+        "differs": 0,
+        "unchecked": 0
+      },
+      "lifted": {
+        "ok": 0,
+        "refused": 12
+      },
+      "wgsl": {
+        "ok": 0,
+        "failed": 0
+      },
+      "executed": {
+        "pass": 0,
+        "fail": 0
+      },
+      "proved_by": []
+    },
+    {
+      "format": "dxil",
+      "kind": "opcode",
       "name": "dx.op.getMeshPayload.struct.payload_data.0 (op 170)",
       "programs": 4,
       "decoded": "yes",
@@ -10308,6 +10398,36 @@
       "lifted": {
         "ok": 0,
         "refused": 4
+      },
+      "wgsl": {
+        "ok": 0,
+        "failed": 0
+      },
+      "executed": {
+        "pass": 0,
+        "fail": 0
+      },
+      "proved_by": []
+    },
+    {
+      "format": "dxil",
+      "kind": "opcode",
+      "name": "dx.op.getMeshPayload.struct.payload_data.2 (op 170)",
+      "programs": 2,
+      "decoded": "yes",
+      "decoded_counts": {
+        "ok": 2,
+        "failed": 0
+      },
+      "listed": "exact",
+      "listed_counts": {
+        "exact": 2,
+        "differs": 0,
+        "unchecked": 0
+      },
+      "lifted": {
+        "ok": 0,
+        "refused": 2
       },
       "wgsl": {
         "ok": 0,
@@ -10547,21 +10667,21 @@
       "format": "dxil",
       "kind": "opcode",
       "name": "dx.op.legacyF16ToF32 (op 131)",
-      "programs": 7,
+      "programs": 9,
       "decoded": "yes",
       "decoded_counts": {
-        "ok": 7,
+        "ok": 9,
         "failed": 0
       },
       "listed": "exact",
       "listed_counts": {
-        "exact": 5,
+        "exact": 7,
         "differs": 0,
         "unchecked": 2
       },
       "lifted": {
         "ok": 6,
-        "refused": 1
+        "refused": 3
       },
       "wgsl": {
         "ok": 6,
@@ -10643,24 +10763,24 @@
       "format": "dxil",
       "kind": "opcode",
       "name": "dx.op.loadInput.f32 (op 4)",
-      "programs": 1074,
+      "programs": 1078,
       "decoded": "yes",
       "decoded_counts": {
-        "ok": 1074,
+        "ok": 1078,
         "failed": 0
       },
       "listed": "exact",
       "listed_counts": {
-        "exact": 980,
+        "exact": 984,
         "differs": 0,
         "unchecked": 94
       },
       "lifted": {
-        "ok": 932,
-        "refused": 128
+        "ok": 934,
+        "refused": 130
       },
       "wgsl": {
-        "ok": 847,
+        "ok": 849,
         "failed": 85
       },
       "executed": {
@@ -12969,21 +13089,21 @@
       "format": "dxil",
       "kind": "opcode",
       "name": "dx.op.setMeshOutputCounts (op 168)",
-      "programs": 20,
+      "programs": 34,
       "decoded": "yes",
       "decoded_counts": {
-        "ok": 20,
+        "ok": 34,
         "failed": 0
       },
       "listed": "exact",
       "listed_counts": {
-        "exact": 16,
+        "exact": 30,
         "differs": 0,
         "unchecked": 4
       },
       "lifted": {
         "ok": 11,
-        "refused": 8
+        "refused": 22
       },
       "wgsl": {
         "ok": 11,
@@ -13061,29 +13181,29 @@
       "format": "dxil",
       "kind": "opcode",
       "name": "dx.op.storeOutput.f32 (op 5)",
-      "programs": 4877,
+      "programs": 4881,
       "decoded": "yes",
       "decoded_counts": {
-        "ok": 4877,
+        "ok": 4881,
         "failed": 0
       },
       "listed": "exact",
       "listed_counts": {
-        "exact": 4773,
+        "exact": 4777,
         "differs": 0,
         "unchecked": 104
       },
       "lifted": {
-        "ok": 4549,
-        "refused": 312
+        "ok": 4551,
+        "refused": 314
       },
       "wgsl": {
-        "ok": 4379,
+        "ok": 4381,
         "failed": 170
       },
       "executed": {
-        "pass": 3483,
-        "fail": 139
+        "pass": 3473,
+        "fail": 149
       },
       "proved_by": [
         "offload",
@@ -13249,21 +13369,21 @@
       "format": "dxil",
       "kind": "opcode",
       "name": "dx.op.storeVertexOutput.f32 (op 171)",
-      "programs": 20,
+      "programs": 34,
       "decoded": "yes",
       "decoded_counts": {
-        "ok": 20,
+        "ok": 34,
         "failed": 0
       },
       "listed": "exact",
       "listed_counts": {
-        "exact": 16,
+        "exact": 30,
         "differs": 0,
         "unchecked": 4
       },
       "lifted": {
         "ok": 11,
-        "refused": 8
+        "refused": 22
       },
       "wgsl": {
         "ok": 11,
@@ -13734,12 +13854,11 @@
         "failed": 20
       },
       "executed": {
-        "pass": 12,
-        "fail": 0
+        "pass": 2,
+        "fail": 10
       },
       "proved_by": [
-        "offload",
-        "vkd3d"
+        "offload"
       ]
     },
     {
@@ -13943,21 +14062,21 @@
       "format": "dxil",
       "kind": "opcode",
       "name": "dx.op.threadIdInGroup.i32 (op 95)",
-      "programs": 149,
+      "programs": 153,
       "decoded": "yes",
       "decoded_counts": {
-        "ok": 149,
+        "ok": 153,
         "failed": 0
       },
       "listed": "exact",
       "listed_counts": {
-        "exact": 5,
+        "exact": 9,
         "differs": 0,
         "unchecked": 144
       },
       "lifted": {
         "ok": 78,
-        "refused": 66
+        "refused": 70
       },
       "wgsl": {
         "ok": 73,
@@ -18456,21 +18575,21 @@
       "format": "dxil",
       "kind": "stage",
       "name": "as_6",
-      "programs": 9,
+      "programs": 29,
       "decoded": "yes",
       "decoded_counts": {
-        "ok": 9,
+        "ok": 29,
         "failed": 0
       },
       "listed": "exact",
       "listed_counts": {
-        "exact": 8,
+        "exact": 28,
         "differs": 0,
         "unchecked": 1
       },
       "lifted": {
         "ok": 0,
-        "refused": 9
+        "refused": 29
       },
       "wgsl": {
         "ok": 0,
@@ -18646,21 +18765,21 @@
       "format": "dxil",
       "kind": "stage",
       "name": "ms_6",
-      "programs": 20,
+      "programs": 34,
       "decoded": "yes",
       "decoded_counts": {
-        "ok": 20,
+        "ok": 34,
         "failed": 0
       },
       "listed": "exact",
       "listed_counts": {
-        "exact": 16,
+        "exact": 30,
         "differs": 0,
         "unchecked": 4
       },
       "lifted": {
         "ok": 11,
-        "refused": 8
+        "refused": 22
       },
       "wgsl": {
         "ok": 11,
@@ -18678,29 +18797,29 @@
       "format": "dxil",
       "kind": "stage",
       "name": "ps_6",
-      "programs": 4657,
+      "programs": 4661,
       "decoded": "yes",
       "decoded_counts": {
-        "ok": 4657,
+        "ok": 4661,
         "failed": 0
       },
       "listed": "exact",
       "listed_counts": {
-        "exact": 4594,
+        "exact": 4598,
         "differs": 0,
         "unchecked": 63
       },
       "lifted": {
-        "ok": 4218,
-        "refused": 428
+        "ok": 4220,
+        "refused": 430
       },
       "wgsl": {
-        "ok": 4146,
+        "ok": 4148,
         "failed": 72
       },
       "executed": {
-        "pass": 3202,
-        "fail": 146
+        "pass": 3192,
+        "fail": 156
       },
       "proved_by": [
         "offload",
@@ -18748,37 +18867,45 @@
       "source": "https://gitlab.winehq.org/wine/vkd3d/-/tree/master/tests/hlsl",
       "commit": "vkd3d 1e329f31 tests/hlsl, read for its Windows runners d3d9; vkd3d 1e329f31 tests/hlsl, read for its Windows runners d3d11, d3d12; vkd3d 1e329f31 tests/hlsl, read for its Windows runners d3d12-dxc",
       "licence": "LGPL-2.1-or-later",
-      "description": "Each test file run at each shader model on each of vkd3d's Windows runners (d3d9, d3d11, d3d12 with fxc, d3d12 with dxc), every step in order, every probe compared as vkd3d compares it. A row is one run: pass when every probe holds that vkd3d's runner runs at that model (selected); a run it runs none of is extended (selected false), its status that of all its probes, and the probes vkd3d leaves out of the others are their extended_status: the same expectations at a model vkd3d's own runs leave out, which need not hold on any device.",
+      "description": "Each test file run at each shader model on each of vkd3d's Windows runners (d3d9, d3d11, d3d12 with fxc, d3d12 with dxc), every step in order, every probe compared as vkd3d compares it. A row is one run: pass when every probe holds that vkd3d's runner runs at that model (selected); a run it runs none of is extended (selected false), its status that of all its probes, and the probes vkd3d leaves out of the others are their extended_status: the same expectations at a model vkd3d's own runs leave out, which need not hold on any device. A probe vkd3d's test marks winbug where Windows itself reads otherwise is counted as winbug and decides no run (winbug_outcomes: what those found); one marked winbug for a driver's bug (driver_bug_probes) is a probe like any other.",
       "totals": {
-        "error": 7,
+        "error": 9,
         "fail": 19,
-        "not-modelled": 7,
-        "pass": 842,
-        "refused": 62
+        "not-modelled": 6,
+        "pass": 840,
+        "refused": 63
       },
       "probe_totals": {
-        "error": 680,
+        "error": 690,
         "fail": 138,
-        "not-modelled": 11,
-        "pass": 7911,
-        "refused": 665
+        "not-modelled": 21,
+        "pass": 7971,
+        "refused": 674,
+        "winbug": 29
       },
       "extended_totals": {
         "compiler-refused": 7,
-        "error": 25,
+        "error": 30,
         "fail": 41,
-        "not-modelled": 18,
-        "pass": 1800,
-        "refused": 104
+        "not-modelled": 17,
+        "pass": 1795,
+        "refused": 105
       },
       "extended_probe_totals": {
         "compiler-refused": 43,
-        "error": 2642,
+        "error": 2667,
         "fail": 265,
-        "not-modelled": 29,
-        "pass": 17857,
-        "refused": 1670
+        "not-modelled": 39,
+        "pass": 17952,
+        "refused": 1701,
+        "winbug": 100
       },
+      "winbug_outcomes": {
+        "fail": 1,
+        "pass": 8,
+        "refused": 120
+      },
+      "driver_bug_probes": 248,
       "rows": [
         {
           "id": "abs.shader_test:d3d9:2.0",
@@ -19438,9 +19565,9 @@
           "model": "2.0",
           "status": "pass",
           "detail": "",
-          "probes": 27,
+          "probes": 28,
           "selected": true,
-          "selected_probes": 27,
+          "selected_probes": 28,
           "extended_status": null
         },
         {
@@ -19451,7 +19578,7 @@
           "model": "3.0",
           "status": "pass",
           "detail": "",
-          "probes": 27,
+          "probes": 28,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -20075,9 +20202,9 @@
           "model": "2.0",
           "status": "pass",
           "detail": "",
-          "probes": 28,
+          "probes": 32,
           "selected": true,
-          "selected_probes": 28,
+          "selected_probes": 32,
           "extended_status": null
         },
         {
@@ -20088,7 +20215,7 @@
           "model": "3.0",
           "status": "pass",
           "detail": "",
-          "probes": 29,
+          "probes": 33,
           "selected": true,
           "selected_probes": 1,
           "extended_status": "pass"
@@ -20725,9 +20852,9 @@
           "model": "2.0",
           "status": "pass",
           "detail": "",
-          "probes": 1,
+          "probes": 3,
           "selected": true,
-          "selected_probes": 1,
+          "selected_probes": 3,
           "extended_status": null
         },
         {
@@ -20738,7 +20865,7 @@
           "model": "3.0",
           "status": "pass",
           "detail": "",
-          "probes": 1,
+          "probes": 3,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -20985,9 +21112,9 @@
           "model": "3.0",
           "status": "pass",
           "detail": "",
-          "probes": 35,
+          "probes": 36,
           "selected": true,
-          "selected_probes": 35,
+          "selected_probes": 36,
           "extended_status": null
         },
         {
@@ -21388,9 +21515,9 @@
           "model": "2.0",
           "status": "pass",
           "detail": "",
-          "probes": 31,
+          "probes": 35,
           "selected": true,
-          "selected_probes": 31,
+          "selected_probes": 35,
           "extended_status": null
         },
         {
@@ -21401,7 +21528,7 @@
           "model": "3.0",
           "status": "pass",
           "detail": "",
-          "probes": 31,
+          "probes": 35,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -21973,9 +22100,9 @@
           "model": "2.0",
           "status": "pass",
           "detail": "",
-          "probes": 12,
+          "probes": 16,
           "selected": true,
-          "selected_probes": 12,
+          "selected_probes": 16,
           "extended_status": null
         },
         {
@@ -21986,9 +22113,9 @@
           "model": "3.0",
           "status": "pass",
           "detail": "",
-          "probes": 12,
+          "probes": 16,
           "selected": true,
-          "selected_probes": 12,
+          "selected_probes": 16,
           "extended_status": null
         },
         {
@@ -22701,9 +22828,9 @@
           "model": "2.0",
           "status": "pass",
           "detail": "",
-          "probes": 2,
+          "probes": 3,
           "selected": true,
-          "selected_probes": 2,
+          "selected_probes": 3,
           "extended_status": null
         },
         {
@@ -29719,11 +29846,11 @@
           "runner": "d3d12",
           "format": "dxbc",
           "model": "5.0",
-          "status": "pass",
-          "detail": "",
-          "probes": 2,
+          "status": "error",
+          "detail": "line 74: a9ccea5c1dbd493d: program at 0: module: Entry point main at Fragment is invalid: Expression [6] is invalid: Gather component Y doesn't exist in the image",
+          "probes": 7,
           "selected": true,
-          "selected_probes": 2,
+          "selected_probes": 7,
           "extended_status": null
         },
         {
@@ -29732,9 +29859,9 @@
           "runner": "d3d12",
           "format": "dxbc",
           "model": "5.1",
-          "status": "pass",
-          "detail": "",
-          "probes": 2,
+          "status": "error",
+          "detail": "line 74: 6e96a18263e0b0ad: program at 0: module: Entry point main at Fragment is invalid: Expression [6] is invalid: Gather component Y doesn't exist in the image",
+          "probes": 7,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -33855,9 +33982,9 @@
           "model": "4.0",
           "status": "pass",
           "detail": "",
-          "probes": 9,
+          "probes": 10,
           "selected": true,
-          "selected_probes": 9,
+          "selected_probes": 10,
           "extended_status": null
         },
         {
@@ -33868,7 +33995,7 @@
           "model": "4.1",
           "status": "pass",
           "detail": "",
-          "probes": 9,
+          "probes": 10,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -33881,7 +34008,7 @@
           "model": "5.0",
           "status": "pass",
           "detail": "",
-          "probes": 9,
+          "probes": 10,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -34674,9 +34801,9 @@
           "model": "4.0",
           "status": "pass",
           "detail": "",
-          "probes": 36,
+          "probes": 40,
           "selected": true,
-          "selected_probes": 36,
+          "selected_probes": 40,
           "extended_status": null
         },
         {
@@ -34687,7 +34814,7 @@
           "model": "4.1",
           "status": "pass",
           "detail": "",
-          "probes": 36,
+          "probes": 40,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -34700,7 +34827,7 @@
           "model": "5.0",
           "status": "pass",
           "detail": "",
-          "probes": 36,
+          "probes": 40,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -34713,9 +34840,9 @@
           "model": "4.0",
           "status": "pass",
           "detail": "",
-          "probes": 36,
+          "probes": 40,
           "selected": true,
-          "selected_probes": 36,
+          "selected_probes": 40,
           "extended_status": null
         },
         {
@@ -34726,7 +34853,7 @@
           "model": "4.1",
           "status": "pass",
           "detail": "",
-          "probes": 36,
+          "probes": 40,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -34739,7 +34866,7 @@
           "model": "5.0",
           "status": "pass",
           "detail": "",
-          "probes": 36,
+          "probes": 40,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -34752,7 +34879,7 @@
           "model": "5.1",
           "status": "pass",
           "detail": "",
-          "probes": 36,
+          "probes": 40,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -37859,9 +37986,9 @@
           "model": "4.0",
           "status": "pass",
           "detail": "",
-          "probes": 4,
+          "probes": 6,
           "selected": true,
-          "selected_probes": 4,
+          "selected_probes": 6,
           "extended_status": null
         },
         {
@@ -37872,7 +37999,7 @@
           "model": "4.1",
           "status": "pass",
           "detail": "",
-          "probes": 4,
+          "probes": 5,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -37885,9 +38012,9 @@
           "model": "5.0",
           "status": "pass",
           "detail": "",
-          "probes": 4,
+          "probes": 5,
           "selected": true,
-          "selected_probes": 4,
+          "selected_probes": 5,
           "extended_status": null
         },
         {
@@ -37898,7 +38025,7 @@
           "model": "5.1",
           "status": "pass",
           "detail": "",
-          "probes": 4,
+          "probes": 5,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -40602,9 +40729,9 @@
           "model": "5.0",
           "status": "pass",
           "detail": "",
-          "probes": 73,
+          "probes": 89,
           "selected": true,
-          "selected_probes": 65,
+          "selected_probes": 81,
           "extended_status": "pass"
         },
         {
@@ -43748,9 +43875,9 @@
           "model": "6.0",
           "status": "refused",
           "detail": "line 19: 2c27b9c24ffe0773: DXIL at bit 10590: a constant load of other than four 32-bit lanes (16-bit and 64-bit rows are not lifted)",
-          "probes": 23,
+          "probes": 27,
           "selected": true,
-          "selected_probes": 23,
+          "selected_probes": 27,
           "extended_status": null
         },
         {
@@ -43761,7 +43888,7 @@
           "model": "6.1",
           "status": "refused",
           "detail": "line 19: ddbcb17c7e0a7f21: DXIL at bit 10590: a constant load of other than four 32-bit lanes (16-bit and 64-bit rows are not lifted)",
-          "probes": 23,
+          "probes": 27,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -43774,9 +43901,9 @@
           "model": "6.2",
           "status": "refused",
           "detail": "line 244: 8190bf60118f7c4a: DXIL at bit 10110: a constant load of other than four 32-bit lanes (16-bit and 64-bit rows are not lifted)",
-          "probes": 27,
+          "probes": 32,
           "selected": true,
-          "selected_probes": 4,
+          "selected_probes": 5,
           "extended_status": "refused"
         },
         {
@@ -43787,7 +43914,7 @@
           "model": "6.5",
           "status": "refused",
           "detail": "line 19: 1ec12b2a7e480a8e: DXIL at bit 10622: a constant load of other than four 32-bit lanes (16-bit and 64-bit rows are not lifted)",
-          "probes": 27,
+          "probes": 32,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -43800,7 +43927,7 @@
           "model": "6.6",
           "status": "refused",
           "detail": "line 19: 7af121c832762d7d: DXIL at bit 11530: a constant load of other than four 32-bit lanes (16-bit and 64-bit rows are not lifted)",
-          "probes": 27,
+          "probes": 32,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -44528,9 +44655,9 @@
           "model": "6.0",
           "status": "pass",
           "detail": "",
-          "probes": 4,
+          "probes": 32,
           "selected": true,
-          "selected_probes": 4,
+          "selected_probes": 32,
           "extended_status": null
         },
         {
@@ -44541,7 +44668,7 @@
           "model": "6.1",
           "status": "pass",
           "detail": "",
-          "probes": 4,
+          "probes": 32,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -44554,7 +44681,7 @@
           "model": "6.2",
           "status": "pass",
           "detail": "",
-          "probes": 4,
+          "probes": 32,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -44567,7 +44694,7 @@
           "model": "6.5",
           "status": "pass",
           "detail": "",
-          "probes": 4,
+          "probes": 32,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -44580,7 +44707,7 @@
           "model": "6.6",
           "status": "pass",
           "detail": "",
-          "probes": 4,
+          "probes": 32,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -47256,11 +47383,11 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.0",
-          "status": "pass",
-          "detail": "",
-          "probes": 2,
+          "status": "error",
+          "detail": "line 74: bbb5dd455ae5c3cf: program at 0: module: Entry point main at Fragment is invalid: Expression [6] is invalid: Gather component Y doesn't exist in the image",
+          "probes": 7,
           "selected": true,
-          "selected_probes": 2,
+          "selected_probes": 7,
           "extended_status": null
         },
         {
@@ -47269,9 +47396,9 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.1",
-          "status": "pass",
-          "detail": "",
-          "probes": 2,
+          "status": "error",
+          "detail": "line 74: 80d00e87e0ecd101: program at 0: module: Entry point main at Fragment is invalid: Expression [6] is invalid: Gather component Y doesn't exist in the image",
+          "probes": 7,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -47282,9 +47409,9 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.2",
-          "status": "pass",
-          "detail": "",
-          "probes": 2,
+          "status": "error",
+          "detail": "line 74: 4f389d08db7c5d63: program at 0: module: Entry point main at Fragment is invalid: Expression [6] is invalid: Gather component Y doesn't exist in the image",
+          "probes": 7,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -47295,9 +47422,9 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.5",
-          "status": "pass",
-          "detail": "",
-          "probes": 2,
+          "status": "error",
+          "detail": "line 74: 88c43992156969d5: program at 0: module: Entry point main at Fragment is invalid: Expression [6] is invalid: Gather component Y doesn't exist in the image",
+          "probes": 7,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -47308,9 +47435,9 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.6",
-          "status": "pass",
-          "detail": "",
-          "probes": 2,
+          "status": "error",
+          "detail": "line 74: 2a421a0ed617eee1: program at 0: module: Entry point main at Fragment is invalid: Expression [6] is invalid: Gather component Y doesn't exist in the image",
+          "probes": 7,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -50246,11 +50373,11 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.5",
-          "status": "not-modelled",
-          "detail": "line 262: an amplification program (iridia-dxil does not lift them)",
-          "probes": 8,
+          "status": "refused",
+          "detail": "line 205: 7d397d70f1d142ab: DXIL at bit 13038: per-primitive outputs of a mesh program are not lifted",
+          "probes": 19,
           "selected": true,
-          "selected_probes": 8,
+          "selected_probes": 19,
           "extended_status": null
         },
         {
@@ -50259,9 +50386,9 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.6",
-          "status": "not-modelled",
-          "detail": "line 262: an amplification program (iridia-dxil does not lift them)",
-          "probes": 8,
+          "status": "refused",
+          "detail": "line 205: 00bd16994905a459: DXIL at bit 13006: per-primitive outputs of a mesh program are not lifted",
+          "probes": 19,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -50274,9 +50401,9 @@
           "model": "6.0",
           "status": "refused",
           "detail": "line 239: 917be775109093dd: DXIL at bit 10750: memory of type Integer(16)",
-          "probes": 7,
+          "probes": 10,
           "selected": true,
-          "selected_probes": 7,
+          "selected_probes": 10,
           "extended_status": null
         },
         {
@@ -50287,7 +50414,7 @@
           "model": "6.1",
           "status": "refused",
           "detail": "line 239: 5ddad67ed06da0ec: DXIL at bit 10750: memory of type Integer(16)",
-          "probes": 7,
+          "probes": 10,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -50300,7 +50427,7 @@
           "model": "6.2",
           "status": "refused",
           "detail": "line 239: a38c0cbb60f7633b: DXIL at bit 10782: memory of type Integer(16)",
-          "probes": 7,
+          "probes": 10,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -50313,7 +50440,7 @@
           "model": "6.5",
           "status": "refused",
           "detail": "line 239: 2127ebdf44608850: DXIL at bit 10782: memory of type Integer(16)",
-          "probes": 7,
+          "probes": 10,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -50326,7 +50453,7 @@
           "model": "6.6",
           "status": "refused",
           "detail": "line 239: e24b151091b2fe66: DXIL at bit 11614: memory of type Integer(16)",
-          "probes": 7,
+          "probes": 10,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -50794,9 +50921,9 @@
           "model": "6.0",
           "status": "pass",
           "detail": "",
-          "probes": 36,
+          "probes": 40,
           "selected": true,
-          "selected_probes": 36,
+          "selected_probes": 40,
           "extended_status": null
         },
         {
@@ -50807,7 +50934,7 @@
           "model": "6.1",
           "status": "pass",
           "detail": "",
-          "probes": 36,
+          "probes": 40,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -50820,7 +50947,7 @@
           "model": "6.2",
           "status": "pass",
           "detail": "",
-          "probes": 36,
+          "probes": 40,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -50833,7 +50960,7 @@
           "model": "6.5",
           "status": "pass",
           "detail": "",
-          "probes": 36,
+          "probes": 40,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -50846,7 +50973,7 @@
           "model": "6.6",
           "status": "pass",
           "detail": "",
-          "probes": 36,
+          "probes": 40,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -53263,10 +53390,10 @@
           "format": "dxil",
           "model": "6.0",
           "status": "refused",
-          "detail": "line 269: e1ad2f9766c47cba: DXIL at bit 320: TEXCOORD0: signature component type 6 is not a known value",
-          "probes": 4,
+          "detail": "line 182: 5e62b13660aec017: DXIL at bit 11996: an input read at a computed row or column",
+          "probes": 5,
           "selected": true,
-          "selected_probes": 4,
+          "selected_probes": 5,
           "extended_status": null
         },
         {
@@ -53276,8 +53403,8 @@
           "format": "dxil",
           "model": "6.1",
           "status": "refused",
-          "detail": "line 269: 9f2f5439c2da0c05: DXIL at bit 320: TEXCOORD0: signature component type 6 is not a known value",
-          "probes": 4,
+          "detail": "line 182: 9ae5a4d78e4db659: DXIL at bit 11996: an input read at a computed row or column",
+          "probes": 5,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -53289,8 +53416,8 @@
           "format": "dxil",
           "model": "6.2",
           "status": "refused",
-          "detail": "line 269: d2db20bc0e98b6b6: DXIL at bit 320: TEXCOORD0: signature component type 6 is not a known value",
-          "probes": 7,
+          "detail": "line 182: 0659848adccc267b: DXIL at bit 11996: an input read at a computed row or column",
+          "probes": 8,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -53302,8 +53429,8 @@
           "format": "dxil",
           "model": "6.5",
           "status": "refused",
-          "detail": "line 269: afafaed836012b2f: DXIL at bit 320: TEXCOORD0: signature component type 6 is not a known value",
-          "probes": 7,
+          "detail": "line 182: efca900560a73d11: DXIL at bit 12028: an input read at a computed row or column",
+          "probes": 8,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -53315,8 +53442,8 @@
           "format": "dxil",
           "model": "6.6",
           "status": "refused",
-          "detail": "line 269: 3ffb13f24c7adb02: DXIL at bit 320: TEXCOORD0: signature component type 6 is not a known value",
-          "probes": 7,
+          "detail": "line 182: c2e14071ec5feaa0: DXIL at bit 12926: an input read at a computed row or column",
+          "probes": 8,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -54693,10 +54820,10 @@
           "format": "dxil",
           "model": "6.0",
           "status": "refused",
-          "detail": "line 645: f5205a4ac6d8483c: DXIL at bit 10590: a constant load of other than four 32-bit lanes (16-bit and 64-bit rows are not lifted)",
-          "probes": 27,
+          "detail": "line 642: f5205a4ac6d8483c: DXIL at bit 10590: a constant load of other than four 32-bit lanes (16-bit and 64-bit rows are not lifted)",
+          "probes": 29,
           "selected": true,
-          "selected_probes": 27,
+          "selected_probes": 29,
           "extended_status": null
         },
         {
@@ -54706,8 +54833,8 @@
           "format": "dxil",
           "model": "6.1",
           "status": "refused",
-          "detail": "line 645: a2a0af776d483e09: DXIL at bit 10590: a constant load of other than four 32-bit lanes (16-bit and 64-bit rows are not lifted)",
-          "probes": 27,
+          "detail": "line 642: a2a0af776d483e09: DXIL at bit 10590: a constant load of other than four 32-bit lanes (16-bit and 64-bit rows are not lifted)",
+          "probes": 29,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -54719,8 +54846,8 @@
           "format": "dxil",
           "model": "6.2",
           "status": "refused",
-          "detail": "line 645: c798af7d0ce81d9f: DXIL at bit 10622: a constant load of other than four 32-bit lanes (16-bit and 64-bit rows are not lifted)",
-          "probes": 27,
+          "detail": "line 642: c798af7d0ce81d9f: DXIL at bit 10622: a constant load of other than four 32-bit lanes (16-bit and 64-bit rows are not lifted)",
+          "probes": 29,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -54732,8 +54859,8 @@
           "format": "dxil",
           "model": "6.5",
           "status": "refused",
-          "detail": "line 645: 67ef9c8d8c53deb6: DXIL at bit 10622: a constant load of other than four 32-bit lanes (16-bit and 64-bit rows are not lifted)",
-          "probes": 27,
+          "detail": "line 642: 67ef9c8d8c53deb6: DXIL at bit 10622: a constant load of other than four 32-bit lanes (16-bit and 64-bit rows are not lifted)",
+          "probes": 29,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -54745,8 +54872,8 @@
           "format": "dxil",
           "model": "6.6",
           "status": "refused",
-          "detail": "line 645: 0ece9b563f1f028c: DXIL at bit 11542: a constant load of other than four 32-bit lanes (16-bit and 64-bit rows are not lifted)",
-          "probes": 27,
+          "detail": "line 642: 0ece9b563f1f028c: DXIL at bit 11542: a constant load of other than four 32-bit lanes (16-bit and 64-bit rows are not lifted)",
+          "probes": 29,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -56774,9 +56901,9 @@
           "model": "6.0",
           "status": "fail",
           "detail": "line 74: (4, 0): got [524], expected [f24]",
-          "probes": 35,
+          "probes": 40,
           "selected": true,
-          "selected_probes": 35,
+          "selected_probes": 40,
           "extended_status": null
         },
         {
@@ -56787,7 +56914,7 @@
           "model": "6.1",
           "status": "fail",
           "detail": "line 74: (4, 0): got [524], expected [f24]",
-          "probes": 35,
+          "probes": 40,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -56800,7 +56927,7 @@
           "model": "6.2",
           "status": "fail",
           "detail": "line 74: (4, 0): got [524], expected [f24]",
-          "probes": 35,
+          "probes": 40,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -56813,7 +56940,7 @@
           "model": "6.5",
           "status": "fail",
           "detail": "line 74: (4, 0): got [524], expected [f24]",
-          "probes": 35,
+          "probes": 40,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -56826,7 +56953,7 @@
           "model": "6.6",
           "status": "fail",
           "detail": "line 74: (4, 0): got [524], expected [f24]",
-          "probes": 35,
+          "probes": 40,
           "selected": false,
           "selected_probes": 0,
           "extended_status": null
@@ -61360,7 +61487,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "25211d9e07f7d95f: DXIL at bit 6819: resource: lower bound: -2 is out of range"
+          "detail": "25211d9e07f7d95f: DXIL at bit 12284: a handle at an index other than its range's register"
         },
         {
           "id": "Feature/RootSignatures/ParameterInsensitivity.test",

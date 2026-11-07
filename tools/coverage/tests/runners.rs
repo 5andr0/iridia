@@ -473,49 +473,22 @@ fn a_pixel_input_reads_the_lanes_of_its_components() {
 
 /// Direct3D 9 reads a pixel input its vertex program leaves unwritten: a texture coordinate as 0, and at shader model
 /// 2 a colour as white (uninitialized-varyings), where a later API's pipeline does not link. The file's probe of the
-/// white is `winbug(amd)`, every Windows driver but AMD's giving it, so the cases leave it out as a probe of the
-/// hardware; it is put back here.
+/// white is `winbug(amd)`, every Windows driver but AMD's giving it: the case file keeps it as a driver's bug, a probe
+/// like any other, which the 2.0 run is held to.
 #[test]
 fn direct3d_9_reads_unwritten_inputs_as_zero_and_shader_model_2_colours_as_white() {
-    use vkd3d::cases::{Step, What};
-    let text = read_text(&suite("vkd3d/d3d9.json.gz")).expect("the vkd3d case file");
-    let mut file = vkd3d::cases::read(&text).expect("the vkd3d case file");
-    file.cases
-        .retain(|r| r.file == "uninitialized-varyings.shader_test");
-    let two = file
-        .cases
-        .iter_mut()
-        .find(|r| r.model == "2.0")
-        .expect("the 2.0 run");
-    assert!(
-        matches!(
-            two.steps.last(),
-            Some(Step {
-                line: 43,
-                what: What::Draw { .. }
-            })
-        ),
-        "the 2.0 run ends with the colour draw at line 43"
-    );
-    two.steps.push(Step {
-        line: 44,
-        what: What::Probe {
-            probe: [0, 0, 1, 1],
-            target: "rtv-0".into(),
-            kind: "f32".into(),
-            count: 4,
-            expect: vec![1f32.to_bits(); 4],
-            ulps: 0,
-            layer: 0,
-        },
-    });
-    let runs = vkd3d::run::run_all(&file, 4).0;
+    let runs = vkd3d_runs("vkd3d/d3d9.json.gz", "uninitialized-varyings.shader_test");
     assert_selected_pass(&runs);
     let two = runs.iter().find(|r| r.model == "2.0").expect("the 2.0 run");
-    assert!(
-        two.probes.iter().any(|p| p.line == 44 && p.selected),
-        "the white probe is selected"
-    );
+    let white = two
+        .probes
+        .iter()
+        .find(|p| p.line == 44)
+        .expect("the white probe, line 44");
+    assert!(white.selected, "the white probe is selected");
+    let winbug = white.winbug.as_ref().expect("the white probe is marked winbug");
+    assert_eq!((winbug.qualifier.as_str(), winbug.driver), ("amd", true));
+    assert_eq!(white.class(), "pass");
 }
 
 /// A Direct3D 9 `ps_1_x` `tex` reads its texture stage's state, which neither WGSL nor `iridia-exec` reads: a draw
@@ -606,39 +579,16 @@ fn a_multisampled_target_is_drawn_and_read_by_its_samples() {
 /// A mesh dispatch runs the mesh program's thread groups and draws the primitives they emit with the pixel program,
 /// held to vkd3d's expected values: mesh.shader_test's sections without an amplification program (lines 35, 66, 101
 /// and 143: the output counts the first thread sets, vertices and indices written by several threads, and each
-/// coordinate by a thread of its own). Refused by name: the pixel program reading primitive outputs (line 205, whose
-/// probe is `winbug(amd)`, every Windows driver but AMD's giving it, so the cases leave it out as a probe of the
-/// hardware; it is put back here), since the IR carries no per-primitive outputs, and the sections with an
-/// amplification program, since iridia-dxil does not lift amplification programs or a mesh program's payload.
+/// coordinate by a thread of its own). Refused by name: the pixel program reading primitive outputs (line 205, a
+/// `winbug(amd)` probe the case file keeps as a driver's bug), since iridia-dxil does not lift per-primitive outputs,
+/// and the sections with an amplification program (lines 262 to 1440: payloads of each layout and size), since it does
+/// not lift amplification programs.
 #[test]
 fn a_mesh_dispatch_draws_the_primitives_its_program_emits() {
-    use vkd3d::cases::{Step, What};
     let text = read_text(&suite("vkd3d/dxil.json.gz")).expect("the vkd3d case file");
     let mut file = vkd3d::cases::read(&text).expect("the vkd3d case file");
     file.cases.retain(|r| r.file == "mesh.shader_test");
     assert!(!file.cases.is_empty(), "mesh.shader_test has runs");
-    for case in &mut file.cases {
-        let at = case
-            .steps
-            .iter()
-            .position(|s| s.line == 199 && matches!(s.what, What::DispatchMesh { .. }))
-            .expect("the primitive output section's dispatch at line 199");
-        case.steps.insert(
-            at + 1,
-            Step {
-                line: 205,
-                what: What::Probe {
-                    probe: [0, 0, 640, 480],
-                    target: "rtv-0".into(),
-                    kind: "f32".into(),
-                    count: 4,
-                    expect: [0.25f32, 0.5, 0.75, 1.0].map(f32::to_bits).to_vec(),
-                    ulps: 0,
-                    layer: 0,
-                },
-            },
-        );
-    }
     let runs = vkd3d::run::run_all(&file, 4).0;
     assert!(
         runs.iter().any(|r| r.selected()),
@@ -670,7 +620,7 @@ fn a_mesh_dispatch_draws_the_primitives_its_program_emits() {
             seen.push(p.line);
         }
     }
-    for line in [35, 66, 101, 143, 205] {
+    for line in [35, 66, 101, 143, 205, 262, 322, 395, 462, 1440] {
         assert!(seen.contains(&line), "the probe at line {line} is run");
     }
 }

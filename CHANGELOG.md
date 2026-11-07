@@ -156,7 +156,10 @@
   offloader's D3D12 mesh pipeline state has them (its default rasterizer: back faces culled, clockwise front faces),
   and its raster pipelines draw on multisampled targets, resolved before they are read back. Every atomic operation
   of an unordered-access view reaches the device (and, or, xor, minimum and maximum, exchange and compare-exchange,
-  of a view in an array too), where it took adds alone. CI makes the table again (`docs/coverage`) and fails when it
+  of a view in an array too), where it took adds alone. The vkd3d case files (format 3) keep the 377 probes vkd3d's
+  tests mark `winbug`, with the qualifier: one naming devices (`amd`, `nvidia`, `warp=1.0.16`) is a driver's bug and a
+  probe like any other (mesh.shader_test's per-primitive outputs and payload layouts among them), one that does not is
+  counted as `winbug` and decides no run. CI makes the table again (`docs/coverage`) and fails when it
   differs from the one committed.
 - `iridia-exec`: `draw` draws points and lines as well as triangles (every list and strip topology), each primitive
   numbered for `SV_PrimitiveID`; an aliased line by the diamond exit rule (3.4.3), which an NVIDIA RTX 5070 Ti draws

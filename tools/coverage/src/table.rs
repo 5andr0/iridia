@@ -156,6 +156,7 @@ fn vkd3d_status(class: &str) -> &'static str {
         "error" => "error",
         "not modelled" => "not-modelled",
         "compiler refused" => "compiler-refused",
+        "winbug" => "winbug",
         _ => "other",
     }
 }
@@ -199,6 +200,9 @@ pub fn make(inputs: &Inputs<'_>) -> Result<(Value, String), String> {
     let mut probe_totals: BTreeMap<String, usize> = BTreeMap::new();
     let mut extended_totals: BTreeMap<String, usize> = BTreeMap::new();
     let mut extended_probe_totals: BTreeMap<String, usize> = BTreeMap::new();
+    // the probes vkd3d marks `winbug`: those apart by what they found, and the driver bugs' count
+    let mut winbug_outcomes: BTreeMap<String, usize> = BTreeMap::new();
+    let mut driver_bugs = 0;
     let mut source = String::new();
     for path in &inputs.vkd3d {
         let file = vkd3d::cases::read(&read_text(path)?)?;
@@ -228,9 +232,14 @@ pub fn make(inputs: &Inputs<'_>) -> Result<(Value, String), String> {
                 } else {
                     &mut extended_probe_totals
                 };
-                *probes
-                    .entry(vkd3d_status(p.outcome.class()).to_string())
-                    .or_default() += 1;
+                *probes.entry(vkd3d_status(p.class()).to_string()).or_default() += 1;
+                if p.apart() {
+                    *winbug_outcomes
+                        .entry(vkd3d_status(p.outcome.class()).to_string())
+                        .or_default() += 1;
+                } else if p.winbug.is_some() {
+                    driver_bugs += 1;
+                }
             }
             let format = r
                 .programs
@@ -309,6 +318,18 @@ pub fn make(inputs: &Inputs<'_>) -> Result<(Value, String), String> {
             n(&extended_probe_totals, s)
         );
     }
+    let found: Vec<String> = winbug_outcomes.iter().map(|(s, n)| format!("{s} {n}")).collect();
+    let _ = writeln!(
+        summary,
+        "\nThe winbug probes are those vkd3d's tests mark `winbug` where Windows itself reads otherwise (a plain \
+         `winbug`, or one of models or of devices it does not hold on): they decide no run, and found {}. The \
+         {driver_bugs} marked `winbug` for a driver's bug (`amd`, `nvidia`, `warp=1.0.16`) are probes like any other.\n",
+        if found.is_empty() {
+            "nothing".to_string()
+        } else {
+            found.join(", ")
+        }
+    );
     suites.push(json!({
         "id": "vkd3d",
         "name": "vkd3d HLSL shader tests",
@@ -320,11 +341,15 @@ pub fn make(inputs: &Inputs<'_>) -> Result<(Value, String), String> {
             pass when every probe holds that vkd3d's runner runs at that model (selected); a run it runs none of is \
             extended (selected false), its status that of all its probes, and the probes vkd3d leaves out of the \
             others are their extended_status: the same expectations at a model vkd3d's own runs leave out, which need \
-            not hold on any device.",
+            not hold on any device. A probe vkd3d's test marks winbug where Windows itself reads otherwise is counted \
+            as winbug and decides no run (winbug_outcomes: what those found); one marked winbug for a driver's bug \
+            (driver_bug_probes) is a probe like any other.",
         "totals": totals,
         "probe_totals": probe_totals,
         "extended_totals": extended_totals,
         "extended_probe_totals": extended_probe_totals,
+        "winbug_outcomes": winbug_outcomes,
+        "driver_bug_probes": driver_bugs,
         "rows": rows,
     }));
 

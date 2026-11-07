@@ -1,18 +1,22 @@
 """vkd3d's HLSL shader tests as runs of a Direct3D runner on Windows: the programs Microsoft's compilers make of the
 tests' shaders, and every step a run takes with what the test expects it to read back.
 
-    python3 vkd3d_cases.py extract <vkd3d>/tests/hlsl <work> <runner>...   (Linux) the runs and the shaders to compile
+    python vkd3d_cases.py extract <vkd3d>/tests/hlsl <work> <runner>...    the runs and the shaders to compile
     python vkd3d_cases.py compile-fxc <dll> <work> [<previous work>]      (Windows Python) D3DCompile, D3DDisassemble
-    python3 vkd3d_cases.py compile-dxc <dxc> <work> [<previous work>]      (Linux) dxc and its -dumpbin listing
-    python3 vkd3d_cases.py merge <work> <out dir> <vkd3d commit>           (Linux) d3d9, dxbc, dxil .json.gz
+    python vkd3d_cases.py compile-dxc <dxc> <work> [<previous work>]      dxc and its -dumpbin listing
+    python vkd3d_cases.py merge <work> <out dir> <vkd3d commit>           d3d9, dxbc, dxil .json.gz
 
 A runner is one of vkd3d's Windows runners and its model range: `d3d9` (2.0 and 3.0), `d3d11` (4.0 to 5.0), `d3d12`
 (4.0 to 5.1, compiled by d3dcompiler_47) and `d3d12-dxc` (6.0 to 6.6, compiled by dxcompiler). The test files are read
 as vkd3d's shader runner reads them (tests/shader_runner.c, at the commit the output names) for that runner: its tags
-(`windows` and the runner's), `todo` and `bug` ignored since on Windows every check must hold, `winbug` lines left out.
-A runner here is a device with every capability vkd3d's runner can report for it (the capabilities a device lacks only
-remove runs). A line qualified by a tag of the hardware (`amd`, `intel`, `nvidia`, `warp`, or a version of a runner) is
-left out where it is a probe, and stops its run where it changes state, since what follows depends on the machine.
+(`windows` and the runner's), `todo` and `bug` ignored since on Windows every check must hold. A `winbug` probe that
+holds on the runner is kept with its qualifier (`winbug` in the step): a driver's bug where the qualifier names devices
+(`amd`, `nvidia`, `warp=1.0.16`), whose expected value the other devices read (and a driver's bug on a state change
+is a step, which they make), and otherwise one vkd3d found Windows itself reads otherwise (plain `winbug`,
+`sm>=6 & !amd`), which the runner reports apart. A runner here is a device with
+every capability vkd3d's runner can report for it (the capabilities a device lacks only remove runs). Any other line
+qualified by a tag of the hardware (`amd`, `intel`, `nvidia`, `warp`, or a version of a runner) is left out where it is
+a probe, and stops its run where it changes state, since what follows depends on the machine.
 
 This script has no bytecode logic: the programs are Microsoft's compilers', and what a run expects is the test file's.
 
@@ -29,7 +33,7 @@ import tempfile
 from fractions import Fraction
 from pathlib import Path
 
-FORMAT = 2
+FORMAT = 3
 MODELS = ["2.0", "3.0", "4.0", "4.1", "5.0", "5.1", "6.0", "6.1", "6.2", "6.5", "6.6"]
 TAGS = ["amd", "d3d11", "d3d12", "d3d9", "glsl", "intel", "llvm", "llvmpipe", "mesa", "msl", "mvk", "nvidia",
         "opengl", "radeonsi", "radv", "spirv", "vulkan", "warp", "windows"]
@@ -174,6 +178,16 @@ def strtof(line):
     if not m:
         return None, line
     return f32_bits(m.group(1)), line[m.end():]
+
+
+def driver_bug(qualifier):
+    """Whether a winbug qualifier names a driver's bug: every alternative it holds on names a device (`amd`, `intel`,
+    `nvidia`, `warp`, with or without a version), so the devices it does not name read what the probe expects. A plain
+    `winbug`, or one of models or of devices it does not hold on (`sm>=6 & !amd`), says Windows itself reads otherwise."""
+    if not qualifier.strip():
+        return False
+    device = re.compile(r"(%s)(?:(<=|>=|!=|<|>|=)[\d.]+)?$" % "|".join(sorted(HARDWARE)))
+    return all(any(device.match(term.strip()) for term in alternative.split("&")) for alternative in qualifier.split("|"))
 
 
 def match(line, token):
@@ -543,7 +557,7 @@ class Run:
 
     def test_line(self, line, number):
         """parse_test_directive: one step, or a stop where the line is not one this reading models."""
-        skip, more = False, True
+        skip, more, winbug = False, True, None
         while more:
             # shader_runner.c's loop: a qualifier that does not hold is still read past, but does not repeat the loop
             more = False
@@ -554,11 +568,10 @@ class Run:
                     more = more or m[0] is not False
             m = self.with_args(line, "winbug")
             if m is not None:
-                if m[0] is UNKNOWN:
-                    raise Unknown(line)
+                qualifier = re.match(r"\s*winbug(?:\(([^)]*)\))?", line).group(1) or ""
                 line = m[1]
-                if m[0]:
-                    skip, more = True, True
+                if m[0] is not False:
+                    winbug, more = (m[0], qualifier), True
             m = self.with_args(line, "if")
             if m is not None:
                 if m[0] is UNKNOWN:
@@ -567,6 +580,13 @@ class Run:
                     skip = True
                 line, more = m[1], True
         if skip:
+            return
+        if winbug is not None and match(line, "probe") is None and not driver_bug(winbug[1]):
+            # a state change Windows itself does not make: vkd3d's runner leaves it out where the qualifier holds, so
+            # what follows depends on the machine where it holds on some (a driver's bug is a step: the devices the
+            # qualifier does not name make it)
+            if winbug[0] is UNKNOWN:
+                raise Unknown(line)
             return
 
         for word in ("dispatch-mesh", "dispatch"):
@@ -688,6 +708,8 @@ class Run:
                 step["ulps"] = int(u.group(1)) if u else 0
             if layer:
                 step["layer"] = layer
+            if winbug is not None:
+                step["winbug"] = {"qualifier": winbug[1], "driver": driver_bug(winbug[1])}
             return self.step(step, number)
         rest = match(line, "write")
         if rest is not None:

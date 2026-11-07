@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use serde::Deserialize;
 
 /// The case-file format this reader takes (`format` in the file).
-pub const FORMAT: u32 = 2;
+pub const FORMAT: u32 = 3;
 
 /// A case file.
 #[derive(Debug, Deserialize)]
@@ -216,6 +216,9 @@ pub enum What {
         /// The array layer.
         #[serde(default)]
         layer: u32,
+        /// The test's `winbug` qualifier of the probe, where vkd3d found Windows reads otherwise on some devices.
+        #[serde(default)]
+        winbug: Option<Winbug>,
     },
     /// Fixed-function state.
     State {
@@ -329,6 +332,17 @@ pub struct Descriptor {
     pub space: u32,
     /// The resource slot of the first register.
     pub target: u32,
+}
+
+/// A probe vkd3d's test marks `winbug`: one it found a Windows device reads otherwise.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+pub struct Winbug {
+    /// The qualifier as the test writes it (`amd`, `sm>=6 & !amd`; empty for a plain `winbug`).
+    pub qualifier: String,
+    /// Whether it names a driver's bug: every alternative of the qualifier names a device (`amd`, `nvidia`,
+    /// `warp=1.0.16`), so the devices it does not name read what the probe expects. Otherwise (a plain `winbug`, or one
+    /// of models or of devices it does not hold on) Windows itself reads otherwise.
+    pub driver: bool,
 }
 
 /// Read a case file.

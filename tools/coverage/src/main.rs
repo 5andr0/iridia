@@ -18,7 +18,7 @@ fn main() -> Result<(), String> {
                 *runs.entry(format!("{} {}{extended}", r.runner, r.class())).or_default() += 1;
                 for p in &r.probes {
                     let extended = if p.selected { "" } else { " (extended)" };
-                    *probes.entry(format!("{}{extended}", p.outcome.class())).or_default() += 1;
+                    *probes.entry(format!("{}{extended}", p.class())).or_default() += 1;
                 }
                 if let Some(p) = r.deciding() {
                     let extended = if r.selected() { "" } else { " (extended)" };
