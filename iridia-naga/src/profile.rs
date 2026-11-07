@@ -8,20 +8,11 @@
 
 use alloc::{format, string::String, vec::Vec};
 
-use iridia_ir::interface::{InterpSampling, ResourceKind, ScalarType, Stage, SystemValue, TextureDim};
-use iridia_ir::{Program, Scalar};
+use iridia_ir::Program;
+use iridia_ir::target::{self, Bindings, Capability};
 use naga::valid::Capabilities;
 
 use crate::Error;
-
-/// How a target binds a program's resources (see [`crate::BindingPlan::for_profile`]).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Bindings {
-    /// Direct3D's registers as they are ([`crate::BindingPlan::d3d`]).
-    D3d,
-    /// Inside WebGPU's default limits ([`crate::BindingPlan::webgpu`]).
-    WebGpu,
-}
 
 /// Which `enable` directives the WGSL states (see [`crate::wgsl`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -99,105 +90,32 @@ pub struct Requirement {
     pub feature: String,
 }
 
-fn capability_of(s: Scalar) -> Option<(Capabilities, &'static str)> {
-    match s {
-        Scalar::F64 => Some((Capabilities::FLOAT64, "f64")),
-        Scalar::F16 => Some((Capabilities::SHADER_FLOAT16, "f16")),
-        Scalar::I16 | Scalar::U16 => Some((Capabilities::SHADER_INT16, "16-bit integers")),
-        Scalar::I64 | Scalar::U64 => Some((Capabilities::SHADER_INT64, "64-bit integers")),
-        _ => None,
+/// naga's capability for a target's.
+fn capability(c: Capability) -> Capabilities {
+    match c {
+        Capability::Float64 => Capabilities::FLOAT64,
+        Capability::Float16 => Capabilities::SHADER_FLOAT16,
+        Capability::Int16 => Capabilities::SHADER_INT16,
+        Capability::Int64 => Capabilities::SHADER_INT64,
+        Capability::PrimitiveIndex => Capabilities::PRIMITIVE_INDEX,
+        Capability::MultisampledShading => Capabilities::MULTISAMPLED_SHADING,
+        Capability::CubeArrayTextures => Capabilities::CUBE_ARRAY_TEXTURES,
+        Capability::ClipDistances => Capabilities::CLIP_DISTANCES,
+        Capability::Subgroup => Capabilities::SUBGROUP,
+        Capability::SubgroupVertexStage => Capabilities::SUBGROUP_VERTEX_STAGE,
     }
 }
 
-/// Every capability `program`'s lowering needs, each once, with the first feature that needs it.
+/// Every capability `program`'s lowering needs, each once, with the first feature that needs it
+/// ([`iridia_ir::target::requirements`], as naga's capabilities).
 pub fn requirements(program: &Program) -> Vec<Requirement> {
-    let mut found: Vec<Requirement> = Vec::new();
-    let mut need = |capability: Capabilities, feature: String| {
-        if !found.iter().any(|r| r.capability == capability) {
-            found.push(Requirement { capability, feature });
-        }
-    };
-    let f = &program.entry;
-    for (n, v) in f.values.iter().enumerate() {
-        if let Some((c, what)) = capability_of(v.ty.scalar) {
-            need(c, format!("value %{n} is {what}"));
-        }
-        if matches!(v.op, iridia_ir::Op::Wave(_)) {
-            need(Capabilities::SUBGROUP, format!("value %{n} is a wave operation"));
-            if program.interface.stage == Stage::Vertex {
-                need(
-                    Capabilities::SUBGROUP_VERTEX_STAGE,
-                    format!("value %{n} is a wave operation of a vertex program"),
-                );
-            }
-        }
-        // an f64's bits are moved and tested as 64-bit integers (a bitcast to or from 32-bit lanes, a NaN test)
-        if v.ty.scalar == Scalar::F64 {
-            need(
-                Capabilities::SHADER_INT64,
-                format!("value %{n} is f64, whose bits the lowering moves as 64-bit integers"),
-            );
-        }
-    }
-    for v in &f.vars {
-        if let Some((c, what)) = capability_of(v.ty.scalar) {
-            need(c, format!("variable {} is {what}", v.name));
-        }
-    }
-    let stage = program.interface.stage;
-    let inputs = program.interface.inputs.iter().map(|v| ("input", v));
-    let outputs = program.interface.outputs.iter().map(|v| ("output", v));
-    for (list, v) in inputs.chain(outputs) {
-        let name = format!("{list} {}{}", v.label.name, v.label.index);
-        if v.value.scalar == ScalarType::Double {
-            need(Capabilities::FLOAT64, format!("{name} is f64"));
-        }
-        let pixel_input = stage == Stage::Pixel && list == "input";
-        if stage == Stage::Vertex && list == "output" && v.system == Some(SystemValue::ClipDistance) {
-            need(Capabilities::CLIP_DISTANCES, format!("{name} is a clip distance"));
-        }
-        match v.system {
-            Some(SystemValue::PrimitiveIndex) if pixel_input => {
-                need(
-                    Capabilities::PRIMITIVE_INDEX,
-                    format!("{name} is the primitive index"),
-                );
-            }
-            Some(SystemValue::LaneIndex | SystemValue::LaneCount) if list == "input" => {
-                need(
-                    Capabilities::SUBGROUP,
-                    format!("{name} is the lane number or the wave's lane count"),
-                );
-            }
-            Some(SystemValue::SampleIndex) if pixel_input => {
-                need(
-                    Capabilities::MULTISAMPLED_SHADING,
-                    format!("{name} is the sample index"),
-                );
-            }
-            _ => {}
-        }
-        if pixel_input && v.interp.is_some_and(|i| i.sampling == InterpSampling::Sample) {
-            need(
-                Capabilities::MULTISAMPLED_SHADING,
-                format!("{name} is interpolated per sample"),
-            );
-        }
-    }
-    for r in &program.interface.resources {
-        if let ResourceKind::Texture {
-            dim: TextureDim::Cube,
-            arrayed: true,
-            ..
-        } = r.kind
-        {
-            need(
-                Capabilities::CUBE_ARRAY_TEXTURES,
-                format!("resource {} is a cube array texture", r.provenance.name),
-            );
-        }
-    }
-    found
+    target::requirements(program)
+        .into_iter()
+        .map(|r| Requirement {
+            capability: capability(r.capability),
+            feature: r.feature,
+        })
+        .collect()
 }
 
 /// Refuse `program` if its lowering needs a capability `profile` does not allow, naming the first such feature.

@@ -4,22 +4,11 @@
 
 use naga::Binding;
 
-use crate::{Interface, Label, ScalarType, Stage, StageFacts, SystemValue, Value, Varying};
+use iridia_ir::target::{self, BuiltIn};
 
-/// The type of an entry point argument or result member.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum IoType {
-    /// A scalar (width 1) or vector.
-    Value(Value),
-    /// An array of this many floats: the clip distances of a vertex stage, all of its `SV_ClipDistance` outputs
-    /// together.
-    ClipDistances(u32),
-    /// An array of this value: a hull or domain program's control points (one per point), a hull program's outputs.
-    Array(Value, u32),
-    /// A pointer, in function memory, to a structure the module defines: a ray tracing program's payload or hit
-    /// attributes, whose layout is the shader's own.
-    Memory,
-}
+use crate::{Interface, ScalarType, Stage, StageFacts, Value, Varying};
+
+pub use iridia_ir::target::{IoType, carried, varying_name};
 
 /// One argument or result member.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -46,132 +35,45 @@ pub struct EntryIo {
     pub results: Vec<IoItem>,
 }
 
-/// The name a varying has as an argument or result member.
-pub fn varying_name(label: &Label) -> String {
-    format!("{}{}", label.name, label.index)
-}
-
-/// The value the module carries for a varying: the interface's own, except where the pipeline fixes it. A built-in has
-/// its API type (a front-facing flag is a bool, the position four floats, an index a u32) and a pixel stage's colour
-/// output always has four lanes (D3D lets a target element be narrower than its render target, WebGPU does not).
-pub fn carried(stage: Stage, output: bool, v: &Varying) -> Value {
-    let (scalar, width) = match v.system {
-        Some(SystemValue::ClipPosition | SystemValue::FragCoord) => (ScalarType::Float, 4),
-        Some(SystemValue::FrontFacing) => (ScalarType::Bool, 1),
-        Some(
-            SystemValue::VertexIndex
-            | SystemValue::InstanceIndex
-            | SystemValue::PrimitiveIndex
-            | SystemValue::SampleIndex
-            | SystemValue::Coverage,
-        ) => (ScalarType::Uint, 1),
-        Some(SystemValue::GroupId | SystemValue::GroupThreadId | SystemValue::DispatchThreadId) => {
-            (ScalarType::Uint, 3)
-        }
-        Some(SystemValue::GroupIndex | SystemValue::LaneIndex | SystemValue::LaneCount) => {
-            (ScalarType::Uint, 1)
-        }
-        Some(SystemValue::DispatchRaysIndex | SystemValue::DispatchRaysDimensions) => (ScalarType::Uint, 3),
-        Some(
-            SystemValue::WorldRayOrigin
-            | SystemValue::WorldRayDirection
-            | SystemValue::ObjectRayOrigin
-            | SystemValue::ObjectRayDirection,
-        ) => (ScalarType::Float, 3),
-        Some(SystemValue::RayTMin | SystemValue::RayTCurrent) => (ScalarType::Float, 1),
-        Some(SystemValue::ObjectToWorld | SystemValue::WorldToObject) => (ScalarType::Float, 4),
-        Some(
-            SystemValue::RayFlags
-            | SystemValue::InstanceId
-            | SystemValue::GeometryIndex
-            | SystemValue::HitKind,
-        ) => (ScalarType::Uint, 1),
-        Some(SystemValue::Depth | SystemValue::DepthGreaterEqual | SystemValue::DepthLessEqual) => {
-            (ScalarType::Float, 1)
-        }
-        Some(SystemValue::Target(_)) if stage == Stage::Pixel && output => (v.value.scalar, 4),
-        _ => (v.value.scalar, v.value.width),
-    };
-    Value { scalar, width }
-}
-
-/// The built-in a system value is as an input or output of `stage`; `None` for one the module cannot carry.
-fn builtin(stage: Stage, output: bool, system: SystemValue) -> Option<naga::BuiltIn> {
-    use SystemValue::*;
-    Some(match (stage, output, system) {
-        (Stage::Vertex, true, ClipPosition) | (Stage::Pixel, false, FragCoord) => {
-            naga::BuiltIn::Position { invariant: false }
-        }
-        (Stage::Pixel, false, FrontFacing) => naga::BuiltIn::FrontFacing,
-        (Stage::Vertex, false, VertexIndex) => naga::BuiltIn::VertexIndex,
-        (Stage::Vertex, false, InstanceIndex) => naga::BuiltIn::InstanceIndex,
-        (Stage::Pixel, false, PrimitiveIndex) => naga::BuiltIn::PrimitiveIndex,
-        (Stage::Pixel, false, SampleIndex) => naga::BuiltIn::SampleIndex,
-        (Stage::Pixel, _, Coverage) => naga::BuiltIn::SampleMask,
-        (Stage::Compute | Stage::Mesh | Stage::Amplification, false, GroupId) => naga::BuiltIn::WorkGroupId,
-        (Stage::Compute | Stage::Mesh | Stage::Amplification, false, GroupThreadId) => {
-            naga::BuiltIn::LocalInvocationId
-        }
-        (Stage::Compute | Stage::Mesh | Stage::Amplification, false, DispatchThreadId) => {
-            naga::BuiltIn::GlobalInvocationId
-        }
-        (Stage::Compute | Stage::Mesh | Stage::Amplification, false, GroupIndex) => {
-            naga::BuiltIn::LocalInvocationIndex
-        }
-        (Stage::Compute | Stage::Pixel, false, LaneIndex) => naga::BuiltIn::SubgroupInvocationId,
-        (Stage::Compute | Stage::Pixel, false, LaneCount) => naga::BuiltIn::SubgroupSize,
-        // naga has no conservative-depth variants: the depth hints are not carried
-        (Stage::Pixel, true, Depth | DepthGreaterEqual | DepthLessEqual) => naga::BuiltIn::FragDepth,
-        _ => return None,
-    })
-}
-
-/// The location binding of a plain varying. A pixel input takes the interface's interpolation; a value that is not a
-/// float is always flat, and a flat value has no sampling (naga and WebGPU both insist). A vertex output states the
-/// perspective default (or flat, for a value that is not a float) that its consumer's interface is matched against.
-fn location(stage: Stage, output: bool, v: &Varying, at: u32) -> Binding {
-    let float = v.value.scalar == ScalarType::Float;
-    let (interpolation, sampling) = match (stage, output) {
-        (Stage::Pixel, false) => {
-            let declared = v.interp.map(|i| {
-                (
-                    match i.mode {
-                        crate::InterpMode::Perspective => naga::Interpolation::Perspective,
-                        crate::InterpMode::Linear => naga::Interpolation::Linear,
-                        crate::InterpMode::Flat => naga::Interpolation::Flat,
-                    },
-                    match i.sampling {
-                        crate::InterpSampling::Center => None,
-                        crate::InterpSampling::Centroid => Some(naga::Sampling::Centroid),
-                        crate::InterpSampling::Sample => Some(naga::Sampling::Sample),
-                    },
-                )
-            });
-            match declared {
-                Some((mode, sampling)) if float && mode != naga::Interpolation::Flat => {
-                    (Some(mode), sampling)
-                }
-                Some(_) => (Some(naga::Interpolation::Flat), None),
-                None if float => (Some(naga::Interpolation::Perspective), None),
-                None => (Some(naga::Interpolation::Flat), None),
-            }
-        }
-        (Stage::Vertex, true) => (
-            Some(if float {
-                naga::Interpolation::Perspective
-            } else {
-                naga::Interpolation::Flat
+/// naga's binding for a target's.
+fn naga_binding(b: target::Binding) -> Binding {
+    match b {
+        target::Binding::BuiltIn(b) => Binding::BuiltIn(match b {
+            BuiltIn::Position => naga::BuiltIn::Position { invariant: false },
+            BuiltIn::FrontFacing => naga::BuiltIn::FrontFacing,
+            BuiltIn::VertexIndex => naga::BuiltIn::VertexIndex,
+            BuiltIn::InstanceIndex => naga::BuiltIn::InstanceIndex,
+            BuiltIn::PrimitiveIndex => naga::BuiltIn::PrimitiveIndex,
+            BuiltIn::SampleIndex => naga::BuiltIn::SampleIndex,
+            BuiltIn::SampleMask => naga::BuiltIn::SampleMask,
+            BuiltIn::FragDepth => naga::BuiltIn::FragDepth,
+            BuiltIn::WorkgroupId => naga::BuiltIn::WorkGroupId,
+            BuiltIn::LocalInvocationId => naga::BuiltIn::LocalInvocationId,
+            BuiltIn::GlobalInvocationId => naga::BuiltIn::GlobalInvocationId,
+            BuiltIn::LocalInvocationIndex => naga::BuiltIn::LocalInvocationIndex,
+            BuiltIn::SubgroupInvocationId => naga::BuiltIn::SubgroupInvocationId,
+            BuiltIn::SubgroupSize => naga::BuiltIn::SubgroupSize,
+            BuiltIn::ClipDistances => naga::BuiltIn::ClipDistances,
+        }),
+        target::Binding::Location {
+            location,
+            interpolation,
+            sampling,
+        } => Binding::Location {
+            location,
+            interpolation: interpolation.map(|i| match i {
+                crate::InterpMode::Perspective => naga::Interpolation::Perspective,
+                crate::InterpMode::Linear => naga::Interpolation::Linear,
+                crate::InterpMode::Flat => naga::Interpolation::Flat,
             }),
-            None,
-        ),
-        _ => (None, None),
-    };
-    Binding::Location {
-        location: at,
-        interpolation,
-        sampling,
-        blend_src: None,
-        per_primitive: false,
+            sampling: match sampling {
+                crate::InterpSampling::Center => None,
+                crate::InterpSampling::Centroid => Some(naga::Sampling::Centroid),
+                crate::InterpSampling::Sample => Some(naga::Sampling::Sample),
+            },
+            blend_src: None,
+            per_primitive: false,
+        },
     }
 }
 
@@ -390,124 +292,18 @@ pub fn mesh_vertex_io(interface: &Interface) -> Result<Vec<IoItem>, String> {
     Ok(entry_io(&vertex)?.results)
 }
 
-/// The entry point's arguments and result members for `interface`. `Err` says why the module cannot carry it (a
-/// system value no stage binding exists for).
+/// The entry point's arguments and result members for `interface` ([`iridia_ir::target::entry_io`], with naga's
+/// bindings). `Err` says why the module cannot carry it (a system value no stage binding exists for).
 pub fn entry_io(interface: &Interface) -> Result<EntryIo, String> {
-    let stage = interface.stage;
-    // a mesh or amplification program takes a compute program's ids and returns nothing: what a mesh program writes is
-    // in the module's output variable, a member of its vertex type for each output varying (see [`mesh_vertex_io`])
-    if matches!(stage, Stage::Mesh | Stage::Amplification) {
-        let mut ids = interface.clone();
-        ids.stage = Stage::Compute;
-        ids.outputs.clear();
-        ids.facts = StageFacts::None;
-        return Ok(EntryIo {
-            arguments: entry_io(&ids)?.arguments,
-            results: Vec::new(),
-        });
-    }
-    let mut io = EntryIo {
-        arguments: Vec::new(),
-        results: Vec::new(),
+    let io = target::entry_io(interface)?;
+    let item = |i: target::IoItem| IoItem {
+        name: i.name,
+        ty: i.ty,
+        binding: naga_binding(i.binding),
+        varyings: i.varyings,
     };
-    for output in [false, true] {
-        let list = if output {
-            &interface.outputs
-        } else {
-            &interface.inputs
-        };
-        let items = if output {
-            &mut io.results
-        } else {
-            &mut io.arguments
-        };
-        let mut next_location = 0u32;
-        let mut clip: Option<usize> = None;
-        for (i, v) in list.iter().enumerate() {
-            let name = varying_name(&v.label);
-            let direction = if output { "output" } else { "input" };
-            if v.system == Some(SystemValue::ClipDistance) {
-                if stage != Stage::Vertex || !output {
-                    // the interface lists what the container declares; an element nothing reads or writes, and the
-                    // module cannot bind, is not carried
-                    if !v.used {
-                        continue;
-                    }
-                    return Err(format!(
-                        "{name}: clip distances as {} {direction} have no built-in binding",
-                        stage.with_article()
-                    ));
-                }
-                let width = u32::from(v.value.width);
-                match clip {
-                    Some(at) => {
-                        let Some(item) = items.get_mut(at) else {
-                            return Err(format!("{name}: the clip distances item is missing"));
-                        };
-                        item.varyings.push(i);
-                        let IoType::ClipDistances(n) = &mut item.ty else {
-                            return Err(format!("{name}: the clip distances item is not clip distances"));
-                        };
-                        *n = n.saturating_add(width);
-                    }
-                    None => {
-                        clip = Some(items.len());
-                        items.push(IoItem {
-                            name: "clip_distances".into(),
-                            ty: IoType::ClipDistances(width),
-                            binding: Binding::BuiltIn(naga::BuiltIn::ClipDistances),
-                            varyings: vec![i],
-                        });
-                    }
-                }
-                continue;
-            }
-            let binding = match v.system {
-                Some(SystemValue::Target(n)) if stage == Stage::Pixel && output => Binding::Location {
-                    location: n,
-                    interpolation: None,
-                    sampling: None,
-                    blend_src: None,
-                    per_primitive: false,
-                },
-                // WebGPU has no layer or viewport index to read or write: the value travels as a flat varying, and
-                // routing a primitive to the layer it names is the pipeline's
-                Some(SystemValue::RenderTargetArrayIndex | SystemValue::ViewportArrayIndex) => {
-                    let at = next_location;
-                    next_location = at.saturating_add(1);
-                    location(stage, output, v, at)
-                }
-                // WebGPU has no cull distance either: a vertex program's value travels as a varying, and culling the
-                // primitive whose vertices are all negative is the pipeline's
-                Some(SystemValue::CullDistance) if stage == Stage::Vertex && output => {
-                    let at = next_location;
-                    next_location = at.saturating_add(1);
-                    location(stage, output, v, at)
-                }
-                Some(system) => match builtin(stage, output, system) {
-                    Some(built_in) => Binding::BuiltIn(built_in),
-                    // not carried, as above
-                    None if !v.used => continue,
-                    None => {
-                        return Err(format!(
-                            "{name}: {system:?} as {} {direction} has no built-in binding",
-                            stage.with_article()
-                        ));
-                    }
-                },
-                None => {
-                    let at = next_location;
-                    next_location = at.saturating_add(1);
-                    location(stage, output, v, at)
-                }
-            };
-            items.push(IoItem {
-                name,
-                ty: IoType::Value(carried(stage, output, v)),
-                binding,
-                varyings: vec![i],
-            });
-        }
-    }
-    Ok(io)
+    Ok(EntryIo {
+        arguments: io.arguments.into_iter().map(item).collect(),
+        results: io.results.into_iter().map(item).collect(),
+    })
 }

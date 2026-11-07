@@ -10,7 +10,7 @@ use iridia_ir::interface::{
     Access, BufferKind, D3dBinding, D3dClass, Interface, Resource, ResourceId, ResourceKind,
     ResourceProvenance, Stage, StageFacts, StorageTarget,
 };
-use iridia_naga::{BindingPlan, Bindings, Profile};
+use iridia_ir::target::{BindingPlan, Bindings};
 use proptest::prelude::*;
 
 /// A resource of register class `class` (0 constant buffer, 1 shader resource, 2 sampler, 3 unordered access) at
@@ -109,16 +109,14 @@ fn a_binding_at_the_limit_is_refused_by_name() {
     // space 0 takes u999; the view of space 1 would bind at 1000
     let i = interface(vec![resource(0, 3, 999, 0, false), resource(1, 3, 0, 1, false)]);
     let e = BindingPlan::webgpu(&i).unwrap_err();
-    assert!(e.0.contains("u0_space1") && e.0.contains("1000"), "{e}");
+    assert!(e.contains("u0_space1") && e.contains("1000"), "{e}");
 }
 
 #[test]
-fn the_browser_profile_binds_inside_webgpu_limits() {
-    assert_eq!(Profile::BROWSER.bindings, Bindings::WebGpu);
-    assert_eq!(Profile::NAGA.bindings, Bindings::D3d);
+fn the_webgpu_plan_binds_other_spaces_and_counters_after_space_0() {
     // a structured view of space 2 and its counter: inside group 3, below 1000
     let i = interface(vec![resource(0, 3, 5, 0, true), resource(1, 3, 1, 2, true)]);
-    let plan = BindingPlan::for_profile(&i, &Profile::BROWSER).unwrap();
+    let plan = BindingPlan::new(&i, Bindings::WebGpu).unwrap();
     let at: Vec<(u32, u32, &str)> = plan
         .bindings
         .iter()

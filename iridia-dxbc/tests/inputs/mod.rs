@@ -36,6 +36,16 @@ primase_testdata::inputs! {
             source: "third-party: Microsoft's WARP rasterizer, through a thin host program that is not part of this repository",
             gate: true,
         },
+        WgslRun = "wgsl_run" {
+            about: "the WGSL harness that runs a WGSL program's entry point on Direct3D 12's WARP adapter through wgpu (tools/wgsl-run, built with `cargo build --release` there)",
+            source: "independent: wgpu and Microsoft's WARP rasterizer, through tools/wgsl-run of this repository (its own workspace, outside iridia's)",
+            gate: false,
+        },
+        WgslRunDxc = "wgsl_run_dxc" {
+            about: "the `dxcompiler.dll` the WGSL harness compiles with (DXC 1.8.2502 or later, wgpu 30's minimum, `dxil.dll` beside it): the programs that need Shader Model 6 (subgroup operations, 16-bit and 64-bit types); FXC compiles the others where it is not configured",
+            source: "third-party: Microsoft's DirectX Shader Compiler release build",
+            gate: false,
+        },
     }
     oracle_sets {
         Corpus = "corpus" {

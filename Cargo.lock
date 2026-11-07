@@ -402,6 +402,7 @@ dependencies = [
 name = "iridia-ir"
 version = "0.6.0"
 dependencies = [
+ "proptest",
  "serde",
  "serde_json",
  "sha2",

@@ -17,5 +17,9 @@ serde = { version = "1", default-features = false, features = ["alloc", "derive"
 serde_json = { version = "=1.0.154", default-features = false, features = ["alloc"] }
 sha2.workspace = true
 
+[dev-dependencies]
+# tests/bindings.rs generates the interfaces it plans
+proptest.workspace = true
+
 [lints]
 workspace = true

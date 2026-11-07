@@ -12,6 +12,8 @@
 //!   parameters and [`Terminator`]s, block 0 the entry).
 //! - A [`Program`] is the entry function with its [`interface::Interface`], [`Conventions`], [`FloatEnv`],
 //!   [`Provenance`] and notes. [`validate()`] checks it; [`Builder`] makes one; [`text`] prints it.
+//! - [`target`] is what a module written from a program carries of it, for every writer alike: where its resources
+//!   bind, how its entry point carries the interface, which capabilities of a target it needs.
 //! - [`VERSION`] names the IR's meaning and text form; with a lifter's version it keys caches, and [`gate`] checks a
 //!   lifter's fixtures against it.
 #![no_std]
@@ -35,6 +37,7 @@ pub mod interface;
 mod op;
 mod program;
 mod refusal;
+pub mod target;
 pub mod text;
 mod ty;
 mod validate;

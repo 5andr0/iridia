@@ -18,6 +18,19 @@
   refused as "a derivative of a computed value".
 - The executor's and the D3D9 lifter's tests run their programs on the IR: each one written as IR text or lifted by the
   IR lifts, run by the `::from_ir` constructors and, where it can, by `iridia-exec-ir` too, the two held to agree.
+- `iridia-ir::target`: what a module written from a program carries of it, for every writer and executor alike, with
+  no writer's types. `BindingPlan` (with `Bind` and `Bindings`; `d3d`, `webgpu` and `new(interface, Bindings)`) says
+  where each resource binds; `entry_io` (with `EntryIo`, `IoItem`, `IoType`, `Binding`, an iridia-owned `BuiltIn`,
+  `carried` and `varying_name`) how the entry point carries the interface, locations, interpolation and clip
+  distances included; `requirements` (with `Capability` and `Requirement`) which capabilities of a target a program
+  needs. `iridia-naga` and `iridia` each map them to their naga, so the two lowerings bind and carry a program by one
+  statement of it. `iridia-naga` re-exports `BindingPlan`, `Bind` and `Bindings`; its `entry_io`, `EntryIo`, `Item`,
+  `requirements` and `Requirement` are unchanged, and so are `iridia`'s `entry_io`, `EntryIo`, `IoItem` and `IoType`.
+  Breaking: `iridia_naga::BindingPlan::for_profile(interface, &profile)` is now `BindingPlan::new(interface,
+  profile.bindings)`, and `BindingPlan::d3d` and `webgpu` refuse with a `String` (it was `iridia_naga::Error`, whose
+  text it was). Behaviour: a pixel program's lane index and lane count are carried as `u32` (the built-ins' type) by
+  `iridia-naga` too, and `iridia`'s refusal of a used clip or cull distance outside a vertex program's outputs reads
+  "a clip or cull distance as a Pixel input has no built-in", as `iridia-naga`'s did.
 - `iridia-passes`: `prepare(&mut Program)`, the passes every output and executor takes a lifted program through, on
   each of its functions: `structurize`, `promote`, `simplify` and `break_flags`. What it gives is what `iridia-exec`'s
   `::from_ir` constructors and `iridia-naga` take, so a caller no longer copies the sequence (the slim gate and the IR

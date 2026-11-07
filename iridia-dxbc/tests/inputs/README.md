@@ -14,6 +14,8 @@ What this crate's real-data tests read, as tests/inputs/mod.rs declares them: th
 | `tools.vkd3d_compiler` | - | vkd3d's `vkd3d-compiler` program (its Shader Model 4 and 5 reader and disassembler), with vkd3d's command line | third-party: vkd3d (LGPL-2.1-or-later), built from source and run as a program, never linked |
 | `tools.vkd3d_dxbc` | - | vkd3d's `vkd3d-dxbc` program (its container reader, digest check and writer), with vkd3d's command line | third-party: vkd3d (LGPL-2.1-or-later), built from source and run as a program, never linked |
 | `tools.warp` | yes | the WARP oracle program that runs a shader on Microsoft's WARP rasterizer | third-party: Microsoft's WARP rasterizer, through a thin host program that is not part of this repository |
+| `tools.wgsl_run` | - | the WGSL harness that runs a WGSL program's entry point on Direct3D 12's WARP adapter through wgpu (tools/wgsl-run, built with `cargo build --release` there) | independent: wgpu and Microsoft's WARP rasterizer, through tools/wgsl-run of this repository (its own workspace, outside iridia's) |
+| `tools.wgsl_run_dxc` | - | the `dxcompiler.dll` the WGSL harness compiles with (DXC 1.8.2502 or later, wgpu 30's minimum, `dxil.dll` beside it): the programs that need Shader Model 6 (subgroup operations, 16-bit and 64-bit types); FXC compiles the others where it is not configured | third-party: Microsoft's DirectX Shader Compiler release build |
 | `scratch.root` | - | where real-data tests write their outputs (the OS temporary folder when unset) | - |
 
 #### Oracle sets (`<oracles.root>/<set>/<game>/`)
