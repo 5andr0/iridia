@@ -63,8 +63,11 @@
   run again with them flushed, and passes when that holds and breaks nothing that held. A Direct3D 9 draw samples a
   pixel at its whole coordinates, as Direct3D 9 does (the viewport half a pixel on, as wined3d's), and runs again from
   the lifted IR in `iridia-exec` (`ProgramShader::from_ir`, in the register view of the WGSL), which fails the run where
-  it writes otherwise than the WGSL's draw. CI makes the table again (`docs/coverage`) and fails when it differs from
-  the one committed.
+  it writes otherwise than the WGSL's draw. A sample reduces its coordinate to its address mode's range before scaling
+  it (D3D11.3 7.18.6; a NaN left is 0), a draw steps through a structured buffer by the stride the program declares
+  whatever the view's, a vector probe steps 16 bytes as vkd3d's readback does, and a dispatch's typed buffer store
+  reaches every lane of its element. CI makes the table again (`docs/coverage`) and fails when it differs from the one
+  committed.
 - `iridia-exec`: `draw` draws points and lines as well as triangles (every list and strip topology), each primitive
   numbered for `SV_PrimitiveID`; an aliased line by the diamond exit rule (3.4.3), which an NVIDIA RTX 5070 Ti draws
   exactly on every pixel of 10,640 recorded lines and WARP differs from in four classes the tests name and count;
@@ -80,15 +83,23 @@
   (which replaces `viewport`; an index of 16 or more is 0) and its target slice (`Surface::layers`; one past them is
   0); a pixel program's `SV_RenderTargetArrayIndex` and `SV_ViewportArrayIndex` are the values written, its
   `SV_SampleIndex` 0 and its `SV_Coverage` the pixel's one bit ANDed with `Rasterizer::sample_mask`, which also
-  leaves out the write (`DrawStats::masked`).
+  leaves out the write (`DrawStats::masked`). At shader model 2 a vertex program's colours are clamped to [0, 1]
+  between the stages (`Rasterizer::clamp_colours`), and `DrawShader::with_linkage` takes Direct3D 9's linkage
+  (`Linkage::Direct3D9`), where a pixel input no output writes reads 0 as a texture coordinate and, before shader
+  model 3, white as a colour; `DrawShader::new` keeps the strict linkage, which refuses it. A pixel input lane reads
+  the output lane of its component, where an input whose mask starts past x read the output's lanes from x.
 - `iridia-dxil`: a boolean converts to a float as 1 or 0 (`uitofp`) and -1 or 0 (`sitofp`), where it converted its
   all-ones word; and extended to a 16-bit integer (`zext`, `sext`), it is cut to the 16 bits. An array of read-write
   views keeps a counter per element, the element's word at its index (`counter_of`, documented in `iridia-ir`). A
   program compiled with `-denorm preserve` (the entry's `fp32-denorm-mode`) keeps 32-bit denormals
   (`D3dModes::flush_denormals` false), where every program flushed them. `dx.op.coverage` (91) reads the pixel's
-  `SV_Coverage`, where it was refused. `LIFTER_VERSION` is 10.
+  `SV_Coverage`, where it was refused. `Texture2DMS::GetDimensions` gives the sample count, where it gave 1; a
+  constant row of minimum-precision lanes (`min16float`, `min16int`) reads each lane as the low 16 bits of its word,
+  where it reinterpreted the word; a 16-bit lane of a raw or structured buffer, which shares its word with another, is
+  refused by name, where it was read and written as a word of its own. `LIFTER_VERSION` is 10.
 - `iridia-dxbc`: `ld` with an immediate texel offset (`ld_aoffimmi`) reads the texel the offset moves to, where it
-  dropped the offset. `LIFTER_VERSION` is 12.
+  dropped the offset; a hull program without a control-point phase passes its input control points through to its
+  outputs, where they were left unwritten. `LIFTER_VERSION` is 12.
 - Tests: the oracle tools (vkd3d's programs, WARP, dxc) run through primase-testdata 0.1.14's `program(Tool::X)` with a
   time limit (`output_within`): a tool that hangs is killed and the test fails naming it, instead of hanging. A minute
   per vkd3d call, two per dxc compile, ten per WARP batch. vkd3d's tools are its Linux programs, so the vkd3d
