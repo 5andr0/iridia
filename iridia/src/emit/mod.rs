@@ -36,8 +36,8 @@ fn writable(program: &Program) -> Result<(), Error> {
         return Err(Error::Unsupported {
             writer: "wgsl",
             detail: format!(
-                "a {:?} program{} has no WGSL stage: it is functions, not an entry point",
-                program.stage,
+                "{} program{} has no WGSL stage: it is functions, not an entry point",
+                program.stage.with_article(),
                 if program.stage == crate::Stage::Vertex {
                     " that feeds a tessellator"
                 } else {
@@ -57,9 +57,9 @@ fn ray_tracing(program: &Program) -> Error {
     Error::Unsupported {
         writer: "wgsl",
         detail: format!(
-            "a {:?} program has no WGSL form: WebGPU has no ray tracing pipeline, and the program's operations \
+            "{} program has no WGSL form: WebGPU has no ray tracing pipeline, and the program's operations \
              ({}) are the pipeline's",
-            program.stage,
+            program.stage.with_article(),
             crate::rt::OPERATIONS.join(", ")
         ),
     }

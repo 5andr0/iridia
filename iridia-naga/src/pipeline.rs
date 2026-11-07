@@ -74,7 +74,10 @@ pub fn wgsl_for(
         (Stage::Vertex, Some(consumer)) => outputs(program, &io, consumer, &mut module, &mut notes)?,
         (Stage::Vertex, None) => next_after(io.results.iter().map(|r| &r.binding)),
         (stage, Some(_)) => {
-            return Err(Error(format!("a {stage:?} program feeds no consumer")));
+            return Err(Error(format!(
+                "{} program feeds no consumer",
+                stage.with_article()
+            )));
         }
         (_, None) => next_after(io.arguments.iter().map(|a| &a.binding)),
     };

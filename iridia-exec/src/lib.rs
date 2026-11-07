@@ -139,15 +139,15 @@ impl Executable {
         {
             return Err(error(if program.stage.is_ray_tracing() {
                 format!(
-                    "a {:?} program does the ray tracing pipeline's work through operations only the pipeline has \
+                    "{} program does the ray tracing pipeline's work through operations only the pipeline has \
                      ({}): run it with Executable::function inside a pipeline (Pipeline)",
-                    program.stage,
+                    program.stage.with_article(),
                     iridia::rt::OPERATIONS.join(", ")
                 )
             } else {
                 format!(
-                    "a {:?} program is functions, not an entry point: run one with Executable::function",
-                    program.stage
+                    "{} program is functions, not an entry point: run one with Executable::function",
+                    program.stage.with_article()
                 )
             }));
         }
@@ -214,14 +214,16 @@ impl Executable {
             .map_err(error)?
             .ok_or_else(|| {
                 error(format!(
-                    "a {:?} program is an entry point: Executable::from_ir",
-                    program.stage
+                    "{} program is an entry point: Executable::from_ir",
+                    program.stage.with_article()
                 ))
             })?;
-        let sig = signatures
-            .iter()
-            .find(|s| s.name == name)
-            .ok_or_else(|| error(format!("a {:?} program has no function {name}", program.stage)))?;
+        let sig = signatures.iter().find(|s| s.name == name).ok_or_else(|| {
+            error(format!(
+                "{} program has no function {name}",
+                program.stage.with_article()
+            ))
+        })?;
         let f = match name {
             "patch_constant" => program
                 .patch

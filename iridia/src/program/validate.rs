@@ -144,8 +144,8 @@ fn functions(p: &Program, sigs: &[FunctionSig], problems: &mut Vec<Problem>) {
     let mut fail = |m: String| problems.push(Problem::Program(m));
     if !p.module.entry_points.is_empty() {
         fail(format!(
-            "a {:?} program has {} entry points; it is made of functions",
-            p.stage,
+            "{} program has {} entry points; it is made of functions",
+            p.stage.with_article(),
             p.module.entry_points.len()
         ));
     }
@@ -175,8 +175,8 @@ fn functions(p: &Program, sigs: &[FunctionSig], problems: &mut Vec<Problem>) {
     }
     if p.module.functions.len() != sigs.len().saturating_add(operations) {
         fail(format!(
-            "a {:?} program is {} functions and {operations} operations, the module has {}",
-            p.stage,
+            "{} program is {} functions and {operations} operations, the module has {}",
+            p.stage.with_article(),
             sigs.len(),
             p.module.functions.len()
         ));

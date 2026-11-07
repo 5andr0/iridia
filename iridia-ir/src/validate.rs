@@ -1787,7 +1787,10 @@ fn check_function(p: &Program, f: &Function, patch: bool, problems: &mut Vec<Pro
             };
             let others = f.vars.iter().filter(|w| w.space == v.space).count();
             if !stages.contains(&p.stage) {
-                c.problem(None, format!("{what} {} in a {:?} program", v.name, p.stage));
+                c.problem(
+                    None,
+                    format!("{what} {} in {} program", v.name, p.stage.with_article()),
+                );
             } else if others > 1 {
                 c.problem(None, format!("{others} variables of {what}"));
             } else if v.ty != Type::U32 || v.len != Some(bytes.div_ceil(4)) || bytes == 0 {

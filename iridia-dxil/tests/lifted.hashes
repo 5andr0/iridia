@@ -94,6 +94,7 @@ resource_arrays.od.dxil	lifted	9e6ff2c6b2754ecdedf678048d97342a68589d13195a349e0
 resources.66.dxil	lifted	01dac87e473a78d43f75cf920b6ae672cf9ad9eac67710d6c3fbd21b70d99ea8
 resources.dxil	lifted	c08ad04011c06867a1d69a4dca7710f9266ca938c6758e0cb2443bd179a2adf1
 resources.od.dxil	lifted	b3ec5c82e04cf3aeacb0f1e4871083659e9c35c92abee0a6b006efd6095acadb
+sample_count.dxil	refused	DXIL at bit 8800: the sample count of the rasterizer is the pipeline's, not the program's
 structured_layout.dxil	lifted	8491b502d54ff452199330d8ed91a482f5c76502457b4cc464df944aefd93463
 structured_tail.dxil	refused	DXIL at bit 12652: double-precision floats are not lifted (dx.op.makeDouble.f64)
 switch.66.dxil	lifted	ae2e48655fa4b4b46ccc769dbac5ae6c63f39856386263caf96c4950037548ca

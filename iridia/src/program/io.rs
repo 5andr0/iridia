@@ -316,7 +316,10 @@ pub fn stage_functions(interface: &Interface) -> Result<Option<Vec<FunctionSig>>
             }])
         }
         (Stage::Hull | Stage::Domain, _) => {
-            return Err(format!("a {stage:?} program without its patch facts"));
+            return Err(format!(
+                "{} program without its patch facts",
+                stage.with_article()
+            ));
         }
         (Stage::Geometry, StageFacts::Geometry(g)) => {
             let mut args = arrays(&interface.inputs, false, "", g.input.vertices(), inputs);
@@ -372,7 +375,7 @@ pub fn stage_functions(interface: &Interface) -> Result<Option<Vec<FunctionSig>>
             }])
         }
         (stage, facts) if stage.is_ray_tracing() => {
-            return Err(format!("a {stage:?} program with {facts:?}"));
+            return Err(format!("{} program with {facts:?}", stage.with_article()));
         }
         _ => None,
     })
@@ -431,7 +434,8 @@ pub fn entry_io(interface: &Interface) -> Result<EntryIo, String> {
                         continue;
                     }
                     return Err(format!(
-                        "{name}: clip distances as a {stage:?} {direction} have no built-in binding"
+                        "{name}: clip distances as {} {direction} have no built-in binding",
+                        stage.with_article()
                     ));
                 }
                 let width = u32::from(v.value.width);
@@ -486,7 +490,8 @@ pub fn entry_io(interface: &Interface) -> Result<EntryIo, String> {
                     None if !v.used => continue,
                     None => {
                         return Err(format!(
-                            "{name}: {system:?} as a {stage:?} {direction} has no built-in binding"
+                            "{name}: {system:?} as {} {direction} has no built-in binding",
+                            stage.with_article()
                         ));
                     }
                 },

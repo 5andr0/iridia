@@ -95,7 +95,7 @@ pub struct Pipeline {
 fn export_of(interface: &Interface) -> String {
     match &interface.facts {
         StageFacts::RayTracing(facts) => facts.export.clone(),
-        _ => format!("a {:?} program", interface.stage),
+        _ => format!("{} program", interface.stage.with_article()),
     }
 }
 
@@ -139,8 +139,8 @@ impl Pipeline {
         for (interface, executable) in programs {
             let StageFacts::RayTracing(facts) = interface.facts.clone() else {
                 return Err(format!(
-                    "a {:?} program is not a ray tracing program",
-                    interface.stage
+                    "{} program is not a ray tracing program",
+                    interface.stage.with_article()
                 ));
             };
             for sub in &facts.subobjects {
@@ -279,8 +279,8 @@ impl Pipeline {
             .ok_or_else(|| format!("no program {raygen}"))?;
         if entry.interface.stage != iridia::Stage::RayGeneration {
             return Err(format!(
-                "{raygen} is a {:?} program, not a ray generation program",
-                entry.interface.stage
+                "{raygen} is {} program, not a ray generation program",
+                entry.interface.stage.with_article()
             ));
         }
         let built = Arc::new(Built::new(&resources.scene)?);

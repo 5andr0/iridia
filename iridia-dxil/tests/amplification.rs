@@ -38,6 +38,9 @@ fn no_constants() -> std::collections::BTreeMap<(u32, u32), Vec<[u32; 4]>> {
 fn an_amplification_program_launches_its_first_invocations_groups_with_every_invocations_payload() {
     let a = program("amplification.dxil");
     assert_eq!(a.stage, Stage::Amplification);
+    // the target dxc was given (`-T as_6_5`), which the program header names by its shader kind, 14
+    assert_eq!(a.provenance.target, "as_6_5");
+    assert_eq!(program("amplification_mesh.dxil").provenance.target, "ms_6_5");
     assert_eq!(a.workgroup, Some([4, 1, 1]));
     assert_eq!(
         a.interface.facts,

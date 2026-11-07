@@ -85,4 +85,23 @@ impl Stage {
                 | Self::Callable
         )
     }
+
+    /// The stage's name after the article it takes, for messages: `an Amplification`, `a Pixel`
+    /// (`format!("{} program", stage.with_article())`).
+    pub fn with_article(self) -> impl core::fmt::Display {
+        WithArticle(self)
+    }
+}
+
+/// [`Stage::with_article`]'s value.
+struct WithArticle(Stage);
+
+impl core::fmt::Display for WithArticle {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let article = match self.0 {
+            Stage::Amplification | Stage::Intersection | Stage::AnyHit => "an",
+            _ => "a",
+        };
+        write!(f, "{article} {:?}", self.0)
+    }
 }

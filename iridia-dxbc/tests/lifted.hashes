@@ -21,6 +21,7 @@ reflection_sm4.alike.dxbc	refused	DXBC at word 0: reflection: DXBC at word 15: 2
 reflection_sm4.dxbc	lifted	020efaed1267119ae40e2d1a23602cb22170e8f0cf28e5e0451bb7fa33143db9
 reflection_sm4.swapped.dxbc	lifted	193ccda34a2df3c0960fe213d061456bb9f79534ca009382ed9275bd458296d3
 reflection_sm51.ps51.dxbc	lifted	e72936aba5ebc2ff32431c7a7198cbce3022a6d9378253c79f577390f5c0b816
+sample_count.dxbc	refused	DXBC at word 6: sample_info: the sample count of the rasterizer is the pipeline's, not the program's
 sm51/constants.51.dxbc	lifted	792e8393845ace5434cb48c759891e59b705fe0284f58c5532d1e90870876729
 sm51/images.51.dxbc	lifted	08b533752f7e74702332ee42d1ab1b6e0c4edfac77589469d2955bae94e61785
 sm51/nonuniform.51.dxbc	lifted	20ef3e84f274b3b4bc186590804c4781d1f6f27db915fce9163894013d76ccdf

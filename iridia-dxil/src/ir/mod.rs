@@ -98,19 +98,23 @@ pub fn lift_with(container: &[u8], bound: &iridia::BoundSizes) -> Result<Program
     ) {
         return Err(error(
             0,
-            format!("a {stage:?} program is not lifted onto the IR yet"),
+            format!("{} program is not lifted onto the IR yet", stage.with_article()),
         ));
     }
     let workgroup = if stage.has_thread_groups() {
-        Some(
-            reflection::num_threads(&module)
-                .map_err(read)?
-                .ok_or_else(|| error(0, format!("a {stage:?} program that states no thread group size")))?,
-        )
+        Some(reflection::num_threads(&module).map_err(read)?.ok_or_else(|| {
+            error(
+                0,
+                format!(
+                    "{} program that states no thread group size",
+                    stage.with_article()
+                ),
+            )
+        })?)
     } else {
         None
     };
-    let target = crate::lift::target_of(part.program_version);
+    let target = crate::lift::target_of(&part)?;
     // the entry's 32-bit denormal mode (dxc's `-denorm`): kept where it says `preserve`; flushed, as Direct3D's
     // default, where it says `ftz` or `any` or states none
     let f32_denormals = if reflection::fp32_denorm_mode(&module).map_err(read)?.as_deref() == Some("preserve")

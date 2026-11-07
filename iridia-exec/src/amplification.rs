@@ -39,8 +39,8 @@ impl AmplificationShader {
     pub fn from_ir(program: &iridia_ir::Program) -> Result<Self, Error> {
         let StageFacts::Amplification(facts) = program.interface.facts else {
             return Err(error(format!(
-                "a {:?} program is not an amplification program",
-                program.interface.stage
+                "{} program is not an amplification program",
+                program.interface.stage.with_article()
             )));
         };
         let executable = Executable::from_ir(program)?;

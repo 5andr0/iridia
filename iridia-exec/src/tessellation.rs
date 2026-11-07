@@ -104,10 +104,16 @@ impl TessellationShader {
         domain_exe: Executable,
     ) -> Result<Self, String> {
         let StageFacts::Hull(hull_facts) = hull.facts.clone() else {
-            return Err(format!("a {:?} program is not a hull program", hull.stage));
+            return Err(format!(
+                "{} program is not a hull program",
+                hull.stage.with_article()
+            ));
         };
         let StageFacts::Domain(domain_facts) = domain.facts.clone() else {
-            return Err(format!("a {:?} program is not a domain program", domain.stage));
+            return Err(format!(
+                "{} program is not a domain program",
+                domain.stage.with_article()
+            ));
         };
         if hull_facts.domain != domain_facts.domain {
             return Err(format!(

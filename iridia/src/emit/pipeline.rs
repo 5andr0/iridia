@@ -95,14 +95,14 @@ pub fn wgsl_for(program: &Program, pipeline: &Pipeline) -> Result<Written, Error
     let vertex = program.stage == Stage::Vertex;
     if !vertex && (pipeline.feeds.is_some() || pipeline.clip_varyings) {
         return Err(Error::Pipeline(format!(
-            "a {:?} program feeds no consumer and has no clip distances to carry",
-            program.stage
+            "{} program feeds no consumer and has no clip distances to carry",
+            program.stage.with_article()
         )));
     }
     if program.stage != Stage::Pixel && pipeline.clip_discard.is_some() {
         return Err(Error::Pipeline(format!(
-            "a {:?} program does not discard by clip distances",
-            program.stage
+            "{} program does not discard by clip distances",
+            program.stage.with_article()
         )));
     }
     let (clip, next_location) = if vertex {

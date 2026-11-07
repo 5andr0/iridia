@@ -742,7 +742,8 @@ pub fn reflection(chunks: &[Chunk<'_>], program: &Module, named: Option<&Module>
             None if !stage.is_ray_tracing() => Err(error(
                 0,
                 format!(
-                    "a {stage:?} program without its {} part",
+                    "{} program without its {} part",
+                    stage.with_article(),
                     String::from_utf8_lossy(kind)
                 ),
             )),

@@ -24,7 +24,7 @@ impl Lift<'_> {
             return Ok(());
         }
         let StageFacts::RayTracing(facts) = self.setup.interface.facts.clone() else {
-            return self.refuse(format!("a {stage:?} program without its facts"));
+            return self.refuse(format!("{} program without its facts", stage.with_article()));
         };
         let spaces: &[(Space, u32, &str)] = match stage {
             Stage::AnyHit | Stage::ClosestHit => &[
@@ -48,13 +48,14 @@ impl Lift<'_> {
         };
         if params != spaces.len() {
             return self.refuse(format!(
-                "a {stage:?} program whose function takes {params} parameters where {} are expected",
+                "{} program whose function takes {params} parameters where {} are expected",
+                stage.with_article(),
                 spaces.len()
             ));
         }
         for (k, &(space, bytes, name)) in spaces.iter().enumerate() {
             if bytes == 0 {
-                return self.refuse(format!("a {stage:?} program's {name} of no bytes"));
+                return self.refuse(format!("{} program's {name} of no bytes", stage.with_article()));
             }
             let var = VarId(u32::try_from(self.g.vars.len()).unwrap_or(u32::MAX));
             self.g.vars.push(Var {

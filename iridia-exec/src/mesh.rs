@@ -56,8 +56,8 @@ impl MeshShader {
     fn assemble(interface: Interface, executable: Executable) -> Result<Self, Error> {
         let StageFacts::Mesh(facts) = interface.facts else {
             return Err(error(format!(
-                "a {:?} program is not a mesh program",
-                interface.stage
+                "{} program is not a mesh program",
+                interface.stage.with_article()
             )));
         };
         let outputs = mesh_vertex_io(&interface)

@@ -237,8 +237,8 @@ impl Values {
         }
         if interface.stage.is_ray_tracing() {
             return Err(format!(
-                "a {:?} program's payload is not followed",
-                interface.stage
+                "{} program's payload is not followed",
+                interface.stage.with_article()
             ));
         }
         let functions = stage_functions(interface)?.ok_or("the module has no entry point")?;

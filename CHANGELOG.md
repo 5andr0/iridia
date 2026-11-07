@@ -23,6 +23,15 @@
   resources (`CreateHandleForLib` of a resource global), and vectors in memory laid out in bytes. Both lifts of
   `ray_tracing.hlsl`'s pipeline draw what WARP draws, bit for bit alike, and the Elden Ring corpus's 4,281 ray tracing
   programs, which the IR refused before, lift and agree with the naga lift.
+- `iridia-dxil` names a program's target as dxc does by dxil-reader's `Part::target`: an amplification program's
+  `provenance.target` is `as_6_5` (it was `cs_6_5`: every shader kind past those named fell to `cs`), and a shader kind
+  no target names is refused by name.
+- Both DXIL lifters refuse `RenderTargetGetSampleCount` by name, as the DXBC lifters refuse `sampleinfo` of the
+  rasterizer: the render target's sample count is the pipeline's, not the program's ("the sample count of the
+  rasterizer is the pipeline's, not the program's"). A program that reads it (`sample_count.hlsl`) stays refused by
+  every lifter, onto naga and onto the IR: a refusal a caller's tests can rely on.
+- `Stage::with_article` names a stage after the article it takes (`an Amplification`, `a Pixel`), and every message
+  that names a stage uses it: "an Amplification program is not lowered yet", not "a Amplification".
 
 ## 0.6.0 (2026-11-07)
 

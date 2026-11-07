@@ -352,6 +352,9 @@ impl Lift<'_> {
                 let name = self.m.name(function).unwrap_or("dx.op");
                 self.refuse(format!("double-precision floats are not lifted ({name})"))
             }
+            // RenderTargetGetSampleCount: the render target's sample count is the pipeline's (its rasterizer state), which
+            // the program does not carry
+            77 => self.refuse("the sample count of the rasterizer is the pipeline's, not the program's"),
             other => {
                 let name = self.m.name(function).unwrap_or("dx.op");
                 self.refuse(format!("{name}: dx.op {other} is not lifted"))

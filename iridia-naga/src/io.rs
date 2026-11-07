@@ -138,7 +138,10 @@ fn location(stage: Stage, output: bool, v: &Varying, at: u32) -> Binding {
 pub fn entry_io(interface: &Interface) -> Result<EntryIo, String> {
     let stage = interface.stage;
     if !matches!(stage, Stage::Vertex | Stage::Pixel | Stage::Compute) {
-        return Err(format!("a {stage:?} program's entry point is not lowered yet"));
+        return Err(format!(
+            "{} program's entry point is not lowered yet",
+            stage.with_article()
+        ));
     }
     let mut io = EntryIo::default();
     for output in [false, true] {
@@ -194,7 +197,8 @@ pub fn entry_io(interface: &Interface) -> Result<EntryIo, String> {
                 Some(SystemValue::ClipDistance | SystemValue::CullDistance) if !v.used => continue,
                 Some(SystemValue::ClipDistance | SystemValue::CullDistance) => {
                     return Err(format!(
-                        "{name}: a clip or cull distance as a {stage:?} {direction} has no built-in"
+                        "{name}: a clip or cull distance as {} {direction} has no built-in",
+                        stage.with_article()
                     ));
                 }
                 Some(SystemValue::RenderTargetArrayIndex | SystemValue::ViewportArrayIndex) => plain(v),
@@ -203,7 +207,8 @@ pub fn entry_io(interface: &Interface) -> Result<EntryIo, String> {
                     None if !v.used => continue,
                     None => {
                         return Err(format!(
-                            "{name}: {system:?} as a {stage:?} {direction} has no built-in binding"
+                            "{name}: {system:?} as {} {direction} has no built-in binding",
+                            stage.with_article()
                         ));
                     }
                 },

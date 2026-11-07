@@ -115,23 +115,18 @@ pub(crate) fn patch_constant_function(module: &Module, program_version: u32) -> 
         .ok_or_else(|| error(0, "the patch-constant function has no body"))
 }
 
-/// The target a program's version names (`vs_6_0`, `lib_6_3`).
-pub(crate) fn target_of(program_version: u32) -> String {
-    format!(
-        "{}_{}_{}",
-        match program_version >> 16 {
-            0 => "ps",
-            1 => "vs",
-            2 => "gs",
-            13 => "ms",
-            3 => "hs",
-            4 => "ds",
-            6..=12 => "lib",
-            _ => "cs",
-        },
-        (program_version >> 4) & 15,
-        program_version & 15
-    )
+/// The target the program was compiled for, as `dxc -T` names it (`ps_6_0`, `as_6_5`); a shader kind no target names
+/// (a ray tracing kind, which only a library's functions have) is refused by name.
+pub(crate) fn target_of(part: &dxil_reader::Part<'_>) -> Result<String> {
+    part.target().ok_or_else(|| {
+        error(
+            0,
+            format!(
+                "a program of shader kind {}, which no target names",
+                part.program_version >> 16
+            ),
+        )
+    })
 }
 
 fn lift_program(container: &[u8], bound: &iridia::BoundSizes) -> Result<Program> {
@@ -164,7 +159,7 @@ fn lift_program(container: &[u8], bound: &iridia::BoundSizes) -> Result<Program>
     bound
         .apply(&mut setup.interface)
         .map_err(|why| error(0, format!("bound sizes: {why}")))?;
-    let target = target_of(part.program_version);
+    let target = target_of(&part)?;
     // the entry's 32-bit denormal mode (dxc's `-denorm`): kept where it says `preserve`; flushed, as D3D's default,
     // where it says `ftz` or `any` or states none
     let flush_denormals = reflection::fp32_denorm_mode(&module).map_err(read)?.as_deref() != Some("preserve");
@@ -564,8 +559,8 @@ impl<'m> Lift<'m> {
                 .collect();
             if params.len() != memory.len() {
                 return self.refuse(format!(
-                    "a {:?} program whose function takes {} parameters where {} are expected",
-                    self.setup.interface.stage,
+                    "{} program whose function takes {} parameters where {} are expected",
+                    self.setup.interface.stage.with_article(),
                     params.len(),
                     memory.len()
                 ));

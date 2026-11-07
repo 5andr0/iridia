@@ -33,6 +33,10 @@ const AMPLIFICATION_FIXTURES: [&str; 5] = [
 /// refuses each by name (iridia-dxbc's tests/depth_gather.rs checks both lifts). The refusal is the outcome asserted.
 const DEPTH_GATHER_FIXTURES: [&str; 1] = ["gather_cmp_green.dxil"];
 
+/// Fixtures that read the render target's sample count, which is the pipeline's, not the program's: refused by name
+/// (iridia-dxbc's tests/sample_count.rs checks every lift). The refusal is the outcome asserted.
+const SAMPLE_COUNT_FIXTURES: [&str; 1] = ["sample_count.dxil"];
+
 /// Fixtures that are a library of several programs, whose programs are the per-export fixtures beside them.
 const WHOLE_LIBRARIES: [&str; 1] = ["ray_subobjects.dxil"];
 
@@ -66,6 +70,17 @@ fn every_fixture_lifts() {
                 Err(e) if e.to_string().contains("amplification programs are not lifted") => {}
                 other => failures.push(format!(
                     "{name}: expected the refusal of an amplification pipeline, got {other:?}"
+                )),
+            }
+            continue;
+        }
+        if SAMPLE_COUNT_FIXTURES.contains(&name.as_str()) {
+            match lift(&fixture(name)) {
+                Err(e)
+                    if e.to_string()
+                        .contains("the sample count of the rasterizer is the pipeline's") => {}
+                other => failures.push(format!(
+                    "{name}: expected the refusal of the rasterizer's sample count, got {other:?}"
                 )),
             }
             continue;

@@ -106,7 +106,10 @@ const EPILOGUE: [&str; 3] = [
 
 pub(crate) fn lift(source: &str, stage: Stage, hints: &Hints) -> Result<Program> {
     if !matches!(stage, Stage::Vertex | Stage::Pixel) {
-        return Err(error(0, format!("a {stage:?} program is not in the dialect")));
+        return Err(error(
+            0,
+            format!("{} program is not in the dialect", stage.with_article()),
+        ));
     }
     let lexed = lex::lex(source)?;
     let mut notes = Vec::new();

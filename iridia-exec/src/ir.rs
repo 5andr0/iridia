@@ -1709,8 +1709,8 @@ pub(crate) fn compile(p: &ir::Program) -> Result<Executable, String> {
     ) || p.interface.facts == StageFacts::VertexWithoutPosition
     {
         return Err(format!(
-            "a {:?} program is made of functions: compile it with Executable::function_from_ir",
-            p.stage
+            "{} program is made of functions: compile it with Executable::function_from_ir",
+            p.stage.with_article()
         ));
     }
     let io = iridia::entry_io(&p.interface)?;

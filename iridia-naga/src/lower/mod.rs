@@ -2183,7 +2183,12 @@ pub fn module(program: &Program, plan: &BindingPlan) -> Result<naga::Module, Err
                 .workgroup
                 .ok_or_else(|| err("a compute program without its thread group size"))?,
         ),
-        other => return Err(err(format!("a {other:?} program is not lowered yet"))),
+        other => {
+            return Err(err(format!(
+                "{} program is not lowered yet",
+                other.with_article()
+            )));
+        }
     };
     if program.interface.facts == iridia_ir::interface::StageFacts::VertexWithoutPosition {
         return Err(err(

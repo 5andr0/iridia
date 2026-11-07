@@ -584,9 +584,10 @@ impl Interface {
                 Ok(())
             }
             (Stage::Vertex, StageFacts::VertexWithoutPosition) => Ok(()),
-            (Stage::Hull | Stage::Domain, _) => {
-                Err(format!("a {:?} program without its patch facts", self.stage))
-            }
+            (Stage::Hull | Stage::Domain, _) => Err(format!(
+                "{} program without its patch facts",
+                self.stage.with_article()
+            )),
             (Stage::Mesh, StageFacts::Mesh(m)) => {
                 if !(1..=256).contains(&m.max_vertices) || !(1..=256).contains(&m.max_primitives) {
                     return Err(format!(
@@ -615,7 +616,7 @@ impl Interface {
             (Stage::Amplification, _) => Err("an amplification program without its facts".into()),
             (stage, StageFacts::RayTracing(r)) if stage.is_ray_tracing() => {
                 if r.export.is_empty() {
-                    return Err(format!("a {stage:?} program that names no export"));
+                    return Err(format!("{} program that names no export", stage.with_article()));
                 }
                 let carries_payload = matches!(
                     stage,
@@ -623,11 +624,16 @@ impl Interface {
                 );
                 let carries_attributes = matches!(stage, Stage::AnyHit | Stage::ClosestHit);
                 if r.payload > MAX_RAY_PAYLOAD || (r.payload != 0 && !carries_payload) {
-                    return Err(format!("a {stage:?} program of a payload of {} bytes", r.payload));
+                    return Err(format!(
+                        "{} program of a payload of {} bytes",
+                        stage.with_article(),
+                        r.payload
+                    ));
                 }
                 if r.attributes > MAX_HIT_ATTRIBUTES || (r.attributes != 0 && !carries_attributes) {
                     return Err(format!(
-                        "a {stage:?} program of hit attributes of {} bytes",
+                        "{} program of hit attributes of {} bytes",
+                        stage.with_article(),
                         r.attributes
                     ));
                 }
@@ -656,8 +662,10 @@ impl Interface {
                 if let Some(SystemValue::Target(n)) = v.system {
                     if direction == "input" || self.stage != Stage::Pixel {
                         return Err(format!(
-                            "{direction} {}{} is colour output {n} of a {:?} stage: only a pixel stage's outputs are",
-                            v.label.name, v.label.index, self.stage
+                            "{direction} {}{} is colour output {n} of {} stage: only a pixel stage's outputs are",
+                            v.label.name,
+                            v.label.index,
+                            self.stage.with_article()
                         ));
                     }
                     if n > 7 {

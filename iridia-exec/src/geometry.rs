@@ -190,8 +190,8 @@ impl GeometryShader {
     fn assemble(interface: Interface, executable: Executable) -> Result<Self, String> {
         let StageFacts::Geometry(facts) = interface.facts else {
             return Err(format!(
-                "a {:?} program is not a geometry program",
-                interface.stage
+                "{} program is not a geometry program",
+                interface.stage.with_article()
             ));
         };
         let signature = stage_functions(&interface)?
