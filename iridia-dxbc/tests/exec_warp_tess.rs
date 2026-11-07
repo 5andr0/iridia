@@ -16,7 +16,7 @@
 //! scratch folder. Every program is compiled here from the HLSL below, so the cases are the whole of the input.
 mod inputs;
 
-use inputs::{Tool, own_scratch, tool};
+use inputs::{Tool, own_scratch, program};
 use iridia::TessTopology;
 use iridia_dxbc::lift;
 use iridia_exec::Constants;
@@ -168,7 +168,7 @@ impl Domain {
 const PARTITIONS: [&str; 4] = ["integer", "pow2", "fractional_odd", "fractional_even"];
 
 fn fxc_compile(
-    fxc: &Path,
+    fxc: &inputs::Program,
     dir: &Path,
     name: &str,
     profile: &str,
@@ -177,14 +177,17 @@ fn fxc_compile(
 ) -> PathBuf {
     let source = dir.join("tess.hlsl");
     let out = dir.join(format!("{name}.dxbc"));
-    let mut command = std::process::Command::new(fxc);
+    let mut command = fxc.command();
     command
         .args(["/nologo", "/T", profile, "/E", entry, "/Fo"])
-        .arg(&out);
+        .path_arg(&out);
     for (k, v) in defines {
         command.arg(format!("/D{k}={v}"));
     }
-    let run = command.arg(&source).output().unwrap();
+    let run = command
+        .path_arg(&source)
+        .output_within(inputs::COMPILE_LIMIT)
+        .unwrap_or_else(|e| panic!("{e}"));
     assert!(
         run.status.success(),
         "fxc {name}: {}",
@@ -257,7 +260,7 @@ type Vertex = [f32; 4];
 
 #[test]
 fn tessellated_patches_are_the_ones_warp_makes() {
-    let (Some(fxc), Some(warp)) = (tool(Tool::Fxc), tool(Tool::Warp)) else {
+    let (Some(fxc), Some(warp)) = (program(Tool::Fxc), program(Tool::Warp)) else {
         eprintln!("skipped: needs tools.fxc and tools.warp");
         return;
     };
@@ -368,11 +371,12 @@ fn tessellated_patches_are_the_ones_warp_makes() {
                 let results_path = dir.join(format!("{tag}.results.jsonl"));
                 std::fs::write(&cases_path, text).unwrap();
                 let _oracle = inputs::warp_exclusive();
-                let run = std::process::Command::new(&warp)
-                    .arg(&cases_path)
-                    .arg(&results_path)
-                    .output()
-                    .unwrap();
+                let run = warp
+                    .command()
+                    .path_arg(&cases_path)
+                    .path_arg(&results_path)
+                    .output_within(inputs::WARP_LIMIT)
+                    .unwrap_or_else(|e| panic!("{e}"));
                 assert!(
                     run.status.success(),
                     "{tag}: warp: {}",

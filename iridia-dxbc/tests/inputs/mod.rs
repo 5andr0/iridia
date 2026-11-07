@@ -104,3 +104,10 @@ primase_testdata::inputs! {
         "shader.outside" => "a folder of containers outside the configured corpora (walked for every DXBC container in it) that the IR gate and the WARP comparison run",
     }
 }
+
+/// How long one run of a configured tool may take: past it the tool is killed and the test that started it fails naming
+/// it, so a tool that hangs fails the test instead of hanging it. One WARP oracle batch, one fxc or dxc compile.
+#[allow(dead_code)]
+pub const WARP_LIMIT: std::time::Duration = std::time::Duration::from_secs(600);
+#[allow(dead_code)]
+pub const COMPILE_LIMIT: std::time::Duration = std::time::Duration::from_secs(120);

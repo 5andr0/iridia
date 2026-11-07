@@ -18,7 +18,7 @@
 mod common;
 mod inputs;
 use common::case;
-use inputs::{Game, Tool, debug, tool};
+use inputs::{Game, Tool, debug, program};
 use iridia::{
     Interface, InterpMode, InterpSampling, ResourceKind, SampleType, ScalarType, StorageTarget, SystemValue,
     TextureDim,
@@ -414,7 +414,7 @@ fn run_program(
     bytes: &[u8],
     cases: u32,
     all: bool,
-    tools: &(PathBuf, PathBuf, inputs::OwnScratch),
+    tools: &(inputs::Program, inputs::Program, inputs::OwnScratch),
     t: &mut Tally,
 ) {
     let (fxc, warp, scratch) = tools;
@@ -480,12 +480,13 @@ fn run_program(
     let ps_path = scratch.join(format!("{tag}.ps.dxbc"));
     std::fs::write(&hlsl_path, vertex).unwrap();
     std::fs::write(&ps_path, bytes).unwrap();
-    let compiled = std::process::Command::new(fxc)
+    let compiled = fxc
+        .command()
         .args(["/nologo", "/T", "vs_5_0", "/E", "main", "/Fo"])
-        .arg(&vs_path)
-        .arg(&hlsl_path)
-        .output()
-        .unwrap();
+        .path_arg(&vs_path)
+        .path_arg(&hlsl_path)
+        .output_within(inputs::COMPILE_LIMIT)
+        .unwrap_or_else(|e| panic!("{e}"));
     if !compiled.status.success() {
         let first = String::from_utf8_lossy(&compiled.stderr)
             .lines()
@@ -588,11 +589,12 @@ fn run_program(
     let results_path = scratch.join(format!("{tag}.warp.jsonl"));
     std::fs::write(&cases_path, text).unwrap();
     let _oracle = inputs::warp_exclusive();
-    let run = std::process::Command::new(warp)
-        .arg(&cases_path)
-        .arg(&results_path)
-        .output()
-        .unwrap();
+    let run = warp
+        .command()
+        .path_arg(&cases_path)
+        .path_arg(&results_path)
+        .output_within(inputs::WARP_LIMIT)
+        .unwrap_or_else(|e| panic!("{e}"));
     if !run.status.success() {
         *t.errors
             .entry(format!(
@@ -712,7 +714,7 @@ fn corpus(game: Game) {
 
 /// The pixel programs of the containers `paths` (`name` in the report) against WARP, the older lift beside the IR's.
 fn corpus_over(name: &str, paths: &[PathBuf]) {
-    let (Some(fxc), Some(warp)) = (tool(Tool::Fxc), tool(Tool::Warp)) else {
+    let (Some(fxc), Some(warp)) = (program(Tool::Fxc), program(Tool::Warp)) else {
         return;
     };
     let scratch = inputs::own_scratch("warp");
@@ -846,7 +848,7 @@ fn with_resinfo_return(bytes: &[u8], ret: u32) -> (Vec<u8>, usize) {
 /// size's lanes, the layers and the level count as they are. Each program runs through both lifts.
 #[test]
 fn resinfo_agrees_with_warp() {
-    let (Some(fxc), Some(warp)) = (tool(Tool::Fxc), tool(Tool::Warp)) else {
+    let (Some(fxc), Some(warp)) = (program(Tool::Fxc), program(Tool::Warp)) else {
         return;
     };
     let scratch = inputs::own_scratch("warp-resinfo");
@@ -854,12 +856,17 @@ fn resinfo_agrees_with_warp() {
     std::fs::write(&source, RESINFO_HLSL).unwrap();
     let compile = |name: &str, defines: &[&str]| -> Vec<u8> {
         let out = scratch.join(format!("{name}.dxbc"));
-        let mut command = std::process::Command::new(&fxc);
+        let mut command = fxc.command();
         command.args(["/nologo", "/T", "ps_5_0", "/E", "main"]);
         for d in defines {
             command.args(["/D", d]);
         }
-        let compiled = command.arg("/Fo").arg(&out).arg(&source).output().unwrap();
+        let compiled = command
+            .arg("/Fo")
+            .path_arg(&out)
+            .path_arg(&source)
+            .output_within(inputs::COMPILE_LIMIT)
+            .unwrap_or_else(|e| panic!("{e}"));
         assert!(
             compiled.status.success(),
             "fxc: {}",
@@ -959,7 +966,7 @@ const FALLING: [usize; 6] = [1, 4, 6, 7, 8, 10];
 /// the IR lift refuses each by name.
 #[test]
 fn switches_agree_with_warp_and_a_falling_case_is_refused() {
-    let (Some(fxc), Some(warp)) = (tool(Tool::Fxc), tool(Tool::Warp)) else {
+    let (Some(fxc), Some(warp)) = (program(Tool::Fxc), program(Tool::Warp)) else {
         return;
     };
     let scratch = inputs::own_scratch("warp-switch");
@@ -967,12 +974,13 @@ fn switches_agree_with_warp_and_a_falling_case_is_refused() {
     std::fs::write(&source, SWITCH_HLSL).unwrap();
     let compile = |profile: &str| -> Vec<u8> {
         let out = scratch.join(format!("switch_{profile}.dxbc"));
-        let compiled = std::process::Command::new(&fxc)
+        let compiled = fxc
+            .command()
             .args(["/nologo", "/T", profile, "/E", "main", "/Fo"])
-            .arg(&out)
-            .arg(&source)
-            .output()
-            .unwrap();
+            .path_arg(&out)
+            .path_arg(&source)
+            .output_within(inputs::COMPILE_LIMIT)
+            .unwrap_or_else(|e| panic!("{e}"));
         assert!(
             compiled.status.success(),
             "fxc: {}",
@@ -1065,19 +1073,20 @@ Out main(float4 p : SV_Position, float4 s : SELECT) {
 /// comparison's tolerance (`drcp` is within one unit in the last place). The older lift refuses the program.
 #[test]
 fn doubles_agree_with_warp() {
-    let (Some(fxc), Some(warp)) = (tool(Tool::Fxc), tool(Tool::Warp)) else {
+    let (Some(fxc), Some(warp)) = (program(Tool::Fxc), program(Tool::Warp)) else {
         return;
     };
     let scratch = inputs::own_scratch("warp-doubles");
     let source = scratch.join("doubles.hlsl");
     std::fs::write(&source, DOUBLES_HLSL).unwrap();
     let out = scratch.join("doubles.dxbc");
-    let compiled = std::process::Command::new(&fxc)
+    let compiled = fxc
+        .command()
         .args(["/nologo", "/T", "ps_5_0", "/E", "main", "/Fo"])
-        .arg(&out)
-        .arg(&source)
-        .output()
-        .unwrap();
+        .path_arg(&out)
+        .path_arg(&source)
+        .output_within(inputs::COMPILE_LIMIT)
+        .unwrap_or_else(|e| panic!("{e}"));
     assert!(
         compiled.status.success(),
         "fxc: {}",
@@ -1137,19 +1146,20 @@ uint4 main(float4 p : SV_Position, nointerpolation uint4 b : BITS) : SV_Target {
 /// flush it are Direct3D's.
 #[test]
 fn denormals_through_moves_agree_with_warp() {
-    let (Some(fxc), Some(warp)) = (tool(Tool::Fxc), tool(Tool::Warp)) else {
+    let (Some(fxc), Some(warp)) = (program(Tool::Fxc), program(Tool::Warp)) else {
         return;
     };
     let scratch = inputs::own_scratch("warp-denormal-moves");
     let source = scratch.join("denormal.hlsl");
     std::fs::write(&source, DENORMAL_MOVES_HLSL).unwrap();
     let out = scratch.join("denormal.dxbc");
-    let compiled = std::process::Command::new(&fxc)
+    let compiled = fxc
+        .command()
         .args(["/nologo", "/T", "ps_5_0", "/E", "main", "/Fo"])
-        .arg(&out)
-        .arg(&source)
-        .output()
-        .unwrap();
+        .path_arg(&out)
+        .path_arg(&source)
+        .output_within(inputs::COMPILE_LIMIT)
+        .unwrap_or_else(|e| panic!("{e}"));
     assert!(
         compiled.status.success(),
         "fxc: {}",
@@ -1203,19 +1213,20 @@ impl iridia_exec::Backend for Holding {
 /// The older lift refuses it by name: its atomics compare as the memory's one type.
 #[test]
 fn a_buffer_takes_signed_and_unsigned_minimums() {
-    let Some(fxc) = tool(Tool::Fxc) else {
+    let Some(fxc) = program(Tool::Fxc) else {
         return;
     };
     let scratch = inputs::own_scratch("mixed-min-max");
     let source = scratch.join("minmax.hlsl");
     std::fs::write(&source, MIXED_MIN_MAX_HLSL).unwrap();
     let out = scratch.join("minmax.dxbc");
-    let compiled = std::process::Command::new(&fxc)
+    let compiled = fxc
+        .command()
         .args(["/nologo", "/T", "cs_5_0", "/E", "main", "/Fo"])
-        .arg(&out)
-        .arg(&source)
-        .output()
-        .unwrap();
+        .path_arg(&out)
+        .path_arg(&source)
+        .output_within(inputs::COMPILE_LIMIT)
+        .unwrap_or_else(|e| panic!("{e}"));
     assert!(
         compiled.status.success(),
         "fxc: {}",
@@ -1246,19 +1257,20 @@ uint4 main(float4 p : SV_Position, uint f : SV_IsFrontFace) : SV_Target {
 /// [`FRONT_FACE_HLSL`] against WARP through both lifts, on front and back faces: the flag's word is Direct3D's.
 #[test]
 fn a_front_face_flag_is_all_ones() {
-    let (Some(fxc), Some(warp)) = (tool(Tool::Fxc), tool(Tool::Warp)) else {
+    let (Some(fxc), Some(warp)) = (program(Tool::Fxc), program(Tool::Warp)) else {
         return;
     };
     let scratch = inputs::own_scratch("warp-front-face");
     let source = scratch.join("front.hlsl");
     std::fs::write(&source, FRONT_FACE_HLSL).unwrap();
     let out = scratch.join("front.dxbc");
-    let compiled = std::process::Command::new(&fxc)
+    let compiled = fxc
+        .command()
         .args(["/nologo", "/T", "ps_5_0", "/E", "main", "/Fo"])
-        .arg(&out)
-        .arg(&source)
-        .output()
-        .unwrap();
+        .path_arg(&out)
+        .path_arg(&source)
+        .output_within(inputs::COMPILE_LIMIT)
+        .unwrap_or_else(|e| panic!("{e}"));
     assert!(
         compiled.status.success(),
         "fxc: {}",
@@ -1346,19 +1358,20 @@ impl Sampler for Effects {
 /// specification, 16.13), in both lifts: the program writes a structured buffer, a texture and atomics either side.
 #[test]
 fn a_discarded_pixel_changes_no_memory_after_it() {
-    let Some(fxc) = tool(Tool::Fxc) else {
+    let Some(fxc) = program(Tool::Fxc) else {
         return;
     };
     let scratch = inputs::own_scratch("discard-memory");
     let source = scratch.join("discard.hlsl");
     std::fs::write(&source, DISCARD_HLSL).unwrap();
     let out = scratch.join("discard.dxbc");
-    let compiled = std::process::Command::new(&fxc)
+    let compiled = fxc
+        .command()
         .args(["/nologo", "/T", "ps_5_0", "/E", "main", "/Fo"])
-        .arg(&out)
-        .arg(&source)
-        .output()
-        .unwrap();
+        .path_arg(&out)
+        .path_arg(&source)
+        .output_within(inputs::COMPILE_LIMIT)
+        .unwrap_or_else(|e| panic!("{e}"));
     assert!(
         compiled.status.success(),
         "fxc: {}",
@@ -1442,19 +1455,20 @@ Out main(float4 p : POSITION, float4 q : TEXCOORD0) {
 /// (each distance one result member), in both lifts.
 #[test]
 fn outputs_after_several_clip_distances_are_their_own() {
-    let Some(fxc) = tool(Tool::Fxc) else {
+    let Some(fxc) = program(Tool::Fxc) else {
         return;
     };
     let scratch = inputs::own_scratch("clip-distances");
     let source = scratch.join("distances.hlsl");
     std::fs::write(&source, DISTANCES_HLSL).unwrap();
     let out = scratch.join("distances.dxbc");
-    let compiled = std::process::Command::new(&fxc)
+    let compiled = fxc
+        .command()
         .args(["/nologo", "/T", "vs_5_0", "/E", "main", "/Fo"])
-        .arg(&out)
-        .arg(&source)
-        .output()
-        .unwrap();
+        .path_arg(&out)
+        .path_arg(&source)
+        .output_within(inputs::COMPILE_LIMIT)
+        .unwrap_or_else(|e| panic!("{e}"));
     assert!(
         compiled.status.success(),
         "fxc: {}",
@@ -1527,7 +1541,7 @@ float4 main() : SV_Target {
 
 #[test]
 fn a_view_is_stored_at_its_register_not_its_id() {
-    let Some(fxc) = tool(Tool::Fxc) else {
+    let Some(fxc) = program(Tool::Fxc) else {
         return;
     };
     let scratch = inputs::own_scratch("uav-registers");
@@ -1542,12 +1556,13 @@ fn a_view_is_stored_at_its_register_not_its_id() {
     ];
     for model in ["ps_5_0", "ps_5_1"] {
         let out = scratch.join(format!("uav.{model}.dxbc"));
-        let compiled = std::process::Command::new(&fxc)
+        let compiled = fxc
+            .command()
             .args(["/nologo", "/T", model, "/E", "main", "/Fo"])
-            .arg(&out)
-            .arg(&source)
-            .output()
-            .unwrap();
+            .path_arg(&out)
+            .path_arg(&source)
+            .output_within(inputs::COMPILE_LIMIT)
+            .unwrap_or_else(|e| panic!("{e}"));
         assert!(
             compiled.status.success(),
             "fxc: {}",
@@ -1580,19 +1595,20 @@ fn a_view_is_stored_at_its_register_not_its_id() {
 /// [`Store`]: iridia_exec::Store
 #[test]
 fn a_typed_buffer_store_is_its_element() {
-    let Some(fxc) = tool(Tool::Fxc) else {
+    let Some(fxc) = program(Tool::Fxc) else {
         return;
     };
     let scratch = inputs::own_scratch("typed-store");
     let source = scratch.join("typed.hlsl");
     std::fs::write(&source, TYPED_STORE_HLSL).unwrap();
     let out = scratch.join("typed.dxbc");
-    let compiled = std::process::Command::new(&fxc)
+    let compiled = fxc
+        .command()
         .args(["/nologo", "/T", "ps_5_0", "/E", "main", "/Fo"])
-        .arg(&out)
-        .arg(&source)
-        .output()
-        .unwrap();
+        .path_arg(&out)
+        .path_arg(&source)
+        .output_within(inputs::COMPILE_LIMIT)
+        .unwrap_or_else(|e| panic!("{e}"));
     assert!(
         compiled.status.success(),
         "fxc: {}",

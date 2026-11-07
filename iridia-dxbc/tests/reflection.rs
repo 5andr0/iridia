@@ -486,7 +486,7 @@ fn listed_shape(dim: &str) -> Option<(iridia::TextureDim, bool, bool)> {
 /// its count; and no resource the listing does not name.
 #[test]
 fn every_stage_and_model_reflects_as_fxc_lists_it() {
-    let Some(fxc) = inputs::tool(inputs::Tool::Fxc) else {
+    let Some(fxc) = inputs::program(inputs::Tool::Fxc) else {
         return;
     };
     let sekiro = inputs::oracle(inputs::OracleSet::Corpus, inputs::Game::Sekiro, "d3d11-shaders");
@@ -510,12 +510,13 @@ fn every_stage_and_model_reflects_as_fxc_lists_it() {
             let at = path.display();
             let program = iridia_dxbc::ir::lift(&bytes).unwrap_or_else(|e| panic!("{at}: {e}"));
             let listing_path = scratch.join("listing.asm");
-            let out = std::process::Command::new(&fxc)
+            let out = fxc
+                .command()
                 .args(["/nologo", "/dumpbin", "/Fc"])
-                .arg(&listing_path)
-                .arg(&path)
-                .output()
-                .unwrap();
+                .path_arg(&listing_path)
+                .path_arg(&path)
+                .output_within(inputs::COMPILE_LIMIT)
+                .unwrap_or_else(|e| panic!("{e}"));
             assert!(
                 out.status.success(),
                 "fxc {at}: {}",
