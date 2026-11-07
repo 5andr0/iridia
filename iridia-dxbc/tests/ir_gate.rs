@@ -10,6 +10,7 @@
 mod inputs;
 
 use std::collections::BTreeMap;
+use std::time::{Duration, Instant};
 
 use inputs::Game;
 use iridia::{
@@ -605,45 +606,55 @@ fn coherent_quad(base: f32, c: u32, register: u32, lane: usize) -> [f32; 4] {
     std::array::from_fn(|k| base + dx * (k & 1) as f32 + dy * (k >> 1) as f32)
 }
 
-/// A and B on every vector, and the furthest of the [`QuadInputs`] a quad needed. A quad whose lanes diverge at a
-/// derivative or an implicit-level sample runs again with coherent inputs, then with every lane the first lane's. A
-/// vector A cannot evaluate (a loop past the executor's budget on these inputs, a request the sampler does not
-/// answer) is not compared, and B is not run on it: the third result is why, for each; a program none of whose
-/// vectors A evaluates is `AFails`.
+/// A's run of each of the gate's vectors with the inputs it ran on, what B and P are both held to: `quad` whether each
+/// vector is a quad, `furthest` the furthest of the [`QuadInputs`] a quad needed.
+struct Older {
+    quad: bool,
+    runs: Vec<(Vec<common::Case>, Run)>,
+    furthest: QuadInputs,
+}
+
+/// A on every vector. A quad whose lanes diverge at a derivative or an implicit-level sample runs again with coherent
+/// inputs, then with every lane the first lane's.
+fn older_runs(a: &ProgramShader, cases: u32, quad: bool) -> Older {
+    let mut furthest = QuadInputs::Own;
+    let runs = (0..cases)
+        .map(|c| {
+            let mut case = gate_case(a, c, quad, QuadInputs::Own);
+            let mut x = run(a, c, &case);
+            for next in [QuadInputs::Coherent, QuadInputs::First] {
+                if !(quad && x.as_ref().is_err_and(|e| e.contains("diverge"))) {
+                    break;
+                }
+                case = gate_case(a, c, quad, next);
+                x = run(a, c, &case);
+                furthest = furthest.max(next);
+            }
+            (case, x)
+        })
+        .collect();
+    Older { quad, runs, furthest }
+}
+
+/// B against A's runs, on the inputs each ran on. A vector A cannot evaluate (a loop past the executor's budget on
+/// these inputs, a request the sampler does not answer) is not compared, and B is not run on it: the second result is
+/// why, for each; a program none of whose vectors A evaluates is `AFails`.
 /// Where `textures`, every texture request (sample, texel load, query) B makes must be one A makes too: a texel the
 /// program asks for differently is its own behaviour even where a select then drops it. A request A makes and B does
 /// not is one for a value nothing uses, which B's compiler leaves out (buffer reads have no effect; a pass removes a
 /// sample nothing reads, so P is held to its results only).
-fn compare(
-    a: &ProgramShader,
-    b: &ProgramShader,
-    cases: u32,
-    textures: bool,
-) -> (Verdict, QuadInputs, Vec<String>) {
+fn compare(a: &Older, b: &ProgramShader, textures: bool) -> (Verdict, Vec<String>) {
     let mut skipped = Vec::new();
     let mut compared = 0;
-    let mut furthest = QuadInputs::Own;
-    let quad = a.needs_quad() || b.needs_quad();
-    for c in 0..cases {
-        let mut case = gate_case(a, c, quad, QuadInputs::Own);
-        let mut x = run(a, c, &case);
-        for next in [QuadInputs::Coherent, QuadInputs::First] {
-            if !(quad && x.as_ref().is_err_and(|e| e.contains("diverge"))) {
-                break;
-            }
-            case = gate_case(a, c, quad, next);
-            x = run(a, c, &case);
-            furthest = furthest.max(next);
-        }
-        if let Err(e) = &x {
+    for (c, (case, x)) in (0..).zip(&a.runs) {
+        if let Err(e) = x {
             skipped.push(e.clone());
             continue;
         }
-        let y = run(b, c, &case);
-        if !same_run(&x, &y, textures) {
+        let y = run(b, c, case);
+        if !same_run(x, &y, textures) {
             return (
                 Verdict::Differs(format!("case {c}: A {x:x?}\n  but {y:x?}")),
-                furthest,
                 skipped,
             );
         }
@@ -653,7 +664,7 @@ fn compare(
         Some(e) if compared == 0 => Verdict::AFails(e.clone()),
         _ => Verdict::Agree,
     };
-    (verdict, furthest, skipped)
+    (verdict, skipped)
 }
 
 /// The distinct texture requests of a run's read requests ([`Hashed::reads`]): its samples, texel loads and queries.
@@ -705,6 +716,52 @@ fn tally(map: &mut BTreeMap<String, (usize, String)>, why: &str, at: &str) {
 }
 
 impl Gate {
+    /// Another program's tallies added to these: its reasons' first examples kept where these have none.
+    fn absorb(&mut self, other: Gate) {
+        let Gate {
+            programs,
+            a,
+            agree_b,
+            agree_p,
+            refused,
+            unrun,
+            a_fails,
+            skipped,
+            differ,
+            only_ir,
+            neither,
+            compute,
+            functions,
+            coherent,
+            identical,
+            coherent_no_derivative,
+            coherent_derivatives_discarded,
+        } = other;
+        self.programs += programs;
+        self.a += a;
+        self.agree_b += agree_b;
+        self.agree_p += agree_p;
+        self.compute += compute;
+        self.functions += functions;
+        self.coherent += coherent;
+        self.identical += identical;
+        self.coherent_no_derivative += coherent_no_derivative;
+        self.coherent_derivatives_discarded += coherent_derivatives_discarded;
+        self.differ.extend(differ);
+        for (mine, theirs) in [
+            (&mut self.refused, refused),
+            (&mut self.unrun, unrun),
+            (&mut self.a_fails, a_fails),
+            (&mut self.skipped, skipped),
+            (&mut self.only_ir, only_ir),
+            (&mut self.neither, neither),
+        ] {
+            for (why, (n, e)) in theirs {
+                mine.entry(why).or_insert((0, e)).0 += n;
+            }
+        }
+    }
+
     /// Settle a column of a program whose compared vectors agree: `compared` the vectors A evaluated, `skipped` why it
     /// could not evaluate the others. With none compared A fails the program (`false`); otherwise the column agrees,
     /// and B's skipped vectors are counted.
@@ -736,105 +793,205 @@ fn gate(game: Game) {
     gate_over(&name, &paths, &[]);
 }
 
+/// What checking one program took: lifting both ways and building A and B, A's runs, B's runs and their comparison,
+/// and P's (the passes, building P, its runs and their comparison); a program not compared all in `lift`.
+#[derive(Clone, Copy, Debug, Default)]
+struct Took {
+    lift: Duration,
+    a: Duration,
+    b: Duration,
+    p: Duration,
+}
+
+impl Took {
+    fn total(&self) -> Duration {
+        self.lift + self.a + self.b + self.p
+    }
+}
+
+/// The time since `*mark`, and `*mark` moved to now: the phases of [`Took`] one after another.
+fn lap(mark: &mut Instant) -> Duration {
+    let now = Instant::now();
+    let took = now - *mark;
+    *mark = now;
+    took
+}
+
+/// Where the gate's time went (`IR_GATE_TIMES`): the phases summed over the programs, against the wall time the
+/// `workers` threads had, and the slowest programs.
+fn report_times(took: &mut [(Took, String)], workers: usize) {
+    let sum = |f: fn(&Took) -> Duration| took.iter().map(|(t, _)| f(t)).sum::<Duration>();
+    println!(
+        "  times over {} programs on {workers} threads: lifting and building {:.1} s, A's runs {:.1} s, B's {:.1} s, \
+         P's {:.1} s",
+        took.len(),
+        sum(|t| t.lift).as_secs_f64(),
+        sum(|t| t.a).as_secs_f64(),
+        sum(|t| t.b).as_secs_f64(),
+        sum(|t| t.p).as_secs_f64()
+    );
+    took.sort_by_key(|(t, _)| std::cmp::Reverse(t.total()));
+    for (t, at) in took.iter().take(20) {
+        println!(
+            "  {:7.2} s ({:.2} + {:.2} + {:.2} + {:.2})  {at}",
+            t.total().as_secs_f64(),
+            t.lift.as_secs_f64(),
+            t.a.as_secs_f64(),
+            t.b.as_secs_f64(),
+            t.p.as_secs_f64()
+        );
+    }
+}
+
+/// One program of a corpus through the gate, tallied in `g`.
+fn check(g: &mut Gate, path: &std::path::Path, at: &str, took: &mut Took) {
+    let mut mark = Instant::now();
+    let bytes = std::fs::read(path).unwrap();
+    g.programs += 1;
+    let (old, p) = match (iridia_dxbc::lift(&bytes), iridia_dxbc::ir::lift(&bytes)) {
+        (Ok(old), Ok(p)) => (old, p),
+        (Ok(_), Err(e)) => {
+            tally(&mut g.refused, &e.to_string(), at);
+            return;
+        }
+        (Err(e), Ok(_)) => {
+            tally(&mut g.only_ir, &e.to_string(), at);
+            return;
+        }
+        (Err(_), Err(e)) => {
+            tally(&mut g.neither, &e.to_string(), at);
+            return;
+        }
+    };
+    took.lift = lap(&mut mark);
+    if old.interface.stage == Stage::Compute {
+        compute(g, &old, p, at, took);
+        return;
+    }
+    match iridia::stage_functions(&old.interface) {
+        Ok(Some(sigs)) => {
+            functions(g, &old, &sigs, p, at, took);
+            return;
+        }
+        Ok(None) => {}
+        Err(e) => {
+            tally(&mut g.a_fails, &format!("A's functions: {e}"), at);
+            return;
+        }
+    }
+    let a = match ProgramShader::new(old) {
+        Ok(a) => a,
+        Err(e) => {
+            tally(&mut g.a_fails, &format!("A not built: {e}"), at);
+            return;
+        }
+    };
+    g.a += 1;
+    let b = match ProgramShader::from_ir(p.clone()) {
+        Ok(b) => b,
+        Err(e) => {
+            tally(&mut g.unrun, &format!("B: {e}"), at);
+            return;
+        }
+    };
+    took.lift += lap(&mut mark);
+    let older = older_runs(&a, CASES, a.needs_quad() || b.needs_quad());
+    took.a = lap(&mut mark);
+    let (verdict, skipped) = compare(&older, &b, true);
+    let quads = older.furthest;
+    took.b = lap(&mut mark);
+    match quads {
+        QuadInputs::Own => {}
+        QuadInputs::Coherent => g.coherent += 1,
+        QuadInputs::First => g.identical += 1,
+    }
+    if quads == QuadInputs::Coherent && matches!(verdict, Verdict::Agree) {
+        let runs = coherent_runs(&b);
+        g.coherent_no_derivative += usize::from(!runs.derivatives);
+        g.coherent_derivatives_discarded += usize::from(runs.derivatives && !runs.kept);
+        took.b += lap(&mut mark);
+    }
+    match verdict {
+        Verdict::Agree => {
+            g.agree_b += 1;
+            for e in &skipped {
+                tally(&mut g.skipped, e, at);
+            }
+        }
+        Verdict::AFails(e) => {
+            tally(&mut g.a_fails, &e, at);
+            return;
+        }
+        Verdict::Differs(d) => g.differ.push(format!("{at} (B)\n  {d}")),
+    }
+    let pp = match passed(p).and_then(|p| ProgramShader::from_ir(p).map_err(|e| e.to_string())) {
+        Ok(pp) => pp,
+        Err(e) => {
+            tally(&mut g.unrun, &format!("P: {e}"), at);
+            return;
+        }
+    };
+    // A's runs serve P too, unless P runs quads where B did not or the other way (a pass removed a derivative)
+    let quad = a.needs_quad() || pp.needs_quad();
+    let older = if quad == older.quad {
+        older
+    } else {
+        older_runs(&a, CASES, quad)
+    };
+    let p_verdict = compare(&older, &pp, false).0;
+    took.p = lap(&mut mark);
+    match p_verdict {
+        Verdict::Agree => g.agree_p += 1,
+        Verdict::AFails(e) => tally(&mut g.a_fails, &e, at),
+        Verdict::Differs(d) => g.differ.push(format!("{at} (P)\n  {d}")),
+    }
+}
+
 /// The gate over the containers `paths` (`name` in its report): a refusal is a failure unless its reason contains one
 /// of `not_yet`.
 fn gate_over(name: &str, paths: &[std::path::PathBuf], not_yet: &[&str]) {
     let limit = common::diff_limit();
     let trace = std::env::var_os("IR_GATE_TRACE").is_some();
-    let mut g = Gate::default();
-    for path in paths.iter().take(limit) {
-        let at = path.display().to_string();
-        let bytes = std::fs::read(path).unwrap();
-        g.programs += 1;
-        if trace {
-            eprintln!("  {name} {}: {at}", g.programs);
-        } else if g.programs.is_multiple_of(500) {
-            eprintln!("  {name}: {} programs", g.programs);
-        }
-        let (old, p) = match (iridia_dxbc::lift(&bytes), iridia_dxbc::ir::lift(&bytes)) {
-            (Ok(old), Ok(p)) => (old, p),
-            (Ok(_), Err(e)) => {
-                tally(&mut g.refused, &e.to_string(), &at);
-                continue;
-            }
-            (Err(e), Ok(_)) => {
-                tally(&mut g.only_ir, &e.to_string(), &at);
-                continue;
-            }
-            (Err(_), Err(e)) => {
-                tally(&mut g.neither, &e.to_string(), &at);
-                continue;
-            }
-        };
-        if old.interface.stage == Stage::Compute {
-            compute(&mut g, &old, p, &at);
-            continue;
-        }
-        match iridia::stage_functions(&old.interface) {
-            Ok(Some(sigs)) => {
-                functions(&mut g, &old, &sigs, p, &at);
-                continue;
-            }
-            Ok(None) => {}
-            Err(e) => {
-                tally(&mut g.a_fails, &format!("A's functions: {e}"), &at);
-                continue;
-            }
-        }
-        let a = match ProgramShader::new(old) {
-            Ok(a) => a,
-            Err(e) => {
-                tally(&mut g.a_fails, &format!("A not built: {e}"), &at);
-                continue;
-            }
-        };
-        g.a += 1;
-        let b = match ProgramShader::from_ir(p.clone()) {
-            Ok(b) => b,
-            Err(e) => {
-                tally(&mut g.unrun, &format!("B: {e}"), &at);
-                continue;
-            }
-        };
-        let (verdict, quads, skipped) = compare(&a, &b, CASES, true);
-        match quads {
-            QuadInputs::Own => {}
-            QuadInputs::Coherent => g.coherent += 1,
-            QuadInputs::First => g.identical += 1,
-        }
-        if quads == QuadInputs::Coherent && matches!(verdict, Verdict::Agree) {
-            let runs = coherent_runs(&b);
-            g.coherent_no_derivative += usize::from(!runs.derivatives);
-            g.coherent_derivatives_discarded += usize::from(runs.derivatives && !runs.kept);
-        }
-        match verdict {
-            Verdict::Agree => {
-                g.agree_b += 1;
-                for e in &skipped {
-                    tally(&mut g.skipped, e, &at);
+    let paths = &paths[..paths.len().min(limit)];
+    // each program is checked on its own, as many at a time as the machine runs threads; their tallies are merged in
+    // the corpus's order, so the report (the first example of each reason among them) is the one a serial run gives
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let checked: Vec<std::sync::Mutex<Option<(Gate, Took)>>> =
+        paths.iter().map(|_| Default::default()).collect();
+    let workers = std::thread::available_parallelism().map_or(1, std::num::NonZero::get);
+    std::thread::scope(|s| {
+        for _ in 0..workers {
+            s.spawn(|| {
+                loop {
+                    let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let Some(path) = paths.get(i) else {
+                        break;
+                    };
+                    let at = path.display().to_string();
+                    if trace {
+                        eprintln!("  {name} {}: {at}", i + 1);
+                    } else if (i + 1).is_multiple_of(500) {
+                        eprintln!("  {name}: {} programs", i + 1);
+                    }
+                    let (mut g, mut took) = (Gate::default(), Took::default());
+                    let started = Instant::now();
+                    check(&mut g, path, &at, &mut took);
+                    // what a program left uncompared took (its lift refused, A not built) counts as lifting
+                    took.lift += started.elapsed().saturating_sub(took.total());
+                    *checked[i].lock().unwrap() = Some((g, took));
                 }
-            }
-            Verdict::AFails(e) => {
-                tally(&mut g.a_fails, &e, &at);
-                continue;
-            }
-            Verdict::Differs(d) => g.differ.push(format!("{at} (B)\n  {d}")),
+            });
         }
-        let pp = match passed(p).and_then(|p| ProgramShader::from_ir(p).map_err(|e| e.to_string())) {
-            Ok(pp) => pp,
-            Err(e) => {
-                tally(&mut g.unrun, &format!("P: {e}"), &at);
-                continue;
-            }
-        };
-        match compare(&a, &pp, CASES, false).0 {
-            Verdict::Agree => g.agree_p += 1,
-            Verdict::AFails(e) => {
-                tally(&mut g.a_fails, &e, &at);
-                continue;
-            }
-            Verdict::Differs(d) => g.differ.push(format!("{at} (P)\n  {d}")),
-        }
+    });
+    let mut g = Gate::default();
+    let mut took = Vec::with_capacity(paths.len());
+    for (path, c) in paths.iter().zip(checked) {
+        let (one, t) = c.into_inner().unwrap().expect("every program is checked");
+        g.absorb(one);
+        took.push((t, path.display().to_string()));
+    }
+    if std::env::var_os("IR_GATE_TIMES").is_some() {
+        report_times(&mut took, workers);
     }
     println!(
         "{name}: {} programs, A runs {} ({} compute, {} of functions), B agrees {}, P agrees {}, {} differ, IR \
@@ -1152,34 +1309,43 @@ fn dispatch(exe: &Executable, program: &iridia::Program, c: u32) -> Result<Memor
 }
 
 /// A compute program: A, B and P dispatched on the same seeded memory must leave the same memory.
-fn compute(g: &mut Gate, old: &iridia::Program, p: iridia_ir::Program, at: &str) {
+fn compute(g: &mut Gate, old: &iridia::Program, p: iridia_ir::Program, at: &str, took: &mut Took) {
+    let mut mark = Instant::now();
     let a = match Executable::new(old) {
         Ok(a) => a,
         Err(e) => return tally(&mut g.a_fails, &format!("A not built: {e}"), at),
     };
     g.a += 1;
     g.compute += 1;
-    let columns = [("B", Ok(p.clone())), ("P", passed(p))];
-    for (column, ir) in columns {
+    took.lift += lap(&mut mark);
+    // A's memory after each vector, which B and P are both held to
+    let older: Vec<_> = (0..CASES).map(|c| dispatch(&a, old, c)).collect();
+    took.a = lap(&mut mark);
+    for column in ["B", "P"] {
+        let ir = if column == "B" {
+            Ok(p.clone())
+        } else {
+            passed(p.clone())
+        };
         let b = match ir.and_then(|p| Executable::from_ir(&p).map_err(|e| e.to_string())) {
             Ok(b) => b,
             Err(e) => return tally(&mut g.unrun, &format!("{column}: {e}"), at),
         };
         let (mut compared, mut skipped) = (0, Vec::new());
-        for c in 0..CASES {
-            let x = dispatch(&a, old, c);
-            if let Err(e) = &x {
+        for (c, x) in (0..).zip(&older) {
+            if let Err(e) = x {
                 skipped.push(e.clone());
                 continue;
             }
             let y = dispatch(&b, old, c);
-            if x != y {
+            if *x != y {
                 let d = format!("case {c}: A {x:x?}\n  but {y:x?}");
                 let d: String = d.chars().take(4000).collect();
                 return g.differ.push(format!("{at} ({column})\n  {d}"));
             }
             compared += 1;
         }
+        *if column == "B" { &mut took.b } else { &mut took.p } += lap(&mut mark);
         if !g.settle(column, compared, &skipped, at) {
             return;
         }
@@ -1291,7 +1457,15 @@ fn call(
 
 /// A program made of functions: each function of A, B and P run on the same seeded arguments and memory must give
 /// the same members and leave the same memory.
-fn functions(g: &mut Gate, old: &iridia::Program, sigs: &[FunctionSig], p: iridia_ir::Program, at: &str) {
+fn functions(
+    g: &mut Gate,
+    old: &iridia::Program,
+    sigs: &[FunctionSig],
+    p: iridia_ir::Program,
+    at: &str,
+    took: &mut Took,
+) {
+    let mut mark = Instant::now();
     let mut a = Vec::with_capacity(sigs.len());
     for sig in sigs {
         match Executable::function(old, sig.name) {
@@ -1301,28 +1475,39 @@ fn functions(g: &mut Gate, old: &iridia::Program, sigs: &[FunctionSig], p: iridi
     }
     g.a += 1;
     g.functions += 1;
-    let columns = [("B", Ok(p.clone())), ("P", passed(p))];
-    for (column, ir) in columns {
+    took.lift += lap(&mut mark);
+    // A's result of each function on each vector, which B and P are both held to
+    let older: Vec<Vec<_>> = sigs
+        .iter()
+        .zip(&a)
+        .map(|(sig, a)| (0..CASES).map(|c| call(a, old, sig, c)).collect())
+        .collect();
+    took.a = lap(&mut mark);
+    for column in ["B", "P"] {
+        let ir = if column == "B" {
+            Ok(p.clone())
+        } else {
+            passed(p.clone())
+        };
         let ir = match ir {
             Ok(ir) => ir,
             Err(e) => return tally(&mut g.unrun, &format!("{column}: {e}"), at),
         };
         // each function is compared on a vector at least, or A fails the program
         let mut skipped = Vec::new();
-        for (sig, a) in sigs.iter().zip(&a) {
+        for (sig, runs) in sigs.iter().zip(&older) {
             let b = match Executable::function_from_ir(&ir, sig.name) {
                 Ok(b) => b,
                 Err(e) => return tally(&mut g.unrun, &format!("{column} {}: {e}", sig.name), at),
             };
             let mut compared = 0;
-            for c in 0..CASES {
-                let x = call(a, old, sig, c);
-                if let Err(e) = &x {
+            for (c, x) in (0..).zip(runs) {
+                if let Err(e) = x {
                     skipped.push(format!("{}: {e}", sig.name));
                     continue;
                 }
                 let y = call(&b, old, sig, c);
-                if x != y {
+                if *x != y {
                     let d = format!("{} case {c}: A {x:x?}\n  but {y:x?}", sig.name);
                     let d: String = d.chars().take(4000).collect();
                     return g.differ.push(format!("{at} ({column})\n  {d}"));
@@ -1337,6 +1522,7 @@ fn functions(g: &mut Gate, old: &iridia::Program, sigs: &[FunctionSig], p: iridi
                 );
             }
         }
+        *if column == "B" { &mut took.b } else { &mut took.p } += lap(&mut mark);
         g.settle(column, 1, &skipped, at);
     }
 }

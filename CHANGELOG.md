@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `iridia-dxbc/tests/ir_gate.rs` checks its programs on every thread the machine runs, with the report a serial run
+  gives, and runs A once for both B and P: the Unity corpus took 57 minutes on one thread and takes about four on 32
+  (Riders Republic 418 s to 40 s). `IR_GATE_TIMES=1` prints where the time goes.
 - `iridia-dxbc`: reflection reads the minimum-precision constant types fxc writes (`min16float`, `min16int`,
   `min16uint` and the narrower ones, types 52 to 57) as their 32-bit types, as DXBC stores them; Shader Model 4
   programs that declare them lifted no more once reflection read every Shader Model 4 program. Two constant buffers of
