@@ -2671,7 +2671,11 @@ mod tests {
 
     /// The bits of a literal of `to` that Rust's `as` makes of the value of a literal of `from` with these bits (the
     /// low bits of `from`'s width are its value), as a literal of `to` holds them: its low bits, the rest zero.
-    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap, clippy::cast_sign_loss)]
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_possible_wrap,
+        clippy::cast_sign_loss
+    )]
     fn cast(bits: u64, from: Scalar, to: Scalar) -> u64 {
         let v: i128 = match from {
             Scalar::I8 => i128::from(bits as i8),

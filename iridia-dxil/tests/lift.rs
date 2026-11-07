@@ -58,7 +58,9 @@ fn every_fixture_lifts() {
         }
         if SIXTEEN_BIT_LANE_FIXTURES.contains(&name.as_str()) {
             match lift(&fixture(name)) {
-                Err(e) if e.to_string().contains("16-bit lanes of a raw or structured buffer are not lifted") => {}
+                Err(e)
+                    if e.to_string()
+                        .contains("16-bit lanes of a raw or structured buffer are not lifted") => {}
                 other => failures.push(format!(
                     "{name}: expected the refusal of 16-bit buffer lanes, got {other:?}"
                 )),
