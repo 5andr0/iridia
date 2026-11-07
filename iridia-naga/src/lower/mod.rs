@@ -5,6 +5,7 @@
 
 mod image;
 mod memory;
+mod rayquery;
 
 use alloc::{format, string::String, vec, vec::Vec};
 
@@ -176,6 +177,8 @@ struct Lower<'a> {
     /// The output structure's members, in order.
     members: Vec<OutMember>,
     result: Option<Handle<naga::Type>>,
+    /// The function's ray queries.
+    queries: Vec<rayquery::Query>,
 }
 
 impl Lower<'_> {
@@ -209,11 +212,15 @@ impl Lower<'_> {
         }
     }
     fn expr(&mut self, e: E) -> Handle<E> {
-        // a statement's result (an atomic's, a subgroup operation's) is not emitted either: its statement makes it
+        // a statement's result (an atomic's, a subgroup operation's, a ray query's step) is not emitted either: its
+        // statement makes it
         let pre = e.needs_pre_emit()
             || matches!(
                 e,
-                E::AtomicResult { .. } | E::SubgroupBallotResult | E::SubgroupOperationResult { .. }
+                E::AtomicResult { .. }
+                    | E::SubgroupBallotResult
+                    | E::SubgroupOperationResult { .. }
+                    | E::RayQueryProceedResult
             );
         if pre {
             self.flush();
@@ -1635,6 +1642,8 @@ impl Lower<'_> {
             Op::ReportHit { .. } => {
                 return Err(err("an intersection program's reported hit is not lowered yet"));
             }
+            Op::RayQueryProceed(q) => self.ray_query_proceed(q)?,
+            Op::RayQueryState(q, field) => self.ray_query_state(q, field)?,
             Op::Counter(r, op) => self.counter(r, op)?,
             Op::LoadBuffer {
                 resource,
@@ -2101,6 +2110,10 @@ impl Lower<'_> {
             Node::TraceRay { .. } | Node::CallShader { .. } => {
                 return Err(err("a traced ray or a shader call is not lowered yet"));
             }
+            Node::RayQueryInit { .. }
+            | Node::RayQueryAbort(_)
+            | Node::RayQueryCommitTriangle(_)
+            | Node::RayQueryCommitProcedural { .. } => self.ray_query_node(n)?,
             Node::If {
                 cond,
                 accept,
@@ -2263,6 +2276,7 @@ pub fn module(program: &Program, plan: &BindingPlan) -> Result<naga::Module, Err
         outputs: Outputs::Direct(Vec::new()),
         members: Vec::new(),
         result: None,
+        queries: Vec::new(),
     };
     // the result structure first, then the resources, then the arguments: the order naga's writer names them in
     let mut members = Vec::new();
@@ -2413,6 +2427,10 @@ pub fn module(program: &Program, plan: &BindingPlan) -> Result<naga::Module, Err
                 target: StorageTarget::Buffer(kind),
                 access,
             } => (l.buffer_type(r.id, *kind)?, storage(*access != Access::Read)),
+            ResourceKind::AccelerationStructure => (
+                l.ty(TypeInner::AccelerationStructure { vertex_return: false }),
+                AddressSpace::Handle,
+            ),
             other => return Err(err(format!("a {other:?} resource is not lowered yet"))),
         };
         // an array of resources is one binding array at its first register
@@ -2586,6 +2604,7 @@ pub fn module(program: &Program, plan: &BindingPlan) -> Result<naga::Module, Err
             l.store_local(local, value)?;
         }
     }
+    l.declare_queries()?;
     let outputs = program.interface.outputs.len();
     l.outputs = if direct(body) {
         Outputs::Direct(vec![None; outputs])

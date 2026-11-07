@@ -179,7 +179,7 @@ impl Lift<'_> {
     }
 
     /// The `vec3<f32>` of three float operands from `first`.
-    fn float3(&mut self, args: &[ValueId], first: usize) -> Result<iridia_ir::ValueId> {
+    pub(super) fn float3(&mut self, args: &[ValueId], first: usize) -> Result<iridia_ir::ValueId> {
         let mut lanes = Vec::with_capacity(3);
         for k in first..first.saturating_add(3) {
             lanes.push(self.float(self.arg(args, k)?)?);

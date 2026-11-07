@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+- `iridia-ir`: ray queries (DXR 1.1's inline ray tracing, Direct3D's `RayQuery<flags>`). A function declares its
+  queries (`Function::queries`, a `QueryDecl` of the template's flags each, `QueryId` their index: an object of the
+  function, not a variable, which no pass promotes); `Node::RayQueryInit` (the acceleration structure and a `RayDesc`
+  of `TraceRayInline`'s operands), `Node::RayQueryAbort`, `Node::RayQueryCommitTriangle`,
+  `Node::RayQueryCommitProcedural`, `Op::RayQueryProceed` and `Op::RayQueryState` (a `QueryField`: the committed
+  status, the candidate's type and opacity, the ray's flags, origin, direction and least distance, and a `HitField` of
+  the candidate or the committed hit). A search's flags are the ray's and the declared ones together. The text form is
+  `query q0 flags 0x10` declarations, `rayquery init q0 r0 flags %f ...`, `rayquery abort q0`, `rayquery commit q0`,
+  `rayquery commit q0 t %t`, `rayquery.proceed q0` and `rayquery.state q0 committed.status`; the validator holds each
+  operation to a query the function declares, a field to the lanes, rows and columns it has and the type it gives, and
+  a search to an acceleration structure. Breaking: `Function` has the field `queries`, and `Node`, `Op` and the
+  re-exported names (`QueryDecl`, `RayDesc`, `QueryId`, `QueryField`, `HitField`) are new or have new variants.
+  `iridia_ir::target::Capability::RayQuery` is the shared requirement for queries and acceleration structures;
+  `iridia-wgsl` refuses them by name, including when the profile allows that capability.
+- `iridia-dxil::ir` lifts ray queries (dx.op 178 to 215): every `ray_query_*` fixture lifts on the IR, and
+  `ray_query_object.hlsl` (new: object-space rays, matrices, candidate opacity, the flags a search runs with), which
+  the naga lift refuses, too. `iridia-exec` runs them on the IR, and `exec_warp_rq.rs` compares its every committed hit
+  and candidate with WARP's on the IR lift (768 rays of each of three programs, none differ). `iridia-exec-ir` refuses
+  them by name. Of the slim set's 28 DXIL programs that stopped at `allocateRayQuery`, 24 lift on the IR (the 22 the
+  naga lift alone took among them); the other 4 the naga lift refuses too. `iridia-naga` lowers them into the naga
+  module, which naga's validator accepts with the ray query capability (`Profile::NAGA` allows it;
+  `Profile::BROWSER` refuses the program before lowering): a ray in object space is the hit's world-to-object
+  transform of the ray, and whether a candidate procedural primitive is opaque, which naga's intersection does not
+  say, is refused by name. WGSL has no ray queries, so the WGSL output refuses them by name.
+- `iridia-dxil::ir` refuses an operation that yields a value called as a function that returns none (a damaged
+  callee's type) by name, "an instruction that yields a value but defines none", as the naga lift does: it lifted the
+  program and dropped the value.
+- `iridia_dxil::ir::LIFTER_VERSION` is 3 (was 2), invalidating cached lifts for the new ray-query representation.
+  The fixture table includes seven newly lifted ray-query fixtures and the new object-space query fixture; existing
+  successful fixture hashes are unchanged.
 - `iridia-exec`: raster helper invocations evaluate for derivatives and private variables but perform no external
   writes, image or buffer atomics, or append/consume counter operations. A fullscreen triangle writes each covered
   pixel once; helper lanes previously wrote UAVs too.

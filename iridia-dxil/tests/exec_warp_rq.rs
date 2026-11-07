@@ -1,9 +1,10 @@
 #![allow(clippy::unwrap_used)]
-//! The executor's ray queries against Microsoft's WARP rasterizer (Direct3D 12, DXR 1.1 inline ray tracing), the
-//! oracle that is not ours: the same scene (triangles, instances with transforms, masks and flags) and the same rays
-//! go through `ray_query_grid.hlsl` on WARP and on the executor, and every committed hit is compared: the integer
-//! fields (status, instance index and id, hit-group contribution, geometry, primitive, facing) exactly, the distance
-//! and the barycentrics to a relative 1e-4 (the arithmetic of a hardware or software traversal is its own).
+//! The executor's ray queries, lifted onto the IR ([`iridia_dxil::ir`]), against Microsoft's WARP rasterizer
+//! (Direct3D 12, DXR 1.1 inline ray tracing), the oracle that is not ours: the same scene (triangles, instances with
+//! transforms, masks and flags) and the same rays go through a fixture on WARP and on the executor, and what each ray
+//! leaves is compared: the integer fields (status, instance index and id, hit-group contribution, geometry, primitive,
+//! facing, flags) exactly, the floats (distance, barycentrics, the ray in object space, the instance's matrices) to a
+//! relative 1e-4 (the arithmetic of a hardware or software traversal is its own).
 //!
 //! Needs the WARP oracle program with the `d3d12rt` case form (the configured `Tool::Warp`) and the scratch folder. The
 //! scenes and rays are made from fixed seeds.
@@ -14,7 +15,6 @@ mod inputs;
 
 use inputs::{Tool, own_scratch, program};
 use iridia::D3dClass;
-use iridia_dxil::lift;
 use iridia_exec::{
     Backend, Element, Executable, Geometry, ImageSample, Instance, InstanceFlags, Resources, Scene,
 };
@@ -151,7 +151,7 @@ fn scene(seed: u64, with_instance_flags: bool, procedural: bool) -> Scene {
 /// 64 rays: origin, direction, flags, mask. With `outside`, every origin is far from the scene (further than any
 /// instance of it reaches), so that no ray starts inside a procedural primitive's box: WARP offers no candidate for a box
 /// the ray starts in (its entry before the ray's t min), which DXR does not say, so the gate leaves such rays out.
-fn rays(seed: u64, outside: bool) -> Vec<([f32; 3], [f32; 3], u32, u32)> {
+fn rays(seed: u64, outside: bool) -> Vec<RayDesc> {
     let mut r = Lcg(seed);
     let flag_sets = [
         0u32,
@@ -190,25 +190,164 @@ fn rays(seed: u64, outside: bool) -> Vec<([f32; 3], [f32; 3], u32, u32)> {
         .collect()
 }
 
+/// Whether two floats' bits agree to a relative 1e-4 (of 1e-2 at least).
+fn close(x: u32, y: u32) -> bool {
+    let (x, y) = (f32::from_bits(x), f32::from_bits(y));
+    (x - y).abs() <= 1e-4 * x.abs().max(y.abs()).max(1e-2)
+}
+
 #[test]
 fn ray_queries_agree_with_warp() {
-    gate("ray_query_grid", false);
+    hits("ray_query_grid", false);
 }
 
 #[test]
 fn procedural_primitives_agree_with_warp() {
-    gate("ray_query_procedural", true);
+    hits("ray_query_procedural", true);
 }
 
-fn gate(fixture_name: &str, procedural: bool) {
-    let Some(warp) = program(Tool::Warp) else {
+/// `ray_query_grid.hlsl` and `ray_query_procedural.hlsl`: the committed hit of every ray, ten words.
+fn hits(fixture_name: &str, procedural: bool) {
+    let Some(run) = gate(fixture_name, procedural, 10) else {
         return;
     };
+    let (mut hits, mut misses, mut mismatches) = (0, 0, Vec::new());
+    for (name, rays, a, b) in run.rays() {
+        let i = rays.0;
+        let (o, d, f, m) = rays.1;
+        if a[0] != b[0] {
+            mismatches.push(format!(
+                "{name} ray {i} (origin {o:?}, direction {d:?}, flags {f:#x}, mask {m:#x}): status executor {}, WARP {}",
+                a[0], b[0]
+            ));
+            continue;
+        }
+        if a[0] == 0 {
+            misses += 1;
+            continue;
+        }
+        hits += 1;
+        // a triangle also has barycentrics and a facing; a procedural hit has neither (the words are 0)
+        let same = [2, 3, 4, 5, 6, 9].iter().all(|&k| a[k] == b[k])
+            && close(a[1], b[1])
+            && (a[0] != 1 || (close(a[7], b[7]) && close(a[8], b[8])));
+        if !same {
+            mismatches.push(format!(
+                "{name} ray {i} (origin {o:?}, direction {d:?}, flags {f:#x}, mask {m:#x}):\n    executor {a:08x?}\n    WARP     {b:08x?}"
+            ));
+        }
+    }
+    println!(
+        "{fixture_name}: {} rays: {hits} hits and {misses} misses agree with WARP, {} differ",
+        12 * 64,
+        mismatches.len()
+    );
+    for m in &mismatches {
+        println!("MISMATCH {m}");
+    }
+    assert!(hits > 0 && mismatches.is_empty());
+}
+
+/// `ray_query_object.hlsl`: what a query reports of the ray it was traced with (its flags joined with the query's
+/// declared `RAY_FLAG_SKIP_CLOSEST_HIT_SHADER`, origin, direction, t min), of the committed hit's instance (the ray in
+/// its object space, its matrices), and of every procedural candidate a query of `RAY_FLAG_SKIP_TRIANGLES` that commits
+/// nothing is offered (whether it is non-opaque, the ray in its instance's object space).
+#[test]
+fn object_space_rays_and_candidate_opacity_agree_with_warp() {
+    let Some(run) = gate("ray_query_object", true, 132) else {
+        return;
+    };
+    let (mut hits, mut candidates, mut non_opaque, mut mismatches) = (0, 0, 0, Vec::new());
+    for (name, rays, a, b) in run.rays() {
+        let i = rays.0;
+        let (o, d, f, m) = rays.1;
+        let mut differ = Vec::new();
+        if a[0] != b[0] || a[1] != b[1] {
+            differ.push("status or flags");
+        }
+        if !(2..9).all(|k| close(a[k], b[k])) {
+            differ.push("world ray");
+        }
+        if a[0] == b[0] && a[0] != 0 {
+            hits += 1;
+            if !(9..40).all(|k| close(a[k], b[k])) || a[40..43] != b[40..43] {
+                differ.push("committed hit, its object ray or matrices");
+            }
+        }
+        for slot in (48..132).step_by(7) {
+            if a[slot] != b[slot] {
+                differ.push("candidate offered or opacity");
+            } else if a[slot] != 0 {
+                candidates += 1;
+                non_opaque += usize::from(a[slot] == 2);
+                if !(slot + 1..slot + 7).all(|k| close(a[k], b[k])) {
+                    differ.push("candidate object ray");
+                }
+            }
+        }
+        if !differ.is_empty() {
+            mismatches.push(format!(
+                "{name} ray {i} (origin {o:?}, direction {d:?}, flags {f:#x}, mask {m:#x}): {}:\n    executor {a:08x?}\n    WARP     {b:08x?}",
+                differ.join(", ")
+            ));
+        }
+    }
+    println!(
+        "ray_query_object: {} rays, {hits} hits and {candidates} procedural candidates ({non_opaque} non-opaque) \
+         agree with WARP, {} differ",
+        12 * 64,
+        mismatches.len()
+    );
+    for m in &mismatches {
+        println!("MISMATCH {m}");
+    }
+    assert!(hits > 0 && candidates > non_opaque && non_opaque > 0 && mismatches.is_empty());
+}
+
+/// A ray's origin, direction, flags and mask.
+type RayDesc = ([f32; 3], [f32; 3], u32, u32);
+
+/// A ray of a case: its number, and the ray.
+type Ray = (usize, RayDesc);
+
+/// One fixture's cases run on the executor and on WARP: `words` words a ray of each.
+struct Run {
+    words: usize,
+    ours: BTreeMap<String, Vec<u32>>,
+    theirs: BTreeMap<String, Vec<u32>>,
+    cases: Vec<(String, Vec<RayDesc>)>,
+}
+
+impl Run {
+    /// Each ray of each case: the case, the ray, and the words the executor and WARP left for it.
+    fn rays(&self) -> Vec<(&str, Ray, &[u32], &[u32])> {
+        let mut out = Vec::new();
+        for (name, rays) in &self.cases {
+            let (mine, theirs) = (&self.ours[name], &self.theirs[name]);
+            for (i, ray) in rays.iter().enumerate() {
+                let at = self.words * i..self.words * (i + 1);
+                out.push((name.as_str(), (i, *ray), &mine[at.clone()], &theirs[at]));
+            }
+        }
+        out
+    }
+}
+
+/// The fixture lifted onto the IR and prepared as the executor takes it.
+fn on_ir(bytes: &[u8]) -> iridia_ir::Program {
+    let mut program = iridia_dxil::ir::lift(bytes).unwrap();
+    iridia_passes::prepare(&mut program).unwrap();
+    program
+}
+
+/// Twelve scenes of 64 rays each through `fixture_name` on the executor and on WARP, or `None` without WARP.
+fn gate(fixture_name: &str, procedural: bool, words: usize) -> Option<Run> {
+    let warp = program(Tool::Warp)?;
     let scratch = own_scratch("warp");
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("tests/fixtures/{fixture_name}.dxil"));
     let bytes = std::fs::read(&fixture).unwrap();
-    let program = lift(&bytes).unwrap();
-    let exe = Executable::new(&program).unwrap();
+    let program = on_ir(&bytes);
+    let exe = Executable::from_ir(&program).unwrap();
     let find = |class: Option<D3dClass>| {
         program
             .interface
@@ -249,8 +388,9 @@ fn gate(fixture_name: &str, procedural: bool) {
         }
 
         text.push_str(&format!(
-            "case {name}\napi d3d12rt\ncs {}\nresults 640\ngroups 1 1 1\ncb 0 {}\n",
+            "case {name}\napi d3d12rt\ncs {}\nresults {}\ngroups 1 1 1\ncb 0 {}\n",
             fixture.display(),
+            64 * words,
             rows.len()
         ));
         for row in &rows {
@@ -324,7 +464,7 @@ fn gate(fixture_name: &str, procedural: bool) {
         resources.constants.insert(constants, rows);
         resources.scenes.insert(structure, scene);
         let bound = exe.bind_resources(&resources).unwrap();
-        let mut buffers = BTreeMap::from([(results, vec![0u32; 640])]);
+        let mut buffers = BTreeMap::from([(results, vec![0u32; 64 * words])]);
         exe.dispatch(&bound, &mut NoBackend, &mut buffers, [1, 1, 1], 32)
             .unwrap_or_else(|e| panic!("{name}: {e}"));
         ours.insert(name.clone(), buffers.remove(&results).unwrap());
@@ -351,80 +491,48 @@ fn gate(fixture_name: &str, procedural: bool) {
             let v: serde_json::Value = serde_json::from_str(line).unwrap();
             let name = v["case"].as_str().unwrap().to_owned();
             assert!(v["error"].is_null(), "{name}: WARP error {}", v["error"]);
-            let mut words: Vec<u32> = v["words"]
+            let mut answer: Vec<u32> = v["words"]
                 .as_array()
                 .unwrap()
                 .iter()
                 .map(|w| u32::from_str_radix(w.as_str().unwrap(), 16).unwrap())
                 .collect();
-            assert_eq!(words.len(), 640, "{name}: WARP word count");
-            for hit in words.as_chunks_mut::<10>().0 {
-                if hit[0] == 0 {
+            assert_eq!(answer.len(), 64 * words, "{name}: WARP word count");
+            for hit in answer.chunks_exact_mut(words) {
+                if words == 10 && hit[0] == 0 {
                     hit[1..].fill(0);
                 }
             }
-            assert!(answers.insert(name.clone(), words).is_none(), "duplicate {name}");
+            assert!(answers.insert(name.clone(), answer).is_none(), "duplicate {name}");
         }
         assert!(answers.keys().eq(ours.keys()), "WARP case names differ");
         answers
     };
-    let first = run_warp(1);
+    let mut theirs = run_warp(1);
     let second = run_warp(2);
-    let third = (first != second).then(|| run_warp(3));
-    let (mut hits, mut misses, mut unstable, mut mismatches) = (0, 0, 0, Vec::new());
-    for (name, theirs) in &first {
-        let mine = &ours[name];
-        let rays = &cases.iter().find(|c| &c.0 == name).unwrap().1;
-        for (i, (o, d, f, m)) in rays.iter().enumerate() {
-            let range = 10 * i..10 * i + 10;
-            let a = &mine[range.clone()];
-            let mut b = &theirs[range.clone()];
+    let third = (theirs != second).then(|| run_warp(3));
+    let mut unstable = 0;
+    for (name, answer) in &mut theirs {
+        for (ray, hit) in answer.chunks_exact_mut(words).enumerate() {
+            let range = ray * words..(ray + 1) * words;
             let repeat = &second[name][range.clone()];
-            if b != repeat {
+            if hit != repeat {
                 unstable += 1;
                 let last = &third.as_ref().unwrap()[name][range];
-                println!("WARP SELF-DISAGREEMENT {name} ray {i}: {b:08x?}, {repeat:08x?}, {last:08x?}");
-                if last == b || last == repeat {
-                    b = last;
-                } else {
-                    mismatches.push(format!("{name} ray {i}: no two WARP runs agree"));
-                    continue;
-                }
-            }
-            if a[0] != b[0] {
-                mismatches.push(format!(
-                    "{name} ray {i} (origin {o:?}, direction {d:?}, flags {f:#x}, mask {m:#x}): status executor {}, WARP {}",
-                    a[0], b[0]
-                ));
-                continue;
-            }
-            if a[0] == 0 {
-                misses += 1;
-                continue;
-            }
-            hits += 1;
-            let close = |x: u32, y: u32| {
-                let (x, y) = (f32::from_bits(x), f32::from_bits(y));
-                (x - y).abs() <= 1e-4 * x.abs().max(y.abs()).max(1e-2)
-            };
-            // a triangle also has barycentrics and a facing; a procedural hit has neither (the words are 0)
-            let same = [2, 3, 4, 5, 6, 9].iter().all(|&k| a[k] == b[k])
-                && close(a[1], b[1])
-                && (a[0] != 1 || (close(a[7], b[7]) && close(a[8], b[8])));
-            if !same {
-                mismatches.push(format!(
-                    "{name} ray {i} (origin {o:?}, direction {d:?}, flags {f:#x}, mask {m:#x}):\n    executor {a:08x?}\n    WARP     {b:08x?}"
-                ));
+                println!("WARP SELF-DISAGREEMENT {name} ray {ray}: {hit:08x?}, {repeat:08x?}, {last:08x?}");
+                assert!(
+                    last == hit || last == repeat,
+                    "{name} ray {ray}: no two WARP runs agree"
+                );
+                hit.copy_from_slice(last);
             }
         }
     }
-    println!(
-        "{fixture_name}: {} rays: {hits} hits and {misses} misses agree with WARP, {} differ; {unstable} WARP self-disagreements",
-        12 * 64,
-        mismatches.len()
-    );
-    for m in &mismatches {
-        println!("MISMATCH {m}");
-    }
-    assert!(hits > 0 && mismatches.is_empty());
+    println!("{fixture_name}: {unstable} WARP self-disagreements");
+    Some(Run {
+        words,
+        ours,
+        theirs,
+        cases,
+    })
 }

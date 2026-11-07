@@ -603,3 +603,74 @@ fn main {
     let wgsl = iridia_naga::wgsl(&plain, &iridia_naga::Profile::BROWSER.with(subgroups)).unwrap();
     assert!(!wgsl.contains("enable"), "{wgsl}");
 }
+
+/// A pixel program that traces a ray query of the acceleration structure at `t0` and writes `reads`, the text's
+/// lines that read the query's state into `%7` and `%8`.
+fn ray_query_program(reads: &str) -> Program {
+    let scene = Resource {
+        id: ResourceId(0),
+        kind: ResourceKind::AccelerationStructure,
+        count: 1,
+        provenance: ResourceProvenance {
+            name: "scene".into(),
+            d3d: Some(D3dBinding {
+                class: D3dClass::ShaderResource,
+                register: 0,
+                space: 0,
+            }),
+            ..ResourceProvenance::default()
+        },
+    };
+    let text = format!(
+        "iridia-ir 1
+fn main {{
+  query q0 flags 0x0
+  %0: u32 = u32(0)
+  %1: u32 = u32(255)
+  %2: vec3<f32> = vec3<f32>(0x0, 0x0, 0x0)
+  %3: f32 = f32(0x0)
+  %4: vec3<f32> = vec3<f32>(0x0, 0x0, 0x3f800000)
+  %5: f32 = f32(0x447a0000)
+  rayquery init q0 r0 flags %0 mask %1 origin %2 tmin %3 direction %4 tmax %5
+  %6: bool = rayquery.proceed q0
+{reads}  output 0.x = %7
+  output 0.y = %8
+  return
+}}
+"
+    );
+    program(&text, &[], &[(ScalarType::Float, 2)], vec![scene])
+}
+
+#[test]
+fn a_ray_query_lowers_to_a_module_naga_validates_and_wgsl_refuses_by_name() {
+    // the ray in object space is the hit's world-to-object transform of the kept ray, which naga's intersection has
+    let p = ray_query_program(
+        "  %7: f32 = rayquery.state q0 candidate.objectorigin.x
+  %8: f32 = rayquery.state q0 committed.objectdirection.z
+",
+    );
+    let plan = iridia_naga::BindingPlan::d3d(&p.interface).unwrap();
+    let module = iridia_naga::module(&p, &plan).unwrap();
+    iridia_naga::validate(&module, &iridia_naga::Profile::NAGA).unwrap();
+    // naga's validator holds the module to the ray query capability, which browser WGSL lacks: the preflight says so
+    assert!(iridia_naga::validate(&module, &iridia_naga::Profile::BROWSER).is_err());
+    let e = iridia_naga::wgsl(&p, &iridia_naga::Profile::BROWSER).unwrap_err();
+    assert!(e.0.contains("ray query q0"), "{e}");
+    let e = iridia_naga::wgsl(&p, &iridia_naga::Profile::NAGA).unwrap_err();
+    assert!(e.0.starts_with("WGSL has no ray queries"), "{e}");
+
+    // whether a candidate procedural primitive is opaque naga's intersection does not say
+    let p = ray_query_program(
+        "  %7: f32 = rayquery.state q0 committed.t
+  %9: bool = rayquery.state q0 candidate.nonopaque
+  %8: f32 = select %9, %7, %3
+",
+    );
+    let plan = iridia_naga::BindingPlan::d3d(&p.interface).unwrap();
+    let e = iridia_naga::module(&p, &plan).unwrap_err();
+    assert!(
+        e.0.contains("candidate procedural primitive is opaque is not lowered"),
+        "{e}"
+    );
+}

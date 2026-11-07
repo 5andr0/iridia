@@ -91,6 +91,13 @@ fn write(
     info: &naga::valid::ModuleInfo,
     profile: &Profile,
 ) -> Result<String, Error> {
+    // WGSL has no ray queries (naga's writer has none either: it meets one as a statement it cannot reach), so the
+    // validated module is as far as a program with one goes
+    if !program.entry.queries.is_empty() {
+        return Err(Error(
+            "WGSL has no ray queries: the program's are in its naga module, which no WGSL writes".into(),
+        ));
+    }
     let text = naga::back::wgsl::write_string(module, info, naga::back::wgsl::WriterFlags::empty())
         .map_err(|e| Error(format!("naga's WGSL writer: {e}")))?;
     let subgroups = profile.directives == Directives::Standard

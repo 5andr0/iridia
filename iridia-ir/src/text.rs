@@ -6,9 +6,9 @@ use alloc::string::String;
 use core::fmt::Write;
 
 use crate::{
-    Address, Barrier, Binary, Body, Builtin, End, Function, GatherOffset, Level, Memory, Node, Op,
-    OutOfBounds, Precision, Query, Region, Res, Scalar, Scope, Space, Target, Terminator, Ternary, Type,
-    Unary, ValueId, Var, Wave,
+    Address, Barrier, Binary, Body, Builtin, End, Function, GatherOffset, HitField, Level, Memory, Node, Op,
+    OutOfBounds, Precision, Query, QueryField, QueryId, Region, Res, Scalar, Scope, Space, Target,
+    Terminator, Ternary, Type, Unary, ValueId, Var, Wave,
 };
 
 mod parse;
@@ -168,6 +168,79 @@ fn offsets(o: &[i8; 3]) -> String {
     alloc::format!("({},{},{})", o[0], o[1], o[2])
 }
 
+/// A ray query by its number: `q0`.
+fn query(q: QueryId) -> String {
+    alloc::format!("q{}", q.0)
+}
+
+/// What a ray query state read reads: `ray.origin.x`, `candidate.type`, `committed.objecttoworld.r0c3`.
+fn query_field(field: QueryField) -> String {
+    let hit = |h: HitField| match h {
+        HitField::T => String::from("t"),
+        HitField::InstanceIndex => "instance".into(),
+        HitField::InstanceId => "instanceid".into(),
+        HitField::GeometryIndex => "geometry".into(),
+        HitField::PrimitiveIndex => "primitive".into(),
+        HitField::ContributionToHitGroup => "contribution".into(),
+        HitField::FrontFace => "frontface".into(),
+        HitField::Barycentrics(l) => alloc::format!("barycentrics.{}", lane(l)),
+        HitField::ObjectToWorld { row, column } => alloc::format!("objecttoworld.r{row}c{column}"),
+        HitField::WorldToObject { row, column } => alloc::format!("worldtoobject.r{row}c{column}"),
+        HitField::ObjectRayOrigin(l) => alloc::format!("objectorigin.{}", lane(l)),
+        HitField::ObjectRayDirection(l) => alloc::format!("objectdirection.{}", lane(l)),
+    };
+    match field {
+        QueryField::RayFlags => "ray.flags".into(),
+        QueryField::RayTMin => "ray.tmin".into(),
+        QueryField::WorldRayOrigin(l) => alloc::format!("ray.origin.{}", lane(l)),
+        QueryField::WorldRayDirection(l) => alloc::format!("ray.direction.{}", lane(l)),
+        QueryField::CommittedStatus => "committed.status".into(),
+        QueryField::CandidateType => "candidate.type".into(),
+        QueryField::CandidateNonOpaque => "candidate.nonopaque".into(),
+        QueryField::Candidate(h) => alloc::format!("candidate.{}", hit(h)),
+        QueryField::Committed(h) => alloc::format!("committed.{}", hit(h)),
+    }
+}
+
+/// Every ray query field whose lanes, row and column are in range, for reading [`query_field`]'s text back.
+fn query_fields() -> impl Iterator<Item = QueryField> {
+    let lanes3 = || 0u8..3;
+    let hits = || {
+        [
+            HitField::T,
+            HitField::InstanceIndex,
+            HitField::InstanceId,
+            HitField::GeometryIndex,
+            HitField::PrimitiveIndex,
+            HitField::ContributionToHitGroup,
+            HitField::FrontFace,
+        ]
+        .into_iter()
+        .chain((0u8..2).map(HitField::Barycentrics))
+        .chain((0u8..12).flat_map(|k| {
+            let (row, column) = (k / 4, k % 4);
+            [
+                HitField::ObjectToWorld { row, column },
+                HitField::WorldToObject { row, column },
+            ]
+        }))
+        .chain(lanes3().map(HitField::ObjectRayOrigin))
+        .chain(lanes3().map(HitField::ObjectRayDirection))
+    };
+    [
+        QueryField::RayFlags,
+        QueryField::RayTMin,
+        QueryField::CommittedStatus,
+        QueryField::CandidateType,
+        QueryField::CandidateNonOpaque,
+    ]
+    .into_iter()
+    .chain(lanes3().map(QueryField::WorldRayOrigin))
+    .chain(lanes3().map(QueryField::WorldRayDirection))
+    .chain(hits().map(QueryField::Candidate))
+    .chain(hits().map(QueryField::Committed))
+}
+
 fn var_name(f: &Function, v: crate::VarId) -> &str {
     f.vars.get(v.0 as usize).map_or("?", |d| d.name.as_str())
 }
@@ -264,6 +337,8 @@ fn op(out: &mut String, f: &Function, ty: Type, o: &Op) {
             kind.0,
             var_name(f, *attributes)
         ),
+        Op::RayQueryProceed(q) => write!(out, "rayquery.proceed {}", query(*q)),
+        Op::RayQueryState(q, field) => write!(out, "rayquery.state {} {}", query(*q), query_field(*field)),
         Op::LoadVar(v) => match f.vars.get(v.0 as usize) {
             Some(var) => write!(out, "load {}", var.name),
             None => write!(out, "load ?{}", v.0),
@@ -597,6 +672,33 @@ impl Printer<'_> {
                     ray.t_max.0
                 );
             }
+            Node::RayQueryInit { query: q, scene, ray } => {
+                self.indent();
+                let _ = writeln!(
+                    self.out,
+                    "rayquery init {} {} flags %{} mask %{} origin %{} tmin %{} direction %{} tmax %{}",
+                    query(*q),
+                    res(scene),
+                    ray.flags.0,
+                    ray.mask.0,
+                    ray.origin.0,
+                    ray.t_min.0,
+                    ray.direction.0,
+                    ray.t_max.0
+                );
+            }
+            Node::RayQueryAbort(q) => {
+                self.indent();
+                let _ = writeln!(self.out, "rayquery abort {}", query(*q));
+            }
+            Node::RayQueryCommitTriangle(q) => {
+                self.indent();
+                let _ = writeln!(self.out, "rayquery commit {}", query(*q));
+            }
+            Node::RayQueryCommitProcedural { query: q, t } => {
+                self.indent();
+                let _ = writeln!(self.out, "rayquery commit {} t %{}", query(*q), t.0);
+            }
             Node::CallShader { index, parameter } => {
                 self.indent();
                 let name = self
@@ -687,6 +789,9 @@ pub fn print(f: &Function) -> String {
         p.out.push_str("  var ");
         declaration(&mut p.out, var);
         p.out.push('\n');
+    }
+    for (n, q) in f.queries.iter().enumerate() {
+        let _ = writeln!(p.out, "  query q{n} flags 0x{:x}", q.flags);
     }
     match &f.body {
         Body::Regions(r) => p.region(r),

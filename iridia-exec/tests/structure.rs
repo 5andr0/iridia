@@ -160,6 +160,7 @@ fn program(cfg: &Cfg, seed: u32) -> Program {
     vars.extend((0..n).map(|i| u32_var(format!("v{i}"))));
     let mut toy = Toy {
         f: Function {
+            queries: vec![],
             name: "main".into(),
             values: Vec::new(),
             vars,

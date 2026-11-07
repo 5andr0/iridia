@@ -237,6 +237,7 @@ fn op_name(op: &Op) -> &'static str {
         Op::Atomic { .. } => "an atomic",
         Op::Counter(..) => "a buffer counter",
         Op::ReportHit { .. } => "a reported hit",
+        Op::RayQueryProceed(_) | Op::RayQueryState(..) => "a ray query",
         Op::Wave(_) => "a wave operation",
         _ => "the operation",
     }
@@ -1461,6 +1462,8 @@ impl Machine<'_, '_> {
             | Op::Atomic { .. }
             | Op::Counter(..)
             | Op::ReportHit { .. }
+            | Op::RayQueryProceed(_)
+            | Op::RayQueryState(..)
             | Op::Wave(_) => {
                 return Err(format!("{} is not run here: iridia-exec runs it", op_name(op)).into());
             }
@@ -1616,6 +1619,12 @@ impl Machine<'_, '_> {
             }
             Node::TraceRay { .. } | Node::CallShader { .. } => {
                 return Err("a traced ray or a shader call is not run here: iridia-exec's ray tracing pipeline runs it".into());
+            }
+            Node::RayQueryInit { .. }
+            | Node::RayQueryAbort(_)
+            | Node::RayQueryCommitTriangle(_)
+            | Node::RayQueryCommitProcedural { .. } => {
+                return Err("a ray query is not run here: iridia-exec runs it".into());
             }
             Node::Demote => self.demoted = true,
             Node::StoreOutput(..) if self.demoted => {}

@@ -23,6 +23,7 @@ impl Graph {
                 name: "main".into(),
                 values: Vec::new(),
                 vars: Vec::new(),
+                queries: Vec::new(),
                 body: Body::Cfg(Vec::new()),
             },
         }

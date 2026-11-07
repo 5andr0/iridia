@@ -789,6 +789,10 @@ impl Cx<'_> {
                     }
                 }
             },
+            ir::Op::RayQueryState(q, field) => Op::RqState {
+                q: q.0,
+                field: *field,
+            },
             op => return Err(format!("{} is not compiled yet", op_name(op))),
         };
         self.ops.push((v.0, op));
@@ -1111,6 +1115,7 @@ impl Cx<'_> {
                     },
                 )
             }
+            ir::Op::RayQueryProceed(q) => self.statement(out, St::RqProceed { q: q.0, result: v.0 }),
             ir::Op::Counter(r, op) => {
                 let tex = self.res(r)?;
                 self.statement(
@@ -1228,6 +1233,47 @@ impl Cx<'_> {
         }
     }
 
+    /// Start ray query `q` on `scene`: the search's flags are the ray's joined with those the query is declared with.
+    fn ray_query_init(
+        &mut self,
+        out: &mut Vec<St>,
+        q: ir::QueryId,
+        scene: &ir::Res,
+        ray: &ir::RayDesc,
+    ) -> Result<(), String> {
+        if scene.index.is_some() {
+            return Err("a ray query of an element of an array of acceleration structures".into());
+        }
+        let declared = self
+            .f
+            .queries
+            .get(q.0 as usize)
+            .ok_or_else(|| format!("ray query q{} is not declared", q.0))?
+            .flags;
+        let flags = if declared == 0 {
+            ray.flags.0
+        } else {
+            let declared = self.literal(Type::U32, [declared, 0, 0, 0])?;
+            self.compute(
+                Type::U32,
+                ir::Op::Binary(ir::Binary::Or, ray.flags, ValueId(declared)),
+            )?
+        };
+        self.statement(
+            out,
+            St::RqInit {
+                q: q.0,
+                scene: scene.id,
+                flags,
+                mask: ray.mask.0,
+                tmin: ray.t_min.0,
+                tmax: ray.t_max.0,
+                origin: ray.origin.0,
+                direction: ray.direction.0,
+            },
+        )
+    }
+
     fn node(&mut self, n: &Node, out: &mut Vec<St>) -> Result<(), String> {
         match n {
             Node::Value(v) => self.effect(*v, out),
@@ -1283,6 +1329,12 @@ impl Cx<'_> {
                         parameter,
                     },
                 )
+            }
+            Node::RayQueryInit { query, scene, ray } => self.ray_query_init(out, *query, scene, ray),
+            Node::RayQueryAbort(q) => self.statement(out, St::RqTerminate { q: q.0 }),
+            Node::RayQueryCommitTriangle(q) => self.statement(out, St::RqConfirm { q: q.0 }),
+            Node::RayQueryCommitProcedural { query, t } => {
+                self.statement(out, St::RqGenerate { q: query.0, t: t.0 })
             }
             Node::SetMeshCounts { .. } | Node::StoreVertex { .. } | Node::StoreIndices { .. } => {
                 self.meshlet(out, n)

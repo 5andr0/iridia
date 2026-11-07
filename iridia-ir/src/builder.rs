@@ -4,8 +4,8 @@
 use alloc::{format, string::String, vec, vec::Vec};
 
 use crate::{
-    Address, Barrier, Body, Case, End, Function, LabelId, Node, Op, Origin, OutOfBounds, Precision, Region,
-    Res, Space, Type, ValueDef, ValueId, Var, VarId, derived_type,
+    Address, Barrier, Body, Case, End, Function, LabelId, Node, Op, Origin, OutOfBounds, Precision,
+    QueryDecl, QueryId, Region, Res, Space, Type, ValueDef, ValueId, Var, VarId, derived_type,
 };
 
 /// An open construct.
@@ -54,6 +54,7 @@ impl Builder {
                 name: name.into(),
                 values: Vec::new(),
                 vars: Vec::new(),
+                queries: Vec::new(),
                 body: Body::Regions(Region::default()),
             },
             stack: Vec::new(),
@@ -93,6 +94,13 @@ impl Builder {
     pub fn declare(&mut self, var: Var) -> VarId {
         let id = VarId(u32::try_from(self.f.vars.len()).unwrap_or(u32::MAX));
         self.f.vars.push(var);
+        id
+    }
+
+    /// A new ray query, declared with `flags` (Direct3D's `RayQuery<flags>`).
+    pub fn query(&mut self, flags: u32) -> QueryId {
+        let id = QueryId(u32::try_from(self.f.queries.len()).unwrap_or(u32::MAX));
+        self.f.queries.push(QueryDecl { flags });
         id
     }
 

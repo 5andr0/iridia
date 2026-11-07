@@ -54,6 +54,17 @@ fn every_fixture_lifts() {
     names.sort();
     let mut failures = Vec::new();
     for name in &names {
+        if name == "ray_query_object.dxil" {
+            let bytes = fixture(name);
+            assert_eq!(
+                lift(&bytes).unwrap_err().to_string(),
+                "DXIL at bit 19290: ray query state 205 is not carried (naga's query keeps the ray's own values to itself)"
+            );
+            let mut p = iridia_dxil::ir::lift(&bytes).unwrap();
+            iridia_passes::prepare(&mut p).unwrap();
+            iridia_ir::validate(&p).unwrap();
+            continue;
+        }
         // a whole library holds several programs: `lift` refuses it by name, and each program of it is a container of
         // its own (ray_subobjects.<export>.dxil), which this loop lifts
         if WHOLE_LIBRARIES.contains(&name.as_str()) {

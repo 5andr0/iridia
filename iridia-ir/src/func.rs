@@ -2,7 +2,7 @@
 
 use alloc::{string::String, vec::Vec};
 
-use crate::{Address, Barrier, LabelId, Op, OutOfBounds, Res, Type, Unit, ValueId, VarId};
+use crate::{Address, Barrier, LabelId, Op, OutOfBounds, QueryId, Res, Type, Unit, ValueId, VarId};
 
 /// Where in the source bytes an operation comes from, for refusals, notes and mapping back.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
@@ -192,6 +192,32 @@ pub enum Node {
         /// The parameter: `u32` elements laid out as [`Space::RayPayload`] is.
         parameter: VarId,
     },
+    /// A ray query starts a search of an acceleration structure for a ray (Direct3D's `RayQuery::TraceRayInline`),
+    /// the flags it runs with the ray's and the query's declared ones together; what it held before is gone. No
+    /// candidate is offered until [`Op::RayQueryProceed`].
+    RayQueryInit {
+        /// The query.
+        query: QueryId,
+        /// The acceleration structure.
+        scene: Res,
+        /// The ray.
+        ray: RayDesc,
+    },
+    /// A ray query's search ends (Direct3D's `RayQuery::Abort`): the next [`Op::RayQueryProceed`] gives false, and
+    /// the committed hit stays what it is.
+    RayQueryAbort(QueryId),
+    /// A ray query commits its candidate, a non-opaque triangle (Direct3D's `CommitNonOpaqueTriangleHit`): it is the
+    /// committed hit, and the search goes on only nearer than it.
+    RayQueryCommitTriangle(QueryId),
+    /// A ray query commits its candidate procedural primitive hit at a distance (`f32`) the program found
+    /// (Direct3D's `CommitProceduralPrimitiveHit`), within the search's range (the ray's least distance to the
+    /// committed hit's).
+    RayQueryCommitProcedural {
+        /// The query.
+        query: QueryId,
+        /// The distance along the ray.
+        t: ValueId,
+    },
     /// A multi-way choice on an integer (`u32` or `i32`, by its bits): the case whose values hold it, else the default.
     /// Each region ends in a yield of the results' values or an exit; none falls into the next.
     Switch {
@@ -296,6 +322,58 @@ impl Ray {
     }
 }
 
+/// The ray a ray query traces (Direct3D's `RayDesc`, with the flags and instance mask `TraceRayInline` takes).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+pub struct RayDesc {
+    /// The ray flags (`u32`, `RAY_FLAG_*`).
+    pub flags: ValueId,
+    /// The instance inclusion mask (`u32`, its low 8 bits).
+    pub mask: ValueId,
+    /// The origin (`vec3<f32>`).
+    pub origin: ValueId,
+    /// The least distance along the ray a hit counts at (`f32`).
+    pub t_min: ValueId,
+    /// The direction (`vec3<f32>`).
+    pub direction: ValueId,
+    /// The greatest distance (`f32`).
+    pub t_max: ValueId,
+}
+
+impl RayDesc {
+    /// The values, in Direct3D's order.
+    pub fn values(&self) -> [ValueId; 6] {
+        [
+            self.flags,
+            self.mask,
+            self.origin,
+            self.t_min,
+            self.direction,
+            self.t_max,
+        ]
+    }
+
+    /// The values, in Direct3D's order, to change.
+    pub fn values_mut(&mut self) -> [&mut ValueId; 6] {
+        [
+            &mut self.flags,
+            &mut self.mask,
+            &mut self.origin,
+            &mut self.t_min,
+            &mut self.direction,
+            &mut self.t_max,
+        ]
+    }
+}
+
+/// A ray query a function declares (Direct3D's `RayQuery<flags>` object, DXR 1.1's inline ray tracing): the state of
+/// one search of an acceleration structure at a time, which [`Node::RayQueryInit`] starts and [`Op::RayQueryProceed`]
+/// steps. It is not a variable: no words hold it, and passes do not promote it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+pub struct QueryDecl {
+    /// The ray flags it is declared with (`RAY_FLAG_*`), which every search it runs takes besides the ray's own.
+    pub flags: u32,
+}
+
 impl Node {
     /// The values the node itself reads (a construct's condition, selector or initial values; not its regions').
     pub fn values(&self) -> Vec<ValueId> {
@@ -314,6 +392,9 @@ impl Node {
             Node::DispatchMesh { groups, .. } => alloc::vec![*groups],
             Node::TraceRay { scene, ray, .. } => scene.index.into_iter().chain(ray.values()).collect(),
             Node::CallShader { index, .. } => alloc::vec![*index],
+            Node::RayQueryInit { scene, ray, .. } => scene.index.into_iter().chain(ray.values()).collect(),
+            Node::RayQueryAbort(_) | Node::RayQueryCommitTriangle(_) => Vec::new(),
+            Node::RayQueryCommitProcedural { t, .. } => alloc::vec![*t],
             Node::StoreBuffer {
                 resource,
                 address,
@@ -352,6 +433,11 @@ impl Node {
                 scene.index.as_mut().into_iter().chain(ray.values_mut()).collect()
             }
             Node::CallShader { index, .. } => alloc::vec![index],
+            Node::RayQueryInit { scene, ray, .. } => {
+                scene.index.as_mut().into_iter().chain(ray.values_mut()).collect()
+            }
+            Node::RayQueryAbort(_) | Node::RayQueryCommitTriangle(_) => Vec::new(),
+            Node::RayQueryCommitProcedural { t, .. } => alloc::vec![t],
             Node::StoreBuffer {
                 resource,
                 address,
@@ -400,7 +486,22 @@ impl Node {
                 | Node::DispatchMesh { .. }
                 | Node::TraceRay { .. }
                 | Node::CallShader { .. }
+                | Node::RayQueryInit { .. }
+                | Node::RayQueryAbort(_)
+                | Node::RayQueryCommitTriangle(_)
+                | Node::RayQueryCommitProcedural { .. }
         )
+    }
+
+    /// The ray query the node starts, ends or commits a hit of.
+    pub fn query(&self) -> Option<QueryId> {
+        match self {
+            Node::RayQueryInit { query, .. }
+            | Node::RayQueryAbort(query)
+            | Node::RayQueryCommitTriangle(query)
+            | Node::RayQueryCommitProcedural { query, .. } => Some(*query),
+            _ => None,
+        }
     }
 
     /// The regions of a construct, in order.
@@ -583,6 +684,8 @@ pub struct Function {
     pub values: Vec<ValueDef>,
     /// Every variable, by `VarId`.
     pub vars: Vec<Var>,
+    /// Every ray query, by `QueryId`.
+    pub queries: Vec<QueryDecl>,
     /// The body.
     pub body: Body,
 }

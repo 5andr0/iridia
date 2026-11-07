@@ -1162,6 +1162,24 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                         }
                     }
                 }
+                Op::RqState { q, field } => {
+                    for l in 0..N {
+                        if !active.has(l) {
+                            continue;
+                        }
+                        let b = self.b;
+                        let query = self
+                            .query_slot(*q, l)?
+                            .as_ref()
+                            .ok_or("a ray query read before it was initialized")?;
+                        let scene = b
+                            .scenes
+                            .get(&query.scene())
+                            .ok_or("a ray query without its scene")?;
+                        let r = query.state(*field, scene);
+                        self.wr(dst, l, r)?;
+                    }
+                }
                 Op::ArrLen {
                     gid,
                     elem_words,

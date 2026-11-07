@@ -272,6 +272,11 @@ pub(super) enum Op {
         committed: bool,
         first: u32,
     },
+    /// One field of the state of ray query `q` (an [`iridia_ir::Program`]'s `RayQueryState`).
+    RqState {
+        q: u32,
+        field: iridia_ir::QueryField,
+    },
     ArrLen {
         gid: u32,
         elem_words: u32,

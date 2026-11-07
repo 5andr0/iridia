@@ -35,6 +35,7 @@ const fn bit(c: Capability) -> u32 {
         Capability::BindingArrayNonUniform(ArrayClass::Buffers) => 1 << 16,
         Capability::BindingArrayNonUniform(ArrayClass::StorageImages) => 1 << 17,
         Capability::TextureAtomic => 1 << 18,
+        Capability::RayQuery => 1 << 19,
     }
 }
 
@@ -152,6 +153,9 @@ pub fn needs(program: &Program) -> Vec<Requirement> {
 
 /// Refuse `program` if it needs a capability `profile` does not allow, naming the first such feature.
 pub fn preflight(program: &Program, profile: &Profile) -> Result<(), Error> {
+    if !program.entry.queries.is_empty() {
+        return Err(Error("WGSL has no ray queries".into()));
+    }
     match requirements(program)
         .into_iter()
         .find(|r| !profile.capabilities.contains(r.capability))

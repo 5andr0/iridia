@@ -10,13 +10,13 @@ use alloc::{
 };
 use core::fmt;
 
-use super::{SCHEMA, binary, builtin, ternary, unary};
+use super::{SCHEMA, binary, builtin, query_field, query_fields, ternary, unary};
 use crate::{
     Address, AtomicOp, Axis, Barrier, Binary, Block, Body, Builtin, Case, Cmp, CounterOp, End, Fineness,
     FloatToInt, Function, GatherOffset, LabelId, Level, Memory, MinMaxNan, MulZero, Node, OnZero, Op,
-    OutOfBounds, Precision, QuadSwap, Query, Ray, Region, Res, Rounding, SaturateNan, Scalar, Scope, Space,
-    Target, Terminator, Ternary, Type, Unary, ValueDef, ValueId, Var, VarId, Wave, WaveOp, WaveScan,
-    interface::ResourceId,
+    OutOfBounds, Precision, QuadSwap, Query, QueryDecl, QueryField, QueryId, Ray, RayDesc, Region, Res,
+    Rounding, SaturateNan, Scalar, Scope, Space, Target, Terminator, Ternary, Type, Unary, ValueDef, ValueId,
+    Var, VarId, Wave, WaveOp, WaveScan, interface::ResourceId,
 };
 
 /// Why a text cannot be read: the line (from 1) and what is wrong there.
@@ -214,6 +214,7 @@ struct Parser<'a> {
     values: Vec<Option<ValueDef>>,
     vars: Vec<Var>,
     var_names: BTreeMap<String, VarId>,
+    queries: Vec<QueryDecl>,
 }
 
 impl<'a> Parser<'a> {
@@ -452,6 +453,20 @@ impl<'a> Parser<'a> {
         }
         Ok(out)
     }
+    /// A declared ray query by its name, `q0`.
+    fn query_id(&self, s: &str) -> Result<QueryId> {
+        match s.strip_prefix('q').and_then(|n| n.parse::<u32>().ok()) {
+            Some(n) if (n as usize) < self.queries.len() => Ok(QueryId(n)),
+            _ => self.fail(format!("{s} is not a declared ray query")),
+        }
+    }
+    /// What a ray query state read reads, as [`query_field`] names it.
+    fn query_field(&self, s: &str) -> Result<QueryField> {
+        match query_fields().find(|f| query_field(*f) == s) {
+            Some(f) => Ok(f),
+            None => self.fail(format!("{s} is not a ray query field")),
+        }
+    }
     fn var(&self, name: &str) -> Result<VarId> {
         match self.var_names.get(name.trim()) {
             Some(v) => Ok(*v),
@@ -606,6 +621,13 @@ impl<'a> Parser<'a> {
                     kind: self.value_id(kind)?,
                     attributes: self.var(attributes)?,
                 }
+            }
+            "rayquery.proceed" => Op::RayQueryProceed(self.query_id(rest)?),
+            "rayquery.state" => {
+                let Some((q, field)) = rest.split_once(' ') else {
+                    return self.fail("a ray query state read without its field");
+                };
+                Op::RayQueryState(self.query_id(q)?, self.query_field(field)?)
             }
             "counter.increment" => Op::Counter(self.res(rest)?, CounterOp::Increment),
             "counter.decrement" => Op::Counter(self.res(rest)?, CounterOp::Decrement),
@@ -986,6 +1008,42 @@ impl<'a> Parser<'a> {
                 payload: self.var(payload)?,
             }));
         }
+        if let Some(rest) = line.strip_prefix("rayquery init ") {
+            let names = ["flags", "mask", "origin", "tmin", "direction", "tmax"];
+            let (head, keys) = keywords(rest, &names);
+            let found = |name: &str| keys.iter().find(|(k, _)| *k == name).map(|(_, x)| *x);
+            let value = |name: &str| match found(name) {
+                Some(x) => self.value_id(x),
+                None => self.fail(format!("a ray query's ray without its {name}")),
+            };
+            let Some((query, scene)) = head.split_once(' ') else {
+                return self.fail("a ray query started without its acceleration structure");
+            };
+            return Ok(Some(Node::RayQueryInit {
+                query: self.query_id(query)?,
+                scene: self.res(scene)?,
+                ray: RayDesc {
+                    flags: value("flags")?,
+                    mask: value("mask")?,
+                    origin: value("origin")?,
+                    t_min: value("tmin")?,
+                    direction: value("direction")?,
+                    t_max: value("tmax")?,
+                },
+            }));
+        }
+        if let Some(rest) = line.strip_prefix("rayquery abort ") {
+            return Ok(Some(Node::RayQueryAbort(self.query_id(rest)?)));
+        }
+        if let Some(rest) = line.strip_prefix("rayquery commit ") {
+            return Ok(Some(match rest.split_once(" t ") {
+                Some((query, t)) => Node::RayQueryCommitProcedural {
+                    query: self.query_id(query)?,
+                    t: self.value_id(t)?,
+                },
+                None => Node::RayQueryCommitTriangle(self.query_id(rest)?),
+            }));
+        }
         if let Some(rest) = line.strip_prefix("call shader ") {
             let Some((index, parameter)) = rest.split_once(" parameter ") else {
                 return self.fail("a shader call without its parameter");
@@ -1294,6 +1352,7 @@ pub fn parse(text: &str) -> core::result::Result<Function, TextError> {
         values: Vec::new(),
         vars: Vec::new(),
         var_names: BTreeMap::new(),
+        queries: Vec::new(),
     };
     if p.next()? != SCHEMA {
         return p.fail(format!("the first line is not {SCHEMA:?}"));
@@ -1357,6 +1416,19 @@ pub fn parse(text: &str) -> core::result::Result<Function, TextError> {
             init: elements,
         });
     }
+    while let Some(rest) = p.peek().and_then(|l| l.strip_prefix("query ")) {
+        p.next()?;
+        let Some((name, flags)) = rest.split_once(" flags 0x") else {
+            return p.fail("a ray query declared without its flags");
+        };
+        if name != format!("q{}", p.queries.len()) {
+            return p.fail(format!("ray query {name} is not declared in its place"));
+        }
+        let Ok(flags) = u32::from_str_radix(flags, 16) else {
+            return p.fail(format!("ray query flags 0x{flags}"));
+        };
+        p.queries.push(QueryDecl { flags });
+    }
     let graph = p
         .peek()
         .is_some_and(|l| l.starts_with("b0(") && l.ends_with("):"));
@@ -1387,6 +1459,7 @@ pub fn parse(text: &str) -> core::result::Result<Function, TextError> {
         name: name.to_string(),
         values,
         vars: p.vars,
+        queries: p.queries,
         body,
     })
 }

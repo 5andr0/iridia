@@ -38,20 +38,6 @@ fn prepared(bytes: &[u8]) -> Result<Program, String> {
     Ok(program)
 }
 
-/// The older lift's program of a ray query fixture and its executable: the IR has no ray queries yet, so these run on
-/// the naga path until it does.
-fn lifted_naga(name: &str) -> (iridia::Program, Executable) {
-    let bytes = std::fs::read(
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/fixtures")
-            .join(name),
-    )
-    .unwrap();
-    let program = iridia_dxil::lift(&bytes).unwrap_or_else(|e| panic!("{name}: {e}"));
-    let exe = Executable::new(&program).unwrap_or_else(|e| panic!("{name}: {e}"));
-    (program, exe)
-}
-
 /// The entry arguments of an invocation: `read` are those of the inputs the program reads, in order (arguments past
 /// them are ignored); the signature's other elements (`used` false) are listed too and take zeros.
 fn arguments(program: &Program, read: &[[u32; 4]]) -> Vec<[u32; 4]> {
@@ -1455,7 +1441,7 @@ mod ray_queries {
     #[test]
     fn rays_find_the_closest_committed_hit_of_the_scene() {
         for v in ["", ".od"] {
-            let (program, exe) = lifted_naga(&fixture("ray_query_hits", v));
+            let (program, exe) = lifted(&fixture("ray_query_hits", v));
             let find = |class: Option<D3dClass>| {
                 program
                     .interface
@@ -1647,7 +1633,7 @@ mod procedural_primitives {
     /// along z from z = -5 at x = 0).
     #[test]
     fn a_procedural_primitive_is_intersected_by_the_program_in_the_instances_object_space() {
-        let (program, exe) = lifted_naga(&fixture("ray_query_procedural", ""));
+        let (program, exe) = lifted(&fixture("ray_query_procedural", ""));
         let find = |class: Option<D3dClass>| {
             program
                 .interface
@@ -1723,7 +1709,7 @@ mod instance_matrices {
     /// same instance.
     #[test]
     fn a_program_reads_the_transform_and_its_inverse_of_the_instance_it_is_offered() {
-        let (program, exe) = lifted_naga(&fixture("ray_query_matrices", ""));
+        let (program, exe) = lifted(&fixture("ray_query_matrices", ""));
         let find = |class: Option<D3dClass>| {
             program
                 .interface

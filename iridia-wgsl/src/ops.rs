@@ -189,6 +189,9 @@ impl Writer<'_> {
             Op::ReportHit { .. } => {
                 return Err(err("an intersection program's reported hit is not written yet"));
             }
+            Op::RayQueryProceed(_) | Op::RayQueryState(_, _) => {
+                return Err(err("WGSL has no ray queries"));
+            }
             Op::Counter(r, op) => self.counter(r, op)?,
             Op::LoadBuffer {
                 resource,

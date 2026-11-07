@@ -169,13 +169,14 @@ iridia-dxil/payload_layout_mesh.dxil	51a43bef6d8e59ab	execution not compared: a 
 iridia-dxil/pixel_ops.66.dxil	5b6a2822b92d7e8a	execution not compared: a texel load is not run here: iridia-exec runs it	differ: output: an input via Value -> Coordinate; nothing dropped	steps completed=0, max=0, exhausted=0
 iridia-dxil/pixel_ops.dxil	5b6a2822b92d7e8a	execution not compared: a texel load is not run here: iridia-exec runs it	differ: output: an input via Value -> Coordinate; nothing dropped	steps completed=0, max=0, exhausted=0
 iridia-dxil/pixel_ops.od.dxil	5b6a2822b92d7e8a	execution not compared: a texel load is not run here: iridia-exec runs it	differ: output: an input via Value -> Coordinate; nothing dropped	steps completed=0, max=0, exhausted=0
-iridia-dxil/ray_query_grid.dxil	not lifted	not lifted: IR lift: DXIL at bit N: dx.op.allocateRayQuery: dx.op N is not lifted onto the IR yet	steps completed=0, max=0, exhausted=0
-iridia-dxil/ray_query_hits.dxil	not lifted	not lifted: IR lift: DXIL at bit N: dx.op.allocateRayQuery: dx.op N is not lifted onto the IR yet	steps completed=0, max=0, exhausted=0
-iridia-dxil/ray_query_hits.od.dxil	not lifted	not lifted: IR lift: DXIL at bit N: dx.op.allocateRayQuery: dx.op N is not lifted onto the IR yet	steps completed=0, max=0, exhausted=0
-iridia-dxil/ray_query_matrices.dxil	not lifted	not lifted: IR lift: DXIL at bit N: dx.op.allocateRayQuery: dx.op N is not lifted onto the IR yet	steps completed=0, max=0, exhausted=0
-iridia-dxil/ray_query_procedural.dxil	not lifted	not lifted: IR lift: DXIL at bit N: dx.op.allocateRayQuery: dx.op N is not lifted onto the IR yet	steps completed=0, max=0, exhausted=0
-iridia-dxil/ray_query_state.dxil	not lifted	not lifted: IR lift: DXIL at bit N: dx.op.allocateRayQuery: dx.op N is not lifted onto the IR yet	steps completed=0, max=0, exhausted=0
-iridia-dxil/ray_query_state.od.dxil	not lifted	not lifted: IR lift: DXIL at bit N: dx.op.allocateRayQuery: dx.op N is not lifted onto the IR yet	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_query_grid.dxil	refused: a ray query is not followed	both refuse	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_query_hits.dxil	refused: a ray query is not followed	both refuse	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_query_hits.od.dxil	refused: a ray query is not followed	both refuse	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_query_matrices.dxil	refused: a ray query is not followed	both refuse	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_query_object.dxil	refused: a ray query is not followed	not lifted: older lift: DXIL at bit N: ray query state N is not carried (naga's query keeps the ray's own values to itself)	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_query_procedural.dxil	refused: a ray query is not followed	both refuse	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_query_state.dxil	refused: a ray query is not followed	both refuse	steps completed=0, max=0, exhausted=0
+iridia-dxil/ray_query_state.od.dxil	refused: a ray query is not followed	both refuse	steps completed=0, max=0, exhausted=0
 iridia-dxil/ray_subobjects.any_hit.dxil	refused: an AnyHit program's payload is not followed	both refuse	steps completed=0, max=0, exhausted=0
 iridia-dxil/ray_subobjects.closest_hit.dxil	refused: a ClosestHit program's payload is not followed	both refuse	steps completed=0, max=0, exhausted=0
 iridia-dxil/ray_subobjects.dxil	not lifted	not lifted: IR lift: DXIL at bit N: dx.entryPoints: expected exactly one entry point with a function, found N	steps completed=0, max=0, exhausted=0

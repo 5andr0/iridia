@@ -39,6 +39,8 @@ pub enum Capability {
     BindingArrayNonUniform(ArrayClass),
     /// An atomic operation on a storage image's texel (naga's image atomics; WGSL has none).
     TextureAtomic,
+    /// Inline ray queries, including acceleration structures (WGSL has none).
+    RayQuery,
 }
 
 /// What an array of resources is of, as targets tell their binding arrays apart.
@@ -171,6 +173,9 @@ pub fn requirements(program: &Program) -> Vec<Requirement> {
             need(c, format!("variable {} is {what}", v.name));
         }
     }
+    if !f.queries.is_empty() {
+        need(Capability::RayQuery, "ray query q0".into());
+    }
     let stage = program.interface.stage;
     let inputs = program.interface.inputs.iter().map(|v| ("input", v));
     let outputs = program.interface.outputs.iter().map(|v| ("output", v));
@@ -212,6 +217,12 @@ pub fn requirements(program: &Program) -> Vec<Requirement> {
         }
     }
     for r in &program.interface.resources {
+        if r.kind == ResourceKind::AccelerationStructure {
+            need(
+                Capability::RayQuery,
+                format!("resource {} is an acceleration structure", r.provenance.name),
+            );
+        }
         if let ResourceKind::Texture {
             dim: TextureDim::Cube,
             arrayed: true,

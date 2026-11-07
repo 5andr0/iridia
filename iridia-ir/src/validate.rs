@@ -6,8 +6,8 @@ use core::fmt;
 
 use crate::{
     AtomicOp, Barrier, Binary, Block, Body, Builtin, End, Function, GatherOffset, LabelId, Level, Memory,
-    Node, Op, Program, Query, Region, Res, Scalar, Terminator, Ternary, Type, Unary, ValueId, VarId, Wave,
-    WaveOp,
+    Node, Op, Program, Query, QueryId, Region, Res, Scalar, Terminator, Ternary, Type, Unary, ValueId, VarId,
+    Wave, WaveOp,
     interface::{
         BufferKind, Interface, Resource, ResourceKind, SampleType, ScalarType, Stage, StageFacts,
         StorageTarget, TextureDim, Value, Varying,
@@ -101,6 +101,8 @@ pub fn derived_type(op: &Op, ty: impl Fn(ValueId) -> Option<Type>) -> Result<Opt
             same(get(*kind)?, Type::U32, "a reported hit's kind")?;
             Type::BOOL
         }
+        Op::RayQueryProceed(_) => Type::BOOL,
+        Op::RayQueryState(_, field) => field.ty(),
         Op::Wave(w) => {
             // a value read from another invocation, or gathered over them, is a scalar or vector of numbers
             let numbers = |t: Type, what: &str| {
@@ -895,6 +897,17 @@ impl Checker<'_> {
             Some(_) => {}
         }
     }
+    /// A ray query an operation or a node names: one the function declares.
+    fn query(&mut self, at: Option<ValueId>, q: QueryId) {
+        if q.0 as usize >= self.f.queries.len() {
+            let m = format!(
+                "ray query q{}, where the function declares {}",
+                q.0,
+                self.f.queries.len()
+            );
+            self.problem(at, m);
+        }
+    }
     fn uses(&mut self, at: Option<ValueId>, v: ValueId) {
         if !self.visible.get(v.0 as usize).copied().unwrap_or(false) {
             self.problem(
@@ -967,6 +980,17 @@ impl Checker<'_> {
         }
         if matches!(def.op, Op::Unary(Unary::Derivative(..), _)) && self.stage != Stage::Pixel {
             self.problem(Some(v), "a derivative outside a pixel program");
+        }
+        if let Some(q) = def.op.query() {
+            self.query(Some(v), q);
+        }
+        if let Op::RayQueryState(_, field) = def.op
+            && !field.in_range()
+        {
+            self.problem(
+                Some(v),
+                format!("ray query field {field:?} reads past its lanes, rows or columns"),
+            );
         }
         if let Op::ReportHit { attributes, .. } = def.op {
             if self.stage != Stage::Intersection {
@@ -1258,6 +1282,53 @@ impl Checker<'_> {
                     }
                 }
                 self.handed(*payload, "a traced ray's payload");
+            }
+            Node::RayQueryInit { query, scene, ray } => {
+                self.query(None, *query);
+                for v in scene.index.into_iter().chain(ray.values()) {
+                    self.uses(None, v);
+                }
+                if let Some(i) = scene.index
+                    && let Some(t) = self.ty(i)
+                    && let Err(e) = index_type(t, "an acceleration structure array index")
+                {
+                    self.problem(Some(i), e);
+                }
+                match self.interface.resource(scene.id).map(|r| &r.kind) {
+                    Some(ResourceKind::AccelerationStructure) => {}
+                    _ => self.problem(
+                        None,
+                        format!(
+                            "a ray query started in resource {}, not an acceleration structure",
+                            scene.id.0
+                        ),
+                    ),
+                }
+                let vec3 = Type::vector(Scalar::F32, 3);
+                let wanted = [
+                    (ray.flags, Type::U32, "flags"),
+                    (ray.mask, Type::U32, "instance mask"),
+                    (ray.origin, vec3, "origin"),
+                    (ray.t_min, Type::F32, "least distance"),
+                    (ray.direction, vec3, "direction"),
+                    (ray.t_max, Type::F32, "greatest distance"),
+                ];
+                for (v, t, what) in wanted {
+                    if self.ty(v) != Some(t) {
+                        self.problem(Some(v), format!("a ray query's {what} that is not a {t}"));
+                    }
+                }
+            }
+            Node::RayQueryAbort(query) | Node::RayQueryCommitTriangle(query) => self.query(None, *query),
+            Node::RayQueryCommitProcedural { query, t } => {
+                self.query(None, *query);
+                self.uses(None, *t);
+                if self.ty(*t) != Some(Type::F32) {
+                    self.problem(
+                        Some(*t),
+                        "a procedural hit committed at a distance that is not an f32",
+                    );
+                }
             }
             Node::CallShader { .. }
                 if !matches!(

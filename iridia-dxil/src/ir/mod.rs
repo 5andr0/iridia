@@ -17,6 +17,7 @@
 mod dxop;
 mod mesh;
 mod payload;
+mod rayquery;
 mod raytracing;
 mod resources;
 mod stages;
@@ -27,7 +28,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use iridia_ir::{
     Block, Body, Conventions, Denormals, FloatEnv, Function, Node, Op, Origin, Precision, Program,
-    Provenance, Res, Target, Terminator, Type, Unit, ValueDef, ValueId as IrValue, Var, VarId,
+    Provenance, QueryDecl, QueryId, Res, Target, Terminator, Type, Unit, ValueDef, ValueId as IrValue, Var,
+    VarId,
     interface::{InstructionCount, InstructionUnit, ShaderFormat, Stage},
 };
 
@@ -42,7 +44,7 @@ use dxil_reader::reflection;
 pub const LIFTER: &str = "iridia-dxil-ir";
 
 /// Increment when the same bytecode lifts differently (`tests/versions.rs` holds the IR lift's fixtures to it).
-pub const LIFTER_VERSION: u32 = 2;
+pub const LIFTER_VERSION: u32 = 3;
 
 /// Lift a DXIL container's entry function onto the IR: a vertex, pixel, compute, hull, domain, geometry, mesh,
 /// amplification or ray tracing program (a library of one export). What the lift does not carry is an `Err` naming the
@@ -180,6 +182,8 @@ pub(crate) enum Lv {
     Pointer(Pointer),
     /// A pointer into dxc's no-op marker globals (`dx.nothing`): a load of it is zero and a store does nothing.
     Nothing,
+    /// A ray query of the function (`AllocateRayQuery`'s handle).
+    Query(QueryId),
 }
 
 /// Where a pointer reaches in a variable: a fixed offset plus, where the pointer was computed, a `u32` value; in words,
@@ -191,10 +195,11 @@ pub(crate) struct Pointer {
     pub index: Option<IrValue>,
 }
 
-/// The IR function being built: its values, variables and `Cfg` blocks.
+/// The IR function being built: its values, variables, ray queries and `Cfg` blocks.
 struct Graph {
     values: Vec<ValueDef>,
     vars: Vec<Var>,
+    queries: Vec<QueryDecl>,
     blocks: Vec<Block>,
     /// The block instructions are placed in.
     current: usize,
@@ -290,6 +295,7 @@ impl<'m> Lift<'m> {
             g: Graph {
                 values: Vec::new(),
                 vars: Vec::new(),
+                queries: Vec::new(),
                 blocks: Vec::new(),
                 current: 0,
                 origin: None,
@@ -331,6 +337,7 @@ impl<'m> Lift<'m> {
         self.g = Graph {
             values: Vec::new(),
             vars: Vec::new(),
+            queries: Vec::new(),
             blocks: Vec::new(),
             current: 0,
             origin: None,
@@ -646,12 +653,13 @@ impl<'m> Lift<'m> {
         }
     }
 
-    /// The function `name`: its values, variables and blocks.
+    /// The function `name`: its values, variables, ray queries and blocks.
     fn finish_function(&mut self, name: &str) -> Result<Function> {
         Ok(Function {
             name: name.into(),
             values: std::mem::take(&mut self.g.values),
             vars: std::mem::take(&mut self.g.vars),
+            queries: std::mem::take(&mut self.g.queries),
             body: Body::Cfg(std::mem::take(&mut self.g.blocks)),
         })
     }

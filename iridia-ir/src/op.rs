@@ -4,6 +4,7 @@
 
 use alloc::vec::Vec;
 
+use crate::Type;
 use crate::interface::ResourceId;
 
 /// A value of a function: an index into its value arena.
@@ -17,6 +18,10 @@ pub struct VarId(pub u32);
 /// A label of a `Regions` construct (`Block`, `Loop`) that exits name.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
 pub struct LabelId(pub u32);
+
+/// A ray query of a function (Direct3D's `RayQuery` object): an index into its queries ([`crate::Function::queries`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
+pub struct QueryId(pub u32);
 
 /// What `FMin` and `FMax` give when an operand is NaN.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
@@ -506,6 +511,120 @@ pub enum Query {
     Elements,
 }
 
+/// What an [`Op::RayQueryState`] reads of a ray query: the ray it traces, or the candidate or committed hit of its
+/// search (DXR 1.1's `RayQuery` methods). A hit's field reads 0 (`false`) where there is no such hit.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+pub enum QueryField {
+    /// The flags the search runs with: the ray's and the query's declared ones together (`RayFlags`), `u32`.
+    RayFlags,
+    /// The ray's least distance (`RayTMin`), `f32`.
+    RayTMin,
+    /// A lane (0 to 2) of the ray's origin in world space (`WorldRayOrigin`), `f32`.
+    WorldRayOrigin(u8),
+    /// A lane (0 to 2) of the ray's direction in world space (`WorldRayDirection`), `f32`.
+    WorldRayDirection(u8),
+    /// What the search has committed (`CommittedStatus`): 0 nothing, 1 a triangle, 2 a procedural primitive
+    /// (`COMMITTED_*`), `u32`.
+    CommittedStatus,
+    /// What the candidate is (`CandidateType`): 0 a non-opaque triangle, 1 a procedural primitive (`CANDIDATE_*`),
+    /// `u32`.
+    CandidateType,
+    /// Whether the candidate procedural primitive is not opaque to the ray (`CandidateProceduralPrimitiveNonOpaque`),
+    /// `bool`.
+    CandidateNonOpaque,
+    /// A field of the candidate (`Candidate*`).
+    Candidate(HitField),
+    /// A field of the committed hit (`Committed*`).
+    Committed(HitField),
+}
+
+/// A field of a ray query's candidate or committed hit ([`QueryField`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+pub enum HitField {
+    /// The distance along the ray (`CandidateTriangleRayT`, `CommittedRayT`), `f32`.
+    T,
+    /// The instance's index in the top level (`*InstanceIndex`), `u32`.
+    InstanceIndex,
+    /// The instance's id (`*InstanceID`, its low 24 bits), `u32`.
+    InstanceId,
+    /// The geometry's index in the instance's bottom level (`*GeometryIndex`), `u32`.
+    GeometryIndex,
+    /// The primitive's index in its geometry (`*PrimitiveIndex`), `u32`.
+    PrimitiveIndex,
+    /// The instance's contribution to the hit group index (`*InstanceContributionToHitGroupIndex`), `u32`.
+    ContributionToHitGroup,
+    /// Whether the triangle faces the ray (`*TriangleFrontFace`), `bool`.
+    FrontFace,
+    /// A lane (0 or 1) of the triangle's barycentrics, the second and third vertices' weights
+    /// (`*TriangleBarycentrics`), `f32`.
+    Barycentrics(u8),
+    /// Row `row` (0 to 2), column `column` (0 to 3) of the instance's object-to-world transform
+    /// (`*ObjectToWorld3x4`), `f32`.
+    ObjectToWorld {
+        /// The row.
+        row: u8,
+        /// The column.
+        column: u8,
+    },
+    /// Row `row`, column `column` of the instance's world-to-object transform (`*WorldToObject3x4`), `f32`.
+    WorldToObject {
+        /// The row.
+        row: u8,
+        /// The column.
+        column: u8,
+    },
+    /// A lane (0 to 2) of the ray's origin in the instance's object space (`*ObjectRayOrigin`), `f32`.
+    ObjectRayOrigin(u8),
+    /// A lane (0 to 2) of the ray's direction in the instance's object space (`*ObjectRayDirection`), `f32`.
+    ObjectRayDirection(u8),
+}
+
+impl QueryField {
+    /// The type of what it reads.
+    pub fn ty(self) -> Type {
+        match self {
+            QueryField::RayFlags | QueryField::CommittedStatus | QueryField::CandidateType => Type::U32,
+            QueryField::CandidateNonOpaque => Type::BOOL,
+            QueryField::RayTMin | QueryField::WorldRayOrigin(_) | QueryField::WorldRayDirection(_) => {
+                Type::F32
+            }
+            QueryField::Candidate(h) | QueryField::Committed(h) => match h {
+                HitField::FrontFace => Type::BOOL,
+                HitField::InstanceIndex
+                | HitField::InstanceId
+                | HitField::GeometryIndex
+                | HitField::PrimitiveIndex
+                | HitField::ContributionToHitGroup => Type::U32,
+                HitField::T
+                | HitField::Barycentrics(_)
+                | HitField::ObjectToWorld { .. }
+                | HitField::WorldToObject { .. }
+                | HitField::ObjectRayOrigin(_)
+                | HitField::ObjectRayDirection(_) => Type::F32,
+            },
+        }
+    }
+
+    /// Whether its lane, row or column is one the value has.
+    pub fn in_range(self) -> bool {
+        match self {
+            QueryField::WorldRayOrigin(l)
+            | QueryField::WorldRayDirection(l)
+            | QueryField::Candidate(HitField::ObjectRayOrigin(l) | HitField::ObjectRayDirection(l))
+            | QueryField::Committed(HitField::ObjectRayOrigin(l) | HitField::ObjectRayDirection(l)) => l < 3,
+            QueryField::Candidate(HitField::Barycentrics(l))
+            | QueryField::Committed(HitField::Barycentrics(l)) => l < 2,
+            QueryField::Candidate(
+                HitField::ObjectToWorld { row, column } | HitField::WorldToObject { row, column },
+            )
+            | QueryField::Committed(
+                HitField::ObjectToWorld { row, column } | HitField::WorldToObject { row, column },
+            ) => row < 3 && column < 4,
+            _ => true,
+        }
+    }
+}
+
 /// What an [`Op::Wave`] does across the active invocations of a wave.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
 pub enum Wave {
@@ -780,6 +899,16 @@ pub enum Op {
         /// The attributes: `u32` elements laid out as [`crate::Space::HitAttributes`] is.
         attributes: VarId,
     },
+    /// A ray query's search goes on to its next candidate (Direct3D's `RayQuery::Proceed`): whether there is one for
+    /// the program to commit or let go (a `bool`); false once the search has ended (its last candidate gone, or
+    /// aborted). Opaque triangles the ray meets on the way are committed by the search itself, the nearest kept. The
+    /// step is the operation's own effect, kept even where nothing reads its result. A query not initialized has no
+    /// defined search (D3D leaves it undefined): an executor refuses it.
+    RayQueryProceed(QueryId),
+    /// What a ray query holds, as [`QueryField`] says: the ray it traces, or a field of its candidate or committed
+    /// hit as the search left them. A query not initialized holds nothing defined, as for
+    /// [`Op::RayQueryProceed`].
+    RayQueryState(QueryId, QueryField),
     /// An operation across the invocations of the invocation's wave (Direct3D's wave, a subgroup), as [`Wave`] says.
     /// Which invocations make a wave, and how many, is the device's. An invocation takes part where it is active:
     /// where its control flow reaches the operation with the others' (a demoted invocation, a helper, is not active);
@@ -902,6 +1031,7 @@ impl Op {
             }
             Op::Counter(r, _) => r.operands_mut(&mut v),
             Op::ReportHit { t, kind, .. } => v.extend([t, kind]),
+            Op::RayQueryProceed(_) | Op::RayQueryState(..) => {}
             Op::Wave(w) => match w {
                 Wave::Ballot(a) | Wave::First(a) | Wave::QuadSwap(a, _) => v.push(a),
                 Wave::Lane(a, l) | Wave::QuadLane(a, l) => v.extend([a, l]),
@@ -984,10 +1114,21 @@ impl Op {
         ) || matches!(self, Op::Unary(Unary::Derivative(..), _))
     }
 
-    /// Whether the operation changes state (memory, a counter): it is kept where it is and as often as it runs, even
-    /// where nothing reads its value.
+    /// The ray query the operation steps or reads.
+    pub fn query(&self) -> Option<QueryId> {
+        match self {
+            Op::RayQueryProceed(q) | Op::RayQueryState(q, _) => Some(*q),
+            _ => None,
+        }
+    }
+
+    /// Whether the operation changes state (memory, a counter, a ray query's search): it is kept where it is and as
+    /// often as it runs, even where nothing reads its value.
     pub fn has_effect(&self) -> bool {
-        matches!(self, Op::Atomic { .. } | Op::Counter(..) | Op::ReportHit { .. })
+        matches!(
+            self,
+            Op::Atomic { .. } | Op::Counter(..) | Op::ReportHit { .. } | Op::RayQueryProceed(_)
+        )
     }
 }
 

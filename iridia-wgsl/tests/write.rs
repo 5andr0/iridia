@@ -79,6 +79,28 @@ fn program(
 
 const F4: (ScalarType, u8) = (ScalarType::Float, 4);
 
+#[test]
+fn ray_queries_are_a_shared_requirement_and_wgsl_refuses_them() {
+    let p = program(
+        "iridia-ir 1\nfn main {\n  query q0 flags 0x0\n  return\n}\n",
+        &[],
+        &[],
+        vec![],
+    );
+    let needs: Vec<_> = iridia_wgsl::needs(&p).into_iter().map(|r| r.capability).collect();
+    assert_eq!(needs, [Capability::RayQuery]);
+    for profile in [
+        Profile::BROWSER,
+        Profile::NAGA,
+        Profile::NAGA.with(Capabilities::of(&[Capability::RayQuery])),
+    ] {
+        assert_eq!(
+            iridia_wgsl::wgsl(&p, &profile).unwrap_err().0,
+            "WGSL has no ray queries"
+        );
+    }
+}
+
 /// What upstream naga's validator is given for a profile: the capabilities it allows.
 fn naga_capabilities(profile: &Profile) -> naga::valid::Capabilities {
     use naga::valid::Capabilities as C;

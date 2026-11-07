@@ -947,6 +947,9 @@ impl<'a> Walker<'a> {
                 vec![self.g.intern(Node::Counter { resource: r.id }); width]
             }
             IrOp::ReportHit { .. } => return Err("a reported hit is not followed".into()),
+            IrOp::RayQueryProceed(_) | IrOp::RayQueryState(_, _) => {
+                return Err("a ray query is not followed".into());
+            }
             IrOp::Wave(w) => match w {
                 IrWave::Ballot(c) => {
                     let operands = self.get(*c)?;
@@ -1102,6 +1105,12 @@ impl<'a> Walker<'a> {
         let mut state = state;
         for step in &r.nodes {
             match step {
+                Step::RayQueryInit { .. }
+                | Step::RayQueryAbort(_)
+                | Step::RayQueryCommitTriangle(_)
+                | Step::RayQueryCommitProcedural { .. } => {
+                    return Err("a ray query is not followed".into());
+                }
                 Step::Value(v) => {
                     let lanes = self.evaluate(*v, &mut state)?;
                     self.set(*v, lanes);

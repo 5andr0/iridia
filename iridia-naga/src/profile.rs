@@ -54,7 +54,8 @@ impl Profile {
             .union(Capabilities::SUBGROUP)
             .union(Capabilities::SUBGROUP_VERTEX_STAGE)
             .union(Capabilities::TEXTURE_ATOMIC)
-            .union(BINDING_ARRAYS),
+            .union(BINDING_ARRAYS)
+            .union(Capabilities::RAY_QUERY),
         bindings: Bindings::D3d,
         directives: Directives::Naga,
     };
@@ -123,6 +124,7 @@ fn capability(c: Capability) -> Capabilities {
             ArrayClass::StorageImages => Capabilities::STORAGE_TEXTURE_BINDING_ARRAY,
         },
         Capability::TextureAtomic => Capabilities::TEXTURE_ATOMIC,
+        Capability::RayQuery => Capabilities::RAY_QUERY,
         Capability::BindingArrayNonUniform(class) => match class {
             ArrayClass::TexturesAndSamplers => {
                 Capabilities::TEXTURE_AND_SAMPLER_BINDING_ARRAY_NON_UNIFORM_INDEXING

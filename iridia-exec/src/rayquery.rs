@@ -493,6 +493,74 @@ impl Query {
         self.tmax
     }
 
+    /// One field of the query's state (an [`iridia_ir`] program's `RayQueryState`) as a register: a `u32`, an `f32`'s
+    /// bits or a bool (0 or 1) in every lane. A hit field of a hit the query has not found reads as zero, as the
+    /// naga-path intersection of no hit does; a candidate's type of no candidate reads as a procedural primitive (1).
+    pub(super) fn state(&self, field: iridia_ir::QueryField, scene: &Built) -> [u32; 4] {
+        use iridia_ir::{HitField as H, QueryField as Q};
+        let lane = |v: Vec3, k: u8| v.get(usize::from(k)).copied().unwrap_or(0.0).to_bits();
+        let word = match field {
+            Q::RayFlags => self.flags,
+            Q::RayTMin => self.tmin.to_bits(),
+            Q::WorldRayOrigin(k) => lane(self.origin, k),
+            Q::WorldRayDirection(k) => lane(self.direction, k),
+            // nothing (0), a triangle (1) or a procedural primitive (2): the committed hit's kind
+            Q::CommittedStatus => self.committed.map_or(0, |h| h.kind),
+            // a non-opaque triangle (0) or a procedural primitive (1)
+            Q::CandidateType => u32::from(self.candidate.is_none_or(|h| h.kind != 1)),
+            Q::CandidateNonOpaque => u32::from(self.candidate.is_some_and(|h| !h.opaque)),
+            Q::Candidate(h) | Q::Committed(h) => {
+                let hit = if matches!(field, Q::Committed(_)) {
+                    self.committed.as_ref()
+                } else {
+                    self.candidate.as_ref()
+                };
+                let r = hit.map_or_else(Reported::none, |hit| Reported::of(hit, scene));
+                // the ray in the object space of the hit's instance
+                let object = |v: Vec3, point: bool, k: u8| {
+                    hit.map_or(0, |hit| {
+                        let m = scene.inverse(hit.instance);
+                        lane(
+                            if point {
+                                transform_point(m, v)
+                            } else {
+                                transform_vector(m, v)
+                            },
+                            k,
+                        )
+                    })
+                };
+                let entry = |m: &[Vec3; 4], row: u8, column: u8| {
+                    m.get(usize::from(column))
+                        .and_then(|c| c.get(usize::from(row)))
+                        .copied()
+                        .unwrap_or(0.0)
+                        .to_bits()
+                };
+                match h {
+                    H::T => r.t.to_bits(),
+                    H::InstanceIndex => r.instance,
+                    H::InstanceId => r.custom,
+                    H::GeometryIndex => r.geometry,
+                    H::PrimitiveIndex => r.primitive,
+                    H::ContributionToHitGroup => r.sbt,
+                    H::FrontFace => u32::from(r.front),
+                    H::Barycentrics(k) => r
+                        .barycentrics
+                        .get(usize::from(k))
+                        .copied()
+                        .unwrap_or(0.0)
+                        .to_bits(),
+                    H::ObjectToWorld { row, column } => entry(&r.object_to_world, row, column),
+                    H::WorldToObject { row, column } => entry(&r.world_to_object, row, column),
+                    H::ObjectRayOrigin(k) => object(self.origin, true, k),
+                    H::ObjectRayDirection(k) => object(self.direction, false, k),
+                }
+            }
+        };
+        [word; 4]
+    }
+
     /// End the search.
     pub(super) fn terminate(&mut self) {
         self.done = true;

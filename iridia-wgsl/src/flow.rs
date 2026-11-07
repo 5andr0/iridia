@@ -450,6 +450,12 @@ impl Writer<'_> {
             Node::TraceRay { .. } | Node::CallShader { .. } => {
                 return Err(err("a traced ray or a shader call is not written yet"));
             }
+            Node::RayQueryInit { .. }
+            | Node::RayQueryAbort(_)
+            | Node::RayQueryCommitTriangle(_)
+            | Node::RayQueryCommitProcedural { .. } => {
+                return Err(err("WGSL has no ray queries"));
+            }
             Node::If {
                 cond,
                 accept,

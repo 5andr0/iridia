@@ -1575,9 +1575,81 @@ fn bound_elements(count: u32) -> u32 {
     count.min(32)
 }
 
+/// The acceleration structure a program's ray queries search on case `c`: a bottom level of triangles (an opaque
+/// geometry and a non-opaque one) and one of procedural boxes, under three instances that rotate, scale and move them,
+/// with masks, ids, contributions and, but for the first, flags of the case's own.
+fn scene(c: u32) -> iridia_exec::Scene {
+    // the case's floats, one after another
+    struct Draw(u32, u32);
+    impl Draw {
+        fn next(&mut self, lo: f32, hi: f32) -> f32 {
+            self.1 += 1;
+            lo + (hi - lo) * common::unit(common::mix(hash_words(&[11, self.0, self.1])))
+        }
+        fn point(&mut self, spread: f32) -> [f32; 3] {
+            std::array::from_fn(|_| self.next(-spread, spread))
+        }
+    }
+    let mut d = Draw(c, 0);
+    let triangles = (0..2)
+        .map(|g| iridia_exec::Geometry {
+            positions: (0..24).map(|_| d.point(3.0)).collect(),
+            boxes: Vec::new(),
+            indices: None,
+            opaque: g == 0,
+        })
+        .collect();
+    let boxes = (0..4)
+        .map(|_| {
+            let (centre, half) = (d.point(3.0), d.point(1.0).map(|x| 0.3 + x.abs()));
+            [
+                std::array::from_fn(|i| centre[i] - half[i]),
+                std::array::from_fn(|i| centre[i] + half[i]),
+            ]
+        })
+        .collect();
+    let procedural = vec![iridia_exec::Geometry {
+        positions: Vec::new(),
+        boxes,
+        indices: None,
+        opaque: c.is_multiple_of(2),
+    }];
+    let instances = (0..3u32)
+        .map(|i| {
+            let (s, cos) = d.next(0.0, std::f32::consts::TAU).sin_cos();
+            let scale = d.next(0.6, 1.6);
+            let t = d.point(1.0);
+            let f = common::mix(hash_words(&[12, c, i])) % 8;
+            iridia_exec::Instance {
+                bottom: (i % 2) as usize,
+                transform: [
+                    [cos * scale, -s * scale, 0.0, t[0]],
+                    [s * scale, cos * scale, 0.0, t[1]],
+                    [0.0, 0.0, scale, t[2]],
+                ],
+                id: 100 + 7 * i,
+                mask: [0xff, 0x01, 0x02][i as usize],
+                contribution: 10 * i + c % 5,
+                flags: iridia_exec::InstanceFlags {
+                    cull_disable: i > 0 && f & 1 != 0,
+                    front_counter_clockwise: i > 0 && f & 2 != 0,
+                    force_opaque: i > 0 && f & 4 != 0,
+                    force_non_opaque: i > 0 && f == 3,
+                },
+            }
+        })
+        .collect();
+    iridia_exec::Scene {
+        bottoms: vec![triangles, procedural],
+        instances,
+    }
+}
+
 /// What a compute run binds and changes, seeded by case: the constant and read-only buffers bound (an array's
-/// elements each), the read-write ones the dispatch changes. Each buffer has 64 elements of small words, so an
-/// address the program computes from one stays mostly inside.
+/// elements each), the read-write ones the dispatch changes, and the acceleration structures searched. Each buffer has
+/// 64 elements of small words, so an address the program computes from one stays mostly inside; a program with ray
+/// queries reads its rays from constants, so its constant words are floats in [-4, 4) instead (small words are
+/// denormal floats, flushed: every ray would start at the origin and go nowhere).
 struct Seeded {
     resources: Resources,
     buffers: BTreeMap<ResourceId, Vec<u32>>,
@@ -1590,9 +1662,18 @@ fn seeded(program: &iridia::Program, c: u32) -> Seeded {
         buffers: BTreeMap::new(),
         elements: BTreeMap::new(),
     };
+    let rays = program
+        .interface
+        .resources
+        .iter()
+        .any(|r| r.kind == ResourceKind::AccelerationStructure);
     for r in &program.interface.resources {
         let array = r.count != 1;
         let (kind, storage) = match &r.kind {
+            ResourceKind::AccelerationStructure => {
+                s.resources.scenes.insert(r.id, scene(c));
+                continue;
+            }
             ResourceKind::Buffer(k) => (k, false),
             ResourceKind::Storage {
                 target: StorageTarget::Buffer(k),
@@ -1604,10 +1685,13 @@ fn seeded(program: &iridia::Program, c: u32) -> Seeded {
                     let v = (0..rows)
                         .map(|row| {
                             std::array::from_fn(|k| {
+                                let h = common::mix(hash_words(&[7, c, r.id.0, e, row, k as u32]));
                                 if c == ZEROED {
                                     0
+                                } else if rays {
+                                    (common::unit(h) * 8.0 - 4.0).to_bits()
                                 } else {
-                                    common::mix(hash_words(&[7, c, r.id.0, e, row, k as u32])) % 97
+                                    h % 97
                                 }
                             })
                         })

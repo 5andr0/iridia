@@ -1,5 +1,5 @@
 # lifted fixtures of iridia-dxil-ir
-# versions lifter=2 ir=2
+# versions lifter=3 ir=2
 amplification.dxil	lifted	f36d227bd722caf294879e3d62a8bc6dc1ab68e2de302ff3c7044a601488e08c
 amplification_mesh.dxil	lifted	c8d6d609eccce22ca7722d5b26b8b0868a491a9bb579171d953c4fc667d29901
 arrays.66.dxil	lifted	8326b4a844846015bf0ee5f9d768f629f7f422a225cef6826f5c28429a1b1a6d
@@ -64,13 +64,14 @@ payload_layout_mesh.dxil	lifted	a4ecb7a490253f18aaeb797dcc11ecc70d6e15efba7b411c
 pixel_ops.66.dxil	lifted	94775b7c2dab8b96934c4a1808587440c9f1fca45cf90581c2bbdc2e8544a050
 pixel_ops.dxil	lifted	4d8b906cfeb8f9a92bd6be1444920fd8c359b1dcdd9032b8dd3dd6ead22b6128
 pixel_ops.od.dxil	lifted	7f5c4cad140fa6a8b4b9d963f1ccc36408e92ad30f1baba12d88571adea9f902
-ray_query_grid.dxil	refused	DXIL at bit 15910: dx.op.allocateRayQuery: dx.op 178 is not lifted onto the IR yet
-ray_query_hits.dxil	refused	DXIL at bit 15814: dx.op.allocateRayQuery: dx.op 178 is not lifted onto the IR yet
-ray_query_hits.od.dxil	refused	DXIL at bit 16320: dx.op.allocateRayQuery: dx.op 178 is not lifted onto the IR yet
-ray_query_matrices.dxil	refused	DXIL at bit 13980: dx.op.allocateRayQuery: dx.op 178 is not lifted onto the IR yet
-ray_query_procedural.dxil	refused	DXIL at bit 17904: dx.op.allocateRayQuery: dx.op 178 is not lifted onto the IR yet
-ray_query_state.dxil	refused	DXIL at bit 13068: dx.op.allocateRayQuery: dx.op 178 is not lifted onto the IR yet
-ray_query_state.od.dxil	refused	DXIL at bit 13420: dx.op.allocateRayQuery: dx.op 178 is not lifted onto the IR yet
+ray_query_grid.dxil	lifted	969177307384cf35340a0b1dee35f199eb839eddc7617bfbc25ec1ffe157d12c
+ray_query_hits.dxil	lifted	d04104d0fd74ab0be4b465270b6f3531ee97249e1bc259b9bd9d5f7c96dfe8f4
+ray_query_hits.od.dxil	lifted	7526aa39d8495242db19292d8f3b911a256f21c9fdef3212119128a0e1b85e1b
+ray_query_matrices.dxil	lifted	1b3c1906b809e937791a899988804bc05d6c85a43a0790bfe7f6f27237e8116e
+ray_query_object.dxil	lifted	b567444751575639ac14336f0d92e08d495fb53727496b821b282a4836e6ab48
+ray_query_procedural.dxil	lifted	4f41eb87da83eb2d2671ce311844e0d872427af505cff17ea53af3f612d2ff42
+ray_query_state.dxil	lifted	bfa6b7698bd8093fc95cfc1f98c85c3310fbf5fed73ac563c26daef4ffaa1689
+ray_query_state.od.dxil	lifted	602613b8c27fc3c42f2172dc0d8163116bc2c2f056d78825e4c77dbd11d83e3a
 ray_subobjects.any_hit.dxil	lifted	f03d518732b16239291446dcb751d6efec85094c46c3580aa858335bad43c89b
 ray_subobjects.closest_hit.dxil	lifted	398ef18785194ef03696f1e04d149ed95fb3c4c38e6c9d80d39252f7d7cd9335
 ray_subobjects.dxil	refused	DXIL at bit 9662: dx.entryPoints: expected exactly one entry point with a function, found 4

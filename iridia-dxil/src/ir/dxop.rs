@@ -31,14 +31,15 @@ impl Lift<'_> {
         args.get(n).and_then(|&a| const_int(self.m, self.f, a))
     }
 
-    /// Define a call's result: a half rounded where it is made.
+    /// Define a call's result: a half rounded where it is made. An operation that yields a value called as a function
+    /// that returns none (a damaged callee's type) is refused, as the naga-path lift refuses it.
     pub(crate) fn define_result(&mut self, inst: &Instruction, lv: Lv) -> Result<()> {
         match inst.result {
             Some((v, ty)) => {
                 let lv = self.quantized(lv, ty)?;
                 self.define(v, lv)
             }
-            None => Ok(()),
+            None => self.refuse("an instruction that yields a value but defines none"),
         }
     }
 
@@ -237,6 +238,8 @@ impl Lift<'_> {
             }
             57 | 160 | 216..=218 => self.create_handle(inst, code, args),
             141..=159 | 161 | 213 => self.ray_op(inst, code, args),
+            178 => self.allocate_ray_query(inst, args),
+            179..=212 | 214 | 215 => self.ray_query_op(inst, code, args),
             59 => self.cbuffer_load(inst, args),
             60..=65 | 73 | 74 => self.sample(inst, code, args),
             66 => self.texture_load(inst, args),
