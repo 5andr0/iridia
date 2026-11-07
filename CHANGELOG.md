@@ -11,13 +11,14 @@
 - `iridia-d3d9` and `iridia-d3d9-ir` refuse an instruction of another version (`texkill` in a vertex program, `defb` in
   `ps_2_0`), and `iridia-d3d9-ir` co-issue and a result shift outside pixel 1.x, which the reader refused before
   0.9.0 and now reads, as Microsoft's disassembler lists them.
-- Tests: the corpus tests read their programs through primase-testdata 0.2.5's `oracle_tree` (`Tree::names`,
+- Tests: the corpus tests read their programs through primase-testdata 0.2.6's `oracle_tree` (`Tree::names`,
   `Tree::read`), so a corpus may be a folder or an archive: iridia-dxil's `lift_corpus`, `metadata_census` and
   `container_digest`, iridia-dxbc's census helpers (`tests/common`: `lift_corpus`, `container_digest`,
   `control_bits`, `operand_format`, `exec_warp`, `vkd3d_oracle`, `reflection`, `disassembly`, `ir_gate`), iridia's
   slim gate and the d3d9 crates' sdb2 `corpus`, `gate` and `disassembly` tests. A folder is read by one thread at a
   time (SMB shares refuse many parallel reads, Windows error 1450) while the programs are checked in parallel; the
-  programs come in the order the folder walk gave, so every count is the same.
+  programs come in the order the folder walk gave, so every count is the same. The slim set, the Elden Ring and skate.
+  corpora and Shaun White's sdb2 are archives in 0.2.6, read on every thread, with the same counts.
 - `iridia-ir`'s `f32tof16` gives the quiet NaN 0x7e00 for every NaN (`iridia-exec-ir`'s definition, the WGSL
   `iridia-naga` writes for it, and `pack2x16float` in `iridia-exec`): the sign and payload of an operation's NaN are
   open in IEEE 754, and two lifts or a pass that orders an operation's operands otherwise made different ones, which
