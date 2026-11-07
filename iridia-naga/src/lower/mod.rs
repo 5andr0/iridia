@@ -2069,6 +2069,9 @@ impl Lower<'_> {
             Node::Emit(_) | Node::Cut(_) => {
                 return Err(err("a geometry program's emit and cut are not lowered yet"));
             }
+            Node::SetMeshCounts { .. } | Node::StoreVertex { .. } | Node::StoreIndices { .. } => {
+                return Err(err("a mesh program's meshlet is not lowered yet"));
+            }
             Node::If {
                 cond,
                 accept,

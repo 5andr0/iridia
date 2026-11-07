@@ -1124,6 +1124,72 @@ impl Checker<'_> {
                 self.problem(None, "a vertex emitted or a strip cut outside a geometry program");
             }
             Node::Emit(_) | Node::Cut(_) => {}
+            Node::SetMeshCounts { .. } | Node::StoreVertex { .. } | Node::StoreIndices { .. }
+                if self.stage != Stage::Mesh =>
+            {
+                self.problem(None, "a meshlet written outside a mesh program");
+            }
+            Node::SetMeshCounts { vertices, primitives } => {
+                for (v, what) in [(vertices, "vertex"), (primitives, "primitive")] {
+                    self.uses(None, *v);
+                    if self.ty(*v) != Some(Type::U32) {
+                        let m = format!("a mesh {what} count of {:?}", self.ty(*v));
+                        self.problem(Some(*v), m);
+                    }
+                }
+            }
+            Node::StoreVertex {
+                vertex,
+                slot,
+                mask,
+                value,
+            } => {
+                self.uses(None, *vertex);
+                self.uses(None, *value);
+                if self.ty(*vertex) != Some(Type::U32) {
+                    let m = format!("a mesh vertex numbered by {:?}", self.ty(*vertex));
+                    self.problem(Some(*vertex), m);
+                }
+                match self
+                    .interface
+                    .outputs
+                    .get(*slot as usize)
+                    .map(|o| masked_type(o.value, *mask))
+                {
+                    Some(Ok(t)) if Some(t) == self.ty(*value) => {}
+                    Some(Ok(t)) => {
+                        let m = format!(
+                            "vertex output {slot} lanes {mask:#06b} of {t} take {:?}",
+                            self.ty(*value)
+                        );
+                        self.problem(Some(*value), m);
+                    }
+                    Some(Err(e)) => self.problem(Some(*value), format!("vertex output {slot}: {e}")),
+                    None => self.problem(
+                        Some(*value),
+                        format!("vertex output slot {slot} is not in the interface"),
+                    ),
+                }
+            }
+            Node::StoreIndices { primitive, indices } => {
+                self.uses(None, *primitive);
+                self.uses(None, *indices);
+                if self.ty(*primitive) != Some(Type::U32) {
+                    let m = format!("a mesh primitive numbered by {:?}", self.ty(*primitive));
+                    self.problem(Some(*primitive), m);
+                }
+                if let StageFacts::Mesh(m) = &self.interface.facts {
+                    let lanes = u8::try_from(m.topology.indices()).unwrap_or(0);
+                    if self.ty(*indices) != Some(Type::vector(Scalar::U32, lanes)) {
+                        let m = format!(
+                            "a {:?} primitive's {lanes} indices given as {:?}",
+                            m.topology,
+                            self.ty(*indices)
+                        );
+                        self.problem(Some(*indices), m);
+                    }
+                }
+            }
             Node::Switch {
                 label,
                 selector,

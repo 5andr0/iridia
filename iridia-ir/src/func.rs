@@ -124,6 +124,35 @@ pub enum Node {
     Emit(u8),
     /// A geometry program ends the strip it is emitting on stream `.0`.
     Cut(u8),
+    /// A mesh program sets how many vertices and primitives its meshlet has (`u32` each), at most the most its facts
+    /// state. Every invocation of the thread group that sets them sets the same (Direct3D's `SetMeshOutputCounts`,
+    /// which requires it).
+    SetMeshCounts {
+        /// The vertices.
+        vertices: ValueId,
+        /// The primitives.
+        primitives: ValueId,
+    },
+    /// Lanes of output `slot` of a vertex of a mesh program's meshlet take the value, as `StoreOutput`'s lanes; a
+    /// vertex past the most the facts state is not written.
+    StoreVertex {
+        /// The vertex (`u32`).
+        vertex: ValueId,
+        /// The output.
+        slot: u32,
+        /// The lanes written.
+        mask: u8,
+        /// The value.
+        value: ValueId,
+    },
+    /// The vertex indices of a primitive of a mesh program's meshlet take the value: `vecN<u32>`, N the topology's
+    /// indices. A primitive past the most the facts state is not written.
+    StoreIndices {
+        /// The primitive (`u32`).
+        primitive: ValueId,
+        /// Its vertices.
+        indices: ValueId,
+    },
     /// A multi-way choice on an integer (`u32` or `i32`, by its bits): the case whose values hold it, else the default.
     /// Each region ends in a yield of the results' values or an exit; none falls into the next.
     Switch {
@@ -185,6 +214,9 @@ impl Node {
             | Node::Block { .. } => Vec::new(),
             Node::StoreVar(_, v) | Node::StoreOutput(_, _, v) | Node::StorePatch(_, _, v) => alloc::vec![*v],
             Node::StoreElement(_, i, v, _) => alloc::vec![*i, *v],
+            Node::SetMeshCounts { vertices, primitives } => alloc::vec![*vertices, *primitives],
+            Node::StoreVertex { vertex, value, .. } => alloc::vec![*vertex, *value],
+            Node::StoreIndices { primitive, indices } => alloc::vec![*primitive, *indices],
             Node::StoreBuffer {
                 resource,
                 address,
@@ -215,6 +247,9 @@ impl Node {
             | Node::Block { .. } => Vec::new(),
             Node::StoreVar(_, v) | Node::StoreOutput(_, _, v) | Node::StorePatch(_, _, v) => alloc::vec![v],
             Node::StoreElement(_, i, v, _) => alloc::vec![i, v],
+            Node::SetMeshCounts { vertices, primitives } => alloc::vec![vertices, primitives],
+            Node::StoreVertex { vertex, value, .. } => alloc::vec![vertex, value],
+            Node::StoreIndices { primitive, indices } => alloc::vec![primitive, indices],
             Node::StoreBuffer {
                 resource,
                 address,
@@ -244,6 +279,9 @@ impl Node {
                 | Node::Barrier(_)
                 | Node::Emit(_)
                 | Node::Cut(_)
+                | Node::SetMeshCounts { .. }
+                | Node::StoreVertex { .. }
+                | Node::StoreIndices { .. }
         )
     }
 

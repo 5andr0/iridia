@@ -798,6 +798,8 @@ struct Gate {
     neither: BTreeMap<String, (usize, String)>,
     /// Compute programs among those A runs.
     compute: usize,
+    /// Mesh programs among those A runs.
+    mesh: usize,
     /// Programs made of functions (hull, domain, geometry, a vertex program feeding a tessellator) among those A runs.
     functions: usize,
     /// Programs a quad of whose ran with coherent inputs at most, and with the first lane's in every lane.
@@ -837,6 +839,7 @@ impl Gate {
             only_ir,
             neither,
             compute,
+            mesh,
             functions,
             coherent,
             identical,
@@ -851,6 +854,7 @@ impl Gate {
         self.agree_b += agree_b;
         self.agree_p += agree_p;
         self.compute += compute;
+        self.mesh += mesh;
         self.functions += functions;
         self.coherent += coherent;
         self.identical += identical;
@@ -1018,7 +1022,7 @@ fn check(g: &mut Gate, path: &std::path::Path, at: &str, took: &mut Took) {
         }
     };
     took.lift = lap(&mut mark);
-    if old.interface.stage == Stage::Compute {
+    if matches!(old.interface.stage, Stage::Compute | Stage::Mesh) {
         compute(g, &old, p, at, took);
         return;
     }
@@ -1326,11 +1330,12 @@ fn gate_over(name: &str, paths: &[std::path::PathBuf], not_yet: &[&str]) {
         report_times(&mut took, workers);
     }
     println!(
-        "{name}: {} programs, A runs {} ({} compute, {} of functions), B agrees {}, P agrees {}, C agrees {} ({} not \
-         lowered, {} not built), {} differ, IR refuses {}, only the IR lifts {}, neither lifts {}",
+        "{name}: {} programs, A runs {} ({} compute, {} mesh, {} of functions), B agrees {}, P agrees {}, C agrees {} \
+         ({} not lowered, {} not built), {} differ, IR refuses {}, only the IR lifts {}, neither lifts {}",
         g.programs,
         g.a,
         g.compute,
+        g.mesh,
         g.functions,
         g.agree_b,
         g.agree_p,
@@ -1413,13 +1418,20 @@ struct Memory {
     elements: BTreeMap<(ResourceId, u32), Vec<u32>>,
     texels: Texels,
     counters: BTreeMap<(u32, u32), u32>,
+    /// A mesh program's: the words of the meshlet each thread group wrote, in the order of the dispatch.
+    meshlets: Vec<Vec<u32>>,
 }
 
 impl Memory {
     /// The memory with every word that is a NaN as one pattern, as outputs are compared: a float a program stores
     /// keeps the NaN its arithmetic made, whose sign and payload IEEE 754 leaves open.
     fn canonical(mut self) -> Self {
-        for words in self.buffers.values_mut().chain(self.elements.values_mut()) {
+        for words in self
+            .buffers
+            .values_mut()
+            .chain(self.elements.values_mut())
+            .chain(&mut self.meshlets)
+        {
             for w in words.iter_mut() {
                 *w = canonical(*w);
             }
@@ -1680,7 +1692,23 @@ fn dispatch(exe: &Executable, program: &iridia::Program, c: u32) -> Result<Memor
     let mut s = seeded(program, c);
     let bound = exe.bind_resources(&s.resources)?;
     let mut backend = Group::for_case(c);
-    exe.dispatch_elements(&bound, &mut backend, &mut s.buffers, &mut s.elements, GROUPS, 32)?;
+    let mut meshlets = Vec::new();
+    if program.interface.stage == Stage::Mesh {
+        exe.dispatch_mesh_elements(
+            &bound,
+            &mut backend,
+            &mut s.buffers,
+            &mut s.elements,
+            GROUPS,
+            32,
+            &mut |_, words| {
+                meshlets.push(words.to_vec());
+                Ok(())
+            },
+        )?;
+    } else {
+        exe.dispatch_elements(&bound, &mut backend, &mut s.buffers, &mut s.elements, GROUPS, 32)?;
+    }
     // a counter kept in a buffer of its own (the older DXIL lift's, a word per element) is that view's counter, as the
     // backend keeps an IR program's; a counter left where it started is not told from one the run never touched
     let mut counters = backend.counters;
@@ -1700,6 +1728,7 @@ fn dispatch(exe: &Executable, program: &iridia::Program, c: u32) -> Result<Memor
         elements: s.elements,
         texels: backend.texels,
         counters,
+        meshlets,
     }
     .canonical())
 }
@@ -1709,7 +1738,8 @@ fn past_budget(run: &Result<Memory, String>) -> bool {
     matches!(run, Err(e) if e.ends_with("execution budget exceeded"))
 }
 
-/// A compute program: A, B and P dispatched on the same seeded memory must leave the same memory.
+/// A compute or mesh program: A, B and P dispatched on the same seeded memory must leave the same memory, and a mesh
+/// program's thread groups the same meshlets.
 fn compute(g: &mut Gate, old: &iridia::Program, p: iridia_ir::Program, at: &str, took: &mut Took) {
     let mut mark = Instant::now();
     let a = match Executable::new(old) {
@@ -1717,7 +1747,11 @@ fn compute(g: &mut Gate, old: &iridia::Program, p: iridia_ir::Program, at: &str,
         Err(e) => return tally(&mut g.a_fails, &format!("A not built: {e}"), at),
     };
     g.a += 1;
-    g.compute += 1;
+    *if old.interface.stage == Stage::Mesh {
+        &mut g.mesh
+    } else {
+        &mut g.compute
+    } += 1;
     took.lift += lap(&mut mark);
     // A's memory after each vector, which B and P are both held to
     let older: Vec<_> = (0..CASES).map(|c| dispatch(&a, old, c)).collect();
@@ -1880,6 +1914,7 @@ fn call(
             elements: s.elements,
             texels: backend.texels,
             counters: backend.counters,
+            meshlets: Vec::new(),
         }
         .canonical(),
     ))
@@ -2476,6 +2511,7 @@ mod properties {
                 elements: BTreeMap::from([((ResourceId(2), 0), words)]),
                 texels: Texels::new(),
                 counters: BTreeMap::new(),
+                meshlets: Vec::new(),
             }
             .canonical();
             let j = pick.index(words.len());

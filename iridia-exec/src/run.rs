@@ -2627,8 +2627,9 @@ pub(super) fn math(mf: MathOp, [a, b, c, d]: [Reg; 4], n: u8, z: bool) -> Reg {
 
 // ---------------------------------------------------------------------------------------------------- compute
 
-/// What a run of a mesh program does with the memory of a thread group's output variable when the group has finished.
-pub(super) type GroupHook<'a> = dyn FnMut([u32; 3], &[u32]) -> Result<(), String> + 'a;
+/// What a run of a mesh program does with the memory of a thread group's output variable when the group has finished:
+/// it takes the group's position in the dispatch and the words.
+pub type GroupHook<'a> = dyn FnMut([u32; 3], &[u32]) -> Result<(), String> + 'a;
 
 /// What a compute run did.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -2673,49 +2674,41 @@ impl Executable {
         wave: u32,
         after: &mut GroupHook<'_>,
     ) -> Result<Dispatched, String> {
+        self.dispatch_mesh_elements(
+            bound,
+            backend,
+            &mut BTreeMap::new(),
+            &mut BTreeMap::new(),
+            groups,
+            wave,
+            after,
+        )
+    }
+
+    /// [`Executable::dispatch_elements`] for a mesh program: `meshlet` takes the words of the meshlet each thread group
+    /// wrote (its output variable, which [`crate::mesh::MeshShader`] reads) when the group has finished, with the
+    /// group's position in the dispatch.
+    #[allow(clippy::too_many_arguments)]
+    pub fn dispatch_mesh_elements(
+        &self,
+        bound: &Bound<'_>,
+        backend: &mut dyn Backend,
+        buffers: &mut BTreeMap<ResourceId, Vec<u32>>,
+        elements: &mut BTreeMap<(ResourceId, u32), Vec<u32>>,
+        groups: [u32; 3],
+        wave: u32,
+        meshlet: &mut GroupHook<'_>,
+    ) -> Result<Dispatched, String> {
         let (global, _) = self.mesh_output.ok_or("not a mesh program")?;
-        let size = self.workgroup.ok_or("not a mesh program")?;
-        if wave == 0 {
-            return Err("a wave of no lanes".into());
-        }
-        let ids = (0..groups[2])
-            .flat_map(move |z| (0..groups[1]).flat_map(move |y| (0..groups[0]).map(move |x| [x, y, z])));
-        let mut buffers = BTreeMap::new();
-        let mut elements = BTreeMap::new();
-        match group_lanes(size)? {
-            0 => Err("a thread group of no invocations".into()),
-            1..=64 => self.groups::<64>(
-                bound,
-                backend,
-                &mut buffers,
-                &mut elements,
-                ids,
-                size,
-                wave,
-                Some((global, after)),
-            ),
-            65..=256 => self.groups::<256>(
-                bound,
-                backend,
-                &mut buffers,
-                &mut elements,
-                ids,
-                size,
-                wave,
-                Some((global, after)),
-            ),
-            257..=1024 => self.groups::<1024>(
-                bound,
-                backend,
-                &mut buffers,
-                &mut elements,
-                ids,
-                size,
-                wave,
-                Some((global, after)),
-            ),
-            _ => Err("a thread group of more than 1024 invocations".into()),
-        }
+        self.dispatch_groups(
+            bound,
+            backend,
+            buffers,
+            elements,
+            groups,
+            wave,
+            Some((global, meshlet)),
+        )
     }
 
     /// [`Executable::dispatch`] for a program that also writes elements of arrays of buffers, `elements` holding
@@ -2729,6 +2722,22 @@ impl Executable {
         groups: [u32; 3],
         wave: u32,
     ) -> Result<Dispatched, String> {
+        self.dispatch_groups(bound, backend, buffers, elements, groups, wave, None)
+    }
+
+    /// Run `groups` thread groups in the order of the dispatch (x, then y, then z), each with as many lanes as the
+    /// executor's widths need; `after` takes a global's words when each group has finished.
+    #[allow(clippy::too_many_arguments)]
+    fn dispatch_groups(
+        &self,
+        bound: &Bound<'_>,
+        backend: &mut dyn Backend,
+        buffers: &mut BTreeMap<ResourceId, Vec<u32>>,
+        elements: &mut BTreeMap<(ResourceId, u32), Vec<u32>>,
+        groups: [u32; 3],
+        wave: u32,
+        after: Option<(usize, &mut GroupHook<'_>)>,
+    ) -> Result<Dispatched, String> {
         let size = self.workgroup.ok_or("not a compute program")?;
         if wave == 0 {
             return Err("a wave of no lanes".into());
@@ -2737,9 +2746,9 @@ impl Executable {
             .flat_map(move |z| (0..groups[1]).flat_map(move |y| (0..groups[0]).map(move |x| [x, y, z])));
         match group_lanes(size)? {
             0 => Err("a thread group of no invocations".into()),
-            1..=64 => self.groups::<64>(bound, backend, buffers, elements, ids, size, wave, None),
-            65..=256 => self.groups::<256>(bound, backend, buffers, elements, ids, size, wave, None),
-            257..=1024 => self.groups::<1024>(bound, backend, buffers, elements, ids, size, wave, None),
+            1..=64 => self.groups::<64>(bound, backend, buffers, elements, ids, size, wave, after),
+            65..=256 => self.groups::<256>(bound, backend, buffers, elements, ids, size, wave, after),
+            257..=1024 => self.groups::<1024>(bound, backend, buffers, elements, ids, size, wave, after),
             _ => Err("a thread group of more than 1024 invocations".into()),
         }
     }

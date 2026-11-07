@@ -903,6 +903,39 @@ impl<'a> Parser<'a> {
                 value: self.value_id(v)?,
             }));
         }
+        if let Some(rest) = line.strip_prefix("store vertex ") {
+            let Some((at, v)) = rest.split_once(" = ") else {
+                return self.fail("a vertex store without a value");
+            };
+            let Some((vertex, at)) = at.split_once(' ') else {
+                return self.fail("a vertex store without its output");
+            };
+            let (slot, mask) = self.slot(at)?;
+            return Ok(Some(Node::StoreVertex {
+                vertex: self.value_id(vertex)?,
+                slot,
+                mask,
+                value: self.value_id(v)?,
+            }));
+        }
+        if let Some(rest) = line.strip_prefix("store indices ") {
+            let Some((primitive, v)) = rest.split_once(" = ") else {
+                return self.fail("an index store without a value");
+            };
+            return Ok(Some(Node::StoreIndices {
+                primitive: self.value_id(primitive)?,
+                indices: self.value_id(v)?,
+            }));
+        }
+        if let Some(rest) = line.strip_prefix("mesh counts ") {
+            let Some((vertices, primitives)) = rest.split_once(", ") else {
+                return self.fail("mesh counts without both counts");
+            };
+            return Ok(Some(Node::SetMeshCounts {
+                vertices: self.value_id(vertices)?,
+                primitives: self.value_id(primitives)?,
+            }));
+        }
         if let Some(rest) = line.strip_prefix("store texel ") {
             let Some((at, v)) = rest.rsplit_once(" = ") else {
                 return self.fail("a texel store without a value");

@@ -15,6 +15,7 @@
 //! function (`Program::patch`), each lifted from its own LLVM function. A domain or geometry program is its entry.
 
 mod dxop;
+mod mesh;
 mod resources;
 mod stages;
 mod values;
@@ -77,18 +78,24 @@ pub fn lift_with(container: &[u8], bound: &iridia::BoundSizes) -> Result<Program
     let stage = setup.interface.stage;
     if !matches!(
         stage,
-        Stage::Vertex | Stage::Pixel | Stage::Compute | Stage::Hull | Stage::Domain | Stage::Geometry
+        Stage::Vertex
+            | Stage::Pixel
+            | Stage::Compute
+            | Stage::Hull
+            | Stage::Domain
+            | Stage::Geometry
+            | Stage::Mesh
     ) {
         return Err(error(
             0,
             format!("a {stage:?} program is not lifted onto the IR yet"),
         ));
     }
-    let workgroup = if stage == Stage::Compute {
+    let workgroup = if matches!(stage, Stage::Compute | Stage::Mesh) {
         Some(
             reflection::num_threads(&module)
                 .map_err(read)?
-                .ok_or_else(|| error(0, "a compute program that states no thread group size"))?,
+                .ok_or_else(|| error(0, format!("a {stage:?} program that states no thread group size")))?,
         )
     } else {
         None

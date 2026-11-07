@@ -312,6 +312,7 @@ impl Lift<'_> {
             }
             97..=99 => self.stream_op(code, args),
             110..=123 | 135 | 136 => self.wave(inst, code, args),
+            168..=173 => self.mesh_op(code, args),
             100 => self.pipeline_value(inst, Builtin::GsInstance),
             103 => self.load_output_control_point(inst, args),
             104 => self.load_patch_constant(inst, args),
@@ -437,6 +438,14 @@ impl Lift<'_> {
 
     /// `StoreOutput(element, row, column, value)`: one lane of an output varying.
     fn store_output(&mut self, args: &[ValueId]) -> Result<()> {
+        let (slot, position, x) = self.output_lane(args)?;
+        self.g.node(Node::StoreOutput(slot, 1 << position, x));
+        Ok(())
+    }
+
+    /// The output lane `(element, row, column, value)` of a store (arguments 1 to 4) names: the output's slot, the
+    /// lane's position in it, and the value as the output's scalar.
+    pub(crate) fn output_lane(&mut self, args: &[ValueId]) -> Result<(u32, u8, IrValue)> {
         let Some(id) = self.const_arg(args, 1) else {
             return self.refuse("an output written at a computed element");
         };
@@ -495,8 +504,7 @@ impl Lift<'_> {
         let x = self.flag_bits(x);
         let x = self.retype(x, t)?;
         let slot = u32::try_from(slot).map_err(|_| crate::error(self.at, "an output slot past 2^32"))?;
-        self.g.node(Node::StoreOutput(slot, 1 << position, x));
-        Ok(())
+        Ok((slot, position, x))
     }
 
     /// `Barrier(mode)`: 1 synchronise the thread group, 2 fence buffer memory across groups, 4 fence it within the

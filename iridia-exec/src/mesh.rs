@@ -3,9 +3,9 @@
 //! geometry program's emitted vertices are, [`MeshShader::outputs`] names them) and its primitives (the indices of their
 //! vertices). What the rasterizer does with them is the pipeline's.
 //!
-//! The program is the entry point of [`iridia::build::Builder::finish_mesh`]: the group's invocations run in lockstep
-//! like a compute program's, and what they write is the module's output variable, thread-group memory that is read when
-//! the group has finished. The counts the program set are the group's (D3D requires every invocation to set the same),
+//! The program is the entry point of [`iridia::build::Builder::finish_mesh`], or a mesh program on the IR
+//! ([`MeshShader::from_ir`]): the group's invocations run in lockstep like a compute program's, and what they write is
+//! the module's output variable (the IR's meshlet stores), thread-group memory that is read when the group has finished. The counts the program set are the group's (D3D requires every invocation to set the same),
 //! and a count past the most the program declares, or an index past the vertices it counted, is an error of the run:
 //! D3D leaves both undefined.
 
@@ -13,7 +13,7 @@ use super::geometry::Vertex;
 use super::stage::{Bindings, Constants};
 use super::{Executable, error};
 use crate::{Error, Sampler};
-use iridia::{IoType, MeshFacts, MeshTopology, Program, StageFacts, mesh_vertex_io};
+use iridia::{Interface, IoType, MeshFacts, MeshTopology, Program, StageFacts, mesh_vertex_io};
 
 /// What one thread group wrote.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -29,7 +29,7 @@ pub struct Meshlet {
 /// A mesh program ready to run.
 #[derive(Debug)]
 pub struct MeshShader {
-    program: Program,
+    interface: Interface,
     executable: Executable,
     facts: MeshFacts,
     /// The output varyings: their names and widths, in the order of the registers of a vertex.
@@ -40,13 +40,26 @@ pub struct MeshShader {
 impl MeshShader {
     /// Prepare `program`, a mesh program, to run.
     pub fn new(program: Program) -> Result<Self, Error> {
-        let StageFacts::Mesh(facts) = program.interface.facts else {
+        let executable = Executable::new(&program)?;
+        Self::assemble(program.interface, executable)
+    }
+
+    /// Prepare `program`, a mesh program on the IR, to run as [`MeshShader::new`] runs its naga form: the same
+    /// meshlets out.
+    pub fn from_ir(program: &iridia_ir::Program) -> Result<Self, Error> {
+        let executable = Executable::from_ir(program)?;
+        Self::assemble(program.interface.clone(), executable)
+    }
+
+    /// The shader of a mesh program of `interface` compiled as `executable`.
+    fn assemble(interface: Interface, executable: Executable) -> Result<Self, Error> {
+        let StageFacts::Mesh(facts) = interface.facts else {
             return Err(error(format!(
                 "a {:?} program is not a mesh program",
-                program.stage
+                interface.stage
             )));
         };
-        let outputs = mesh_vertex_io(&program.interface)
+        let outputs = mesh_vertex_io(&interface)
             .map_err(error)?
             .into_iter()
             .map(|item| match item.ty {
@@ -57,18 +70,17 @@ impl MeshShader {
                 ))),
             })
             .collect::<Result<Vec<_>, _>>()?;
-        if outputs.len() != program.interface.outputs.len() {
+        if outputs.len() != interface.outputs.len() {
             return Err(error(
                 "a mesh program whose clip or cull distances are carried together",
             ));
         }
-        let executable = Executable::new(&program)?;
         let (_, words) = executable
             .mesh_output
             .ok_or_else(|| error("a mesh program without its output variable"))?;
         let shader = Self {
-            bindings: Bindings::new(&program.interface).map_err(error)?,
-            program,
+            bindings: Bindings::new(&interface).map_err(error)?,
+            interface,
             executable,
             facts,
             outputs,
@@ -83,9 +95,9 @@ impl MeshShader {
         Ok(shader)
     }
 
-    /// The mesh program the shader runs.
-    pub fn program(&self) -> &Program {
-        &self.program
+    /// The interface of the mesh program the shader runs.
+    pub fn interface(&self) -> &Interface {
+        &self.interface
     }
 
     /// What the program states: the kind of primitive it writes and the most vertices and primitives a group writes.

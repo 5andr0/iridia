@@ -528,6 +528,29 @@ impl Printer<'_> {
                 self.indent();
                 let _ = writeln!(self.out, "cut {stream}");
             }
+            Node::SetMeshCounts { vertices, primitives } => {
+                self.indent();
+                let _ = writeln!(self.out, "mesh counts %{}, %{}", vertices.0, primitives.0);
+            }
+            Node::StoreVertex {
+                vertex,
+                slot,
+                mask,
+                value,
+            } => {
+                self.indent();
+                let _ = writeln!(
+                    self.out,
+                    "store vertex %{} {slot}.{} = %{}",
+                    vertex.0,
+                    lanes(*mask),
+                    value.0
+                );
+            }
+            Node::StoreIndices { primitive, indices } => {
+                self.indent();
+                let _ = writeln!(self.out, "store indices %{} = %{}", primitive.0, indices.0);
+            }
             Node::Switch {
                 label,
                 selector,

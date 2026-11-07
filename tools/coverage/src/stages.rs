@@ -263,7 +263,7 @@ pub fn mesh_draw(
     state: &Rasterizer,
     surface: &mut Surface,
 ) -> Result<DrawStats, Stopped> {
-    let constants = constants_of(&ms.program().interface, rows);
+    let constants = constants_of(ms.interface(), rows);
     let meshlets = ms
         .draw(&constants, sampler, groups, wave)
         .map_err(|e| Stopped::Failed("ms", e.to_string()))?;
@@ -288,7 +288,7 @@ pub fn mesh_draw(
         }
         vertices.extend(meshlet.vertices);
     }
-    ShadedDraw::new(&ms.program().interface.outputs, ps)
+    ShadedDraw::new(&ms.interface().outputs, ps)
         .map_err(|e| Stopped::Failed("ps", e.to_string()))?
         .draw(&vertices, &primitives, ps_banks, sampler, state, surface)
         .map_err(|e| Stopped::Failed("ps", e.to_string()))

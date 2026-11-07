@@ -101,7 +101,7 @@ pub use request::{
     Backend, BufferAtomic, CallShader, Dim, Element, ImageAtomic, ImageAtomicOp, ImageLoad, ImageLod,
     ImageQuery, ImageSample, ImageStore, QueryKind, ReportHit, TraceRay,
 };
-pub use run::{Bound, Decision, Dispatched, Output, Resources, Runner, STEP_LIMIT, Scratch};
+pub use run::{Bound, Decision, Dispatched, GroupHook, Output, Resources, Runner, STEP_LIMIT, Scratch};
 pub use stage::Constants;
 
 use iridia::Program;

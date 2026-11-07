@@ -55,6 +55,58 @@ struct Emitted {
     strips: u32,
 }
 
+/// A mesh program's meshlet: a workgroup global in the words [`crate::mesh::MeshShader`] reads, the two counts, then
+/// each vertex's outputs packed, then each primitive's indices.
+#[derive(Clone)]
+struct Meshlet {
+    global: u32,
+    /// Per interface output: its first word in a vertex.
+    output_at: Vec<u32>,
+    /// Words of a vertex, and the most vertices.
+    vertex: u32,
+    max_vertices: u32,
+    /// The first word of the primitives, a primitive's words (its indices), and the most primitives.
+    primitives_at: u32,
+    index: u32,
+    max_primitives: u32,
+}
+
+impl Meshlet {
+    /// The words of a mesh program of `interface`, in global `global`.
+    fn of(interface: &Interface, global: u32) -> Result<Self, String> {
+        let StageFacts::Mesh(facts) = &interface.facts else {
+            return Err("a mesh program without its facts".into());
+        };
+        let mut output_at = Vec::with_capacity(interface.outputs.len());
+        let mut vertex = 0u32;
+        for o in &interface.outputs {
+            output_at.push(vertex);
+            vertex = vertex.saturating_add(u32::from(o.value.width));
+        }
+        let primitives_at = vertex
+            .checked_mul(facts.max_vertices)
+            .and_then(|w| w.checked_add(2))
+            .ok_or("a meshlet past the words of memory")?;
+        Ok(Self {
+            global,
+            output_at,
+            vertex,
+            max_vertices: facts.max_vertices,
+            primitives_at,
+            index: facts.topology.indices(),
+            max_primitives: facts.max_primitives,
+        })
+    }
+
+    /// All its words.
+    fn words(&self) -> Result<u32, String> {
+        self.index
+            .checked_mul(self.max_primitives)
+            .and_then(|w| w.checked_add(self.primitives_at))
+            .ok_or_else(|| "a meshlet past the words of memory".to_owned())
+    }
+}
+
 /// Whether region `r` (or one inside it) ends by leaving the construct `label` names.
 fn breaks_to(r: &Region, label: ir::LabelId) -> bool {
     matches!(&r.end, Some(End::Br(l, _)) if *l == label)
@@ -106,6 +158,8 @@ struct Cx<'p> {
     builtins: Vec<(ir::Builtin, u32)>,
     /// A geometry program's vertices.
     emitted: Option<Emitted>,
+    /// A mesh program's meshlet.
+    meshlet: Option<Meshlet>,
     /// Per interface output: its first local word and its words.
     outputs: Vec<(u32, u32)>,
     /// The members of the result, in the order of the entry point's results.
@@ -695,18 +749,28 @@ impl Cx<'_> {
 
     /// Lanes `mask` of the four words at `base` take the lanes of register `src`, in order.
     fn store_lanes(&mut self, out: &mut Vec<St>, base: u32, mask: u8, src: u32) -> Result<(), String> {
+        self.store_masked(out, mask, src, |lane, src, n| St::Store {
+            loc: Loc::Local(base.saturating_add(u32::from(lane))),
+            src,
+            n,
+        })
+    }
+
+    /// Lanes `mask` of four words take the lanes of register `src`, in order: `put(lane, register, n)` stores `n`
+    /// lanes of a register from lane `lane` on, once for the whole mask where its lanes are consecutive, else once
+    /// for each lane.
+    fn store_masked(
+        &mut self,
+        out: &mut Vec<St>,
+        mask: u8,
+        src: u32,
+        put: impl Fn(u8, u32, u8) -> St,
+    ) -> Result<(), String> {
         let lanes = lanes_of(mask);
         let first = lanes.first().copied().unwrap_or(0);
         let contiguous = lanes.iter().zip(first..).all(|(&l, k)| l == k);
         if contiguous {
-            return self.statement(
-                out,
-                St::Store {
-                    loc: Loc::Local(base.saturating_add(u32::from(first))),
-                    src,
-                    n: u8::try_from(lanes.len()).unwrap_or(4),
-                },
-            );
+            return self.statement(out, put(first, src, u8::try_from(lanes.len()).unwrap_or(4)));
         }
         for (k, lane) in lanes.into_iter().enumerate() {
             let one = self.fresh(Type::U32)?;
@@ -717,16 +781,66 @@ impl Cx<'_> {
                     i: u8::try_from(k).unwrap_or(0),
                 },
             ));
-            self.statement(
-                out,
-                St::Store {
-                    loc: Loc::Local(base.saturating_add(u32::from(lane))),
-                    src: one,
-                    n: 1,
-                },
-            )?;
+            self.statement(out, put(lane, one, 1))?;
         }
         Ok(())
+    }
+
+    /// A mesh program's meshlet store: the counts, lanes of a vertex's output, or a primitive's indices. A vertex or
+    /// primitive past the most the program states is not written.
+    fn meshlet(&mut self, out: &mut Vec<St>, node: &Node) -> Result<(), String> {
+        let m = self
+            .meshlet
+            .clone()
+            .ok_or("a meshlet store outside a mesh program")?;
+        match *node {
+            Node::SetMeshCounts { vertices, primitives } => {
+                for (word, v) in [(0, vertices), (1, primitives)] {
+                    self.statement(
+                        out,
+                        St::Store {
+                            loc: Loc::Global(m.global, word),
+                            src: v.0,
+                            n: 1,
+                        },
+                    )?;
+                }
+                Ok(())
+            }
+            Node::StoreVertex {
+                vertex,
+                slot,
+                mask,
+                value,
+            } => {
+                let at = m
+                    .output_at
+                    .get(slot as usize)
+                    .copied()
+                    .ok_or_else(|| format!("vertex output {slot} is not in the interface"))?
+                    .saturating_add(2);
+                self.store_masked(out, mask, value.0, |lane, src, n| St::StoreElement {
+                    loc: Loc::Global(m.global, at.saturating_add(u32::from(lane))),
+                    index: vertex.0,
+                    stride: m.vertex,
+                    len: m.max_vertices,
+                    src,
+                    n,
+                })
+            }
+            Node::StoreIndices { primitive, indices } => self.statement(
+                out,
+                St::StoreElement {
+                    loc: Loc::Global(m.global, m.primitives_at),
+                    index: primitive.0,
+                    stride: m.index,
+                    len: m.max_primitives,
+                    src: indices.0,
+                    n: u8::try_from(m.index).unwrap_or(3),
+                },
+            ),
+            _ => Err("not a meshlet store".into()),
+        }
     }
 
     /// Leave the function with the outputs stored so far.
@@ -986,6 +1100,9 @@ impl Cx<'_> {
                 )
             }
             Node::StoreOutput(slot, mask, v) => self.store_output(out, *slot, *mask, v.0),
+            Node::SetMeshCounts { .. } | Node::StoreVertex { .. } | Node::StoreIndices { .. } => {
+                self.meshlet(out, n)
+            }
             Node::StorePatch(slot, mask, v) => {
                 let base = self
                     .patch_out
@@ -1416,6 +1533,7 @@ fn start<'p>(p: &'p ir::Program, f: &'p Function) -> Result<Cx<'p>, String> {
         patch_out: vec![None; patch_constants],
         builtins: Vec::new(),
         emitted: None,
+        meshlet: None,
         outputs: Vec::new(),
         returned: Vec::new(),
         frames: Vec::new(),
@@ -1438,10 +1556,12 @@ fn start<'p>(p: &'p ir::Program, f: &'p Function) -> Result<Cx<'p>, String> {
     Ok(cx)
 }
 
-/// Compile the entry function of `p`, a program of a stage that is an entry point (vertex, pixel, compute).
+/// Compile the entry function of `p`, a program of a stage that is an entry point (vertex, pixel, compute, mesh).
 pub(crate) fn compile(p: &ir::Program) -> Result<Executable, String> {
-    if !matches!(p.stage, Stage::Vertex | Stage::Pixel | Stage::Compute)
-        || p.interface.facts == StageFacts::VertexWithoutPosition
+    if !matches!(
+        p.stage,
+        Stage::Vertex | Stage::Pixel | Stage::Compute | Stage::Mesh
+    ) || p.interface.facts == StageFacts::VertexWithoutPosition
     {
         return Err(format!(
             "a {:?} program is made of functions: compile it with Executable::function_from_ir",
@@ -1786,6 +1906,20 @@ fn finish(
             n: 1,
         });
     }
+    // a mesh program's meshlet: thread-group memory, read when the group has finished
+    let mesh_output = if p.stage == Stage::Mesh {
+        let m = Meshlet::of(cx.interface, number(cx.globals.len())?)?;
+        let words = m.words()?;
+        cx.globals.push(GlobalDesc {
+            kind: GlobalKind::Workgroup(words),
+            elem_words: 1,
+        });
+        let global = m.global as usize;
+        cx.meshlet = Some(m);
+        Some((global, words))
+    } else {
+        None
+    };
     let mut out = prologue;
     cx.region(body, Yield::Return, &mut out)?;
     cx.flush(&mut out)?;
@@ -1803,7 +1937,7 @@ fn finish(
         globals: cx.globals,
         flush_denormals: p.float.f32 == ir::Denormals::Flush,
         workgroup: p.workgroup,
-        mesh_output: None,
+        mesh_output,
         builtins: arguments.builtins,
         ir_types: cx.types,
     })

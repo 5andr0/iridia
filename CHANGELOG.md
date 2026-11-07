@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- `iridia-ir`: a mesh program's meshlet, `Node::SetMeshCounts`, `Node::StoreVertex` (lanes of a vertex's output, a
+  vertex past the most the facts state not written) and `Node::StoreIndices` (a primitive's vertex indices), in the text
+  form as `mesh counts %v, %p`, `store vertex %i 0.xy = %x` and `store indices %i = %x`, valid in a mesh program alone.
+  `iridia-exec` runs a mesh program on the IR (`MeshShader::from_ir`) with its meshlet in the words the naga-path
+  executor writes, so both draw the same meshlets; `Executable::dispatch_mesh_elements` runs one on given memory and
+  hands each group's meshlet over. `MeshShader::interface` replaces `MeshShader::program`. `iridia-naga` refuses a mesh
+  program by name.
+- `iridia-dxil::ir` lifts mesh programs (`SetMeshOutputCounts`, `EmitIndices`, `StoreVertexOutput`), with the thread
+  group size the entry states; a task payload, per-primitive outputs and `DispatchMesh` are refused by name. The gate
+  runs a mesh program as a compute one and compares each group's meshlet too: the DXIL fixtures' 3 mesh builds agree,
+  and on the slim set A runs 1,619 (3 mesh), B and P agree on 1,353, C on 1,123, none differ.
 - `iridia-naga`: `Profile` states which `enable` directives `wgsl` and `wgsl_for` write (`Profile::directives`,
   `Directives::{Naga, Standard}`). `BROWSER` writes the standard's: `enable subgroups;` before a program that uses a
   subgroup operation or built-in, which a browser requires and naga's writer never states. `NAGA` writes naga's, without

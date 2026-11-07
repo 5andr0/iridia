@@ -210,6 +210,28 @@ impl Builder {
         self.current.nodes.push(Node::Cut(stream));
     }
 
+    /// Set the counts of a mesh program's meshlet.
+    pub fn set_mesh_counts(&mut self, vertices: ValueId, primitives: ValueId) {
+        self.current
+            .nodes
+            .push(Node::SetMeshCounts { vertices, primitives });
+    }
+
+    /// Lanes `mask` of output `slot` of a meshlet's vertex take the value.
+    pub fn store_vertex(&mut self, vertex: ValueId, slot: u32, mask: u8, value: ValueId) {
+        self.current.nodes.push(Node::StoreVertex {
+            vertex,
+            slot,
+            mask,
+            value,
+        });
+    }
+
+    /// A meshlet's primitive takes its vertex indices.
+    pub fn store_indices(&mut self, primitive: ValueId, indices: ValueId) {
+        self.current.nodes.push(Node::StoreIndices { primitive, indices });
+    }
+
     /// Place any node in the current region.
     pub fn node(&mut self, node: Node) {
         self.current.nodes.push(node);
