@@ -324,6 +324,81 @@ fn main {
 }
 
 #[test]
+fn prepare_takes_a_graph_to_regions_with_innermost_exits_that_mean_the_same() {
+    // the program of the test above, flattened to the graph a DXIL lift gives, then prepared as an output takes it
+    let text = "iridia-ir 1
+fn main {
+  var r: f32
+  %0: f32 = input 0.x
+  r = %0
+  %1: f32 = f32(0.0)
+  %2: f32 = f32(10.0)
+  %3: f32 = f32(2.0)
+  block '0 {
+    %4: bool = fcmp.lt %0, %1
+    if %4 {
+      %5: f32 = fneg %0
+      r = %5
+      br '0
+    } else {
+      yield
+    }
+    yield
+  }
+  loop '1 () = () {
+    %6: f32 = load r
+    %7: bool = fcmp.ge %6, %2
+    if %7 {
+      br '1
+    } else {
+      yield
+    }
+    %8: f32 = fmul.ieee %6, %3
+    r = %8
+    continue '1
+  }
+  %9: f32 = load r
+  output 0.x = %9
+  return
+}
+";
+    let p = from_text(text, &[F1], &[F1], Vec::new());
+    let mut prepared = p.clone();
+    iridia_passes::flatten(&mut prepared.entry).unwrap();
+    assert!(matches!(prepared.entry.body, iridia_ir::Body::Cfg(_)));
+    iridia_passes::prepare(&mut prepared).unwrap();
+    iridia_ir::validate(&prepared).unwrap_or_else(|e| {
+        panic!(
+            "{e:?}
+{}",
+            iridia_ir::text::print(&prepared.entry)
+        )
+    });
+    assert!(matches!(prepared.entry.body, iridia_ir::Body::Regions(_)));
+    // promoted: no variable is left
+    assert!(
+        prepared.entry.vars.is_empty(),
+        "{}",
+        iridia_ir::text::print(&prepared.entry)
+    );
+    // a prepared program is prepared again unchanged
+    let mut twice = prepared.clone();
+    iridia_passes::prepare(&mut twice).unwrap();
+    assert_eq!(
+        iridia_ir::text::print(&twice.entry),
+        iridia_ir::text::print(&prepared.entry)
+    );
+    for (x, want) in [(-3.0f32, 12.0f32), (0.5, 16.0), (20.0, 20.0), (-40.0, 40.0)] {
+        for prog in [&p, &prepared] {
+            let (out, _) = run(prog, &[f(x)], &[]).unwrap();
+            assert_eq!(out[0].unwrap()[0], want.to_bits(), "x {x}");
+        }
+        // innermost exits only: the flat executor (as `::from_ir` compiles) takes it, and agrees
+        support::agrees_flat(&prepared, &[f(x)], &[]);
+    }
+}
+
+#[test]
 fn flatten_and_structurize_leave_the_other_form_alone_and_flatten_refuses_an_exit_to_no_construct() {
     let ok = "iridia-ir 1
 fn main {

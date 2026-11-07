@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `iridia-passes`: `prepare(&mut Program)`, the passes every output and executor takes a lifted program through, on
+  each of its functions: `structurize`, `promote`, `simplify` and `break_flags`. What it gives is what `iridia-exec`'s
+  `::from_ir` constructors and `iridia-naga` take, so a caller no longer copies the sequence (the slim gate and the IR
+  gate's column P call it).
 - `iridia-coverage`: the table names the dx readers' versions as the build takes them (from `Cargo.lock`, where it
   named 0.5.0 after 0.11.0 came in), and every row has a format: a vkd3d run with no program (the compiler refused
   every shader) its runner's, an offload test with no program DXIL's (the suite is read for DirectX with DXC).

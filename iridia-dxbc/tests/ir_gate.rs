@@ -580,7 +580,6 @@ fn canonical(w: u32) -> u32 {
     }
 }
 
-/// The IR lift's program after the passes the cut-over runs, on each of its functions.
 /// A program whose functions are graphs made regions (`structurize`, then `break_flags`), as the executor takes them; a
 /// program of regions as it is.
 fn structured(mut p: iridia_ir::Program) -> Result<iridia_ir::Program, String> {
@@ -593,12 +592,9 @@ fn structured(mut p: iridia_ir::Program) -> Result<iridia_ir::Program, String> {
     Ok(p)
 }
 
+/// The IR lift's program after the passes every output and executor takes it through (`iridia_passes::prepare`).
 fn passed(mut p: iridia_ir::Program) -> Result<iridia_ir::Program, String> {
-    for f in std::iter::once(&mut p.entry).chain(p.patch.as_mut()) {
-        iridia_passes::promote(f)?;
-        iridia_passes::simplify(f);
-        iridia_passes::break_flags(f)?;
-    }
+    iridia_passes::prepare(&mut p)?;
     iridia_ir::validate(&p).map_err(|e| format!("{e:?}"))?;
     Ok(p)
 }
