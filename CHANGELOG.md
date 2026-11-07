@@ -8,6 +8,14 @@
   bumped. The IR lifts had changed since their versions were set (ray tracing, the switch arguments above, and more),
   so the versions go up: `iridia_dxil::ir::LIFTER_VERSION` 1 -> 2, `iridia_dxbc::ir::LIFTER_VERSION` 2 -> 3. A cache
   keyed by those versions drops what the earlier lifts made.
+- `iridia-wgsl` (new, `no_std` with `alloc`, no unsafe code, builds for `wasm32-unknown-unknown`): a WGSL writer from the IR with no
+  dependency but `iridia-ir`, as `iridia-naga`'s `wgsl` is without naga. `wgsl(program, &Profile)` writes a vertex, pixel or
+  compute program (the same refusals by name as `iridia-naga`, and a program a profile's capabilities cannot carry refused before
+  writing), `wgsl_for` the same for one pipeline (a vertex program's outputs where the pixel program it feeds reads them).
+  `Profile::BROWSER` writes standard WebGPU WGSL (a `diagnostic(off, derivative_uniformity);` where the program samples or
+  differentiates, since the source program takes those derivatives where it takes them); `Profile::NAGA` binds Direct3D's registers
+  and writes naga's dialect. Held to upstream naga's reader and validator, to Tint (`tools.tint`) and, run on WARP, to the IR
+  executor, by `iridia-dxbc`'s `exec_wgsl` (debug keys `shader.writer`, `shader.tint`).
 - `iridia-dxil`: a switch several of whose cases (or a case and the default, or both ways of a branch) go to one
   block gives that block one set of arguments. dxc writes the block's phi with an entry per edge, the same value on
   each (`phi [7.0, %0]` three times); the IR lift made each edge's arguments afresh, so a constant became three

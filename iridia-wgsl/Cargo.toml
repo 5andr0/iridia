@@ -1,0 +1,24 @@
+[package]
+name = "iridia-wgsl"
+description = "Write iridia's shader IR as WGSL"
+readme = "README.md"
+keywords = ["shader", "ir", "wgsl", "webgpu"]
+categories = ["graphics", "compilers", "no-std"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+iridia-ir.workspace = true
+
+[dev-dependencies]
+# upstream naga reads the written WGSL back and validates it (the library itself has no naga)
+naga = { version = "=30.0.1", default-features = false, features = ["wgsl-in"] }
+iridia-exec-ir.workspace = true
+iridia-passes.workspace = true
+
+[lints]
+workspace = true

@@ -341,6 +341,7 @@ dependencies = [
  "iridia-ir",
  "iridia-naga",
  "iridia-passes",
+ "iridia-wgsl",
  "primase-naga",
  "primase-testdata",
  "proptest",
@@ -452,6 +453,16 @@ dependencies = [
  "iridia-exec-ir",
  "iridia-ir",
  "iridia-naga",
+]
+
+[[package]]
+name = "iridia-wgsl"
+version = "0.6.0"
+dependencies = [
+ "iridia-exec-ir",
+ "iridia-ir",
+ "iridia-passes",
+ "naga",
 ]
 
 [[package]]

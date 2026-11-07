@@ -31,6 +31,11 @@ primase_testdata::inputs! {
             source: "third-party: vkd3d (LGPL-2.1-or-later), built from source and run as a program, never linked",
             gate: false,
         },
+        Tint = "tint" {
+            about: "Dawn's `tint` compiler program (Chrome's WGSL reader, `tint --format wgsl <file>`), which the WGSL comparison holds a writer's browser-profile text to (`shader.tint`)",
+            source: "third-party: Google's Dawn, built from source and run as a program, never linked",
+            gate: false,
+        },
         Warp = "warp" {
             about: "the WARP oracle program that runs a shader on Microsoft's WARP rasterizer",
             source: "third-party: Microsoft's WARP rasterizer, through a thin host program that is not part of this repository",
@@ -118,6 +123,8 @@ primase_testdata::inputs! {
         "shader.diff_limit" => "how many programs of a corpus the WARP comparison runs",
         "shader.lanes" => "a part of a program's name: the WGSL comparison prints that program's WGSL and every lane that is not exact",
         "shader.warp_all" => "`1` compares every program the WARP oracle can bind",
+        "shader.tint" => "`1` also writes each program's browser-profile WGSL and holds it to `tools.tint`",
+        "shader.writer" => "`wgsl` runs the WGSL of iridia-wgsl in the WARP comparison; `naga` (the default) runs iridia-naga's",
         "shader.outside" => "a folder of containers outside the configured corpora (walked for every DXBC container in it) that the IR gate and the WARP comparison run",
     }
 }

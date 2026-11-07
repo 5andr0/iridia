@@ -1,0 +1,265 @@
+//! The writer's state, and the small pieces every operation is written with: lines of the function body, temporaries, the
+//! text of a value's name, and a lane-by-lane call of a helper function.
+
+use alloc::{
+    collections::BTreeSet,
+    format,
+    string::{String, ToString},
+    vec::Vec,
+};
+
+use iridia_ir::interface::{Resource, ResourceId, ResourceKind, Value};
+use iridia_ir::target::{Binding, BindingPlan, EntryIo};
+use iridia_ir::{Function, Program, Scalar, Type, ValueId, VarId};
+
+use crate::Error;
+use crate::flow::Construct;
+use crate::helpers::Helper;
+use crate::memory::Atomics;
+use crate::names::Names;
+use crate::profile::Profile;
+use crate::text::{self, err};
+
+/// A result that may be an error of the writer.
+pub(crate) type R<T = String> = Result<T, Error>;
+
+/// One member of the entry point's result structure, and what it is made of.
+#[derive(Clone, Debug)]
+pub(crate) struct Member {
+    /// The member's name.
+    pub name: String,
+    /// Its location or built-in: the program's own, or the one its consumer reads it at.
+    pub binding: Binding,
+    /// What the program's output is: a pixel target narrower than four lanes is carried as four.
+    pub carried: Value,
+    /// What the member's type is: the carried value, or what a consumer reads it as.
+    pub linked: Value,
+    /// The interface outputs it is made of: one, or every clip distance.
+    pub slots: Vec<usize>,
+    /// Whether it is the clip distances array.
+    pub clip: bool,
+}
+
+/// The writer of one program.
+pub(crate) struct Writer<'a> {
+    pub program: &'a Program,
+    pub f: &'a Function,
+    pub plan: &'a BindingPlan,
+    pub profile: &'a Profile,
+    pub names: Names,
+    pub io: EntryIo,
+    /// The result structure's members, in order.
+    pub members: Vec<Member>,
+    /// The name of each resource's global.
+    pub globals: Vec<(ResourceId, String)>,
+    /// The name of the hidden counter's global of each view that has one.
+    pub counters: Vec<(ResourceId, String)>,
+    /// The name of each variable of the function.
+    pub vars: Vec<String>,
+    pub atomics: Atomics,
+    pub helpers: BTreeSet<Helper>,
+    /// The function body so far.
+    pub out: String,
+    pub depth: usize,
+    pub next: u32,
+    /// Whether each value has been defined yet.
+    pub defined: Vec<bool>,
+    pub constructs: Vec<Construct>,
+    /// The local of each output slot that a member carries.
+    pub outputs: Vec<Option<String>>,
+    /// Structure declarations the module needs besides the result's.
+    pub decls: Vec<String>,
+}
+
+impl Writer<'_> {
+    // lines of the body
+
+    pub(crate) fn line(&mut self, text: &str) {
+        for _ in 0..self.depth {
+            self.out.push_str("    ");
+        }
+        self.out.push_str(text);
+        self.out.push('\n');
+    }
+
+    /// The text `f` writes at one level deeper, not yet in the body.
+    pub(crate) fn capture(&mut self, f: impl FnOnce(&mut Self) -> R<()>) -> R<String> {
+        let outer = core::mem::take(&mut self.out);
+        self.depth = self.depth.saturating_add(1);
+        let done = f(self);
+        self.depth = self.depth.saturating_sub(1);
+        let inner = core::mem::replace(&mut self.out, outer);
+        done?;
+        Ok(inner)
+    }
+
+    /// A temporary made of `expr`, named for use more than once: `let x3 = expr;`.
+    pub(crate) fn tmp(&mut self, expr: &str) -> String {
+        let name = format!("x{}", self.next);
+        self.next = self.next.saturating_add(1);
+        self.line(&format!("let {name} = {expr};"));
+        name
+    }
+
+    /// A fresh `var` of type `ty` with the initial value `init` (zero where `None`): `var x3: T = init;`.
+    pub(crate) fn var(&mut self, ty: &str, init: Option<&str>) -> String {
+        let name = format!("x{}", self.next);
+        self.next = self.next.saturating_add(1);
+        match init {
+            Some(i) => self.line(&format!("var {name}: {ty} = {i};")),
+            None => self.line(&format!("var {name}: {ty};")),
+        }
+        name
+    }
+
+    // values
+
+    pub(crate) fn name(&self, v: ValueId) -> String {
+        format!("v{}", v.0)
+    }
+
+    /// The name of a value that has been defined.
+    pub(crate) fn get(&self, v: ValueId) -> R<String> {
+        if self.defined.get(v.0 as usize).copied().unwrap_or(false) {
+            Ok(self.name(v))
+        } else {
+            Err(err(format!("%{} is used before it is computed", v.0)))
+        }
+    }
+
+    pub(crate) fn vty(&self, v: ValueId) -> R<Type> {
+        self.f.ty(v).ok_or_else(|| err(format!("%{} has no type", v.0)))
+    }
+
+    /// Define value `v` as `expr`: `let v3 = expr;`.
+    pub(crate) fn define(&mut self, v: ValueId, expr: &str) -> R<()> {
+        let name = self.name(v);
+        self.line(&format!("let {name} = {expr};"));
+        self.mark(v)
+    }
+
+    /// Record that `v` has its name defined.
+    pub(crate) fn mark(&mut self, v: ValueId) -> R<()> {
+        *self
+            .defined
+            .get_mut(v.0 as usize)
+            .ok_or_else(|| err(format!("%{} is out of range", v.0)))? = true;
+        Ok(())
+    }
+
+    // resources and variables
+
+    pub(crate) fn resource(&self, id: ResourceId) -> R<&Resource> {
+        self.program
+            .interface
+            .resources
+            .iter()
+            .find(|r| r.id == id)
+            .ok_or_else(|| err(format!("resource {} is not in the interface", id.0)))
+    }
+
+    pub(crate) fn kind(&self, id: ResourceId) -> R<&ResourceKind> {
+        Ok(&self.resource(id)?.kind)
+    }
+
+    /// The global of a resource.
+    pub(crate) fn global(&self, id: ResourceId) -> R<&str> {
+        self.globals
+            .iter()
+            .find(|(r, _)| *r == id)
+            .map(|(_, n)| n.as_str())
+            .ok_or_else(|| err(format!("resource {} has no binding", id.0)))
+    }
+
+    pub(crate) fn var_name(&self, var: VarId) -> R<&str> {
+        self.vars
+            .get(var.0 as usize)
+            .map(String::as_str)
+            .ok_or_else(|| err(format!("variable {} does not exist", var.0)))
+    }
+
+    // typed text
+
+    /// `t`'s name.
+    pub(crate) fn ty(&self, t: Type) -> R<String> {
+        text::ty(t)
+    }
+
+    /// The same bits as `to`'s scalar type: `bitcast<vec3<u32>>(x)`; `x` itself where the scalar is the same.
+    pub(crate) fn bitcast(&self, x: &str, from: Type, to: Scalar) -> R<String> {
+        if from.scalar == to {
+            Ok(x.to_string())
+        } else {
+            Ok(format!("bitcast<{}>({x})", text::ty(from.with(to))?))
+        }
+    }
+
+    /// A literal `bits` of `s`, in each lane of `like`.
+    pub(crate) fn konst(&self, like: Type, s: Scalar, bits: u64) -> R<String> {
+        text::splat(like, s, bits)
+    }
+
+    /// An `f32` literal in each lane of `like`.
+    pub(crate) fn f32s(&self, like: Type, x: f32) -> R<String> {
+        self.konst(like, Scalar::F32, u64::from(x.to_bits()))
+    }
+
+    /// A `u32` literal in each lane of `like`.
+    pub(crate) fn u32s(&self, like: Type, x: u32) -> R<String> {
+        self.konst(like, Scalar::U32, u64::from(x))
+    }
+
+    /// `name` called on each lane: `name(a)` for a scalar, `vec3<R>(name(a.x), name(a.y), name(a.z))` for a vector, each
+    /// argument a name of `t`'s lanes.
+    pub(crate) fn lanewise(&mut self, helper: Helper, args: &[&str], t: Type, result: Scalar) -> R<String> {
+        self.helpers.insert(helper);
+        let name = helper.name();
+        if t.lanes == 1 {
+            return Ok(format!("{name}({})", args.join(", ")));
+        }
+        let mut parts = Vec::new();
+        for k in 0..t.lanes {
+            let c = text::lane(k)?;
+            let lane_args: Vec<String> = args.iter().map(|a| format!("{a}.{c}")).collect();
+            parts.push(format!("{name}({})", lane_args.join(", ")));
+        }
+        Ok(format!("{}({})", text::ty(t.with(result))?, parts.join(", ")))
+    }
+
+    /// Lane `k` of `x` of type `t`: `x.y`, or `x` for a scalar.
+    pub(crate) fn lane(&self, x: &str, t: Type, k: u8) -> R<String> {
+        if t.lanes == 1 {
+            Ok(x.to_string())
+        } else {
+            Ok(format!("{x}.{}", text::lane(k)?))
+        }
+    }
+
+    /// A value of type `t` built a lane at a time: `f` gives lane `k` as a scalar.
+    pub(crate) fn per_lane(&mut self, t: Type, mut f: impl FnMut(&mut Self, u8) -> R<String>) -> R<String> {
+        let parts = (0..t.lanes).map(|k| f(self, k)).collect::<Result<Vec<_>, _>>()?;
+        Ok(match parts.as_slice() {
+            [one] => one.clone(),
+            _ => format!("{}({})", text::ty(t)?, parts.join(", ")),
+        })
+    }
+
+    /// An index (`u32` or `i32`) as a `u32` of the same bits.
+    pub(crate) fn index_u32(&self, v: ValueId) -> R<String> {
+        let x = self.get(v)?;
+        match self.vty(v)? {
+            Type::U32 => Ok(x),
+            Type::I32 => Ok(format!("bitcast<u32>({x})")),
+            t => Err(err(format!("an index of {t}"))),
+        }
+    }
+}
+
+/// A bool vector's lanes all true, as one bool (the scalar itself for one lane).
+pub(crate) fn all_of(x: &str, lanes: u8) -> String {
+    if lanes == 1 {
+        x.to_string()
+    } else {
+        format!("all({x})")
+    }
+}

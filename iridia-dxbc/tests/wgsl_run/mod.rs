@@ -23,6 +23,53 @@ pub mod amplified;
 /// How long one job may take, compiles included, before its process is killed.
 const LIMIT: Duration = Duration::from_secs(120);
 
+/// Dawn's `tint` (`tools.tint`): the WGSL compiler of Chrome, which reads a text and checks it as a browser would.
+pub struct Tint {
+    program: primase_testdata::Program,
+}
+
+impl Tint {
+    /// The configured compiler; `None` where `tools.tint` is not set.
+    pub fn configured() -> Option<Tint> {
+        Some(Tint {
+            program: inputs::program(Tool::Tint)?,
+        })
+    }
+
+    /// Whether Tint accepts `wgsl`: `Err` has its first diagnostic. `id` names the temporary file (unique per call).
+    pub fn check(&self, id: &str, wgsl: &str) -> Result<(), String> {
+        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let folder = std::env::temp_dir().join(format!("iridia-tint-{}", std::process::id()));
+        std::fs::create_dir_all(&folder).map_err(|e| format!("making {}: {e}", folder.display()))?;
+        let file = folder.join(format!(
+            "{n}-{}.wgsl",
+            id.rsplit(['/', '\\']).next().unwrap_or(id)
+        ));
+        std::fs::write(&file, wgsl).map_err(|e| format!("writing {}: {e}", file.display()))?;
+        let mut command = self.program.command();
+        command.args(["--format", "wgsl"]).path_arg(&file);
+        let out = command
+            .command()
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .output()
+            .map_err(|e| format!("starting {}: {e}", self.program.path().display()))?;
+        let _ = std::fs::remove_file(&file);
+        if out.status.success() {
+            return Ok(());
+        }
+        let text = String::from_utf8_lossy(&out.stderr);
+        Err(text
+            .lines()
+            .find(|l| l.contains("error"))
+            .or_else(|| text.lines().find(|l| !l.trim().is_empty()))
+            .unwrap_or("tint failed without a message")
+            .to_owned())
+    }
+}
+
 /// The harness's processes, each used by one job at a time.
 pub struct Harness {
     program: primase_testdata::Program,

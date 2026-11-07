@@ -34,6 +34,7 @@ jobs:
       - run: cargo build --locked --target wasm32-unknown-unknown -p iridia -p iridia-d3d9 -p iridia-dxbc -p iridia-dxil -p iridia-mojo -p iridia-exec
       - run: cargo build --locked --target wasm32-unknown-unknown -p iridia-naga --no-default-features
       - run: cargo build --locked --target wasm32-unknown-unknown -p iridia-naga --features wgsl
+      - run: cargo build --locked --target wasm32-unknown-unknown -p iridia-wgsl
   coverage:
     # the coverage table (docs/coverage) is made from the suites' runs; a change that moves it must commit it
     runs-on: ubuntu-latest

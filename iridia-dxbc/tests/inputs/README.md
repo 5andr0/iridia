@@ -13,6 +13,7 @@ What this crate's real-data tests read, as tests/inputs/mod.rs declares them: th
 | `tools.fxc` | - | Microsoft's `fxc` shader compiler executable | third-party: Microsoft's fxc |
 | `tools.vkd3d_compiler` | - | vkd3d's `vkd3d-compiler` program (its Shader Model 4 and 5 reader and disassembler), with vkd3d's command line | third-party: vkd3d (LGPL-2.1-or-later), built from source and run as a program, never linked |
 | `tools.vkd3d_dxbc` | - | vkd3d's `vkd3d-dxbc` program (its container reader, digest check and writer), with vkd3d's command line | third-party: vkd3d (LGPL-2.1-or-later), built from source and run as a program, never linked |
+| `tools.tint` | - | Dawn's `tint` compiler program (Chrome's WGSL reader, `tint --format wgsl <file>`), which the WGSL comparison holds a writer's browser-profile text to (`shader.tint`) | third-party: Google's Dawn, built from source and run as a program, never linked |
 | `tools.warp` | yes | the WARP oracle program that runs a shader on Microsoft's WARP rasterizer | third-party: Microsoft's WARP rasterizer, through a thin host program that is not part of this repository |
 | `tools.wgsl_run` | - | the WGSL harness that runs a WGSL program's entry point on Direct3D 12's WARP adapter through wgpu (tools/wgsl-run, built with `cargo build --release` there) | independent: wgpu and Microsoft's WARP rasterizer, through tools/wgsl-run of this repository (its own workspace, outside iridia's) |
 | `tools.wgsl_run_dxc` | - | the `dxcompiler.dll` the WGSL harness compiles with (DXC 1.8.2502 or later, wgpu 30's minimum, `dxil.dll` beside it): the programs that need Shader Model 6 (subgroup operations, 16-bit and 64-bit types); FXC compiles the others where it is not configured | third-party: Microsoft's DirectX Shader Compiler release build |
@@ -47,6 +48,8 @@ What this crate's real-data tests read, as tests/inputs/mod.rs declares them: th
 | `shader.diff_limit` | how many programs of a corpus the WARP comparison runs |
 | `shader.lanes` | a part of a program's name: the WGSL comparison prints that program's WGSL and every lane that is not exact |
 | `shader.warp_all` | `1` compares every program the WARP oracle can bind |
+| `shader.tint` | `1` also writes each program's browser-profile WGSL and holds it to `tools.tint` |
+| `shader.writer` | `wgsl` runs the WGSL of iridia-wgsl in the WARP comparison; `naga` (the default) runs iridia-naga's |
 | `shader.outside` | a folder of containers outside the configured corpora (walked for every DXBC container in it) that the IR gate and the WARP comparison run |
 
 <!-- end of real-data inputs -->

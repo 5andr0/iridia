@@ -215,6 +215,9 @@ struct Tally {
     gaps: BTreeMap<String, (usize, String)>,
     unrun: BTreeMap<String, (usize, String)>,
     errors: BTreeMap<String, (usize, String)>,
+    /// Programs written for a browser and held to Tint, and those a browser cannot carry.
+    tinted: usize,
+    browser_refused: BTreeMap<String, (usize, String)>,
     lanes: BTreeMap<Class, usize>,
     /// Per source of an amplified lane: the lanes and the programs.
     amplified: BTreeMap<Source, (usize, BTreeSet<String>)>,
@@ -273,6 +276,37 @@ fn quad(b: &ProgramShader, c: u32) -> Vec<common::Case> {
     lanes
 }
 
+/// The WGSL of a program in naga's dialect by the writer `shader.writer` names: `naga` (the default, `iridia_naga`) or `wgsl`
+/// (`iridia_wgsl`).
+fn write(p: &iridia_ir::Program) -> Result<String, String> {
+    match inputs::debug("shader.writer").as_deref() {
+        None | Some("naga") => iridia_naga::wgsl(p, &iridia_naga::Profile::NAGA).map_err(|e| e.0),
+        Some("wgsl") => iridia_wgsl::wgsl(p, &iridia_wgsl::Profile::NAGA).map_err(|e| e.0),
+        Some(other) => panic!("shader.writer is naga or wgsl, not {other}"),
+    }
+}
+
+/// The program's WGSL as a browser reads it, by the writer `shader.writer` names.
+fn write_browser(p: &iridia_ir::Program) -> Result<String, String> {
+    match inputs::debug("shader.writer").as_deref() {
+        None | Some("naga") => iridia_naga::wgsl(p, &iridia_naga::Profile::BROWSER).map_err(|e| e.0),
+        _ => iridia_wgsl::wgsl(p, &iridia_wgsl::Profile::BROWSER).map_err(|e| e.0),
+    }
+}
+
+/// `tools.tint`, where `shader.tint` is `1`.
+fn tint() -> Option<&'static wgsl_run::Tint> {
+    static TINT: std::sync::OnceLock<Option<wgsl_run::Tint>> = std::sync::OnceLock::new();
+    TINT.get_or_init(|| {
+        if inputs::debug("shader.tint").as_deref() == Some("1") {
+            wgsl_run::Tint::configured()
+        } else {
+            None
+        }
+    })
+    .as_ref()
+}
+
 fn run_program(harness: &Harness, name: &str, bytes: &[u8], t: &mut Tally) {
     t.programs += 1;
     let p = match lifted(bytes) {
@@ -292,14 +326,25 @@ fn run_program(harness: &Harness, name: &str, bytes: &[u8], t: &mut Tally) {
         return;
     }
     *t.stages.entry(format!("{stage:?}")).or_default() += 1;
+    if let Some(tint) = tint() {
+        match write_browser(&p) {
+            Ok(text) => {
+                t.tinted += 1;
+                if let Err(e) = tint.check(name, &text) {
+                    tally(&mut t.errors, &format!("tint: {e}"), name);
+                }
+            }
+            Err(e) => tally(&mut t.browser_refused, &e, name),
+        }
+    }
     if let Some(why) = wgsl_run::gap(&p) {
         tally(&mut t.gaps, &why, name);
         return;
     }
-    let wgsl = match iridia_naga::wgsl(&p, &iridia_naga::Profile::NAGA) {
+    let wgsl = match write(&p) {
         Ok(w) => w,
         Err(e) => {
-            tally(&mut t.refused, &e.0, name);
+            tally(&mut t.refused, &e, name);
             return;
         }
     };
@@ -538,6 +583,7 @@ fn report(title: &str, t: &Tally) {
         ("not written (iridia_naga refuses)", &t.refused),
         ("not on the harness", &t.gaps),
         ("not run", &t.unrun),
+        ("not for a browser", &t.browser_refused),
         ("ERROR", &t.errors),
     ] {
         for (why, (n, at)) in map {
@@ -611,6 +657,7 @@ fn corpus_over(corpus: &common::Corpus) {
         t.compared += one.compared;
         t.runs += one.runs;
         t.discarded += one.discarded;
+        t.tinted += one.tinted;
         for (k, n) in one.stages {
             *t.stages.entry(k).or_default() += n;
         }
@@ -627,6 +674,7 @@ fn corpus_over(corpus: &common::Corpus) {
             (&mut t.gaps, one.gaps),
             (&mut t.unrun, one.unrun),
             (&mut t.errors, one.errors),
+            (&mut t.browser_refused, one.browser_refused),
         ] {
             for (why, (n, at)) in theirs {
                 mine.entry(why).or_insert((0, at)).0 += n;
@@ -636,6 +684,12 @@ fn corpus_over(corpus: &common::Corpus) {
         t.worst.extend(one.worst);
     }
     report(&corpus.name, &t);
+    if t.tinted > 0 {
+        println!(
+            "  {} programs written for a browser and accepted by Tint unless an ERROR says otherwise",
+            t.tinted
+        );
+    }
     assert!(t.errors.is_empty(), "{} kinds of harness errors", t.errors.len());
     assert!(
         t.worst.is_empty(),
