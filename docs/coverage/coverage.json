@@ -56958,7 +56958,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "2ad5d77cdcb12e82: DXIL at bit 0: structured layout size 4 disagrees with stride 2"
+          "detail": "2ad5d77cdcb12e82: DXIL at bit 10920: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Basic/Matrix/matrix_comparison_operators.fp32.test",
@@ -56982,7 +56982,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "7343aab3c03e3804: DXIL at bit 0: structured layout size 4 disagrees with stride 2"
+          "detail": "7343aab3c03e3804: DXIL at bit 10888: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Basic/Matrix/matrix_comparison_operators.int32.test",
@@ -57006,7 +57006,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "bb170d89a5c43f87: DXIL at bit 0: structured layout size 4 disagrees with stride 2"
+          "detail": "bb170d89a5c43f87: DXIL at bit 10952: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Basic/Matrix/matrix_comparison_operators.uint32.test",
@@ -57518,7 +57518,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "2db07667759ca702: DXIL at bit 0: structured layout size 52 disagrees with stride 26"
+          "detail": "2db07667759ca702: DXIL at bit 11516: a constant load of other than four 32-bit lanes (16-bit and 64-bit rows are not lifted)"
         },
         {
           "id": "Feature/CBuffer/arrays-64bit.test",
@@ -57550,7 +57550,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "1679b36b09ccaa00: DXIL at bit 0: structured layout size 12 disagrees with stride 6"
+          "detail": "1679b36b09ccaa00: DXIL at bit 11228: a constant load of other than four 32-bit lanes (16-bit and 64-bit rows are not lifted)"
         },
         {
           "id": "Feature/CBuffer/scalars-64bit.test",
@@ -57582,7 +57582,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "e645ca2a16d2f286: DXIL at bit 0: structured layout size 20 disagrees with stride 10"
+          "detail": "e645ca2a16d2f286: DXIL at bit 11324: a constant load of other than four 32-bit lanes (16-bit and 64-bit rows are not lifted)"
         },
         {
           "id": "Feature/CBuffer/vectors-64bit.test",
@@ -58158,7 +58158,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "891707b957355130: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "891707b957355130: DXIL at bit 11228: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/abs.fp64.test",
@@ -58174,7 +58174,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "a7a5b5244d5988da: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "a7a5b5244d5988da: DXIL at bit 12984: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/abs.int64.test",
@@ -58214,7 +58214,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "76341734a74c9c55: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "76341734a74c9c55: DXIL at bit 11100: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/acos.32.test",
@@ -58262,7 +58262,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "9b689007a0c66a25: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "9b689007a0c66a25: DXIL at bit 10684: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/all.fp64.test",
@@ -58278,7 +58278,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "fcd49f4082ab1a2f: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "fcd49f4082ab1a2f: DXIL at bit 11800: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/all.int64.test",
@@ -58318,7 +58318,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "47aeee6021a207ef: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "47aeee6021a207ef: DXIL at bit 10684: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/any.fp64.test",
@@ -58334,7 +58334,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "cb83b050a1f6101a: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "cb83b050a1f6101a: DXIL at bit 11800: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/any.int64.test",
@@ -58374,7 +58374,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "2ebd0450d4f9ff9e: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "2ebd0450d4f9ff9e: DXIL at bit 11260: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/asin.32.test",
@@ -58406,7 +58406,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "faf164d2ee75e101: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "faf164d2ee75e101: DXIL at bit 10940: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/asint16.int16.test",
@@ -58414,7 +58414,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "face8ac8e80ec6de: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "face8ac8e80ec6de: DXIL at bit 12094: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/asint_mat.test",
@@ -58446,7 +58446,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "675b455aa7a68c7f: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "675b455aa7a68c7f: DXIL at bit 10972: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/asuint16.int16.test",
@@ -58454,7 +58454,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "e051849eb19a1b27: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "e051849eb19a1b27: DXIL at bit 12094: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/asuint_mat.32.test",
@@ -58478,7 +58478,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "edfa1dad8385aa65: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "edfa1dad8385aa65: DXIL at bit 11100: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/atan.32.test",
@@ -58494,7 +58494,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "8b85d9633dc83601: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "8b85d9633dc83601: DXIL at bit 11654: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/atan2.32.test",
@@ -58510,7 +58510,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "271ba7ff0d854104: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "271ba7ff0d854104: DXIL at bit 11684: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/atan2_mat.32.test",
@@ -58534,7 +58534,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "5767d93c18f5afeb: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "5767d93c18f5afeb: DXIL at bit 11100: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/ceil.32.test",
@@ -58566,7 +58566,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "003a1a6c1d8b877b: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "003a1a6c1d8b877b: DXIL at bit 11672: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/clamp.fp64.test",
@@ -58582,7 +58582,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "75dc1d4bee04231b: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "75dc1d4bee04231b: DXIL at bit 13898: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/clamp.int64.test",
@@ -58598,7 +58598,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "31831650993d2a1a: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "31831650993d2a1a: DXIL at bit 11100: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/cos.32.test",
@@ -58630,7 +58630,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "5cd8aef7df3962b0: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "5cd8aef7df3962b0: DXIL at bit 11100: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/cosh.32.test",
@@ -58654,7 +58654,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "4803def8ea36381e: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "4803def8ea36381e: DXIL at bit 14208: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/countbits.32.test",
@@ -58678,7 +58678,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "9e1d3c0480053f9e: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "9e1d3c0480053f9e: DXIL at bit 11034: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/cross.32.test",
@@ -58758,7 +58758,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "89e528100ae7c5d9: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "89e528100ae7c5d9: DXIL at bit 10812: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/degrees.32.test",
@@ -58782,7 +58782,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "d88c842cfd60b215: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "d88c842cfd60b215: DXIL at bit 11588: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/distance.32.test",
@@ -58806,7 +58806,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "94c38e324ad38f62: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "94c38e324ad38f62: DXIL at bit 12128: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/dot.fp64.test",
@@ -58822,7 +58822,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "f6c2c74949cb7a1d: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "f6c2c74949cb7a1d: DXIL at bit 13340: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/dot.int64.test",
@@ -58838,7 +58838,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "6be184ed2b8f3346: DXIL at bit 0: structured layout size 8 disagrees with stride 4"
+          "detail": "6be184ed2b8f3346: DXIL at bit 13898: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/dot4add.test",
@@ -58854,7 +58854,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "669fcf37bd684bf1: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "669fcf37bd684bf1: DXIL at bit 11132: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/exp.32.test",
@@ -58870,7 +58870,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "81104ff43ca4790d: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "81104ff43ca4790d: DXIL at bit 11100: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/exp2.32.test",
@@ -58918,7 +58918,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "c49fc012af1126c6: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "c49fc012af1126c6: DXIL at bit 12282: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/firstbithigh.32.test",
@@ -58942,7 +58942,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "161c0beffdac8a22: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "161c0beffdac8a22: DXIL at bit 12218: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/firstbitlow.32.test",
@@ -58966,7 +58966,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "6353d8c57dec9015: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "6353d8c57dec9015: DXIL at bit 11100: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/floor.32.test",
@@ -59006,7 +59006,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "31619ae8a1ec085c: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "31619ae8a1ec085c: DXIL at bit 11642: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/fmod.32.test",
@@ -59022,7 +59022,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "792e9779012c0663: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "792e9779012c0663: DXIL at bit 11100: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/frac.32.test",
@@ -59046,7 +59046,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "9982db1401f7591b: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "9982db1401f7591b: DXIL at bit 10972: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/isfinite.32.test",
@@ -59070,7 +59070,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "ca69e217b13b09bf: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "ca69e217b13b09bf: DXIL at bit 10972: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/isinf.32.test",
@@ -59094,7 +59094,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "8f069bea576b8221: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "8f069bea576b8221: DXIL at bit 10972: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/isnan.32.test",
@@ -59118,7 +59118,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "bd935b6ca5893150: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "bd935b6ca5893150: DXIL at bit 11132: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/ldexp.32.test",
@@ -59134,7 +59134,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "56a71ba8c4bd4db4: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "56a71ba8c4bd4db4: DXIL at bit 11100: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/length.32.test",
@@ -59150,7 +59150,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "71087e94409d4b9c: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "71087e94409d4b9c: DXIL at bit 11352: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/lerp.32.test",
@@ -59166,7 +59166,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "7cda2c068d5dc91c: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "7cda2c068d5dc91c: DXIL at bit 11452: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/log.32.test",
@@ -59182,7 +59182,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "b10470bf2a1e583e: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "b10470bf2a1e583e: DXIL at bit 11132: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/log10.32.test",
@@ -59206,7 +59206,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "acd5ceff4af925e1: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "acd5ceff4af925e1: DXIL at bit 11100: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/log2.32.test",
@@ -59758,7 +59758,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "ed240f3f59d959ae: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "ed240f3f59d959ae: DXIL at bit 11864: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/mad.fp64.test",
@@ -59774,7 +59774,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "93b0f1d0d3992aaa: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "93b0f1d0d3992aaa: DXIL at bit 13930: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/mad.int64.test",
@@ -59798,7 +59798,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "ac66e3c0e00eb75a: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "ac66e3c0e00eb75a: DXIL at bit 11418: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/max.fp64.test",
@@ -59814,7 +59814,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "9275b2d950c6eb76: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "9275b2d950c6eb76: DXIL at bit 13470: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/max.int64.test",
@@ -59862,7 +59862,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "2ec4c6439879e6c7: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "2ec4c6439879e6c7: DXIL at bit 11610: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/min.fp64.test",
@@ -59878,7 +59878,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "89c90c92d22a185e: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "89c90c92d22a185e: DXIL at bit 13438: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/min.int64.test",
@@ -59918,7 +59918,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "065551f4ddce4a82: DXIL at bit 0: structured layout size 4 disagrees with stride 2"
+          "detail": "065551f4ddce4a82: DXIL at bit 11564: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/mul.fp32.test",
@@ -59942,7 +59942,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "fa9f6f58d8d9ac41: DXIL at bit 0: structured layout size 4 disagrees with stride 2"
+          "detail": "fa9f6f58d8d9ac41: DXIL at bit 11212: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/mul.int32.test",
@@ -59966,7 +59966,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "d91a7ec844b05181: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "d91a7ec844b05181: DXIL at bit 12092: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/normalize.32.test",
@@ -59990,7 +59990,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "ff101209b6dd2eb3: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "ff101209b6dd2eb3: DXIL at bit 12174: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/pack_clamp_s8.32.test",
@@ -60006,7 +60006,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "9bc7507cf2d36db5: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "9bc7507cf2d36db5: DXIL at bit 12136: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/pack_clamp_u8.32.test",
@@ -60022,7 +60022,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "1b6aa75ce2c283b3: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "1b6aa75ce2c283b3: DXIL at bit 12174: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/pack_s8.32.test",
@@ -60038,7 +60038,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "28a1a20fae94e766: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "28a1a20fae94e766: DXIL at bit 12174: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/pack_u8.32.test",
@@ -60054,7 +60054,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "e0f83c3c466a25a2: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "e0f83c3c466a25a2: DXIL at bit 11610: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/pow.32.test",
@@ -60070,7 +60070,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "6603880f6d53ff4f: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "6603880f6d53ff4f: DXIL at bit 11514: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/pow_mat.32.test",
@@ -60086,7 +60086,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "19a191636c7d803d: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "19a191636c7d803d: DXIL at bit 10812: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/radians.32.test",
@@ -60110,7 +60110,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "0934c29ed1b8a801: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "0934c29ed1b8a801: DXIL at bit 10940: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/rcp.32.test",
@@ -60142,7 +60142,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "da544f5d100948b6: DXIL at bit 0: structured layout size 8 disagrees with stride 4"
+          "detail": "da544f5d100948b6: DXIL at bit 15222: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/reflect.32.test",
@@ -60158,7 +60158,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "2545ee5480ce6c93: DXIL at bit 0: structured layout size 8 disagrees with stride 4"
+          "detail": "2545ee5480ce6c93: DXIL at bit 15436: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/refract.32.test",
@@ -60174,7 +60174,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "75871d2d6e014942: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "75871d2d6e014942: DXIL at bit 11228: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/reversebits.32.test",
@@ -60198,7 +60198,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "21668baab92b48f2: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "21668baab92b48f2: DXIL at bit 11100: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/round.32.test",
@@ -60222,7 +60222,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "47b837b55fbcaf57: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "47b837b55fbcaf57: DXIL at bit 11100: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/rsqrt.32.test",
@@ -60246,7 +60246,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "fca042404d6c2ea9: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "fca042404d6c2ea9: DXIL at bit 11100: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/saturate.32.test",
@@ -60278,7 +60278,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "85a90572ae524768: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "85a90572ae524768: DXIL at bit 14684: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/select.fp64.test",
@@ -60294,7 +60294,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "86ee24cac1888fc4: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "86ee24cac1888fc4: DXIL at bit 16978: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/select.int64.test",
@@ -60334,7 +60334,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "95f044c6774666b9: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "95f044c6774666b9: DXIL at bit 12440: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/sign.fp64.test",
@@ -60350,7 +60350,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "34babb7e3738b488: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "34babb7e3738b488: DXIL at bit 12024: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/sign.int64.test",
@@ -60390,7 +60390,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "298e3f541a275abc: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "298e3f541a275abc: DXIL at bit 11100: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/sin.32.test",
@@ -60422,7 +60422,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "589c9cb28b7b6e58: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "589c9cb28b7b6e58: DXIL at bit 11100: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/sinh.32.test",
@@ -60446,7 +60446,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "585533dc228db8b7: DXIL at bit 0: structured layout size 8 disagrees with stride 4"
+          "detail": "585533dc228db8b7: DXIL at bit 14850: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/smoothstep.32.test",
@@ -60462,7 +60462,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "dd849519019a0be6: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "dd849519019a0be6: DXIL at bit 11100: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/sqrt.32.test",
@@ -60486,7 +60486,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "61b5ec171d688f4f: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "61b5ec171d688f4f: DXIL at bit 11034: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/step.32.test",
@@ -60502,7 +60502,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "6b2ab3ebcb9ce6cb: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "6b2ab3ebcb9ce6cb: DXIL at bit 11066: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/step_mat.32.test",
@@ -60518,7 +60518,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "d7a6f129cc3a5ac7: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "d7a6f129cc3a5ac7: DXIL at bit 11260: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/tan.32.test",
@@ -60542,7 +60542,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "b9c3d1755db4fb46: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "b9c3d1755db4fb46: DXIL at bit 11100: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/tanh.32.test",
@@ -60574,7 +60574,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "21e41158bd8e7362: DXIL at bit 0: structured layout size 4 disagrees with stride 2"
+          "detail": "21e41158bd8e7362: DXIL at bit 10650: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/transpose.fp32.test",
@@ -60598,7 +60598,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "43981b65a6159778: DXIL at bit 0: structured layout size 4 disagrees with stride 2"
+          "detail": "43981b65a6159778: DXIL at bit 10746: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/transpose.int32.test",
@@ -60622,7 +60622,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "6145cb75c8894882: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "6145cb75c8894882: DXIL at bit 11100: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Feature/HLSLLib/trunc.32.test",
@@ -60646,7 +60646,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "b2bbde4d5801e099: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "b2bbde4d5801e099: DXIL at bit 12328: dx.op.unpack4x8.i16: dx.op 219 is not lifted"
         },
         {
           "id": "Feature/HLSLLib/unpack_s8s32.test",
@@ -60662,7 +60662,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "ed3d72e2f94c69f0: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "ed3d72e2f94c69f0: DXIL at bit 12392: dx.op.unpack4x8.i16: dx.op 219 is not lifted"
         },
         {
           "id": "Feature/HLSLLib/unpack_u8u32.test",
@@ -62430,7 +62430,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "97fb6d11f57b931d: DXIL at bit 0: structured layout size 4 disagrees with stride 2"
+          "detail": "97fb6d11f57b931d: DXIL at bit 10262: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Tools/Offloader/BufferFloat-64bit.test",
@@ -62446,7 +62446,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "e91556ff28f600be: DXIL at bit 0: structured layout size 4 disagrees with stride 2"
+          "detail": "e91556ff28f600be: DXIL at bit 9596: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "Tools/Offloader/BufferFloat-error-32bit.test",
@@ -62654,7 +62654,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "568df384c976a26a: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "568df384c976a26a: DXIL at bit 12290: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "WaveOps/QuadReadAcrossDiagonal.fp64.test",
@@ -62670,7 +62670,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "e0a631e8be28441d: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "e0a631e8be28441d: DXIL at bit 14706: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "WaveOps/QuadReadAcrossDiagonal.int64.test",
@@ -62702,7 +62702,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "ac013cde94a6913e: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "ac013cde94a6913e: DXIL at bit 12290: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "WaveOps/QuadReadAcrossX.fp64.test",
@@ -62718,7 +62718,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "a1e13e810c1c59e2: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "a1e13e810c1c59e2: DXIL at bit 14688: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "WaveOps/QuadReadAcrossX.int64.test",
@@ -62750,7 +62750,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "5f003886fc2a3309: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "5f003886fc2a3309: DXIL at bit 12290: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "WaveOps/QuadReadAcrossY.fp64.test",
@@ -62766,7 +62766,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "d2f1719377db6321: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "d2f1719377db6321: DXIL at bit 14688: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "WaveOps/QuadReadAcrossY.int64.test",
@@ -62814,7 +62814,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "2b89dc5af5d8e28f: DXIL at bit 0: structured layout size 4 disagrees with stride 2"
+          "detail": "2b89dc5af5d8e28f: DXIL at bit 14260: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "WaveOps/WaveActiveAllEqual.fp64.test",
@@ -62830,7 +62830,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "73b3d9440610d9d5: DXIL at bit 0: structured layout size 4 disagrees with stride 2"
+          "detail": "73b3d9440610d9d5: DXIL at bit 17876: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "WaveOps/WaveActiveAllEqual.int64.test",
@@ -62966,7 +62966,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "493354ec6487df0b: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "493354ec6487df0b: DXIL at bit 15822: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "WaveOps/WaveActiveMax.fp32.test",
@@ -62990,7 +62990,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "4c614ca04260b889: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "4c614ca04260b889: DXIL at bit 15886: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "WaveOps/WaveActiveMax.int32.test",
@@ -63022,7 +63022,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "724d93e888ceb591: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "724d93e888ceb591: DXIL at bit 15828: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "WaveOps/WaveActiveMin.fp32.test",
@@ -63046,7 +63046,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "720f5577401b3673: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "720f5577401b3673: DXIL at bit 15892: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "WaveOps/WaveActiveMin.int32.test",
@@ -63078,7 +63078,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "ed2432ff93f833a7: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "ed2432ff93f833a7: DXIL at bit 13418: memory of type Half"
         },
         {
           "id": "WaveOps/WaveActiveSum.fp32.test",
@@ -63102,7 +63102,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "19f1b620399f5d52: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "19f1b620399f5d52: DXIL at bit 16174: memory of type Integer(16)"
         },
         {
           "id": "WaveOps/WaveActiveSum.int32.test",
@@ -63166,7 +63166,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "05da1acd00226336: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "05da1acd00226336: DXIL at bit 13418: memory of type Half"
         },
         {
           "id": "WaveOps/WavePrefixProduct.fp64.test",
@@ -63182,7 +63182,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "c259034f46cd7b32: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "c259034f46cd7b32: DXIL at bit 16174: memory of type Integer(16)"
         },
         {
           "id": "WaveOps/WavePrefixProduct.int64.test",
@@ -63214,7 +63214,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "c1e540294a100794: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "c1e540294a100794: DXIL at bit 13418: memory of type Half"
         },
         {
           "id": "WaveOps/WavePrefixSum.fp64.test",
@@ -63230,7 +63230,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "06ada9e769657578: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "06ada9e769657578: DXIL at bit 16174: memory of type Integer(16)"
         },
         {
           "id": "WaveOps/WavePrefixSum.int64.test",
@@ -63246,7 +63246,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "b2f0051f714ffdb3: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "b2f0051f714ffdb3: DXIL at bit 16370: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "WaveOps/WaveReadLaneAt.32.test",
@@ -63326,7 +63326,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "f18a1d744b0c6786: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "f18a1d744b0c6786: DXIL at bit 15854: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "WaveOps/WaveReadLaneFirst.fp32.test",
@@ -63350,7 +63350,7 @@
           "format": "dxil",
           "model": "cs_6",
           "status": "refused",
-          "detail": "da0ab936d4c4cfa6: DXIL at bit 0: structured layout size 16 disagrees with stride 8"
+          "detail": "da0ab936d4c4cfa6: DXIL at bit 15918: 16-bit lanes of a raw or structured buffer are not lifted"
         },
         {
           "id": "WaveOps/WaveReadLaneFirst.int32.test",
