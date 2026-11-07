@@ -130,6 +130,14 @@ impl Sampler for Uniform {
             .get(&r.texture)
             .ok_or_else(|| format!("no texture t{}", r.texture))?;
         let c = t.map(f32::from_bits);
+        // a depth texture: its depth is the first lane, and a comparison sample gives 1 where `depth_ref <= depth`
+        // (`wgsl_run::COMPARE`) and 0 elsewhere, in every lane of a gather as of the sample
+        if r.depth || r.depth_ref.is_some() {
+            let depth = c[0];
+            let compared = |reference: f32| if reference <= depth { 1.0 } else { 0.0 };
+            let value = r.depth_ref.map_or(depth, compared);
+            return Ok([value; 4]);
+        }
         Ok(match r.gather {
             Some(k) => [c[usize::from(k)]; 4],
             None => c,
@@ -216,7 +224,7 @@ struct Tally {
     unrun: BTreeMap<String, (usize, String)>,
     errors: BTreeMap<String, (usize, String)>,
     /// Programs written for a browser and held to Tint, and those a browser cannot carry.
-    tinted: usize,
+    tinted: BTreeMap<String, usize>,
     browser_refused: BTreeMap<String, (usize, String)>,
     lanes: BTreeMap<Class, usize>,
     /// Per source of an amplified lane: the lanes and the programs.
@@ -317,6 +325,19 @@ fn run_program(harness: &Harness, name: &str, bytes: &[u8], t: &mut Tally) {
         }
     };
     let stage = p.interface.stage;
+    // Tint takes every stage a writer writes, apart from the harness (compute programs are WebGPU's too)
+    if let Some(tint) = tint() {
+        let at = |why: &str| format!("{stage:?}: {why}");
+        match write_browser(&p) {
+            Ok(text) => {
+                *t.tinted.entry(format!("{stage:?}")).or_default() += 1;
+                if let Err(e) = tint.check(name, &text) {
+                    tally(&mut t.errors, &at(&format!("tint: {e}")), name);
+                }
+            }
+            Err(e) => tally(&mut t.browser_refused, &at(&e), name),
+        }
+    }
     if !matches!(stage, Stage::Vertex | Stage::Pixel) {
         let why = format!(
             "{} program: this test runs vertex and pixel programs",
@@ -326,17 +347,6 @@ fn run_program(harness: &Harness, name: &str, bytes: &[u8], t: &mut Tally) {
         return;
     }
     *t.stages.entry(format!("{stage:?}")).or_default() += 1;
-    if let Some(tint) = tint() {
-        match write_browser(&p) {
-            Ok(text) => {
-                t.tinted += 1;
-                if let Err(e) = tint.check(name, &text) {
-                    tally(&mut t.errors, &format!("tint: {e}"), name);
-                }
-            }
-            Err(e) => tally(&mut t.browser_refused, &e, name),
-        }
-    }
     if let Some(why) = wgsl_run::gap(&p) {
         tally(&mut t.gaps, &why, name);
         return;
@@ -657,7 +667,9 @@ fn corpus_over(corpus: &common::Corpus) {
         t.compared += one.compared;
         t.runs += one.runs;
         t.discarded += one.discarded;
-        t.tinted += one.tinted;
+        for (k, n) in one.tinted {
+            *t.tinted.entry(k).or_default() += n;
+        }
         for (k, n) in one.stages {
             *t.stages.entry(k).or_default() += n;
         }
@@ -684,10 +696,9 @@ fn corpus_over(corpus: &common::Corpus) {
         t.worst.extend(one.worst);
     }
     report(&corpus.name, &t);
-    if t.tinted > 0 {
+    for (stage, n) in &t.tinted {
         println!(
-            "  {} programs written for a browser and accepted by Tint unless an ERROR says otherwise",
-            t.tinted
+            "  {n:6} {stage} programs written for a browser, accepted by Tint unless an ERROR names them"
         );
     }
     assert!(t.errors.is_empty(), "{} kinds of harness errors", t.errors.len());

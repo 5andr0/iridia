@@ -307,12 +307,7 @@ pub fn gap(program: &iridia_ir::Program) -> Option<String> {
             ResourceKind::Texture {
                 multisampled: true, ..
             } => "a multisampled texture",
-            ResourceKind::Texture {
-                sample: SampleType::Depth,
-                ..
-            } => "a depth texture",
             ResourceKind::Texture { .. } => continue,
-            ResourceKind::Sampler { comparison: true } => "a comparison sampler",
             ResourceKind::Sampler { .. } => continue,
             ResourceKind::Buffer(_) => continue,
             ResourceKind::Storage { .. } => "an unordered-access view",
@@ -378,6 +373,10 @@ pub fn job(
                     .get(&register)
                     .ok_or_else(|| format!("no words for t{register}"))?;
                 entry["buffer"] = serde_json::json!({ "words": words });
+            }
+            // a comparison sampler compares with `COMPARE`, which the test's sampler (`Uniform`) applies the same way
+            ResourceKind::Sampler { comparison: true } => {
+                entry["sampler"] = serde_json::json!({ "compare": COMPARE })
             }
             ResourceKind::Sampler { .. } => entry["sampler"] = serde_json::json!({}),
             _ => continue,
@@ -517,6 +516,9 @@ pub fn classify(float: bool, a: u32, b: u32) -> Class {
         Class::Beyond
     }
 }
+
+/// The comparison function of every comparison sampler the harness binds: a sample passes where `depth_ref <= depth`.
+pub const COMPARE: &str = "less_equal";
 
 /// The texel `exec_warp` gives texture `slot` in vector `c`: each lane `k` `((slot * 3 + k + c) % 8 + 1) / 8` as a float
 /// for a float texture, that numerator as an integer for an integer one.
