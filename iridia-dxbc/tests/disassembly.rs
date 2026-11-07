@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 //! The decoder and the executor against Microsoft's tools: the instruction streams, declarations and immediate constant
-//! buffers of real programs equal the D3D Shader Disassembler's, and the executor's outputs for the programs it takes equal the
-//! reference values recorded with each program. Oracles: Microsoft's fxc/D3D disassembly text and recorded reference outputs;
+//! buffers of real programs equal the D3D Shader Disassembler's, and the executor's outputs for the programs it takes (the
+//! IR lift's, after `iridia_passes::prepare`) equal the reference values recorded with each program. Oracles: Microsoft's fxc/D3D disassembly text and recorded reference outputs;
 //! nothing here is ours.
 mod inputs;
 
@@ -9,7 +9,6 @@ use std::collections::BTreeMap;
 
 use dxbc_reader::decode;
 use dxbc_reader::decode::{Declared, Decoded};
-use iridia_dxbc::lift;
 use iridia_exec::ProgramShader;
 use iridia_exec::{PixelShader, Sample};
 
@@ -98,9 +97,14 @@ fn independent_disassembly_counts() -> Result<(), Box<dyn std::error::Error>> {
         if tree.size(&state_path).is_none() {
             continue;
         }
-        let shader = match lift(&bytes)
+        let shader = match iridia_dxbc::ir::lift(&bytes)
             .map_err(|e| e.group())
-            .and_then(|p| ProgramShader::new(p).map_err(|e| common::reason(&e.to_string())))
+            .and_then(|mut p| {
+                iridia_passes::prepare(&mut p)
+                    .map(|()| p)
+                    .map_err(|e| common::reason(&e))
+            })
+            .and_then(|p| ProgramShader::from_ir(p).map_err(|e| common::reason(&e.to_string())))
         {
             Ok(shader) => shader,
             Err(why) => {

@@ -3,7 +3,6 @@
 //! corners moved by the primitive and the instance; two instances) drawn on the CPU: the primitives a topology makes,
 //! the instances of each, the strips they emit. The values are the arithmetic of the HLSL.
 use iridia::{GsInput, GsOutput};
-use iridia_dxil::lift;
 use iridia_exec::geometry::{GeometryShader, Strip, Topology, Vertex};
 use iridia_exec::{Sample, Sampler};
 use std::collections::BTreeMap;
@@ -23,7 +22,9 @@ fn shader(name: &str) -> GeometryShader {
             .join(name),
     )
     .unwrap();
-    GeometryShader::new(lift(&bytes).unwrap_or_else(|e| panic!("{name}: {e}"))).unwrap()
+    let mut program = iridia_dxil::ir::lift(&bytes).unwrap_or_else(|e| panic!("{name}: {e}"));
+    iridia_passes::prepare(&mut program).unwrap_or_else(|e| panic!("{name}: {e}"));
+    GeometryShader::from_ir(&program).unwrap()
 }
 
 /// The constant buffer `scale` (register 0): a row of the scale.

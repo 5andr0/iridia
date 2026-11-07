@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 //! The draw stage ([`iridia_exec::draw`]) against Direct3D 12: each case draws the same points, lines or triangles
-//! through the same vertex and pixel programs (tests/fixtures/draw.hlsl, lifted from their DXIL) into 16 x 16 targets
-//! on both, and every pixel is compared: which pixels each draws (exactly), what it writes (to a stated tolerance: the
+//! through the same vertex and pixel programs (tests/fixtures/draw.hlsl, their DXIL lifted onto the IR) into 16 x 16
+//! targets on both, and every pixel is compared: which pixels each draws (exactly), what it writes (to a stated tolerance: the
 //! interpolation's arithmetic is each implementation's own) and the depth. Triangles draw on Microsoft's WARP
 //! rasterizer; points and lines on the machine's GPU (the oracle's `adapter hardware`), as WARP draws lines otherwise
 //! than the specification and the GPU do (`warp_draws_otherwise_only_as_documented`).
@@ -388,8 +388,11 @@ fn ramp(s: Sample) -> Result<[f32; 4], String> {
     Ok([texel(s.uv[0]), texel(s.uv[1]), 0.0, 1.0])
 }
 
+/// The IR lift of fixture `name`, after the passes every output and executor takes it through, ready to run.
 fn lift(dir: &Path, name: &str) -> ProgramShader {
-    ProgramShader::new(iridia_dxil::lift(&std::fs::read(dir.join(name)).unwrap()).unwrap()).unwrap()
+    let mut program = iridia_dxil::ir::lift(&std::fs::read(dir.join(name)).unwrap()).unwrap();
+    iridia_passes::prepare(&mut program).unwrap();
+    ProgramShader::from_ir(program).unwrap()
 }
 
 /// Each vertex's input registers, by the vertex program's signature: POSITION0, COLOR0, TEXCOORD0, TEXCOORD1.

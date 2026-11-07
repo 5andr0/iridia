@@ -1,11 +1,10 @@
 #![allow(clippy::unwrap_used)]
 //! The old word of an atomic operation on a texture view (`imm_atomic_*` on a typed unordered-access view) in a program
-//! lifted from DXBC, run by the executor against textures that apply the operations (tests/fixtures/
+//! lifted onto the IR from DXBC, run by the executor against textures that apply the operations (tests/fixtures/
 //! image_atomic_results.hlsl: four threads in order, each adding, exchanging and maxing into texels of one texture and
 //! storing the old words it reads to another).
 use iridia::D3dClass;
 use iridia::ResourceId;
-use iridia_dxbc::lift;
 use iridia_exec::{
     Backend, Element, Executable, ImageAtomic, ImageAtomicOp, ImageSample, ImageStore, Resources,
 };
@@ -50,16 +49,15 @@ fn the_old_word_of_an_atomic_on_a_texture_reaches_the_program() {
                 .join(&name),
         )
         .unwrap();
-        let program = lift(&bytes).unwrap_or_else(|e| panic!("{name}: {e}"));
-        program.validate().unwrap_or_else(|p| panic!("{name}: {p:?}"));
-        assert!(
-            iridia::emit::wgsl(&program)
-                .unwrap_err()
-                .to_string()
-                .contains("texture atomic result"),
-            "{name}"
-        );
-        let exe = Executable::new(&program).unwrap_or_else(|e| panic!("{name}: {e}"));
+        let mut program = iridia_dxbc::ir::lift(&bytes).unwrap_or_else(|e| panic!("{name}: {e}"));
+        iridia_passes::prepare(&mut program).unwrap_or_else(|e| panic!("{name}: {e}"));
+        iridia_ir::validate(&program).unwrap_or_else(|p| panic!("{name}: {p:?}"));
+        // WGSL has no texture atomic whose old word is read: the WGSL output refuses the program by name
+        let refused = iridia_naga::wgsl(&program, &iridia_naga::Profile::NAGA)
+            .unwrap_err()
+            .to_string();
+        assert!(refused.contains("atomic"), "{name}: {refused}");
+        let exe = Executable::from_ir(&program).unwrap_or_else(|e| panic!("{name}: {e}"));
         let uav = |register: u32| {
             program
                 .interface

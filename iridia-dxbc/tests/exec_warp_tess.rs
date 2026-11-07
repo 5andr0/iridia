@@ -3,9 +3,9 @@
 //! program, a hull program whose patch-constant function reads its tessellation factors from a constant buffer, the
 //! fixed-function tessellator, a domain program that writes each point's domain location, and a pass-through geometry
 //! program whose stream output WARP's buffer is read back from. The executor runs the same hull and domain programs
-//! (lifted from the same DXBC) and the primitives it makes are compared with the ones WARP wrote: every vertex of every
-//! point, line or triangle, in order, bit by bit. The programs lifted onto the IR
-//! ([`TessellationShader::from_ir`]) must make the same patches as the older lift's, bit for bit.
+//! (lifted onto the IR from the same DXBC and taken through `iridia_passes::prepare`, run by
+//! [`TessellationShader::from_ir`]) and the primitives it makes are compared with the ones WARP wrote: every vertex of
+//! every point, line or triangle, in order, bit by bit. The programs as lifted must make the same patches, bit for bit.
 //!
 //! This checks the tessellator ([`iridia_exec::tessellator`]: which points, in which order, joined how, for
 //! every domain, partitioning and output topology and a spread of factors), the hull and domain stages around it
@@ -18,7 +18,6 @@ mod inputs;
 
 use inputs::{Tool, own_scratch, program};
 use iridia::TessTopology;
-use iridia_dxbc::lift;
 use iridia_exec::Constants;
 use iridia_exec::tessellation::TessellationShader;
 use iridia_exec::{Sample, Sampler};
@@ -328,19 +327,21 @@ fn tessellated_patches_are_the_ones_warp_makes() {
                 };
                 let gs = compile(&format!("gs.{}", gs_entry), "gs_5_0", gs_entry, &[]);
 
-                // the executor
-                let shader = TessellationShader::new(
-                    lift(&std::fs::read(&hs).unwrap()).unwrap_or_else(|e| panic!("{tag}: hull: {e}")),
-                    lift(&std::fs::read(&ds).unwrap()).unwrap_or_else(|e| panic!("{tag}: domain: {e}")),
-                )
-                .unwrap_or_else(|e| panic!("{tag}: {e}"));
-                // the same programs lifted onto the IR, which must make the same patches bit for bit
+                // the executor, on the programs lifted onto the IR and taken through the passes an output takes
                 let ir = |path: &Path, what: &str| {
                     iridia_dxbc::ir::lift(&std::fs::read(path).unwrap())
                         .unwrap_or_else(|e| panic!("{tag}: {what} on the IR: {e}"))
                 };
+                let prepared = |path: &Path, what: &str| {
+                    let mut p = ir(path, what);
+                    iridia_passes::prepare(&mut p).unwrap_or_else(|e| panic!("{tag}: {what}: {e}"));
+                    p
+                };
+                let shader = TessellationShader::from_ir(&prepared(&hs, "hull"), &prepared(&ds, "domain"))
+                    .unwrap_or_else(|e| panic!("{tag}: {e}"));
+                // the same programs as lifted, which must make the same patches bit for bit
                 let ir_shader = TessellationShader::from_ir(&ir(&hs, "hull"), &ir(&ds, "domain"))
-                    .unwrap_or_else(|e| panic!("{tag}: on the IR: {e}"));
+                    .unwrap_or_else(|e| panic!("{tag}: as lifted: {e}"));
                 // the vertex program's output for vertex k: (k + 1, 2k + 1, 3, 4)
                 let control_points_given: Vec<Vec<[u32; 4]>> = (0..control_points)
                     .map(|k| vec![[k as f32 + 1.0, 2.0 * k as f32 + 1.0, 3.0, 4.0].map(f32::to_bits)])
@@ -433,9 +434,11 @@ fn tessellated_patches_are_the_ones_warp_makes() {
                             &control_points_given,
                             0,
                         )
-                        .unwrap_or_else(|e| panic!("{tag}.{k}: on the IR: {e}"));
+                        .unwrap_or_else(|e| panic!("{tag}.{k}: as lifted: {e}"));
                     if ir_patch != patch {
-                        failures.push(format!("{tag}.{k}: the IR lift's patch is not the older lift's"));
+                        failures.push(format!(
+                            "{tag}.{k}: the lifted programs' patch is not the prepared ones'"
+                        ));
                     }
                     let expected_topology = match output {
                         "line" => TessTopology::Line,
@@ -496,7 +499,8 @@ fn tessellated_patches_are_the_ones_warp_makes() {
 /// A patch-constant function that leaves patch constants its signature places unwritten
 /// (tests/fixtures/hull_unwritten.hlsl: no phase declares o7 to o10) lifts onto the IR, and the patch it makes is what
 /// the HLSL says: the constant factors, each domain point's `mix` from the control points and the written constant
-/// `extra`. The older lift makes the same patch bit for bit, and WARP the same vertices where it is configured.
+/// `extra`. The IR as lifted makes the same patch as the prepared program bit for bit, and WARP the same vertices
+/// where it is configured.
 #[test]
 fn a_hull_program_that_leaves_patch_constants_unwritten_tessellates() {
     let hs = include_bytes!("fixtures/hull_unwritten.hs.dxbc");
@@ -504,10 +508,11 @@ fn a_hull_program_that_leaves_patch_constants_unwritten_tessellates() {
     let ir = |bytes: &[u8], what: &str| {
         iridia_dxbc::ir::lift(bytes).unwrap_or_else(|e| panic!("{what} on the IR: {e}"))
     };
-    let shader =
-        TessellationShader::from_ir(&ir(hs, "hull"), &ir(ds, "domain")).unwrap_or_else(|e| panic!("{e}"));
-    let older =
-        TessellationShader::new(lift(hs).unwrap(), lift(ds).unwrap()).unwrap_or_else(|e| panic!("{e}"));
+    let (mut hull, mut domain) = (ir(hs, "hull"), ir(ds, "domain"));
+    let as_lifted = TessellationShader::from_ir(&hull, &domain).unwrap_or_else(|e| panic!("{e}"));
+    iridia_passes::prepare(&mut hull).unwrap();
+    iridia_passes::prepare(&mut domain).unwrap();
+    let shader = TessellationShader::from_ir(&hull, &domain).unwrap_or_else(|e| panic!("{e}"));
     // the vertex program's output for vertex k: (k + 1, 2k + 1, 3, 4)
     let points: Vec<Vec<[u32; 4]>> = (0..4u8)
         .map(|k| vec![[f32::from(k) + 1.0, 2.0 * f32::from(k) + 1.0, 3.0, 4.0].map(f32::to_bits)])
@@ -518,8 +523,8 @@ fn a_hull_program_that_leaves_patch_constants_unwritten_tessellates() {
     };
     let patch = run(&shader);
     assert!(
-        patch == run(&older),
-        "the IR lift's patch is not the older lift's"
+        patch == run(&as_lifted),
+        "the prepared patch is not the IR lift's"
     );
     assert_eq!(patch.factors.edges, [1.0, 2.0, 3.0, 4.0]);
     assert_eq!(patch.factors.inside, [5.0, 6.0]);

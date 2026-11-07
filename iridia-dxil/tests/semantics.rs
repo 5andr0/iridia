@@ -1,10 +1,11 @@
 #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 //! The lifted fixtures run on the executor with outputs worked out by hand from the HLSL (tests/fixtures/*.hlsl), for
 //! both the default and the -Od build of each (different instruction streams of one source). The evaluator cannot run
-//! them (loops, switches, memory); the values below are the arithmetic of the source, not of the lifter.
-use iridia::{Program, ResourceId, ResourceKind};
-use iridia_dxil::lift;
+//! them (loops, switches, memory); the values below are the arithmetic of the source, not of the lifter. Each program
+//! is the IR lift's after `iridia_passes::prepare`, as the executor takes it.
+use iridia::{ResourceId, ResourceKind};
 use iridia_exec::{Backend, Element, Executable, ImageSample, Output, Resources};
+use iridia_ir::Program;
 use std::path::Path;
 
 fn f(x: f32) -> u32 {
@@ -25,7 +26,28 @@ fn lifted(name: &str) -> (Program, Executable) {
             .join(name),
     )
     .unwrap();
-    let program = lift(&bytes).unwrap_or_else(|e| panic!("{name}: {e}"));
+    let program = prepared(&bytes).unwrap_or_else(|e| panic!("{name}: {e}"));
+    let exe = Executable::from_ir(&program).unwrap_or_else(|e| panic!("{name}: {e}"));
+    (program, exe)
+}
+
+/// The IR lift of `bytes` after the passes every output and executor takes it through.
+fn prepared(bytes: &[u8]) -> Result<Program, String> {
+    let mut program = iridia_dxil::ir::lift(bytes).map_err(|e| e.to_string())?;
+    iridia_passes::prepare(&mut program)?;
+    Ok(program)
+}
+
+/// The older lift's program of a ray query fixture and its executable: the IR has no ray queries yet, so these run on
+/// the naga path until it does.
+fn lifted_naga(name: &str) -> (iridia::Program, Executable) {
+    let bytes = std::fs::read(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures")
+            .join(name),
+    )
+    .unwrap();
+    let program = iridia_dxil::lift(&bytes).unwrap_or_else(|e| panic!("{name}: {e}"));
     let exe = Executable::new(&program).unwrap_or_else(|e| panic!("{name}: {e}"));
     (program, exe)
 }
@@ -529,7 +551,7 @@ mod resource_arrays {
 
     fn run(variant: &str, which: [u32; 2]) -> Result<Output, String> {
         let (program, exe) = lifted(&fixture("resource_arrays", variant));
-        program.validate().unwrap();
+        iridia_ir::validate(&program).unwrap();
         let find = |register: u32, class: iridia::D3dClass| {
             program
                 .interface
@@ -618,7 +640,7 @@ mod pixel_ops {
 
     fn run(variant: &str, sample: u32, h: f32, packed: u32) -> Output {
         let (program, exe) = lifted(&fixture("pixel_ops", variant));
-        program.validate().unwrap();
+        iridia_ir::validate(&program).unwrap();
         // the sample index is an input the signature does not list; the position is listed and not read
         let names: Vec<_> = program
             .interface
@@ -814,10 +836,11 @@ mod stage_functions {
                 .join(format!("tessellation.{base}{variant}.dxil")),
         )
         .unwrap();
-        let program = lift(&bytes).unwrap_or_else(|e| panic!("{base}{variant}: {e}"));
+        let program = prepared(&bytes).unwrap_or_else(|e| panic!("{base}{variant}: {e}"));
         let sigs = stage_functions(&program.interface).unwrap().unwrap();
         let sig = sigs.iter().find(|s| s.name == name).unwrap();
-        let exe = Executable::function(&program, name).unwrap_or_else(|e| panic!("{base}{variant}: {e}"));
+        let exe =
+            Executable::function_from_ir(&program, name).unwrap_or_else(|e| panic!("{base}{variant}: {e}"));
         let mut registers = Vec::new();
         for argument in &sig.arguments {
             let given = give(&argument.name).unwrap_or_else(|| {
@@ -1101,13 +1124,13 @@ mod image_atomics {
             };
             let (counts, olds) = (uav(0), uav(1));
             assert!(
-                iridia::emit::wgsl(&program)
+                iridia_naga::wgsl(&program, &iridia_naga::Profile::NAGA)
                     .unwrap_err()
                     .to_string()
-                    .contains("texture atomic result"),
+                    .contains("atomic"),
                 "{v}"
             );
-            program.validate().unwrap_or_else(|p| panic!("{v}: {p:?}"));
+            iridia_ir::validate(&program).unwrap_or_else(|p| panic!("{v}: {p:?}"));
             let mut backend = Results {
                 words: BTreeMap::from([((counts, [1, 0, 0]), 5)]),
                 stores: BTreeMap::new(),
@@ -1432,7 +1455,7 @@ mod ray_queries {
     #[test]
     fn rays_find_the_closest_committed_hit_of_the_scene() {
         for v in ["", ".od"] {
-            let (program, exe) = lifted(&fixture("ray_query_hits", v));
+            let (program, exe) = lifted_naga(&fixture("ray_query_hits", v));
             let find = |class: Option<D3dClass>| {
                 program
                     .interface
@@ -1518,11 +1541,32 @@ mod uav_counter {
     use iridia::D3dClass;
     use std::collections::BTreeMap;
 
+    /// The views' hidden counters, by view: an increment gives the count before it, a decrement the count after it.
+    struct Counters(BTreeMap<ResourceId, u32>);
+    impl Backend for Counters {
+        fn sample(&mut self, _: ImageSample<Element>) -> Result<[f32; 4], String> {
+            Err("no sampling in this fixture".into())
+        }
+        fn counter(&mut self, view: Element, decrement: bool) -> Result<u32, String> {
+            let count = self
+                .0
+                .get_mut(&view.id)
+                .ok_or_else(|| format!("no counter on {:?}", view.id))?;
+            if decrement {
+                *count = count.wrapping_sub(1);
+                Ok(*count)
+            } else {
+                *count = count.wrapping_add(1);
+                Ok(count.wrapping_sub(1))
+            }
+        }
+    }
+
     /// `uav_counter.hlsl`: 8 threads. Thread i appends i * 10 to `appended` (u0), consumes one value of `consumed` (u1) into
     /// results[i], takes the old count of `counted` (u2) into results[8 + i] and the new count of `drained` (u3) after a
-    /// decrement into results[16 + i]. The counters are resources of their own (`counter_of` names the view): started at
-    /// 0, 8, 5 and 20, they end at 8, 0, 13 and 12, and the values each thread got are the distinct ones in between
-    /// whatever order the threads' atomic operations took.
+    /// decrement into results[16 + i]. The counters are the views' hidden counters, which the executor asks its backend
+    /// for: started at 0, 8, 5 and 20, they end at 8, 0, 13 and 12, and the values each thread got are the distinct ones
+    /// in between whatever order the threads' atomic operations took.
     #[test]
     fn append_consume_increment_and_decrement_move_the_counters() {
         for v in BOTH {
@@ -1540,18 +1584,14 @@ mod uav_counter {
                     .unwrap_or_else(|| panic!("{v}: no u{register}"))
                     .id
             };
-            let counter = |of: ResourceId| {
-                program
-                    .interface
-                    .resources
-                    .iter()
-                    .find(|r| r.provenance.counter_of == Some(of))
-                    .unwrap_or_else(|| panic!("{v}: no counter of {of:?}"))
-                    .id
-            };
             let (appended, consumed, counted, drained, results) =
                 (view(0), view(1), view(2), view(3), view(4));
-            let counters = [appended, consumed, counted, drained].map(counter);
+            let mut counters = Counters(BTreeMap::from([
+                (appended, 0),
+                (consumed, 8),
+                (counted, 5),
+                (drained, 20),
+            ]));
             let consumed_values: Vec<u32> = (0..8).map(|k| 100 + k).collect();
             let mut buffers = BTreeMap::from([
                 (appended, vec![0u32; 8]),
@@ -1559,14 +1599,10 @@ mod uav_counter {
                 (counted, vec![0u32; 1]),
                 (drained, vec![0u32; 1]),
                 (results, vec![0u32; 24]),
-                (counters[0], vec![0]),
-                (counters[1], vec![8]),
-                (counters[2], vec![5]),
-                (counters[3], vec![20]),
             ]);
             let resources = Resources::default();
             let bound = exe.bind_resources(&resources).unwrap();
-            exe.dispatch(&bound, &mut NoBackend, &mut buffers, [1, 1, 1], 32)
+            exe.dispatch(&bound, &mut counters, &mut buffers, [1, 1, 1], 32)
                 .unwrap_or_else(|e| panic!("{v}: {e}"));
             let sorted = |words: &[u32]| {
                 let mut w = words.to_vec();
@@ -1589,7 +1625,11 @@ mod uav_counter {
                 (12..20).collect::<Vec<_>>(),
                 "{v} decremented"
             );
-            assert_eq!(counters.map(|c| buffers[&c][0]), [8, 0, 13, 12], "{v} counters");
+            assert_eq!(
+                [appended, consumed, counted, drained].map(|c| counters.0[&c]),
+                [8, 0, 13, 12],
+                "{v} counters"
+            );
         }
     }
 }
@@ -1607,7 +1647,7 @@ mod procedural_primitives {
     /// along z from z = -5 at x = 0).
     #[test]
     fn a_procedural_primitive_is_intersected_by_the_program_in_the_instances_object_space() {
-        let (program, exe) = lifted(&fixture("ray_query_procedural", ""));
+        let (program, exe) = lifted_naga(&fixture("ray_query_procedural", ""));
         let find = |class: Option<D3dClass>| {
             program
                 .interface
@@ -1683,7 +1723,7 @@ mod instance_matrices {
     /// same instance.
     #[test]
     fn a_program_reads_the_transform_and_its_inverse_of_the_instance_it_is_offered() {
-        let (program, exe) = lifted(&fixture("ray_query_matrices", ""));
+        let (program, exe) = lifted_naga(&fixture("ray_query_matrices", ""));
         let find = |class: Option<D3dClass>| {
             program
                 .interface

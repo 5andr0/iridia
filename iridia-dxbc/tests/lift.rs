@@ -354,8 +354,13 @@ fn a_hull_program_whose_phases_declare_different_temporaries_lifts() {
     let program = lift(include_bytes!("fixtures/hull_phases.hs.dxbc")).unwrap_or_else(|e| panic!("{e}"));
     program.validate().unwrap_or_else(|p| panic!("{p:?}"));
     assert_eq!(program.stage, Stage::Hull);
+    // on the IR too, and each phase's function compiles for the executor
+    let mut ir = iridia_dxbc::ir::lift(include_bytes!("fixtures/hull_phases.hs.dxbc"))
+        .unwrap_or_else(|e| panic!("{e}"));
+    iridia_passes::prepare(&mut ir).unwrap_or_else(|e| panic!("{e}"));
+    iridia_ir::validate(&ir).unwrap_or_else(|p| panic!("{p:?}"));
     for name in ["main", "patch_constant"] {
-        iridia_exec::Executable::function(&program, name).unwrap_or_else(|e| panic!("{name}: {e}"));
+        iridia_exec::Executable::function_from_ir(&ir, name).unwrap_or_else(|e| panic!("{name}: {e}"));
     }
 }
 

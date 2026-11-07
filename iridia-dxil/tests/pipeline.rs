@@ -1,9 +1,8 @@
 #![allow(clippy::unwrap_used)]
 //! The ray tracing pipeline on the CPU, run on the lifted programs of `ray_tracing.hlsl` (raygen, miss, closest_hit,
-//! any_hit, intersection, callable) over scenes built here, lifted by the naga-path lift and onto the IR
-//! ([`iridia_dxil::ir`], run by [`Pipeline::from_ir`]). The values are the arithmetic of the HLSL.
-use iridia::{HitGroup, HitGroupKind, Program};
-use iridia_dxil::lift;
+//! any_hit, intersection, callable) over scenes built here, lifted onto the IR ([`iridia_dxil::ir`], run by
+//! [`Pipeline::from_ir`]) as lifted and after `iridia_passes::prepare`. The values are the arithmetic of the HLSL.
+use iridia::{HitGroup, HitGroupKind};
 use iridia_exec::{Geometry, Instance, InstanceFlags, Pipeline, PipelineResources, Scene, ShaderTable};
 use iridia_exec::{Sampler, Store};
 use std::collections::BTreeMap;
@@ -18,8 +17,12 @@ fn bytes(export: &str, variant: &str) -> Vec<u8> {
     .unwrap()
 }
 
-fn program(export: &str, variant: &str) -> Program {
-    lift(&bytes(export, variant)).unwrap_or_else(|e| panic!("{export}{variant}: {e}"))
+/// A program lifted onto the IR and taken through the passes every output and executor takes it through.
+fn prepared(export: &str, variant: &str) -> iridia_ir::Program {
+    let mut p =
+        iridia_dxil::ir::lift(&bytes(export, variant)).unwrap_or_else(|e| panic!("{export}{variant}: {e}"));
+    iridia_passes::prepare(&mut p).unwrap_or_else(|e| panic!("{export}{variant}: {e}"));
+    p
 }
 
 /// A program lifted onto the IR and structured as the executor takes it.
@@ -31,17 +34,17 @@ fn on_ir(export: &str, variant: &str) -> iridia_ir::Program {
     p
 }
 
-/// Which lift a pipeline's programs come from.
+/// Which form of the IR lift a pipeline's programs take: as lifted (structured only), or prepared.
 #[derive(Clone, Copy, Debug)]
 enum Lifter {
-    Naga,
+    Prepared,
     Ir,
 }
 
-/// Each variant (the optimized programs and the `-Od` ones) of each lift.
+/// Each variant (the optimized programs and the `-Od` ones) of each form.
 const CASES: [(&str, Lifter); 4] = [
-    ("", Lifter::Naga),
-    (".od", Lifter::Naga),
+    ("", Lifter::Prepared),
+    (".od", Lifter::Prepared),
     ("", Lifter::Ir),
     (".od", Lifter::Ir),
 ];
@@ -55,11 +58,11 @@ const EXPORTS: [&str; 6] = [
     "callable",
 ];
 
-/// The pipeline of the six programs of `variant` lifted by `lifter`, without the hit groups and recursion depth a
+/// The pipeline of the six programs of `variant` in `lifter`'s form, without the hit groups and recursion depth a
 /// state object adds.
 fn bare(variant: &str, lifter: Lifter, table: ShaderTable) -> Pipeline {
     match lifter {
-        Lifter::Naga => Pipeline::new(EXPORTS.map(|n| program(n, variant)).to_vec(), table),
+        Lifter::Prepared => Pipeline::from_ir(EXPORTS.map(|n| prepared(n, variant)).to_vec(), table),
         Lifter::Ir => Pipeline::from_ir(EXPORTS.map(|n| on_ir(n, variant)).to_vec(), table),
     }
     .unwrap()
@@ -299,7 +302,7 @@ fn a_pipeline_without_a_declared_recursion_depth_is_refused() {
         hit_groups: Vec::new(),
         callable: vec!["callable".to_owned()],
     };
-    for lifter in [Lifter::Naga, Lifter::Ir] {
+    for lifter in [Lifter::Prepared, Lifter::Ir] {
         let mut image = Image::default();
         let e = bare("", lifter, table())
             .dispatch_rays("raygen", [1, 1, 1], &resources, &mut image)
@@ -331,7 +334,7 @@ fn the_pipeline_flags_are_added_to_every_ray() {
     const SKIP_TRIANGLES: u32 = 0x100;
     const SKIP_PROCEDURAL: u32 = 0x200;
     let missed = [0.0, 0.0, -0.6, -1.0];
-    for lifter in [Lifter::Naga, Lifter::Ir] {
+    for lifter in [Lifter::Prepared, Lifter::Ir] {
         let mut image = Image::default();
         pipeline("", lifter)
             .with_pipeline_flags(SKIP_TRIANGLES)

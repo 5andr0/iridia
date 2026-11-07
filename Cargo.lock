@@ -357,6 +357,7 @@ dependencies = [
  "iridia",
  "iridia-exec",
  "iridia-ir",
+ "iridia-naga",
  "iridia-passes",
  "primase-naga",
  "primase-testdata",

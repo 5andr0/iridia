@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 //! Hand-worked controls of the lifted programs' values: each case is a program written as tokens, its expected outputs worked out
-//! by hand from Direct3D's definition of the instruction (the value, not what a lift or an executor does), lifted and run by
-//! the executor (`iridia_exec::ProgramShader`). The oracle is the hand-worked value; these cases stood for the
+//! by hand from Direct3D's definition of the instruction (the value, not what a lift or an executor does), lifted onto
+//! the IR and run by the executor (`iridia_exec::ProgramShader::from_ir`). The oracle is the hand-worked value; these cases stood for the
 //! legacy evaluator's and now stand for the executor's.
 use dxbc_reader::decode;
 use dxbc_reader::decode::Declared;
@@ -155,11 +155,12 @@ fn container_with(
     out
 }
 
-/// The program lifted and ready to run.
+/// The program lifted onto the IR, taken through the passes an output takes, validated and ready to run.
 fn executor(words: &[u32]) -> ProgramShader {
-    let program = lift(&container(words)).unwrap_or_else(|e| panic!("{e}"));
-    program.validate().unwrap_or_else(|p| panic!("{p:?}"));
-    ProgramShader::new(program).unwrap_or_else(|e| panic!("{e}"))
+    let mut program = iridia_dxbc::ir::lift(&container(words)).unwrap_or_else(|e| panic!("{e}"));
+    iridia_passes::prepare(&mut program).unwrap_or_else(|e| panic!("{e}"));
+    iridia_ir::validate(&program).unwrap_or_else(|p| panic!("{p:?}"));
+    ProgramShader::from_ir(program).unwrap_or_else(|e| panic!("{e}"))
 }
 
 fn no_sample(_: Sample) -> Result<[f32; 4], String> {
@@ -734,8 +735,9 @@ fn signature_elements_the_program_does_not_declare_are_listed_unused() {
         ],
         &[("SV_Target", 1, 64, 1, 0b1111)],
     );
-    let program = lift(&bytes).unwrap();
-    program.validate().unwrap_or_else(|p| panic!("{p:?}"));
+    let mut program = iridia_dxbc::ir::lift(&bytes).unwrap();
+    iridia_passes::prepare(&mut program).unwrap();
+    iridia_ir::validate(&program).unwrap_or_else(|p| panic!("{p:?}"));
     let listed = |list: &[iridia::Varying]| {
         list.iter()
             .map(|v| (v.label.name.clone(), v.label.index, v.used))
@@ -755,7 +757,7 @@ fn signature_elements_the_program_does_not_declare_are_listed_unused() {
             ("SV_Target".to_owned(), 1, false)
         ]
     );
-    let e = ProgramShader::new(program)
+    let e = ProgramShader::from_ir(program)
         .unwrap()
         .execute(&[], &[], &mut no_sample)
         .unwrap();

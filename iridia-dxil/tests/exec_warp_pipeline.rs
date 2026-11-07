@@ -3,16 +3,15 @@
 //! `ray_tracing.hlsl` form a state object (a triangle hit group with any-hit and closest-hit programs, a procedural one
 //! with intersection, any-hit and closest-hit programs), the raygen program traces one ray per image pixel through the
 //! same scene on both, and the images are compared texel by texel (to a relative 1e-4: the arithmetic of the programs is
-//! the same, the traversal and its rounding are each implementation's own). The programs are lifted twice, by the
-//! naga-path lift and onto the IR ([`iridia_dxil::ir`], run by [`Pipeline::from_ir`]); the IR's images are the
-//! naga path's, bit for bit, as well as WARP's.
+//! the same, the traversal and its rounding are each implementation's own). The programs are lifted onto the IR
+//! ([`iridia_dxil::ir`], run by [`Pipeline::from_ir`]) and run as lifted and after `iridia_passes::prepare`; the
+//! prepared programs' images are the lifted ones', bit for bit, as well as WARP's.
 //!
 //! Needs the WARP oracle program with the `d3d12rtp` case form (the configured `Tool::Warp`) and the scratch folder.
 mod inputs;
 
 use inputs::{Tool, own_scratch, program};
 use iridia::{HitGroup, HitGroupKind};
-use iridia_dxil::lift;
 use iridia_exec::{Geometry, Instance, InstanceFlags, Pipeline, PipelineResources, Scene, ShaderTable};
 use iridia_exec::{Sample, Sampler, Store};
 use std::collections::BTreeMap;
@@ -33,12 +32,12 @@ fn fixture(export: &str, variant: &str) -> PathBuf {
         .join(format!("ray_tracing.{export}{variant}.dxil"))
 }
 
-/// Which lift a pipeline's programs come from.
+/// Which form of the IR lift a pipeline's programs take.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Lifter {
-    /// The naga-path lift, [`iridia_dxil::lift`].
-    Naga,
-    /// The IR's, [`iridia_dxil::ir::lift`], structured as the executor takes it.
+    /// [`iridia_dxil::ir::lift`]'s, after `iridia_passes::prepare`.
+    Prepared,
+    /// [`iridia_dxil::ir::lift`]'s, structured as the executor takes it.
     Ir,
 }
 
@@ -47,6 +46,13 @@ fn on_ir(bytes: &[u8]) -> iridia_ir::Program {
     let mut p = iridia_dxil::ir::lift(bytes).unwrap();
     iridia_passes::structurize(&mut p.entry).unwrap();
     iridia_passes::break_flags(&mut p.entry).unwrap();
+    p
+}
+
+/// A program lifted onto the IR and taken through the passes every output and executor takes it through.
+fn prepared(bytes: &[u8]) -> iridia_ir::Program {
+    let mut p = iridia_dxil::ir::lift(bytes).unwrap();
+    iridia_passes::prepare(&mut p).unwrap();
     p
 }
 
@@ -65,7 +71,7 @@ fn pipeline(variant: &str, lifter: Lifter) -> Pipeline {
         callable: vec!["callable".to_owned()],
     };
     match lifter {
-        Lifter::Naga => Pipeline::new(bytes.iter().map(|b| lift(b).unwrap()).collect(), table),
+        Lifter::Prepared => Pipeline::from_ir(bytes.iter().map(|b| prepared(b)).collect(), table),
         Lifter::Ir => Pipeline::from_ir(bytes.iter().map(|b| on_ir(b)).collect(), table),
     }
     .unwrap()
@@ -314,7 +320,7 @@ fn pipelines_agree_with_warp() {
     let scratch = own_scratch("warp");
     let (mut compared, mut hits, mut mismatches) = (0, 0, Vec::new());
     for variant in ["", ".od"] {
-        let pipelines = [Lifter::Naga, Lifter::Ir].map(|l| (l, pipeline(variant, l)));
+        let pipelines = [Lifter::Prepared, Lifter::Ir].map(|l| (l, pipeline(variant, l)));
         let mut text = String::new();
         let mut ours = BTreeMap::new();
         for (name, dims, scene) in scenes() {
@@ -331,7 +337,7 @@ fn pipelines_agree_with_warp() {
                     .unwrap_or_else(|e| panic!("{name} ({lifter:?}): {e}"));
                 ours.insert((name.clone(), *lifter), (dims, image));
             }
-            // the IR's image is the naga path's, bit for bit
+            // the prepared programs' image is the lifted ones', bit for bit
             let bits = |l: Lifter| -> Vec<((u32, u32), [u32; 4])> {
                 ours[&(name.clone(), l)]
                     .1
@@ -340,8 +346,10 @@ fn pipelines_agree_with_warp() {
                     .map(|(at, t)| (*at, t.map(f32::to_bits)))
                     .collect()
             };
-            if bits(Lifter::Naga) != bits(Lifter::Ir) {
-                mismatches.push(format!("{name}: the IR's image is not the naga path's"));
+            if bits(Lifter::Prepared) != bits(Lifter::Ir) {
+                mismatches.push(format!(
+                    "{name}: the prepared programs' image is not the lifted ones'"
+                ));
             }
         }
         let cases = scratch.join(format!("pipeline{}.cases.txt", variant.replace('.', "_")));
@@ -372,7 +380,7 @@ fn pipelines_agree_with_warp() {
                 .iter()
                 .map(|w| f32::from_bits(u32::from_str_radix(w.as_str().unwrap(), 16).unwrap()))
                 .collect();
-            for lifter in [Lifter::Naga, Lifter::Ir] {
+            for lifter in [Lifter::Prepared, Lifter::Ir] {
                 let (dims, image) = &ours[&(name.clone(), lifter)];
                 for y in 0..dims[1] {
                     for x in 0..dims[0] {

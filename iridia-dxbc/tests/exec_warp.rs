@@ -2,8 +2,7 @@
 //! The program executor against Microsoft's WARP rasterizer (Direct3D 11, Shader Model 5), the oracle that is not ours:
 //! each pixel program of a corpus the IR lift takes is rendered by WARP on one pixel, with the same input registers,
 //! constant buffers and uniform textures (of the dimension the program declares: 1D, 2D, 3D, cube, arrays, cube
-//! arrays), and run by [`ProgramShader::from_ir`]; every lane both write is compared. Where the older lift takes the
-//! program too, it runs on the same cases beside the IR's, which it must agree with bit for bit.
+//! arrays), and run by [`ProgramShader::from_ir`]; every lane both write is compared.
 //!
 //! Needs `tools.warp` (the oracle program) and `tools.fxc` (Microsoft's `fxc`, for the oracle's vertex shader), and a
 //! corpus folder (the corpus oracle set's `sekiro/shaders`, `riders/shaders`, `sledding/shaders`); it works in
@@ -27,6 +26,12 @@ use iridia_exec::{Dim, ImageLoad, ImageQuery, ImageSample, ProgramShader, QueryK
 use iridia_exec::{PixelShader, Sampler};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+
+/// `program` after the passes every output and executor takes it through.
+fn prepared(mut program: iridia_ir::Program) -> iridia_ir::Program {
+    iridia_passes::prepare(&mut program).unwrap();
+    program
+}
 
 fn hex(words: &[u32]) -> String {
     words
@@ -384,29 +389,6 @@ struct Tally {
     shapes: BTreeMap<&'static str, usize>,
     /// The pixel programs the IR lift refuses (by why).
     ir_refused: BTreeMap<String, usize>,
-    /// The older lift's runs that agree with the IR lift's bit for bit, and the programs it does not lift (by why).
-    older_agree: usize,
-    older_refused: BTreeMap<String, usize>,
-    /// The runs where the older lift's outputs are not the IR lift's.
-    older_differ: Vec<String>,
-}
-
-/// What a run of a pixel program leaves: each written output lane (a NaN as one pattern), or that it discarded.
-fn observed(e: &iridia_exec::Execution) -> Option<Vec<[u32; 4]>> {
-    let canonical = |w: u32| {
-        if f32::from_bits(w).is_nan() {
-            0x7fc0_0000
-        } else {
-            w
-        }
-    };
-    (!e.discarded).then(|| {
-        e.outputs
-            .iter()
-            .zip(&e.output_masks)
-            .map(|(o, &m)| std::array::from_fn(|k| if m >> k & 1 != 0 { canonical(o[k]) } else { 0 }))
-            .collect()
-    })
 }
 
 fn run_program(
@@ -457,17 +439,6 @@ fn run_program(
                 .entry(format!("ProgramShader::from_ir: {e}"))
                 .or_default() += 1;
             return;
-        }
-    };
-    // the older lift of the same program, where it takes it, run on the same cases beside it
-    let older = match iridia_dxbc::lift(bytes)
-        .map_err(|e| e.to_string())
-        .and_then(|p| ProgramShader::new(p).map_err(|e| e.to_string()))
-    {
-        Ok(s) => Some(s),
-        Err(e) => {
-            *t.older_refused.entry(common::reason(&e)).or_default() += 1;
-            None
         }
     };
     let tag = Path::new(name)
@@ -572,17 +543,6 @@ fn run_program(
         let zero = vec![[[0u32; 4]; 2]; case.inputs.len()];
         let refs = common::refs(&case, &shader);
         let a = shader.execute_with_derivatives(&case.inputs, &zero, &refs, &mut sampler);
-        if let (Some(b), Ok(a)) = (&older, &a) {
-            sampler.samples = 0;
-            match b.execute_with_derivatives(&case.inputs, &zero, &refs, &mut sampler) {
-                Ok(b) if observed(&b) == observed(a) => t.older_agree += 1,
-                b => t.older_differ.push(format!(
-                    "{name} case {c}: IR lift {:x?}, older lift {:x?}",
-                    observed(a),
-                    b.map(|b| observed(&b))
-                )),
-            }
-        }
         ours.push(a);
     }
     let cases_path = scratch.join(format!("{tag}.cases.txt"));
@@ -694,16 +654,6 @@ fn report(title: &str, t: &Tally) {
     for (why, n) in &t.ir_refused {
         println!("  IR refuses {n:5}  {why}");
     }
-    println!(
-        "  the older lift: {} runs agree with the IR lift's",
-        t.older_agree
-    );
-    for (why, n) in &t.older_refused {
-        println!("  the older lift refuses {n:5}  {why}");
-    }
-    for d in t.older_differ.iter().take(20) {
-        println!("  OLDER LIFT DIFFERS {d}");
-    }
 }
 
 fn corpus(game: Game) {
@@ -712,7 +662,7 @@ fn corpus(game: Game) {
     }
 }
 
-/// The pixel programs of `corpus`'s containers against WARP, the older lift beside the IR's.
+/// The pixel programs of `corpus`'s containers against WARP.
 fn corpus_over(corpus: &common::Corpus) {
     let (Some(fxc), Some(warp)) = (program(Tool::Fxc), program(Tool::Warp)) else {
         return;
@@ -739,11 +689,6 @@ fn corpus_over(corpus: &common::Corpus) {
         t.ir_refused.is_empty(),
         "the IR lift refuses {} pixel programs",
         t.ir_refused.len()
-    );
-    assert!(
-        t.older_differ.is_empty(),
-        "{} runs of the older lift differ from the IR lift's",
-        t.older_differ.len()
     );
 }
 
@@ -922,11 +867,6 @@ fn resinfo_agrees_with_warp() {
         t.worst.len()
     );
     assert!(t.ir_refused.is_empty(), "the IR lift refuses");
-    assert!(
-        t.older_differ.is_empty(),
-        "{} runs of the older lift differ from the IR lift's",
-        t.older_differ.len()
-    );
 }
 
 /// Two switches whose cases end with `break`, for [`switches_agree_with_warp_and_a_falling_case_is_refused`] to make
@@ -1028,11 +968,6 @@ fn switches_agree_with_warp_and_a_falling_case_is_refused() {
         t.worst.len()
     );
     assert!(t.ir_refused.is_empty(), "the IR lift refuses: {:?}", t.ir_refused);
-    assert!(
-        t.older_differ.is_empty(),
-        "{} runs of the older lift differ from the IR lift's",
-        t.older_differ.len()
-    );
 }
 
 /// A pixel program of doubles: `fxc` writes every double-precision instruction of Shader Model 5 for it (`dadd`,
@@ -1176,11 +1111,6 @@ fn denormals_through_moves_agree_with_warp() {
         "lanes not exact: {:?}",
         t.lanes
     );
-    assert!(
-        t.older_differ.is_empty(),
-        "the older lift is not the IR lift: {:#?}",
-        t.older_differ
-    );
 }
 
 /// A compute program taking signed and unsigned minimums and maximums of one raw buffer's words: four threads, each
@@ -1283,11 +1213,6 @@ fn a_front_face_flag_is_all_ones() {
     assert!(t.compared >= 8, "{} runs compared", t.compared);
     assert!(t.errors.is_empty(), "{:?}", t.errors);
     assert!(t.worst.is_empty(), "the IR lift is not WARP: {:#?}", t.worst);
-    assert!(
-        t.older_differ.is_empty(),
-        "the older lift is not the IR lift: {:#?}",
-        t.older_differ
-    );
 }
 
 /// A pixel program that writes unordered-access memory before and after a `discard` it may take, each lane of its quad
@@ -1378,8 +1303,8 @@ fn a_discarded_pixel_changes_no_memory_after_it() {
     let bytes = std::fs::read(&out).unwrap();
     let lifts = [
         (
-            "older",
-            ProgramShader::new(iridia_dxbc::lift(&bytes).unwrap()).unwrap(),
+            "prepared IR",
+            ProgramShader::from_ir(prepared(iridia_dxbc::ir::lift(&bytes).unwrap())).unwrap(),
         ),
         (
             "IR",
@@ -1475,8 +1400,8 @@ fn outputs_after_several_clip_distances_are_their_own() {
     let bytes = std::fs::read(&out).unwrap();
     let lifts = [
         (
-            "older",
-            ProgramShader::new(iridia_dxbc::lift(&bytes).unwrap()).unwrap(),
+            "prepared IR",
+            ProgramShader::from_ir(prepared(iridia_dxbc::ir::lift(&bytes).unwrap())).unwrap(),
         ),
         (
             "IR",
@@ -1569,8 +1494,8 @@ fn a_view_is_stored_at_its_register_not_its_id() {
         let bytes = std::fs::read(&out).unwrap();
         let lifts = [
             (
-                "older",
-                ProgramShader::new(iridia_dxbc::lift(&bytes).unwrap()).unwrap(),
+                "prepared IR",
+                ProgramShader::from_ir(prepared(iridia_dxbc::ir::lift(&bytes).unwrap())).unwrap(),
             ),
             (
                 "IR",
@@ -1615,8 +1540,8 @@ fn a_typed_buffer_store_is_its_element() {
     let bytes = std::fs::read(&out).unwrap();
     let lifts = [
         (
-            "older",
-            ProgramShader::new(iridia_dxbc::lift(&bytes).unwrap()).unwrap(),
+            "prepared IR",
+            ProgramShader::from_ir(prepared(iridia_dxbc::ir::lift(&bytes).unwrap())).unwrap(),
         ),
         (
             "IR",

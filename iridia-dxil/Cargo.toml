@@ -21,10 +21,12 @@ naga.workspace = true
 half.workspace = true
 
 [dev-dependencies]
+iridia-exec = { path = "../iridia-exec" }
+# tests/semantics.rs: what the naga lowering refuses (texture atomic results)
+iridia-naga = { path = "../iridia-naga", default-features = false, features = ["wgsl"] }
 iridia-passes = { path = "../iridia-passes" }
 primase-testdata.workspace = true
 serde_json.workspace = true
 
-iridia-exec = { path = "../iridia-exec" }
 [lints]
 workspace = true

@@ -1,6 +1,6 @@
 //! Synthetic gates on our own dxc-built fixtures (`tests/fixtures/*.hlsl`, compiled with the command at the top of
-//! each): the lifted interface, execution (`iridia_exec::ProgramShader`) against outputs derived from the HLSL by
-//! hand, every truncation refused, and a seeded mutation run that must never panic.
+//! each): the lifted interface, execution of the IR lift (`iridia_exec::ProgramShader::from_ir`) against outputs
+//! derived from the HLSL by hand, every truncation refused, and a seeded mutation run that must never panic.
 mod inputs;
 
 use iridia::{
@@ -13,11 +13,18 @@ use iridia_exec::{PixelShader, Sample};
 
 const BLEND: &[u8] = include_bytes!("fixtures/blend.dxil");
 
-/// The fixture lifted, validated and ready to run.
+/// The fixture lifted onto the IR, taken through the passes an output takes, validated and ready to run.
 fn shader(bytes: &[u8]) -> ProgramShader {
-    let program = lift(bytes).unwrap_or_else(|e| panic!("{e}"));
-    program.validate().unwrap_or_else(|p| panic!("{p:?}"));
-    ProgramShader::new(program).unwrap_or_else(|e| panic!("{e}"))
+    let program = prepared(bytes).unwrap_or_else(|e| panic!("{e}"));
+    iridia_ir::validate(&program).unwrap_or_else(|p| panic!("{p:?}"));
+    ProgramShader::from_ir(program).unwrap_or_else(|e| panic!("{e}"))
+}
+
+/// The IR lift of `bytes` after `iridia_passes::prepare`.
+fn prepared(bytes: &[u8]) -> Result<iridia_ir::Program, String> {
+    let mut program = iridia_dxil::ir::lift(bytes).map_err(|e| e.to_string())?;
+    iridia_passes::prepare(&mut program)?;
+    Ok(program)
 }
 
 fn f(x: f32) -> u32 {
@@ -262,7 +269,7 @@ fn mutations_never_panic() {
                 }
             }
         }
-        if let Some(s) = lift(&bytes).ok().and_then(|p| ProgramShader::new(p).ok()) {
+        if let Some(s) = prepared(&bytes).ok().and_then(|p| ProgramShader::from_ir(p).ok()) {
             parsed += 1;
             let rows: Vec<(u32, Vec<[u32; 4]>)> = s
                 .constant_buffers()

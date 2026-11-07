@@ -60,9 +60,9 @@ impl iridia_exec::Sampler for NoSampler {
     }
 }
 
-/// A draw of two triangles through the program in each build, lifted both ways: each triangle emits the two strips
-/// the source says (its corners with x scaled, then moved by the primitive number in x and one in y with uv.x one
-/// more), and the IR lift's strips are the older lift's, bit for bit.
+/// A draw of two triangles through the program in each build, lifted onto the IR and taken through
+/// `iridia_passes::prepare`: each triangle emits the two strips the source says (its corners with x scaled, then moved
+/// by the primitive number in x and one in y with uv.x one more), and the program as lifted emits the same, bit for bit.
 #[test]
 fn a_geometry_program_on_the_ir_emits_the_strips_it_states() {
     use iridia_exec::geometry::{GeometryShader, Topology};
@@ -77,15 +77,17 @@ fn a_geometry_program_on_the_ir_emits_the_strips_it_states() {
     constants.insert((0, 0), vec![bits([2.0, 0.0, 0.0, 0.0])]);
     for name in ["geometry.dxbc", "geometry.od.dxbc"] {
         let bytes = fixture(name);
-        let a = GeometryShader::new(lift(&bytes).unwrap()).unwrap_or_else(|e| panic!("{name}: {e}"));
         let ir = iridia_dxbc::ir::lift(&bytes).unwrap_or_else(|e| panic!("{name} on the IR: {e}"));
-        let b = GeometryShader::from_ir(&ir).unwrap_or_else(|e| panic!("{name} on the IR: {e}"));
+        let mut prepared = ir.clone();
+        iridia_passes::prepare(&mut prepared).unwrap_or_else(|e| panic!("{name}: {e}"));
+        let a = GeometryShader::from_ir(&prepared).unwrap_or_else(|e| panic!("{name}: {e}"));
+        let b = GeometryShader::from_ir(&ir).unwrap_or_else(|e| panic!("{name} as lifted: {e}"));
         let draw = |s: &GeometryShader| {
             s.draw(&constants, &mut NoSampler, &vertices, Topology::TriangleList)
                 .unwrap_or_else(|e| panic!("{name}: {e}"))
         };
         let (strips, ir_strips) = (draw(&a), draw(&b));
-        assert_eq!(ir_strips, strips, "{name}: the IR lift's strips");
+        assert_eq!(ir_strips, strips, "{name}: the strips of the program as lifted");
         assert_eq!(strips.len(), 4, "{name}: two strips a triangle");
         for (k, strip) in strips.iter().enumerate() {
             let primitive = (k / 2) as u32;

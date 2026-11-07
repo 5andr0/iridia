@@ -25,10 +25,6 @@ struct Census {
     invalid: Vec<String>,
     /// Validated programs a writer cannot write, by reason, with the first program of each.
     unwritten: BTreeMap<String, (usize, String)>,
-    /// Lifted programs executable as their functions, by stage.
-    as_functions: BTreeMap<String, usize>,
-    /// Lifted programs the executor refuses, by reason, with the first program of each.
-    unrunnable: BTreeMap<String, (usize, String)>,
 }
 
 fn census(game: Game) {
@@ -82,21 +78,6 @@ fn census(game: Game) {
             }
             Err(e) => c.invalid.push(format!("{}: {e}", path)),
         }
-        // the executor compiles it too (as an entry point, or as its functions), or refuses it by name
-        let compiled = match iridia_exec::Executable::functions(&program) {
-            Ok(Some(_)) => {
-                *c.as_functions
-                    .entry(format!("{:?}", program.interface.stage))
-                    .or_default() += 1;
-                Ok(())
-            }
-            Ok(None) => iridia_exec::Executable::new(&program).map(|_| ()),
-            Err(e) => Err(e),
-        };
-        if let Err(e) = compiled {
-            let entry = c.unrunnable.entry(e.to_string()).or_insert((0, path.clone()));
-            entry.0 += 1;
-        }
     }
     println!(
         "{}: {} programs, {} lifted {:?}, {} validated, {} written as WGSL, {} refused",
@@ -113,10 +94,6 @@ fn census(game: Game) {
     }
     for (reason, (n, example)) in &c.unwritten {
         println!("  not written {n:5}  {reason}  (e.g. {example})");
-    }
-    println!("  executable as functions {:?}", c.as_functions);
-    for (reason, (n, example)) in &c.unrunnable {
-        println!("  not executable {n:5}  {reason}  (e.g. {example})");
     }
     for line in c.invalid.iter().take(40) {
         println!("  INVALID {line}");

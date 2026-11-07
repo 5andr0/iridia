@@ -1,7 +1,8 @@
 #![allow(clippy::unwrap_used)]
 //! The program executor on lifted DXIL against Microsoft's WARP rasterizer (Direct3D 12, Shader Model 6), the oracle
 //! that is not ours: each case is rendered by WARP on one pixel with the same input registers and constant buffers,
-//! and run on [`ProgramShader`]; every lane both write must agree bit for bit (the fixtures use no transcendental).
+//! and the IR lift ([`iridia_dxil::ir::lift`], after `iridia_passes::prepare`) is run on [`ProgramShader`]; every lane
+//! both write must agree bit for bit (the fixtures use no transcendental).
 //!
 //! The fixtures are the sampled and integer ones (blend, ops), the control-flow and memory ones (flow, loops, switch,
 //! arrays, bits; default and -Od builds), the resource arrays (textures of different sizes in space 1, samplers in space 2) and the
@@ -12,12 +13,13 @@
 mod inputs;
 
 use inputs::{OwnScratch, Tool, own_scratch, program};
-use iridia::{D3dClass, Interface, InterpMode, InterpSampling, Program, ResourceId, ScalarType, SystemValue};
+use iridia::{D3dClass, Interface, InterpMode, InterpSampling, ResourceId, ScalarType, SystemValue};
 use iridia_exec::{
     Backend, Element, Executable, ImageLoad, ImageQuery, ImageSample, ProgramShader, QueryKind, Resources,
     Runner,
 };
 use iridia_exec::{PixelShader, Sample};
+use iridia_ir::Program;
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -130,7 +132,7 @@ type Ours = Result<Vec<([u32; 4], u8)>, String>;
 /// The executor's run of a program with constant buffers, and textures that are one colour each (the case's `texture`
 /// lines of the form `<slot> <four hex words>`).
 fn plain(program: &Program, c: &Case) -> Ours {
-    let shader = ProgramShader::new(program.clone()).unwrap();
+    let shader = ProgramShader::from_ir(program.clone()).unwrap();
     let position = program
         .interface
         .inputs
@@ -204,7 +206,8 @@ fn compare(
     tolerance: f64,
 ) -> (usize, Vec<String>) {
     let bytes = std::fs::read(container).unwrap();
-    let program = iridia_dxil::lift(&bytes).unwrap();
+    let mut program = iridia_dxil::ir::lift(&bytes).unwrap();
+    iridia_passes::prepare(&mut program).unwrap();
     let targets: Vec<(u32, &str)> = program
         .interface
         .outputs
@@ -551,7 +554,7 @@ fn run_with_backend(
     args: &[[u32; 4]],
     backend: &mut dyn Backend,
 ) -> Ours {
-    let exe = Executable::new(program).map_err(|e| e.to_string())?;
+    let exe = Executable::from_ir(program).map_err(|e| e.to_string())?;
     let mut resources = Resources::default();
     resources
         .constants

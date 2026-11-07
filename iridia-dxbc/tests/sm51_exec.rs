@@ -1,7 +1,9 @@
-//! The same HLSL compiled to SM5.1, SM6.0, and SM5.0 where expressible, evaluated on identical CPU inputs.
+//! The same HLSL compiled to SM5.1, SM6.0, and SM5.0 where expressible, lifted onto the IR and evaluated on identical
+//! CPU inputs.
 #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
-use iridia::{Program, ResourceId, ResourceKind, Stage, StorageTarget};
+use iridia::{ResourceId, ResourceKind, Stage, StorageTarget};
 use iridia_exec::{Backend, Element, Executable, ImageLoad, ImageSample, ImageStore, Resources};
+use iridia_ir::Program;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -92,7 +94,25 @@ impl Backend for Host<'_> {
 }
 
 fn execute(program: &Program, input: &Value) -> Value {
-    execute_with(&Executable::new(program).unwrap(), program, input)
+    execute_with(&Executable::from_ir(program).unwrap(), program, input)
+}
+
+/// The IR lift of a container of Shader Model `model` (6.0 is DXIL, the others DXBC): as lifted (a graph structured as
+/// the executor takes it), or after `iridia_passes::prepare`.
+fn lifted(bytes: &[u8], model: u32, prepared: bool) -> Result<Program, String> {
+    let mut p = if model == 60 {
+        iridia_dxil::ir::lift(bytes)
+    } else {
+        iridia_dxbc::ir::lift(bytes)
+    }
+    .map_err(|e| e.to_string())?;
+    if prepared {
+        iridia_passes::prepare(&mut p)?;
+    } else if matches!(p.entry.body, iridia_ir::Body::Cfg(_)) {
+        iridia_passes::structurize(&mut p.entry)?;
+        iridia_passes::break_flags(&mut p.entry)?;
+    }
+    Ok(p)
 }
 
 /// The runs of `input` on `exe`, a compile of a program with `program`'s interface.
@@ -208,26 +228,19 @@ fn sm51_matches_dxil_and_sm50_bit_for_bit() {
                 continue;
             }
             let bytes = std::fs::read(&path).unwrap();
-            let p = if model == 60 {
-                iridia_dxil::lift(&bytes)
-            } else {
-                iridia_dxbc::lift(&bytes)
-            }
-            .unwrap_or_else(|e| panic!("{name}.{model}: {e}"));
-            p.validate().unwrap_or_else(|e| panic!("{name}.{model}: {e:?}"));
+            let p = lifted(&bytes, model, true).unwrap_or_else(|e| panic!("{name}.{model}: {e}"));
+            iridia_ir::validate(&p).unwrap_or_else(|e| panic!("{name}.{model}: {e:?}"));
             println!("running {name}.{model}");
             let output = execute(&p, &input);
-            if ext == "dxbc" {
-                // the IR lift of the same container, compiled from the IR, gives the same words
-                let ir = iridia_dxbc::ir::lift(&bytes).unwrap_or_else(|e| panic!("{name}.{model} IR: {e}"));
-                let exe = Executable::from_ir(&ir).unwrap_or_else(|e| panic!("{name}.{model} IR: {e}"));
-                assert_eq!(
-                    execute_with(&exe, &p, &input),
-                    output,
-                    "{name}.{model}: the IR lift"
-                );
-                println!("{name}.{model}: the IR lift, {} lanes identical", lanes(&output));
-            }
+            // the program as lifted, before the passes, gives the same words
+            let ir = lifted(&bytes, model, false).unwrap_or_else(|e| panic!("{name}.{model} as lifted: {e}"));
+            let exe = Executable::from_ir(&ir).unwrap_or_else(|e| panic!("{name}.{model} as lifted: {e}"));
+            assert_eq!(
+                execute_with(&exe, &p, &input),
+                output,
+                "{name}.{model}: as lifted"
+            );
+            println!("{name}.{model}: as lifted, {} lanes identical", lanes(&output));
             if let Some(expected) = &baseline {
                 assert_eq!(&output, expected, "{name}.{model}");
                 println!("{name}: 5.1 vs {model}, {} lanes identical", lanes(&output));
@@ -249,14 +262,9 @@ fn sm51_matches_dxil_and_sm50_bit_for_bit() {
 fn unbounded_constant_bindings_are_sparse_and_missing_descriptors_error() {
     for (model, ext) in [(51, "dxbc"), (60, "dxil")] {
         let bytes = std::fs::read(root().join(format!("unbounded_constants.{model}.{ext}"))).unwrap();
-        let p = if model == 60 {
-            iridia_dxil::lift(&bytes)
-        } else {
-            iridia_dxbc::lift(&bytes)
-        }
-        .unwrap();
+        let p = lifted(&bytes, model, true).unwrap();
         let id = p.interface.resources[0].id;
-        let exe = Executable::new(&p).unwrap();
+        let exe = Executable::from_ir(&p).unwrap();
         let mut data = Resources::default();
         let index = 1_000_000_000;
         data.constant_elements.insert((id, index), vec![[17, 23, 31, 47]]);
