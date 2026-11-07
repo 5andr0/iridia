@@ -93,7 +93,8 @@ pub struct Bound<'a> {
     pub denormals: Denormals,
 }
 
-/// The most loop iterations a run takes before it is refused.
+/// The most loop iterations and block executions ("steps") a run takes before it is refused: the budget of [`run`] and
+/// [`run_quad`]. [`run_counted`] and [`run_quad_counted`] take the budget their caller gives.
 pub const STEP_LIMIT: u64 = 1 << 24;
 
 /// The most derivatives and implicit-LOD samples a quad's lanes meet before the quad run is refused.
@@ -103,8 +104,29 @@ pub const MEETING_LIMIT: usize = 1 << 12;
 enum Stop {
     /// It failed.
     Fail(String),
+    /// It was to take a step past its budget: of what kind.
+    Budget(Spent),
     /// A lane of a quad reached an operation whose neighbours' operands it does not know yet.
     Meet,
+}
+
+/// What a run was to take a step past its budget of.
+#[derive(Clone, Copy, Debug)]
+enum Spent {
+    /// A loop iteration.
+    Iteration,
+    /// A block execution of a graph body.
+    Block,
+}
+
+impl Spent {
+    /// What the refusal of a run past [`STEP_LIMIT`] names.
+    fn noun(self) -> &'static str {
+        match self {
+            Spent::Iteration => "loop iterations",
+            Spent::Block => "block executions",
+        }
+    }
 }
 
 impl From<String> for Stop {
@@ -161,6 +183,8 @@ struct Machine<'a, 'b> {
     bound: &'a mut Bound<'b>,
     outputs: Vec<Option<Lanes>>,
     steps: u64,
+    /// The most steps the run takes.
+    budget: u64,
     /// Whether `f32` denormals are flushed.
     flush: bool,
     /// The lane's quad, where the run is one.
@@ -1052,14 +1076,19 @@ impl Machine<'_, '_> {
         }
         Ok(())
     }
+    /// Take a step, or stop where the budget is spent.
+    fn step(&mut self, what: Spent) -> Step<()> {
+        if self.steps >= self.budget {
+            return Err(Stop::Budget(what));
+        }
+        self.steps = self.steps.saturating_add(1);
+        Ok(())
+    }
     /// A graph body from its entry block until it returns or kills: whether it killed.
     fn graph(&mut self, blocks: &[Block]) -> Step<bool> {
         let mut at = 0usize;
         loop {
-            self.steps = self.steps.saturating_add(1);
-            if self.steps > STEP_LIMIT {
-                return Err(format!("more than {STEP_LIMIT} block executions").into());
-            }
+            self.step(Spent::Block)?;
             let block = blocks
                 .get(at)
                 .ok_or_else(|| format!("block {at} does not exist"))?;
@@ -1155,10 +1184,7 @@ impl Machine<'_, '_> {
                     let mut args: Vec<Lanes> =
                         inits.iter().map(|i| self.get(*i)).collect::<Result<_, _>>()?;
                     loop {
-                        self.steps = self.steps.saturating_add(1);
-                        if self.steps > STEP_LIMIT {
-                            return Err(format!("more than {STEP_LIMIT} loop iterations").into());
-                        }
+                        self.step(Spent::Iteration)?;
                         for (p, a) in params.iter().zip(&args) {
                             self.set(*p, *a)?;
                         }
@@ -1205,8 +1231,11 @@ impl Machine<'_, '_> {
 
 /// How a lane's run ended: its outputs, or the meeting it waits at.
 enum Ended {
-    Ran(Run),
+    /// It ended, in this many steps.
+    Ran(Run, u64),
     Waits(Place, Lanes),
+    /// It was to take a step past its budget.
+    Spent(Spent),
 }
 
 /// Run a program's entry function for one lane, the quad's meetings known so far where it is a quad's.
@@ -1214,6 +1243,7 @@ fn lane(
     program: &Program,
     bound: &mut Bound<'_>,
     quad: Option<(usize, &[[Lanes; 4]])>,
+    budget: u64,
 ) -> Result<Ended, String> {
     let f = &program.entry;
     let flush = match program.float.f32 {
@@ -1242,6 +1272,7 @@ fn lane(
         bound,
         outputs: vec![None; program.interface.outputs.len()],
         steps: 0,
+        budget,
         flush,
         quad: quad.map(|(lane, known)| Quad {
             lane,
@@ -1262,11 +1293,15 @@ fn lane(
         Body::Cfg(blocks) => m.graph(blocks),
     };
     match ended {
-        Ok(killed) => Ok(Ended::Ran(Run {
-            outputs: m.outputs,
-            killed: killed || m.demoted,
-        })),
+        Ok(killed) => Ok(Ended::Ran(
+            Run {
+                outputs: m.outputs,
+                killed: killed || m.demoted,
+            },
+            m.steps,
+        )),
         Err(Stop::Fail(e)) => Err(e),
+        Err(Stop::Budget(what)) => Ok(Ended::Spent(what)),
         Err(Stop::Meet) => match m.quad.and_then(|q| q.waiting) {
             Some((place, operand)) => Ok(Ended::Waits(place, operand)),
             None => Err("a run stopped at a meeting it did not record".into()),
@@ -1274,12 +1309,54 @@ fn lane(
     }
 }
 
-/// Run a program's entry function once, in either control phase.
-pub fn run(program: &Program, bound: &mut Bound<'_>) -> Result<Run, String> {
-    match lane(program, bound, None)? {
-        Ended::Ran(run) => Ok(run),
+/// How a run bounded by a step budget ended.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Finish {
+    /// The program ended (returned or was killed).
+    Complete(Run),
+    /// The program was to take a step past the budget: it did not end.
+    Exhausted,
+}
+
+/// A bounded run ([`run_counted`]): how it finished, and the steps it took.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Counted {
+    /// How the run finished.
+    pub finish: Finish,
+    /// The loop iterations and block executions the run took: how many the program needs where it is complete, the
+    /// budget where it is exhausted.
+    pub steps: u64,
+}
+
+/// Run a program's entry function once, in either control phase, taking at most `budget` loop iterations and block
+/// executions: a program that needs more is [`Finish::Exhausted`], which is a result, not an error. An error is a
+/// program the run refuses or fails.
+pub fn run_counted(program: &Program, bound: &mut Bound<'_>, budget: u64) -> Result<Counted, String> {
+    match lane(program, bound, None, budget)? {
+        Ended::Ran(run, steps) => Ok(Counted {
+            finish: Finish::Complete(run),
+            steps,
+        }),
+        Ended::Spent(_) => Ok(Counted {
+            finish: Finish::Exhausted,
+            steps: budget,
+        }),
         Ended::Waits(..) => Err("a single run met its quad".into()),
     }
+}
+
+/// Run a program's entry function once, in either control phase, refusing a run of more than [`STEP_LIMIT`] steps.
+pub fn run(program: &Program, bound: &mut Bound<'_>) -> Result<Run, String> {
+    match lane(program, bound, None, STEP_LIMIT)? {
+        Ended::Ran(run, _) => Ok(run),
+        Ended::Spent(what) => Err(spent(what)),
+        Ended::Waits(..) => Err("a single run met its quad".into()),
+    }
+}
+
+/// The refusal of a run past [`STEP_LIMIT`].
+fn spent(what: Spent) -> String {
+    format!("more than {STEP_LIMIT} {}", what.noun())
 }
 
 /// Whether a program needs the other lanes of its 2 x 2 quad ([`run_quad`]): it takes a screen derivative, or samples
@@ -1313,21 +1390,103 @@ pub fn needs_quad(program: &Program) -> bool {
 /// ends (returns or kills) while the others go on to one, or that meets one elsewhere, makes the run refused as
 /// divergent. So is a run of more than [`MEETING_LIMIT`] meetings.
 pub fn run_quad(program: &Program, bounds: [&mut Bound<'_>; 4]) -> Result<[Run; 4], String> {
+    match quad(program, bounds, STEP_LIMIT)? {
+        QuadEnd::Complete { runs, .. } => Ok(runs),
+        QuadEnd::Spent { lane, what, .. } => Err(format!("lane {lane}: {}", spent(what))),
+    }
+}
+
+/// How a quad run bounded by a step budget ended.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum QuadFinish {
+    /// Every lane ended (returned or was killed).
+    Complete([Run; 4]),
+    /// This lane was to take a step past the budget (the lowest lane of those that were).
+    Exhausted {
+        /// The lane.
+        lane: usize,
+    },
+}
+
+/// A bounded quad run ([`run_quad_counted`]): how it finished, and each lane's steps.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CountedQuad {
+    /// How the run finished.
+    pub finish: QuadFinish,
+    /// Each lane's loop iterations and block executions in the pass the run ended in (the lanes run again after each
+    /// meeting): how many its run needs where the quad is complete; where it is exhausted, the budget for the lane that
+    /// ran out, what the lanes before it took in that pass, and 0 for the lanes after it, which did not run.
+    pub steps: [u64; 4],
+}
+
+/// [`run_quad`] with each lane taking at most `budget` loop iterations and block executions in a pass: a quad in which
+/// a lane needs more is [`QuadFinish::Exhausted`], which is a result, not an error.
+pub fn run_quad_counted(
+    program: &Program,
+    bounds: [&mut Bound<'_>; 4],
+    budget: u64,
+) -> Result<CountedQuad, String> {
+    Ok(match quad(program, bounds, budget)? {
+        QuadEnd::Complete { runs, steps } => CountedQuad {
+            finish: QuadFinish::Complete(runs),
+            steps,
+        },
+        QuadEnd::Spent { lane, steps, .. } => CountedQuad {
+            finish: QuadFinish::Exhausted { lane },
+            steps,
+        },
+    })
+}
+
+/// How a quad run under a budget ended.
+enum QuadEnd {
+    Complete {
+        runs: [Run; 4],
+        steps: [u64; 4],
+    },
+    /// A lane was to take a step past the budget: which, of what, and the steps as [`CountedQuad::steps`] has them.
+    Spent {
+        lane: usize,
+        what: Spent,
+        steps: [u64; 4],
+    },
+}
+
+/// A quad run under `budget`.
+fn quad(program: &Program, bounds: [&mut Bound<'_>; 4], budget: u64) -> Result<QuadEnd, String> {
     let mut bounds = bounds;
     let mut known: Vec<[Lanes; 4]> = Vec::new();
     loop {
         let mut ran = Vec::with_capacity(4);
+        let mut steps = [0u64; 4];
         let mut waits = Vec::with_capacity(4);
         for (l, bound) in bounds.iter_mut().enumerate() {
-            match lane(program, bound, Some((l, &known))).map_err(|e| format!("lane {l}: {e}"))? {
-                Ended::Ran(run) => ran.push(run),
-                Ended::Waits(place, operand) => waits.push((l, place, operand)),
+            match lane(program, bound, Some((l, &known)), budget).map_err(|e| format!("lane {l}: {e}"))? {
+                Ended::Ran(run, taken) => {
+                    ran.push(run);
+                    if let Some(s) = steps.get_mut(l) {
+                        *s = taken;
+                    }
+                }
+                Ended::Waits(place, operand) => {
+                    if let Some(s) = steps.get_mut(l) {
+                        *s = place.steps;
+                    }
+                    waits.push((l, place, operand));
+                }
+                Ended::Spent(what) => {
+                    if let Some(s) = steps.get_mut(l) {
+                        *s = budget;
+                    }
+                    return Ok(QuadEnd::Spent { lane: l, what, steps });
+                }
             }
         }
         if waits.is_empty() {
-            return ran
+            let runs = ran
                 .try_into()
-                .map_err(|_| "a quad of other than four lanes".to_string());
+                .map_err(|_| "a quad of other than four lanes".to_string())?;
+            return Ok(QuadEnd::Complete { runs, steps });
         }
         let Some(&(_, first, _)) = waits.first() else {
             return Err("a quad with no lane waiting".into());

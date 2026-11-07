@@ -236,6 +236,63 @@ fn main {
     }
 }
 
+/// The sum loop, run for `n` under a budget of `budget` steps.
+fn counted_sum(n: f32, budget: u64) -> iridia_exec_ir::Counted {
+    let p = program(
+        "iridia-ir 1
+fn main {
+  %0: f32 = input 0.x
+  %1: f32 = f32(0.0)
+  %2: f32 = f32(1.0)
+  loop '0 (%3: f32, %4: f32) = (%1, %1) {
+    %5: bool = fcmp.ge %3, %0
+    if %5 {
+      br '0 %4
+    } else {
+      yield
+    }
+    %6: f32 = fadd %4, %3
+    %7: f32 = fadd %3, %2
+    continue '0 %7, %6
+  } -> %8: f32
+  output 0.x = %8
+  return
+}
+",
+        &[(ScalarType::Float, 1)],
+        &[(ScalarType::Float, 1)],
+    );
+    let inputs = [[n.to_bits(), 0, 0, 0]];
+    let mut sampler = |_| Err::<[f32; 4], String>("no textures".into());
+    let mut bound = iridia_exec_ir::Bound {
+        inputs: &inputs,
+        buffers: &[],
+        state: &[],
+        sampler: &mut sampler,
+        denormals: iridia_ir::Denormals::Any,
+    };
+    iridia_exec_ir::run_counted(&p, &mut bound, budget).unwrap()
+}
+
+#[test]
+fn a_budgeted_run_counts_its_steps_and_running_out_is_a_result() {
+    use iridia_exec_ir::Finish;
+    // n = 4: the body runs for i = 0 to 4, five iterations, the last of them leaving the loop
+    for budget in [5, 6, 1 << 24] {
+        let counted = counted_sum(4.0, budget);
+        assert_eq!(counted.steps, 5, "budget {budget}");
+        let Finish::Complete(run) = counted.finish else {
+            panic!("budget {budget}: exhausted")
+        };
+        assert_eq!(run.outputs[0].unwrap()[0], 6.0f32.to_bits());
+    }
+    for budget in [0, 1, 4] {
+        let counted = counted_sum(4.0, budget);
+        assert_eq!(counted.finish, Finish::Exhausted, "budget {budget}");
+        assert_eq!(counted.steps, budget, "budget {budget}");
+    }
+}
+
 #[test]
 fn a_kill_ends_the_invocation_with_what_it_stored() {
     let p = program(
@@ -461,6 +518,63 @@ fn main {
     for (l, r) in quad.iter().enumerate() {
         assert_eq!(f32::from_bits(r.outputs[0].unwrap()[0]), 8.0, "lane {l}");
     }
+}
+
+#[test]
+fn a_budgeted_quad_counts_each_lanes_steps_and_names_the_lane_that_runs_out() {
+    use iridia_exec_ir::QuadFinish;
+    // three iterations of the loop that take a derivative, and the fourth leaves it
+    let p = program(
+        "iridia-ir 1
+fn main {
+  %0: f32 = input 0.x
+  %1: f32 = f32(0.0)
+  %2: f32 = f32(1.0)
+  %3: f32 = f32(3.0)
+  loop '0 (%4: f32, %5: f32) = (%1, %2) {
+    %6: bool = fcmp.ge %4, %3
+    if %6 {
+      br '0 %5
+    } else {
+      yield
+    }
+    %7: f32 = fmul.ieee %5, %0
+    %8: f32 = deriv.x.coarse %7
+    %9: f32 = fadd %5, %8
+    %10: f32 = fadd %4, %2
+    continue '0 %10, %9
+  } -> %11: f32
+  output 0.x = %11
+  return
+}
+",
+        &[(ScalarType::Float, 1)],
+        &[(ScalarType::Float, 1)],
+    );
+    let inputs = [x(1.0), x(2.0), x(1.0), x(2.0)];
+    let counted = |budget| {
+        let answer = |_| Err::<[f32; 4], String>("no textures".into());
+        let [mut a, mut b, mut c, mut d] = [answer; 4];
+        let [i0, i1, i2, i3] = &inputs;
+        let (mut b0, mut b1, mut b2, mut b3) = (
+            bound(i0, &mut a),
+            bound(i1, &mut b),
+            bound(i2, &mut c),
+            bound(i3, &mut d),
+        );
+        iridia_exec_ir::run_quad_counted(&p, [&mut b0, &mut b1, &mut b2, &mut b3], budget).unwrap()
+    };
+    for budget in [4, 5, 1 << 24] {
+        let c = counted(budget);
+        assert_eq!(c.steps, [4; 4], "budget {budget}");
+        let QuadFinish::Complete(runs) = c.finish else {
+            panic!("budget {budget}: exhausted")
+        };
+        assert_eq!(f32::from_bits(runs[3].outputs[0].unwrap()[0]), 8.0);
+    }
+    let c = counted(3);
+    assert_eq!(c.finish, QuadFinish::Exhausted { lane: 0 });
+    assert_eq!(c.steps, [3, 0, 0, 0]);
 }
 
 #[test]
