@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- `iridia-dxbc`: reflection reads the minimum-precision constant types fxc writes (`min16float`, `min16int`,
+  `min16uint` and the narrower ones, types 52 to 57) as their 32-bit types, as DXBC stores them; Shader Model 4
+  programs that declare them lifted no more once reflection read every Shader Model 4 program. Two constant buffers of
+  one name (fxc keeps a `cbuffer C` declared twice in a namespace as two) are no longer refused: fxc lists the bindings
+  by register and the buffers in the order declared, so each binding takes the layout that holds the rows its
+  declaration states, and a program whose declarations leave that open (and whose layouts differ) is refused naming
+  them. Fixtures: `tests/fixtures/reflection_sm4.hlsl` in three variants.
 - Tests: the oracle tools (vkd3d's programs, WARP, dxc) run through primase-testdata 0.1.14's `program(Tool::X)` with a
   time limit (`output_within`): a tool that hangs is killed and the test fails naming it, instead of hanging. A minute
   per vkd3d call, two per dxc compile, ten per WARP batch. vkd3d's tools are its Linux programs, so the vkd3d

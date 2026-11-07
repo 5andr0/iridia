@@ -367,13 +367,15 @@ pub fn interpolation(mode: u32) -> Result<Interpolation, Error> {
     Ok(Interpolation { mode, sampling })
 }
 
-/// `D3D_SHADER_VARIABLE_TYPE` of a constant-buffer scalar.
+/// `D3D_SHADER_VARIABLE_TYPE` of a DXBC constant-buffer scalar. A minimum-precision type (`min16float`,
+/// `min16int`, `min16uint` and the narrower ones) is its 32-bit type: DXBC stores and reads it in 32 bits, its
+/// precision only a hint (fxc packs a `min16uint[4]` as 52 bytes).
 pub fn scalar_type(code: u32) -> Result<ScalarType, Error> {
     match code {
         1 => Ok(ScalarType::Bool),
-        2 => Ok(ScalarType::Sint),
-        3 => Ok(ScalarType::Float),
-        19 => Ok(ScalarType::Uint),
+        2 | 55 | 56 => Ok(ScalarType::Sint),
+        3 | 52..=54 => Ok(ScalarType::Float),
+        19 | 57 => Ok(ScalarType::Uint),
         39 => Ok(ScalarType::Double),
         _ => Err(Error::Unknown {
             what: "constant scalar type",
@@ -601,5 +603,10 @@ mod tests {
                 && array(vector(f, 1).unwrap(), 0).is_err()
         );
         assert!(scalar_type(39).is_ok() && scalar_type(10).is_err());
+        // minimum precision is 32-bit storage; the 16-bit types (DXIL's) are not DXBC's
+        assert_eq!(scalar_type(54), Ok(ScalarType::Float));
+        assert_eq!(scalar_type(56), Ok(ScalarType::Sint));
+        assert_eq!(scalar_type(57), Ok(ScalarType::Uint));
+        assert!(scalar_type(58).is_err() && scalar_type(60).is_err());
     }
 }

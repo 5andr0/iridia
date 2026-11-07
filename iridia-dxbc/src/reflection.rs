@@ -2,6 +2,7 @@
 //! interface vocabulary; no material or binding policy. D3D's enum numbers stop here: a value the mapping does not know is an error naming
 //! it.
 use crate::{Result, error, read};
+use dxbc_reader::decode::Declared;
 use dxbc_reader::{ProgramType, RdefBinding, RdefType, SignatureElement};
 use iridia::d3d;
 use iridia::{
@@ -9,6 +10,7 @@ use iridia::{
     Member, Resource, ResourceId, ResourceKind, ResourceProvenance, SampleType, ScalarType, Stage,
     StorageTarget, TextureDim, Value, Varying,
 };
+use std::collections::{BTreeMap, BTreeSet};
 
 /// The pipeline stage of a program type.
 pub(crate) fn stage_of(kind: ProgramType) -> Stage {
@@ -311,7 +313,7 @@ pub fn resource_reflection(bytes: &[u8]) -> Result<Option<Vec<Resource>>> {
     let rdef = dxbc_reader::rdef(bytes)
         .map_err(read)?
         .ok_or_else(|| error(0, "missing reflection chunk RDEF"))?;
-    resources(&rdef, sm51).map(Some)
+    resources(&rdef, sm51, || declared_rows(bytes)).map(Some)
 }
 
 /// Read a pixel, vertex or compute program's RDEF resource and constant-buffer metadata and its ISGN/OSGN signatures
@@ -331,7 +333,7 @@ pub fn reflection(bytes: &[u8]) -> Result<Interface> {
                 "expected the RDEF of a Shader Model 4.0 to 5.1 pixel, vertex or compute program",
             )
         })?;
-    let resources = resources(&rdef, sm51)?;
+    let resources = resources(&rdef, sm51, || declared_rows(bytes))?;
     // a compute program has no varyings: its invocation ids are system values its declarations state, and its
     // signature parts (where it has them) are empty
     let (inputs, outputs) = if program_stage == Stage::Compute {
@@ -351,8 +353,127 @@ pub fn reflection(bytes: &[u8]) -> Result<Interface> {
     })
 }
 
-/// An RDEF's resources: each binding record with the layout of its constant buffer or structured element.
-fn resources(rdef: &dxbc_reader::Rdef, sm51: bool) -> Result<Vec<Resource>> {
+/// The rows each constant-buffer declaration of a container's code states, by its first register and its space; none
+/// where the container has no code.
+fn declared_rows(bytes: &[u8]) -> Result<BTreeMap<(u32, u32), u32>> {
+    let directory = dxbc_reader::parts(bytes).map_err(read)?;
+    if !directory.iter().any(|c| matches!(&c.kind, b"SHDR" | b"SHEX")) {
+        return Ok(BTreeMap::new());
+    }
+    let words = dxbc_reader::code(bytes).map_err(read)?;
+    let decoded = dxbc_reader::decode::decode(&words).map_err(read)?;
+    Ok(decoded
+        .declarations
+        .iter()
+        .filter_map(|d| match &d.kind {
+            Declared::ConstantBuffer { rows, .. } => d.kind.registers().map(|r| ((r.lower, r.space), *rows)),
+            _ => None,
+        })
+        .collect())
+}
+
+/// A constant-buffer or tbuffer binding's name and buffer type (0 or 1, as the buffers state it); `None` for another
+/// binding.
+fn buffer(r: &RdefBinding) -> Option<(&str, u32)> {
+    (r.kind <= 1).then(|| (r.name.as_str(), u32::from(r.kind == 1)))
+}
+
+/// Which layout each constant-buffer and tbuffer binding takes (an index into `layouts`; `None` for another
+/// binding): the one of its name and buffer type. Two buffers can share a name (fxc keeps a `cbuffer C` declared twice
+/// in one namespace as two buffers named alike) and the RDEF does not say which binding is which: fxc lists the
+/// bindings by register and the buffers in the order declared. Such bindings are told apart by the rows their
+/// declarations in the code state (`declared`, read only then), which the layout must hold; where that leaves more
+/// than one way and the layouts differ, the program is refused.
+fn buffer_layouts(
+    bindings: &[RdefBinding],
+    layouts: &[(String, BufferLayout, bool, u32)],
+    declared: impl FnOnce() -> Result<BTreeMap<(u32, u32), u32>>,
+) -> Result<Vec<Option<usize>>> {
+    let mut taken = vec![None; bindings.len()];
+    let mut declared = Some(declared);
+    let mut rows = BTreeMap::new();
+    let mut done = BTreeSet::new();
+    for key in bindings.iter().filter_map(buffer) {
+        if !done.insert(key) {
+            continue;
+        }
+        let what = if key.1 == 1 { "tbuffer" } else { "constant buffer" };
+        let mut open: Vec<usize> = (0..bindings.len())
+            .filter(|&b| bindings.get(b).and_then(buffer) == Some(key))
+            .collect();
+        let mut free: Vec<usize> = (0..layouts.len())
+            .filter(|&l| {
+                layouts
+                    .get(l)
+                    .is_some_and(|(name, _, _, table)| (name.as_str(), *table) == key)
+            })
+            .collect();
+        let word = |b: usize| bindings.get(b).map_or(0, |r| r.word);
+        if open.len() > free.len() {
+            let b = open.get(free.len()).copied().unwrap_or(0);
+            return Err(error(word(b), format!("{}: a {what} without its layout", key.0)));
+        }
+        if open.len() > 1 || free.len() > 1 {
+            if let Some(read) = declared.take() {
+                rows = read()?;
+            }
+            // whether layout `l` holds the rows binding `b`'s declaration states (any, where it has none)
+            let holds = |b: usize, l: usize| {
+                let need = bindings
+                    .get(b)
+                    .and_then(|r| rows.get(&(r.register, r.space)))
+                    .copied()
+                    .unwrap_or(0);
+                layouts
+                    .get(l)
+                    .is_some_and(|(_, layout, _, _)| layout.size.div_ceil(16) >= need)
+            };
+            // a binding only one free layout can hold takes it, until none is left so
+            while let Some((i, j)) = open.iter().enumerate().find_map(|(i, &b)| {
+                let mut fits = free.iter().enumerate().filter(|&(_, &l)| holds(b, l));
+                match (fits.next(), fits.next()) {
+                    (Some((j, _)), None) => Some((i, j)),
+                    _ => None,
+                }
+            }) {
+                let (b, l) = (open.remove(i), free.remove(j));
+                if let Some(t) = taken.get_mut(b) {
+                    *t = Some(l);
+                }
+            }
+            // the rest take the layouts in order only where those are alike and hold every one of them
+            let alike = free.windows(2).all(
+                |w| matches!(w, [x, y] if layouts.get(*x).map(|l| &l.1) == layouts.get(*y).map(|l| &l.1)),
+            );
+            if let Some(&b) = open.first()
+                && !(alike && open.iter().all(|&b| free.iter().all(|&l| holds(b, l))))
+            {
+                return Err(error(
+                    word(b),
+                    format!(
+                        "{} {what}s named {}: their declarations do not tell which binding takes which layout",
+                        open.len(),
+                        key.0
+                    ),
+                ));
+            }
+        }
+        for (b, l) in open.into_iter().zip(free) {
+            if let Some(t) = taken.get_mut(b) {
+                *t = Some(l);
+            }
+        }
+    }
+    Ok(taken)
+}
+
+/// An RDEF's resources: each binding record with the layout of its constant buffer or structured element (`declared`
+/// the rows the code's constant-buffer declarations state, read where two buffers share a name).
+fn resources(
+    rdef: &dxbc_reader::Rdef,
+    sm51: bool,
+    declared: impl FnOnce() -> Result<BTreeMap<(u32, u32), u32>>,
+) -> Result<Vec<Resource>> {
     for binding in &rdef.bindings {
         if (binding.count == 0 && !sm51) || binding.flags & !0x1f != 0 {
             return Err(error(
@@ -429,12 +550,6 @@ fn resources(rdef: &dxbc_reader::Rdef, sm51: bool) -> Result<Vec<Resource>> {
                 default: variable.default.clone(),
             });
         }
-        if layouts.iter().any(|(n, ..)| *n == buffer.name) {
-            return Err(error(
-                buffer.word,
-                format!("constant buffer {} is listed twice", buffer.name),
-            ));
-        }
         layouts.push((
             buffer.name.clone(),
             BufferLayout {
@@ -445,6 +560,7 @@ fn resources(rdef: &dxbc_reader::Rdef, sm51: bool) -> Result<Vec<Resource>> {
             table,
         ));
     }
+    let taken = buffer_layouts(&rdef.bindings, &layouts, declared)?;
     let mut resources = Vec::new();
     for (i, record) in rdef.bindings.iter().enumerate() {
         let binding = Binding(record);
@@ -453,22 +569,13 @@ fn resources(rdef: &dxbc_reader::Rdef, sm51: bool) -> Result<Vec<Resource>> {
         let (kind, class) = if record.kind == 0 || record.kind == 1 {
             // a constant buffer takes a layout of type 0, a tbuffer one of type 1
             let tbuffer = record.kind == 1;
-            let (_, layout, claimed, _) = layouts
-                .iter_mut()
-                .find(|(name, _, _, table)| *name == record.name && *table == u32::from(tbuffer))
-                .ok_or_else(|| {
-                    fail(format!(
-                        "{}: a {} without its layout",
-                        record.name,
-                        if tbuffer { "tbuffer" } else { "constant buffer" }
-                    ))
-                })?;
-            if std::mem::replace(claimed, true) {
-                return Err(fail(format!(
-                    "{}: two bindings of one constant buffer",
-                    record.name
-                )));
-            }
+            let (_, layout, claimed, _) = taken
+                .get(i)
+                .copied()
+                .flatten()
+                .and_then(|l| layouts.get_mut(l))
+                .ok_or_else(|| fail(format!("{}: a buffer without its layout", record.name)))?;
+            *claimed = true;
             if tbuffer {
                 table_layout = Some(layout.clone());
                 binding.kind().map_err(fail)?
@@ -648,5 +755,97 @@ mod structured_tests {
         let members = layout.constants[0].ty.members();
         assert_eq!(members[0].ty, ConstantType::Scalar(ScalarType::Double));
         assert_eq!((members[0].offset, members[1].offset), (0, 8));
+    }
+}
+
+#[cfg(test)]
+mod shader_model_4_tests {
+    use iridia::{Constant, ConstantType, Interface, ResourceKind, ScalarType, Value};
+
+    // tests/fixtures/reflection_sm4.hlsl: ps_4_0, as declared (the first `cbuffer A::C` at b1), with that buffer at b9
+    // (fxc then lists its binding after the other's), and with the two buffers alike in size and declaration
+    const PLAIN: &[u8] = include_bytes!("../tests/fixtures/reflection_sm4.dxbc");
+    const SWAPPED: &[u8] = include_bytes!("../tests/fixtures/reflection_sm4.swapped.dxbc");
+    const ALIKE: &[u8] = include_bytes!("../tests/fixtures/reflection_sm4.alike.dxbc");
+
+    /// The size and constants (name, offset) of the constant buffer at `register`.
+    fn buffer(interface: &Interface, register: u32) -> (u32, Vec<Constant>) {
+        let resource = interface
+            .resources
+            .iter()
+            .find(|r| r.provenance.d3d.as_ref().is_some_and(|d| d.register == register))
+            .unwrap_or_else(|| panic!("a resource at register {register}"));
+        let ResourceKind::ConstantBuffer { layout } = &resource.kind else {
+            panic!("a constant buffer at register {register}")
+        };
+        (layout.size, layout.constants.clone())
+    }
+
+    fn named(constants: &[Constant]) -> Vec<(&str, u32)> {
+        constants.iter().map(|c| (c.name.as_str(), c.offset)).collect()
+    }
+
+    #[test]
+    fn minimum_precision_constants_are_their_32_bit_types() {
+        for interface in [
+            super::reflection(PLAIN).unwrap(),
+            crate::lift(PLAIN).unwrap().interface,
+        ] {
+            let (size, constants) = buffer(&interface, 0);
+            assert_eq!(size, 96);
+            let tys: Vec<&ConstantType> = constants.iter().map(|c| &c.ty).collect();
+            assert_eq!(
+                tys[..2],
+                [
+                    &ConstantType::Vector(Value {
+                        scalar: ScalarType::Float,
+                        width: 4
+                    }),
+                    &ConstantType::Vector(Value {
+                        scalar: ScalarType::Sint,
+                        width: 2
+                    }),
+                ]
+            );
+            // fxc's 52 bytes: three 16-byte registers and the last element's 4
+            assert!(matches!(
+                tys[2],
+                ConstantType::Array { element, count: 4, stride: 16 }
+                    if **element == ConstantType::Scalar(ScalarType::Uint)
+            ));
+            assert_eq!(tys[2].size(), Some(52));
+        }
+    }
+
+    #[test]
+    fn same_named_buffers_take_the_layouts_their_declarations_hold() {
+        for (bytes, first) in [(PLAIN, 1), (SWAPPED, 9)] {
+            for interface in [
+                super::reflection(bytes).unwrap(),
+                crate::lift(bytes).unwrap().interface,
+            ] {
+                let (size, constants) = buffer(&interface, first);
+                assert_eq!((size, named(&constants)), (16, vec![("A::pad", 0), ("A::x", 4)]));
+                let (size, constants) = buffer(&interface, 2);
+                assert_eq!(
+                    (size, named(&constants)),
+                    (48, vec![("A::skip", 0), ("A::y", 32)])
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn same_named_buffers_nothing_tells_apart_are_refused() {
+        for e in [
+            super::reflection(ALIKE).unwrap_err(),
+            crate::lift(ALIKE).unwrap_err(),
+        ] {
+            assert!(
+                e.to_string()
+                    .contains("2 constant buffers named A::C: their declarations do not tell which binding takes which layout"),
+                "{e}"
+            );
+        }
     }
 }
