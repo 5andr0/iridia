@@ -1,6 +1,26 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 (2026-11-07)
+
+Breaking changes, for code that uses 0.5.0 (each is in its entry below):
+
+- The dx readers are 0.11.0: the `d3d9-reader` types `iridia-d3d9` and `iridia-d3d9-ir` re-export (`Comment`,
+  `Constant`, `ConstantTable`, `Type`, `TypeMember`, `Comparison`, `Opcode`, `Version`) are 0.11.0's, so code that
+  builds them with `d3d9-reader` 0.5 needs 0.11.
+- `iridia-exec`: `MeshShader::interface` and `GeometryShader::interface` replace `MeshShader::program` and
+  `GeometryShader::program`; `DrawShader::draw` (any topology, from `Primitive::assemble`) replaces
+  `DrawShader::draw_indexed` (a triangle list); `Rasterizer::viewports` replaces `Rasterizer::viewport`, and
+  `Rasterizer` is no longer `Copy`; `DrawStats::primitives` replaces `DrawStats::triangles`; `DepthState` is no longer
+  `Eq` (its `bounds` are floats). `Rasterizer`, `DrawStats`, `DepthState`, `Surface`, `Output`, `Execution` and
+  `ImageAtomic` have new public fields, and `ImageAtomicOp` the variant `CompareExchange`.
+- `iridia-ir`: `Op::LoadBuffer` takes an `address` (`Address`) in place of `index`, `stride` and `offset`;
+  `OnZero::ByOne` replaces `OnZero::Dividend` (it applies to `SDiv` and `SRem` too); `Op::Sample` has `compare`,
+  `offset` and `clamp`; `Program` has `patch` and `workgroup`, `Var` has `len`, `space` and `init`, `MeshFacts` has
+  `payload`. `Op`, `Node`, `Unary`, `Binary` and `Terminator` have new variants, which an exhaustive `match` must take.
+  `Stage::Amplification` is before `Stage::RayGeneration`, so the ray tracing stages' discriminants (`as u8`) are one
+  more.
+- `iridia::flow::Reach` has the field `words`; `iridia-naga`'s `Profile` has `bindings` and `directives`, and
+  `BindingPlan` has `counters`: a struct literal of these needs the new fields.
 
 - Contributing: `scripts/check.sh` runs the full check (fmt, clippy, every test, the doc tests, the docs), the tests
   under cargo-nextest where it is installed (`.config/nextest.toml`): about 9 minutes warm on the gate configuration,
