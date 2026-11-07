@@ -11,8 +11,8 @@ use std::sync::Arc;
 
 use iridia::{Interface, Program, ResourceKind, SystemValue};
 use iridia_exec::draw::{
-    AlphaTest, Compare as DrawCompare, Cull, DepthState, DrawShader, PointSize, Primitive, Rasterizer,
-    Surface, Viewport,
+    AlphaTest, Compare as DrawCompare, Cull, DepthState, DrawShader, Linkage, PointSize, Primitive,
+    Rasterizer, Surface, Viewport,
 };
 use iridia_exec::geometry::{GeometryShader, Topology};
 use iridia_exec::tessellation::TessellationShader;
@@ -1092,7 +1092,19 @@ fn draw_step(
     let linked = if staged {
         None
     } else {
-        Some(DrawShader::new(vsh, psh).map_err(|e| Outcome::Error(ps_name.clone(), e.to_string()))?)
+        // Direct3D 9 reads a pixel input the vertex program leaves unwritten; shader models 1 and 2 start their
+        // colour registers white
+        let linkage = if d3d9 {
+            Linkage::Direct3D9 {
+                colours_white: shader_model(&vs.lifted.program.provenance.target).is_some_and(|m| m < 3),
+            }
+        } else {
+            Linkage::Strict
+        };
+        Some(
+            DrawShader::with_linkage(vsh, psh, linkage)
+                .map_err(|e| Outcome::Error(ps_name.clone(), e.to_string()))?,
+        )
     };
     // the vertices and how they make primitives
     let mut draws: Vec<(Vec<Vec<[u32; 4]>>, Assembly)> = Vec::new();

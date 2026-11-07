@@ -420,6 +420,20 @@ fn same_label(a: &Varying, b: &Varying) -> bool {
     a.label.index == b.label.index && a.label.name.eq_ignore_ascii_case(&b.label.name)
 }
 
+/// How a pixel input that no output of the stage before writes is read.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Linkage {
+    /// Direct3D 10 and later: the pipeline does not link, an error.
+    Strict,
+    /// Direct3D 9: a texture coordinate (`TEXCOORD`) reads 0 in every lane, and a colour (`COLOR`) white where
+    /// `colours_white` (a shader model 1 or 2 vertex program, whose colour registers start white) and is refused
+    /// otherwise, as are other inputs: drivers read those differently (vkd3d's uninitialized-varyings).
+    Direct3D9 {
+        /// Whether an unwritten colour reads (1, 1, 1, 1).
+        colours_white: bool,
+    },
+}
+
 /// A vertex and a pixel program linked for drawing.
 #[derive(Debug)]
 pub struct DrawShader<'a> {
@@ -584,6 +598,7 @@ impl<'a> Raster<'a> {
         outputs: &'a [Varying],
         pixel: &'a ProgramShader,
         from: impl Fn(usize, &Varying) -> Result<(usize, Vec<u8>), Error>,
+        linkage: Linkage,
     ) -> Result<Self, Error> {
         let mut sources = Vec::new();
         let mut inputs = pixel.input_count();
@@ -681,16 +696,36 @@ impl<'a> Raster<'a> {
                 }
                 None => {}
             }
-            let (at, out) = outputs
+            let Some((at, out)) = outputs
                 .iter()
                 .enumerate()
                 .find(|(_, o)| o.system.is_none() && same_label(o, v))
-                .ok_or_else(|| {
-                    error(format!(
-                        "pixel input {} has no output of its semantic in the stage before it",
-                        name()
-                    ))
-                })?;
+            else {
+                let unwritten = |word: u32| {
+                    to_lanes.iter().map(move |&lane| Source::Word {
+                        register: to_register,
+                        lane,
+                        word,
+                    })
+                };
+                let label = &v.label.name;
+                match linkage {
+                    Linkage::Direct3D9 { .. } if label.eq_ignore_ascii_case("TEXCOORD") => {
+                        sources.extend(unwritten(0));
+                        continue;
+                    }
+                    Linkage::Direct3D9 { colours_white: true } if label.eq_ignore_ascii_case("COLOR") => {
+                        sources.extend(unwritten(1f32.to_bits()));
+                        continue;
+                    }
+                    _ => {
+                        return Err(error(format!(
+                            "pixel input {} has no output of its semantic in the stage before it",
+                            name()
+                        )));
+                    }
+                }
+            };
             let (from_register, from_lanes) = from(at, out)?;
             let from_lanes = component_lanes(&from_lanes, &to_lanes);
             let mode = match v.interp {
@@ -1115,8 +1150,19 @@ impl MapW for [&Shaded] {
 }
 
 impl<'a> DrawShader<'a> {
-    /// Link `vertex`'s outputs to `pixel`'s inputs by semantic.
+    /// Link `vertex`'s outputs to `pixel`'s inputs by semantic; a pixel input no output writes is an error
+    /// ([`Linkage::Strict`]).
     pub fn new(vertex: &'a ProgramShader, pixel: &'a ProgramShader) -> Result<Self, Error> {
+        Self::with_linkage(vertex, pixel, Linkage::Strict)
+    }
+
+    /// Link `vertex`'s outputs to `pixel`'s inputs by semantic, reading a pixel input no output writes as `linkage`
+    /// says.
+    pub fn with_linkage(
+        vertex: &'a ProgramShader,
+        pixel: &'a ProgramShader,
+        linkage: Linkage,
+    ) -> Result<Self, Error> {
         let from = |_, out: &Varying| {
             let from = out.provenance.d3d.ok_or_else(|| {
                 error(format!(
@@ -1127,7 +1173,7 @@ impl<'a> DrawShader<'a> {
             Ok((from.register as usize, lanes_of(from.mask)))
         };
         let outputs = &vertex.interface().outputs;
-        let raster = Raster::new(outputs, pixel, from)?;
+        let raster = Raster::new(outputs, pixel, from, linkage)?;
         let values = RasterValues::of(outputs, from)?;
         Ok(Self {
             vertex,
@@ -1199,7 +1245,7 @@ impl<'a> ShadedDraw<'a> {
             .position(|o| o.system == Some(SystemValue::ClipPosition))
             .ok_or_else(|| error("the stage before the pixel program writes no position"))?;
         let from = |at, out: &Varying| Ok((at, (0..out.value.width.min(4)).collect()));
-        let raster = Raster::new(outputs, pixel, from)?;
+        let raster = Raster::new(outputs, pixel, from, Linkage::Strict)?;
         let values = RasterValues::of(outputs, from)?;
         Ok(Self {
             raster,

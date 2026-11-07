@@ -378,3 +378,50 @@ fn shader_model_2_clamps_colours_between_the_stages() {
 fn a_pixel_input_reads_the_lanes_of_its_components() {
     assert_selected_pass(&vkd3d_runs("vkd3d/d3d9.json.gz", "interface-packing.shader_test"));
 }
+
+/// Direct3D 9 reads a pixel input its vertex program leaves unwritten: a texture coordinate as 0, and at shader model
+/// 2 a colour as white (uninitialized-varyings), where a later API's pipeline does not link. The file's probe of the
+/// white is `winbug(amd)`, every Windows driver but AMD's giving it, so the cases leave it out as a probe of the
+/// hardware; it is put back here.
+#[test]
+fn direct3d_9_reads_unwritten_inputs_as_zero_and_shader_model_2_colours_as_white() {
+    use vkd3d::cases::{Step, What};
+    let text = read_text(&suite("vkd3d/d3d9.json.gz")).expect("the vkd3d case file");
+    let mut file = vkd3d::cases::read(&text).expect("the vkd3d case file");
+    file.cases
+        .retain(|r| r.file == "uninitialized-varyings.shader_test");
+    let two = file
+        .cases
+        .iter_mut()
+        .find(|r| r.model == "2.0")
+        .expect("the 2.0 run");
+    assert!(
+        matches!(
+            two.steps.last(),
+            Some(Step {
+                line: 43,
+                what: What::Draw { .. }
+            })
+        ),
+        "the 2.0 run ends with the colour draw at line 43"
+    );
+    two.steps.push(Step {
+        line: 44,
+        what: What::Probe {
+            probe: [0, 0, 1, 1],
+            target: "rtv-0".into(),
+            kind: "f32".into(),
+            count: 4,
+            expect: vec![1f32.to_bits(); 4],
+            ulps: 0,
+            layer: 0,
+        },
+    });
+    let runs = vkd3d::run::run_all(&file, 4).0;
+    assert_selected_pass(&runs);
+    let two = runs.iter().find(|r| r.model == "2.0").expect("the 2.0 run");
+    assert!(
+        two.probes.iter().any(|p| p.line == 44 && p.selected),
+        "the white probe is selected"
+    );
+}
