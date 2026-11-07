@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `iridia-ir`'s `f32tof16` gives the quiet NaN 0x7e00 for every NaN (`iridia-exec-ir`'s definition, the WGSL
+  `iridia-naga` writes for it, and `pack2x16float` in `iridia-exec`): the sign and payload of an operation's NaN are
+  open in IEEE 754, and two lifts or a pass that orders an operation's operands otherwise made different ones, which
+  the conversion carried into the half. On the Elden Ring corpus 96 programs differed between the lifts this way; none do now.
 - `iridia-ir`: a mesh program's meshlet, `Node::SetMeshCounts`, `Node::StoreVertex` (lanes of a vertex's output, a
   vertex past the most the facts state not written) and `Node::StoreIndices` (a primitive's vertex indices), in the text
   form as `mesh counts %v, %p`, `store vertex %i 0.xy = %x` and `store indices %i = %x`, valid in a mesh program alone.

@@ -2509,8 +2509,15 @@ pub(super) fn math(mf: MathOp, [a, b, c, d]: [Reg; 4], n: u8, z: bool) -> Reg {
         _ => {}
     }
     if mf == MathOp::PackHalf {
-        r[0] = half::f16::from_f32(f(a[0])).to_bits() as u32
-            | ((half::f16::from_f32(f(a[1])).to_bits() as u32) << 16);
+        // a NaN packs as the quiet NaN 0x7e00, as the IR's f32tof16 gives it: its sign and payload are open
+        let half = |v: f32| {
+            if v.is_nan() {
+                0x7e00
+            } else {
+                u32::from(half::f16::from_f32(v).to_bits())
+            }
+        };
+        r[0] = half(f(a[0])) | half(f(a[1])) << 16;
         return r;
     }
     if mf == MathOp::UnpackHalf {

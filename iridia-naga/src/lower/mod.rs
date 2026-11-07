@@ -640,8 +640,8 @@ impl Lower<'_> {
         })
     }
     /// The nearest binary16 to each `f32` lane, in the low 16 bits: integer arithmetic, so every backend gives the same
-    /// bits (`pack2x16float` needs naga's f16 capability and leaves the rounding open). Ties go to even; NaN keeps
-    /// its payload's top bits and is quiet, a value beyond the range is an infinity, a binary16 denormal is kept.
+    /// bits (`pack2x16float` needs naga's f16 capability and leaves the rounding open). Ties go to even; a NaN is the
+    /// quiet NaN 0x7e00, a value beyond the range is an infinity, a binary16 denormal is kept.
     fn f32_to_f16(&mut self, x: Handle<E>, t: Type) -> Result<Handle<E>, Error> {
         let u = t.with(Scalar::U32);
         let k = |l: &mut Self, v: u32| l.constant(u, Scalar::U32, u64::from(v));
@@ -660,12 +660,9 @@ impl Lower<'_> {
         // NaN and infinity
         let infinity = k(self, 0x7c00)?;
         let signed_infinity = self.binary(Bo::InclusiveOr, sign, infinity);
-        let payload = self.binary(Bo::ShiftRight, man, c13);
-        let m200 = k(self, 0x200)?;
-        let payload = self.binary(Bo::InclusiveOr, payload, m200);
+        let nan = k(self, 0x7e00)?;
         let man_zero = self.binary(Bo::Equal, man, zero);
-        let payload = self.select(man_zero, zero, payload);
-        let special = self.binary(Bo::InclusiveOr, signed_infinity, payload);
+        let special = self.select(man_zero, signed_infinity, nan);
         // a normal half keeps the exponent less 112 and drops 13 bits; below one the implicit bit joins a significand
         // shifted further, a denormal
         let c112 = k(self, 112)?;

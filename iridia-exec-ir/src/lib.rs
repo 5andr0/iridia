@@ -238,14 +238,16 @@ fn bit_insert(base: u32, insert: u32, offset: u32, count: u32) -> u32 {
     base & !field | insert.wrapping_shl(offset) & field
 }
 
-/// The binary16 nearest an `f32`, ties to even, in the low 16 bits: NaN stays a (quiet) NaN, a value past the range an
-/// infinity, and a value below the smallest normal a denormal or a zero.
+/// The binary16 nearest an `f32`, ties to even, in the low 16 bits: a NaN is the quiet NaN 0x7e00, a value past the
+/// range an infinity, and a value below the smallest normal a denormal or a zero. IEEE 754 leaves the sign and payload
+/// of an operation's NaN open (an operation on two NaNs gives either), so the half keeps neither: what the conversion
+/// gives depends on the value alone, and a pass that reorders an operation's operands leaves it.
 fn f32_to_f16(w: u32) -> u32 {
     let sign = w >> 16 & 0x8000;
     let exp = w >> 23 & 0xff;
     let man = w & 0x7f_ffff;
     if exp == 0xff {
-        return sign | 0x7c00 | if man == 0 { 0 } else { 0x200 | man >> 13 };
+        return if man == 0 { sign | 0x7c00 } else { 0x7e00 };
     }
     // binary16's biased exponent is f32's less 112
     if exp >= 143 {
@@ -1343,6 +1345,23 @@ pub fn run_quad(program: &Program, bounds: [&mut Bound<'_>; 4]) -> Result<[Run; 
             }
         }
         known.push(operands);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every NaN, of either sign and any payload, converts to the one quiet half NaN; an infinity keeps its sign.
+    #[test]
+    fn every_nan_is_one_half_nan() {
+        for sign in [0, 0x8000_0000u32] {
+            for man in 1..0x80_0000u32 {
+                let w = sign | 0x7f80_0000 | man;
+                assert_eq!(f32_to_f16(w), 0x7e00, "{w:#x}");
+            }
+            assert_eq!(f32_to_f16(sign | 0x7f80_0000), sign >> 16 | 0x7c00);
+        }
     }
 }
 
