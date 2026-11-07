@@ -284,3 +284,12 @@ fn an_infinite_coordinate_samples_the_edge_texel_it_clamps_to() {
     runs.retain(|r| r.model == "4.0");
     assert_selected_pass(&runs);
 }
+
+/// A draw steps through a structured buffer by the stride its program declares, not the view's: vkd3d's
+/// srv-structuredbuffer reads a view of 16-byte structures as 32-byte `float4[2]` elements.
+#[test]
+fn a_draw_addresses_a_structured_buffer_by_the_programs_stride() {
+    for cases in ["vkd3d/dxbc.json.gz", "vkd3d/dxil.json.gz"] {
+        assert_selected_pass(&vkd3d_runs(cases, "srv-structuredbuffer.shader_test"));
+    }
+}

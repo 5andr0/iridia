@@ -1020,11 +1020,7 @@ fn raster(
     let ps_banks: Vec<(u32, &[[u32; 4]])> = ps_constants.iter().map(|(s, r)| (*s, r.as_slice())).collect();
     let mut interfaces = vec![vsh.interface(), psh.interface()];
     interfaces.extend(between.iter().map(|(_, r)| &r.lifted.program.interface));
-    let classes = SlotRequests::classes(&interfaces).map_err(Stopped::NotModelled)?;
-    let mut requests = SlotRequests {
-        device: &mut device,
-        classes,
-    };
+    let mut requests = SlotRequests::new(&mut device, &interfaces).map_err(Stopped::NotModelled)?;
     match &linked {
         Some(linked) => {
             let Assembly::Primitives(topology) = assembly else {

@@ -1256,7 +1256,6 @@ fn draw_step(
     let ps_constants = constant_rows(psh, device);
     let vs_banks: Vec<Bank<'_>> = vs_constants.iter().map(|(s, r)| (*s, r.as_slice())).collect();
     let ps_banks: Vec<Bank<'_>> = ps_constants.iter().map(|(s, r)| (*s, r.as_slice())).collect();
-    let classes = SlotRequests::classes(&interfaces).map_err(Outcome::NotModelled)?;
     // the constant buffers of the stages between, by register (space 0: the runner binds no other)
     let words = device.constants.clone();
     let rows = move |register: u32, space: u32, n: usize| -> Vec<[u32; 4]> {
@@ -1280,7 +1279,7 @@ fn draw_step(
             device.samplers.entry(*slot).or_insert_with(d3d9_default_sampler);
         }
     }
-    let mut requests = SlotRequests { device, classes };
+    let mut requests = SlotRequests::new(device, &interfaces).map_err(Outcome::NotModelled)?;
     let mut written = 0usize;
     for (vertices, assembly) in &draws {
         let stats = match &linked {

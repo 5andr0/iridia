@@ -209,10 +209,18 @@ fn atomic_word(old: u32, op: ImageAtomicOp, signed: bool, value: u32, compare: u
 }
 
 /// A store of `value`'s lanes `mask` marks to a texel or buffer element of a resource: typed through its format, a
-/// structured or raw buffer's consecutive words from the byte address.
-fn store_to(r: &mut Resource, address: [u32; 3], layer: Option<u32>, value: [u32; 4], mask: u8) {
-    if r.dim == Dim::Buffer && (r.stride.is_some() || r.raw) {
-        let base = match r.stride {
+/// structured or raw buffer's consecutive words from the byte address. A structured buffer's element (`address[0]`) is
+/// `stride` bytes, the stride of the program that addresses it.
+fn store_to(
+    r: &mut Resource,
+    stride: Option<u32>,
+    address: [u32; 3],
+    layer: Option<u32>,
+    value: [u32; 4],
+    mask: u8,
+) {
+    if r.dim == Dim::Buffer && (stride.is_some() || r.raw) {
+        let base = match stride {
             Some(stride) => address[0] as usize * stride as usize + address[1] as usize,
             None => address[0] as usize * 4,
         };
@@ -235,10 +243,11 @@ fn store_to(r: &mut Resource, address: [u32; 3], layer: Option<u32>, value: [u32
     }
 }
 
-/// The word a 32-bit atomic on a texel or buffer element operates on: its byte offset.
-fn atomic_offset(r: &Resource, address: [u32; 3], layer: Option<u32>) -> Option<usize> {
+/// The word a 32-bit atomic on a texel or buffer element operates on: its byte offset. A structured buffer's element
+/// (`address[0]`) is `stride` bytes, as in [`store_to`].
+fn atomic_offset(r: &Resource, stride: Option<u32>, address: [u32; 3], layer: Option<u32>) -> Option<usize> {
     if r.dim == Dim::Buffer {
-        return Some(match (r.stride, r.raw) {
+        return Some(match (stride, r.raw) {
             (Some(stride), _) => address[0] as usize * stride as usize + address[1] as usize,
             (None, true) => address[0] as usize * 4,
             (None, false) => address[0] as usize * r.format.size as usize,
@@ -262,14 +271,20 @@ pub struct SlotRequests<'a> {
     /// The device.
     pub device: &'a mut Device,
     /// The view class each slot the programs bind a buffer at reads.
-    pub classes: BTreeMap<u32, Kind>,
+    classes: BTreeMap<u32, Kind>,
+    /// The structure stride of each slot the programs bind a structured buffer at. Direct3D steps through a structured
+    /// buffer by the stride the program declares, whatever the view's (vkd3d's srv-structuredbuffer reads a 16-byte
+    /// view as 32-byte elements); the view's stride stands only where no program states one.
+    strides: BTreeMap<u32, u32>,
 }
 
-impl SlotRequests<'_> {
-    /// The requests of programs with these interfaces; programs that bind a shader resource and an unordered-access
-    /// view at one slot number cannot be told apart in this vocabulary, and are refused.
-    pub fn classes(interfaces: &[&Interface]) -> Result<BTreeMap<u32, Kind>, String> {
+impl<'a> SlotRequests<'a> {
+    /// The requests on `device` of programs with these interfaces; programs that bind a shader resource and an
+    /// unordered-access view at one slot number cannot be told apart in this vocabulary, and are refused, as are two
+    /// structure strides at one slot.
+    pub fn new(device: &'a mut Device, interfaces: &[&Interface]) -> Result<Self, String> {
         let mut classes = BTreeMap::new();
+        let mut strides = BTreeMap::new();
         for i in interfaces {
             for r in &i.resources {
                 let Some(d) = r.provenance.d3d else { continue };
@@ -288,13 +303,38 @@ impl SlotRequests<'_> {
                         d.register
                     ));
                 }
+                let (ResourceKind::Buffer(iridia::BufferKind::Structured { stride })
+                | ResourceKind::Storage {
+                    target: StorageTarget::Buffer(iridia::BufferKind::Structured { stride }),
+                    ..
+                }) = r.kind
+                else {
+                    continue;
+                };
+                if let Some(old) = strides.insert(d.register, stride)
+                    && old != stride
+                {
+                    return Err(format!(
+                        "slot {} is read as structures of {old} and of {stride} bytes",
+                        d.register
+                    ));
+                }
             }
         }
-        Ok(classes)
+        Ok(SlotRequests {
+            device,
+            classes,
+            strides,
+        })
     }
 
     fn kind(&self, slot: u32) -> Kind {
         self.classes.get(&slot).copied().unwrap_or(Kind::Srv)
+    }
+
+    /// The structure stride the programs address the buffer at `slot` by: their own, else the view's.
+    fn stride(&self, slot: u32, view: &Resource) -> Option<u32> {
+        self.strides.get(&slot).copied().or(view.stride)
     }
 }
 
@@ -370,8 +410,10 @@ impl iridia_exec::Sampler for SlotRequests<'_> {
     }
 
     fn store(&mut self, request: Store) -> Result<(), String> {
+        let program = self.strides.get(&request.view).copied();
         if let Some(r) = self.device.view_mut(Kind::Uav, request.view, 0) {
-            store_to(r, request.address, None, request.value, request.mask);
+            let stride = program.or(r.stride);
+            store_to(r, stride, request.address, None, request.value, request.mask);
         }
         Ok(())
     }
@@ -379,16 +421,17 @@ impl iridia_exec::Sampler for SlotRequests<'_> {
     fn store_image(&mut self, request: ImageStore<u32>) -> Result<(), String> {
         let mask = (1u8 << request.lanes.min(4)) - 1;
         if let Some(r) = self.device.view_mut(Kind::Uav, request.view, 0) {
-            store_to(r, request.texel, request.layer, request.value, mask);
+            store_to(r, r.stride, request.texel, request.layer, request.value, mask);
         }
         Ok(())
     }
 
     fn atomic_add(&mut self, request: AtomicAdd) -> Result<u32, String> {
+        let program = self.strides.get(&request.view).copied();
         let Some(r) = self.device.view_mut(Kind::Uav, request.view, 0) else {
             return Ok(0);
         };
-        let Some(at) = atomic_offset(r, request.address, None) else {
+        let Some(at) = atomic_offset(r, program.or(r.stride), request.address, None) else {
             return Ok(0);
         };
         let old = r.word(at);
@@ -400,7 +443,7 @@ impl iridia_exec::Sampler for SlotRequests<'_> {
         let Some(r) = self.device.view_mut(Kind::Uav, request.view, 0) else {
             return Ok(0);
         };
-        let Some(at) = atomic_offset(r, request.texel, request.layer) else {
+        let Some(at) = atomic_offset(r, r.stride, request.texel, request.layer) else {
             return Ok(0);
         };
         let (old, new) = atomic_word(
@@ -419,7 +462,7 @@ impl iridia_exec::Sampler for SlotRequests<'_> {
         let Some(r) = self.device.view(kind, slot, 0) else {
             return Ok(0);
         };
-        let at = match r.stride {
+        let at = match self.stride(slot, r) {
             Some(stride) => element as usize * stride as usize + offset as usize,
             None => element as usize * 4 + offset as usize,
         };
@@ -429,10 +472,12 @@ impl iridia_exec::Sampler for SlotRequests<'_> {
     fn buffer_elements(&mut self, slot: u32) -> Option<u32> {
         let kind = self.kind(slot);
         Some(self.device.view(kind, slot, 0).map_or(0, |r| {
-            if r.raw {
-                r.width.saturating_mul(r.element_size()) / 4
-            } else {
-                r.width
+            let bytes = r.width.saturating_mul(r.element_size());
+            match self.stride(slot, r) {
+                // as many of the program's structures as the view's bytes hold
+                Some(stride) => bytes / stride.max(1),
+                None if r.raw => bytes / 4,
+                None => r.width,
             }
         }))
     }
@@ -637,7 +682,7 @@ impl<'a> IdRequests<'a> {
             match b.held {
                 Held::Lanes => {
                     for (i, lanes) in (0u32..).zip(w.as_chunks::<4>().0) {
-                        store_to(r, [i, 0, 0], None, *lanes, 0xf);
+                        store_to(r, None, [i, 0, 0], None, *lanes, 0xf);
                     }
                 }
                 Held::Words | Held::No => {
@@ -764,7 +809,7 @@ impl iridia_exec::Backend for IdRequests<'_> {
     fn store_image(&mut self, r: ImageStore<iridia::ResourceId>) -> Result<(), String> {
         let mask = (1u8 << r.lanes.min(4)) - 1;
         if let Some(res) = self.element_mut(r.view, r.index)? {
-            store_to(res, r.texel, r.layer, r.value, mask);
+            store_to(res, res.stride, r.texel, r.layer, r.value, mask);
         }
         Ok(())
     }
@@ -773,7 +818,7 @@ impl iridia_exec::Backend for IdRequests<'_> {
         let Some(res) = self.element_mut(r.view, r.index)? else {
             return Ok(0);
         };
-        let Some(at) = atomic_offset(res, r.texel, r.layer) else {
+        let Some(at) = atomic_offset(res, res.stride, r.texel, r.layer) else {
             return Ok(0);
         };
         let (old, new) = atomic_word(res.word(at), r.op, r.signed, r.value, r.compare);
@@ -819,7 +864,7 @@ impl iridia_exec::Backend for IdRequests<'_> {
         let Some(res) = self.resource_mut(view)? else {
             return Ok(0);
         };
-        let Some(at) = atomic_offset(res, [word / 4, 0, 0], None) else {
+        let Some(at) = atomic_offset(res, None, [word / 4, 0, 0], None) else {
             return Ok(0);
         };
         let old = res.word(at);
