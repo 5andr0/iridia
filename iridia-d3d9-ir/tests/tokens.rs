@@ -1,15 +1,14 @@
 #![allow(clippy::unwrap_used)]
 //! Hand-worked SM3 tokens and arithmetic. Expected numbers come from the SDK instruction definitions, not
-//! a second bytecode decoder. The IR's executor only observes the lifted program's answer, and each program is also
-//! written as WGSL.
+//! a second bytecode decoder. Both executors only observe the lifted program's answer (and must agree on it), and each
+//! program is also written as WGSL.
+mod executors;
 mod fixtures;
 
+use executors::{execute, lifted, no_sample};
 use iridia_d3d9_ir::{lift, read};
-use iridia_exec_ir::{Bound, Lanes, Lod, Run, Sample};
-use iridia_ir::{
-    Program,
-    interface::{D3dClass, ResourceId, ResourceKind, ShaderFormat, Stage, TextureDim},
-};
+use iridia_exec_ir::{Lod, Sample};
+use iridia_ir::interface::{D3dClass, ResourceKind, ShaderFormat, Stage, TextureDim};
 use primase_testdata::gate::{GateReport, Tolerance};
 
 fn program(body: &[u32]) -> Vec<u8> {
@@ -30,46 +29,6 @@ fn def(n: u32, values: [f32; 4]) -> Vec<u32> {
         &[vec![0xa00f_0000 | n], values.map(f32::to_bits).to_vec()].concat(),
     )
 }
-/// The lift of a token stream, promoted, simplified, validated and written as WGSL.
-fn lifted(bytes: &[u8]) -> Program {
-    let mut p = lift(bytes).unwrap();
-    iridia_passes::promote(&mut p.entry).unwrap();
-    iridia_passes::simplify(&mut p.entry);
-    iridia_ir::validate(&p).unwrap_or_else(|e| panic!("{e:?}\n{}", iridia_ir::text::print(&p.entry)));
-    iridia_naga::wgsl(&p, &iridia_naga::Profile::BROWSER).unwrap();
-    p
-}
-
-/// A run of `p` on these inputs and constant rows, with every sample answered by `sampler`.
-fn execute(
-    p: &Program,
-    inputs: &[Lanes],
-    constants: &[Lanes],
-    sampler: &mut dyn FnMut(Sample) -> Result<[f32; 4], String>,
-) -> Run {
-    let bank = p
-        .interface
-        .resources
-        .iter()
-        .find(|r| matches!(r.kind, ResourceKind::ConstantBuffer { .. }));
-    let buffers: Vec<(ResourceId, &[Lanes])> = bank.map(|r| (r.id, constants)).into_iter().collect();
-    iridia_exec_ir::run(
-        p,
-        &mut Bound {
-            inputs,
-            buffers: &buffers,
-            state: &[],
-            sampler,
-            denormals: iridia_ir::Denormals::Any,
-        },
-    )
-    .unwrap()
-}
-
-fn no_sample(_: Sample) -> Result<[f32; 4], String> {
-    Err("unexpected sample".into())
-}
-
 fn run(op: u32, values: &[[f32; 4]]) -> [f32; 4] {
     let mut body = Vec::new();
     for (n, v) in values.iter().enumerate() {

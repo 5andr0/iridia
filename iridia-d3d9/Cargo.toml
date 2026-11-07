@@ -19,7 +19,6 @@ iridia.workspace = true
 naga.workspace = true
 
 [dev-dependencies]
-iridia-exec = { path = "../iridia-exec" }
 primase-testdata.workspace = true
 
 [lints]

@@ -1,8 +1,9 @@
 #![allow(clippy::unwrap_used)]
-//! Independent hand-worked answers for lane slicing; full-program comparisons are regressions, not an oracle.
+//! Lane slicing of one vertex output: what a slice reads and refuses. What the slices compute is no longer run (the
+//! executor runs IR programs only, and `project_vertex_output` goes with this crate); the whole program's answer is
+//! held on the IR (iridia-d3d9-ir's tests/vertex_output.rs).
 use iridia::flow::{At, Node, Values};
 use iridia_d3d9::{lift, project_vertex_output};
-use iridia_exec::{PixelShader, ProgramShader, Sample};
 
 fn op(code: u32, args: &[u32]) -> Vec<u32> {
     [vec![code | (args.len() as u32) << 24], args.to_vec()].concat()
@@ -42,7 +43,7 @@ fn fixture() -> Vec<u8> {
 }
 
 #[test]
-fn output_slice_keeps_original_hash_and_arithmetic_without_other_outputs() {
+fn output_slice_keeps_original_hash_and_reads_only_what_the_output_needs() {
     let raw = fixture();
     let full = lift(&raw).unwrap();
     let sliced = project_vertex_output(&raw, 3, 3).unwrap();
@@ -68,25 +69,10 @@ fn output_slice_keeps_original_hash_and_arithmetic_without_other_outputs() {
     words.sort();
     assert_eq!(input_lanes, [(1, 0), (1, 1)]);
     assert_eq!(words, [40, 41, 42, 44, 45, 46]);
-    let mut constants = [[f32::NAN.to_bits(); 4]; 13];
-    constants[10] = [2f32, -3., 0.25, f32::NAN].map(f32::to_bits);
-    constants[11] = [5f32, 7., -2., f32::NAN].map(f32::to_bits);
-    let mut inputs = [[f32::NAN.to_bits(); 4]; 3];
-    inputs[1] = [0.4f32, -0.2, f32::NAN, f32::NAN].map(f32::to_bits);
-    let got = ProgramShader::new(sliced)
-        .unwrap()
-        .execute(&inputs, &[(0, &constants)], &mut |_: Sample| {
-            Err("no texture".into())
-        })
-        .unwrap();
-    let actual = got.outputs[0].map(f32::from_bits);
-    for (a, b) in actual.into_iter().zip([1.65, -1.4, 0., 1.]) {
-        assert!((a - b).abs() < 1e-6, "{actual:?}");
-    }
 }
 
 #[test]
-fn partial_overwrites_aliasing_and_every_mask_preserve_original_lane_positions() {
+fn every_mask_of_an_output_with_partial_overwrites_is_sliced() {
     let raw = bytes(
         &[
             declarations(),
@@ -99,37 +85,10 @@ fn partial_overwrites_aliasing_and_every_mask_preserve_original_lane_positions()
         ]
         .concat(),
     );
-    let inputs = [
-        [0f32, 0., 0., 1.].map(f32::to_bits),
-        [2f32, 3., 4., 5.].map(f32::to_bits),
-        [0; 4],
-    ];
-    let mut constants = [[0u32; 4]; 11];
-    constants[10] = [7f32, 11., 0., 0.].map(f32::to_bits);
-    let full = ProgramShader::new(lift(&raw).unwrap())
-        .unwrap()
-        .execute_vertex(&inputs, &[(0, &constants)], &mut |_: Sample| {
-            Err("no texture".into())
-        })
-        .unwrap()
-        .0;
-    assert_eq!(full.outputs[3].map(f32::from_bits), [21., 32., 4., 5.]);
+    lift(&raw).unwrap();
     for mask in 1..16 {
         let p = project_vertex_output(&raw, 3, mask).unwrap();
-        let got = ProgramShader::new(p)
-            .unwrap()
-            .execute(&inputs, &[(0, &constants)], &mut |_: Sample| {
-                Err("no texture".into())
-            })
-            .unwrap();
-        let expected = std::array::from_fn(|lane| {
-            if mask & (1 << lane) != 0 {
-                [21f32, 32., 4., 5.][lane]
-            } else {
-                [0f32, 0., 0., 1.][lane]
-            }
-        });
-        assert_eq!(got.outputs[0].map(f32::from_bits), expected, "mask {mask}");
+        iridia::emit::wgsl(&p).unwrap_or_else(|e| panic!("mask {mask}: {e}"));
     }
 }
 
@@ -191,7 +150,7 @@ fn projected_vertex_output_has_a_versioned_ir_baseline() {
 }
 
 #[test]
-fn normalize_fourth_lane_and_scalar_swizzles_keep_their_dependencies() {
+fn normalize_fourth_lane_and_scalar_swizzles_are_sliced() {
     let wrap = |middle: Vec<u32>| {
         bytes(
             &[
@@ -204,21 +163,10 @@ fn normalize_fourth_lane_and_scalar_swizzles_keep_their_dependencies() {
             .concat(),
         )
     };
-    let inputs = [
-        [0f32, 0., 0., 1.].map(f32::to_bits),
-        [0f32, 3., 4., 10.].map(f32::to_bits),
-        [0; 4],
-    ];
     let raw = wrap(op(36, &[0x800f_0000, 0x90e4_0001]));
-    for (mask, expected) in [(8, [0f32, 0., 0., 2.]), (2, [0f32, 0.6, 0., 1.])] {
+    for mask in [8, 2] {
         let p = project_vertex_output(&raw, 3, mask).unwrap();
-        let got = ProgramShader::new(p)
-            .unwrap()
-            .execute(&inputs, &[], &mut |_: Sample| Err("no texture".into()))
-            .unwrap();
-        for (got, want) in got.outputs[0].map(f32::from_bits).into_iter().zip(expected) {
-            assert!((got - want).abs() < 1e-6);
-        }
+        iridia::emit::wgsl(&p).unwrap_or_else(|e| panic!("mask {mask}: {e}"));
     }
     let raw = wrap(
         [
@@ -228,24 +176,5 @@ fn normalize_fourth_lane_and_scalar_swizzles_keep_their_dependencies() {
         .concat(),
     );
     let p = project_vertex_output(&raw, 3, 2).unwrap();
-    let mut constants = [[0u32; 4]; 11];
-    constants[10][0] = 3f32.to_bits();
-    let inputs = [
-        [0f32, 0., 0., 1.].map(f32::to_bits),
-        [2f32, 0., 0., 0.].map(f32::to_bits),
-        [0; 4],
-    ];
-    let got = ProgramShader::new(p)
-        .unwrap()
-        .execute(&inputs, &[(0, &constants)], &mut |_: Sample| {
-            Err("no texture".into())
-        })
-        .unwrap();
-    for (got, want) in got.outputs[0]
-        .map(f32::from_bits)
-        .into_iter()
-        .zip([0f32, 8., 0., 1.])
-    {
-        assert!((got - want).abs() < 1e-5);
-    }
+    iridia::emit::wgsl(&p).unwrap();
 }

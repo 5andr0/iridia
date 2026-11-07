@@ -1,8 +1,8 @@
 #![allow(clippy::unwrap_used)]
-//! Hand-assembled SM3 tokens: bank edges, packed output semantics and independent arithmetic answers.
+//! Hand-assembled SM3 tokens: bank edges and packed output semantics as the naga lift declares them. The fixture's
+//! answers are held on the IR, on both executors (iridia-d3d9-ir's tests/vertex.rs).
 use iridia::{Stage, SystemValue};
 use iridia_d3d9::{lift, read};
-use iridia_exec::{ProgramShader, Sample};
 
 fn instruction(op: u32, operands: &[u32]) -> Vec<u32> {
     [vec![op | (operands.len() as u32) << 24], operands.to_vec()].concat()
@@ -46,7 +46,7 @@ fn fixture() -> Vec<u8> {
 }
 
 #[test]
-fn vertex_banks_clip_position_and_packed_semantics_keep_their_values() {
+fn vertex_banks_clip_position_and_packed_semantics_are_declared() {
     let bytes = fixture();
     let source = read(&bytes).unwrap();
     assert_eq!(source.stage, Stage::Vertex);
@@ -66,18 +66,6 @@ fn vertex_banks_clip_position_and_packed_semantics_keep_their_values() {
         [("COLOR", 4, 1), ("TEXCOORD", 3, 6), ("FOG", 0, 8)]
     );
     iridia::emit::wgsl(&p).unwrap();
-    let mut input = [[0u32; 4]; 16];
-    input[15] = [1f32, 2., 3., 1.].map(f32::to_bits);
-    let mut constants = [[0u32; 4]; 256];
-    constants[255] = [10f32, 20., 30., 40.].map(f32::to_bits);
-    let (got, clip) = ProgramShader::new(p)
-        .unwrap()
-        .execute_vertex(&input, &[(0, &constants)], &mut |_: Sample| {
-            Err("no texture".into())
-        })
-        .unwrap();
-    assert_eq!(clip, [1f32, 2., 3., 1.].map(f32::to_bits));
-    assert_eq!(got.outputs[3].map(f32::from_bits), [12., 26., 42., 45.]);
 }
 
 #[test]

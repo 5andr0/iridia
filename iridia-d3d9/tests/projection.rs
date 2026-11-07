@@ -1,7 +1,7 @@
-//! Hand-worked prefix and replacement-tail evidence; no source-specific matching.
+//! Hand-worked prefix and replacement-tail evidence; no source-specific matching. What the projected programs compute
+//! is no longer run (the executor runs IR programs only, and `project` and `reencode` go with this crate).
 #![allow(clippy::unwrap_used, reason = "hand-worked assertions")]
 use iridia_d3d9::{Projection, project, reencode};
-use iridia_exec::{PixelShader, ProgramShader, Sample};
 fn bytes() -> Vec<u8> {
     // mov r0,c0; mul r0,r0,c1; add oC0,r0,c2
     [
@@ -24,7 +24,7 @@ fn bytes() -> Vec<u8> {
     .collect()
 }
 #[test]
-fn projection_keeps_original_hash_and_runs_original_tail_with_replaced_lanes() {
+fn projection_keeps_original_hash_and_refuses_a_cut_it_cannot_make() {
     let b = bytes();
     let cut = Projection {
         after_word: 4,
@@ -34,21 +34,8 @@ fn projection_keeps_original_hash_and_runs_original_tail_with_replaced_lanes() {
     let prefix = project(&b, cut).unwrap();
     assert_eq!(prefix.provenance.source_hash, Some(iridia::source_hash(&b)));
     assert!(prefix.provenance.lifter.contains("projection:word=4"));
-    let constants = [[2., 3., 4., 5.], [3.; 4], [1.; 4]].map(|v| v.map(f32::to_bits));
-    let run = |p, inputs: &[[u32; 4]]| {
-        ProgramShader::new(p)
-            .unwrap()
-            .execute(inputs, &[(0, &constants)], &mut |_: Sample| {
-                Err("unexpected sample".into())
-            })
-            .unwrap()
-            .outputs[0]
-            .map(f32::from_bits)
-    };
-    assert_eq!(run(prefix, &[]), [12., 6., 9., 1.]);
-    let mut inputs = vec![[0; 4]; 32];
-    inputs[31] = [10., 20., 30., 0.].map(f32::to_bits);
-    assert_eq!(run(reencode(&b, cut).unwrap(), &inputs), [21., 31., 11., 16.]);
+    let tail = reencode(&b, cut).unwrap();
+    assert_eq!(tail.provenance.source_hash, Some(iridia::source_hash(&b)));
     for bad in [
         Projection { after_word: 5, ..cut },
         Projection {

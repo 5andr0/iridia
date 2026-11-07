@@ -307,7 +307,6 @@ version = "0.6.0"
 dependencies = [
  "d3d9-reader",
  "iridia",
- "iridia-exec",
  "iridia-interface",
  "primase-naga",
  "primase-testdata",
