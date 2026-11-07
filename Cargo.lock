@@ -387,6 +387,7 @@ name = "iridia-exec-ir"
 version = "0.6.0"
 dependencies = [
  "iridia-ir",
+ "proptest",
 ]
 
 [[package]]

@@ -278,9 +278,9 @@ pub(super) enum Op {
         /// The element of an array of buffers.
         pick: Option<Pick>,
     },
-    /// An operation of an [`iridia_ir::Program`] whose definition is `iridia_exec_ir::eval`'s: its operands are the
-    /// registers their value ids number, typed by [`Executable::ir_types`].
-    Ir(Box<iridia_ir::Op>),
+    /// A pure operation of an [`iridia_ir::Program`] whose definition is `iridia_exec_ir::eval`'s, prepared on its
+    /// operands' types: its operands are the registers their value ids number.
+    Ir(Box<iridia_exec_ir::Prepared>),
     /// Element `index` (the first lane of a register, its bits as `u32`) of an array at `loc`, `stride` words apart and
     /// `len` elements long: `n` words, or zero for an index past the end.
     Element {
@@ -636,7 +636,4 @@ pub struct Executable {
     pub(super) group_output: Option<(usize, u32)>,
     /// Per entry argument, the built-in it carries.
     pub(super) builtins: Vec<Option<naga::BuiltIn>>,
-    /// The type of each register an [`Op::Ir`] reads or writes, by register (empty for a program compiled from a naga
-    /// module).
-    pub(super) ir_types: Vec<iridia_ir::Type>,
 }

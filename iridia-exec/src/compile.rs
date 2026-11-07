@@ -1990,7 +1990,6 @@ pub(super) fn compile(
                 _ => None,
             })
             .collect(),
-        ir_types: Vec::new(),
     })
 }
 

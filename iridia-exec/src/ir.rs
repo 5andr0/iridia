@@ -238,9 +238,20 @@ impl Cx<'_> {
 
     /// An operation on values the compile adds, of type `t`, on registers it names as values.
     fn compute(&mut self, t: Type, op: ir::Op) -> Result<u32, String> {
+        let prepared = self.prepared(t, &op);
         let r = self.fresh(t)?;
-        self.ops.push((r, Op::Ir(Box::new(op))));
+        self.ops.push((r, prepared));
         Ok(r)
+    }
+
+    /// A pure operation of type `t` on registers it names as values, prepared on their types.
+    fn prepared(&self, t: Type, op: &ir::Op) -> Op {
+        Op::Ir(Box::new(iridia_exec_ir::Prepared::new(op, t, |v| {
+            self.types
+                .get(v.0 as usize)
+                .copied()
+                .ok_or_else(|| format!("internal error: register {} has no type", v.0))
+        })))
     }
 
     fn copy(&mut self, to: u32, from: u32) {
@@ -327,7 +338,7 @@ impl Cx<'_> {
     /// The position of sample `index` of a multisampled texture in Direct3D's standard pattern for its sample count
     /// (`iridia_ir::standard_sample_position`), (0, 0) past its samples: each position of the table chosen where the
     /// count and the index are its own.
-    fn sample_position(&mut self, texture: &ir::Res, index: ValueId) -> Result<Op, String> {
+    fn sample_position(&mut self, t: Type, texture: &ir::Res, index: ValueId) -> Result<Op, String> {
         let (dim, _, _, _) = self.texture(texture)?;
         let count = self.fresh(Type::U32)?;
         let query = Op::Query {
@@ -371,7 +382,7 @@ impl Cx<'_> {
                 )?;
             }
         }
-        Ok(Op::Ir(Box::new(ir::Op::Swizzle(ValueId(position), [0, 1, 0, 0]))))
+        Ok(self.prepared(t, &ir::Op::Swizzle(ValueId(position), [0, 1, 0, 0])))
     }
 
     /// The integer layer of an array sample: the coordinate's lane `at` rounded to the nearest even and clamped to 0 or
@@ -474,7 +485,7 @@ impl Cx<'_> {
             | ir::Op::Splat(_)
             | ir::Op::Dot(..)
             | ir::Op::Convert(..)
-            | ir::Op::Bitcast(_) => Op::Ir(Box::new(d.op.clone())),
+            | ir::Op::Bitcast(_) => self.prepared(t, &d.op),
             ir::Op::LoadInput(slot, mask) => {
                 let (_, arg) = self
                     .inputs
@@ -719,11 +730,10 @@ impl Cx<'_> {
                         let words = self.fresh(Type::U32)?;
                         self.ops.push((words, count));
                         let four = self.literal(Type::U32, [4, 0, 0, 0])?;
-                        Op::Ir(Box::new(ir::Op::Binary(
-                            ir::Binary::IMul,
-                            ValueId(words),
-                            ValueId(four),
-                        )))
+                        self.prepared(
+                            t,
+                            &ir::Op::Binary(ir::Binary::IMul, ValueId(words), ValueId(four)),
+                        )
                     } else {
                         count
                     }
@@ -732,7 +742,7 @@ impl Cx<'_> {
                     let ir::Query::SamplePosition(index) = *query else {
                         return Err("a sample position without its index".into());
                     };
-                    self.sample_position(texture, index)?
+                    self.sample_position(t, texture, index)?
                 }
                 _ => {
                     let (dim, _, _, _) = self.texture(texture)?;
@@ -2156,6 +2166,5 @@ fn finish(
         workgroup: p.workgroup,
         group_output,
         builtins: arguments.builtins,
-        ir_types: cx.types,
     })
 }

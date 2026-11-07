@@ -177,6 +177,33 @@ fn main {
 }
 
 #[test]
+fn a_compose_puts_each_part_after_the_one_before() {
+    let p = program(
+        "iridia-ir 1
+fn main {
+  %0: vec4<f32> = input 0.xyzw
+  %1: f32 = %0.w
+  %2: f32 = %0.x
+  %3: vec2<f32> = %0.yz
+  %4: vec4<f32> = compose %1, %2, %3
+  %5: vec4<f32> = compose %3, %2, %1
+  %6: vec3<f32> = compose %2, %3
+  output 0.xyzw = %4
+  output 1.xyzw = %5
+  output 2.xyz = %6
+  return
+}
+",
+        &[F4],
+        &[F4, F4, (ScalarType::Float, 3)],
+    );
+    let r = run(&p, &[f([1.0, 2.0, 3.0, 4.0])]);
+    assert_eq!(r.outputs[0].unwrap(), f([4.0, 1.0, 2.0, 3.0]));
+    assert_eq!(r.outputs[1].unwrap(), f([2.0, 3.0, 1.0, 4.0]));
+    assert_eq!(r.outputs[2].unwrap()[..3], f([1.0, 2.0, 3.0, 0.0])[..3]);
+}
+
+#[test]
 fn masked_loads_and_stores_take_and_give_their_lanes_in_order() {
     let p = program(
         "iridia-ir 1

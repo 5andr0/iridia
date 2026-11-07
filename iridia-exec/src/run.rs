@@ -445,29 +445,6 @@ fn buffer_loc(g: u32, pick: Pick) -> Loc {
     }
 }
 
-/// One lane of the registers, as the operands of an IR operation.
-struct IrLane<'r> {
-    regs: &'r [Reg],
-    types: &'r [iridia_ir::Type],
-    lane: usize,
-    n: usize,
-}
-impl iridia_exec_ir::Operands for IrLane<'_> {
-    fn get(&self, v: iridia_ir::ValueId) -> Result<iridia_exec_ir::Lanes, String> {
-        let index = (v.0 as usize).saturating_mul(self.n).saturating_add(self.lane);
-        self.regs
-            .get(index)
-            .copied()
-            .ok_or_else(|| no_register(index, self.regs.len()))
-    }
-    fn ty(&self, v: iridia_ir::ValueId) -> Result<iridia_ir::Type, String> {
-        self.types
-            .get(v.0 as usize)
-            .copied()
-            .ok_or_else(|| format!("internal error: register {} has no type", v.0))
-    }
-}
-
 fn slot_at<const N: usize>(slot: u32) -> usize {
     (slot as usize).saturating_mul(N)
 }
@@ -1191,21 +1168,9 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                     }
                 }
                 Op::Ir(op) => {
-                    let t = *c
-                        .ir_types
-                        .get(dst.checked_div(N).unwrap_or(usize::MAX))
-                        .ok_or("internal error: an IR operation's register has no type")?;
-                    each!(active, l, {
-                        let view = IrLane {
-                            regs: &self.regs,
-                            types: &c.ir_types,
-                            lane: l,
-                            n: N,
-                        };
-                        let value = iridia_exec_ir::eval(op, t, &view, ftz)?
-                            .ok_or_else(|| format!("internal error: {op:?} is not an operation on values"))?;
-                        self.wr(dst, l, value)?;
-                    })
+                    if !op.run_lanes(&mut self.regs, N, dst, |l| active.has(l), ftz)? {
+                        return Err("internal error: an IR operation that is not pure".into());
+                    }
                 }
                 Op::Element {
                     loc,
