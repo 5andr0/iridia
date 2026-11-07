@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `iridia-naga`: `Profile` states which `enable` directives `wgsl` and `wgsl_for` write (`Profile::directives`,
+  `Directives::{Naga, Standard}`). `BROWSER` writes the standard's: `enable subgroups;` before a program that uses a
+  subgroup operation or built-in, which a browser requires and naga's writer never states. `NAGA` writes naga's, without
+  it: naga 30's WGSL reader refuses the directive.
 - `iridia-naga`: `BindingPlan::webgpu` binds inside WebGPU's default limits (four bind groups, bindings below 1000):
   a register of space 0 at its number, the registers of other spaces after the largest binding of their group, and the
   hidden counters of structured views in group 3 after its views (`BindingPlan::d3d` put them in group 4, and other

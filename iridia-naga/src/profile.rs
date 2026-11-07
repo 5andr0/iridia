@@ -23,7 +23,19 @@ pub enum Bindings {
     WebGpu,
 }
 
-/// What a target lets a module use: the naga capabilities its validator runs with, and how it binds resources.
+/// Which `enable` directives the WGSL states (see [`crate::wgsl`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Directives {
+    /// naga's: the ones naga's WGSL writer states. naga 30 has no `enable subgroups;`: its writer leaves it out and its
+    /// reader refuses it, and uses the subgroup operations without it.
+    Naga,
+    /// The WGSL standard's: naga's, and `enable subgroups;` where the program uses a subgroup operation or built-in,
+    /// which a browser requires.
+    Standard,
+}
+
+/// What a target lets a module use: the naga capabilities its validator runs with, how it binds resources and which
+/// directives the WGSL states.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Profile {
     /// The target's name, as refusals spell it.
@@ -32,6 +44,8 @@ pub struct Profile {
     pub capabilities: Capabilities,
     /// How [`crate::wgsl`] binds the program's resources.
     pub bindings: Bindings,
+    /// Which `enable` directives [`crate::wgsl`] states.
+    pub directives: Directives,
 }
 
 impl Profile {
@@ -49,17 +63,19 @@ impl Profile {
             .union(Capabilities::SUBGROUP)
             .union(Capabilities::SUBGROUP_VERTEX_STAGE),
         bindings: Bindings::D3d,
+        directives: Directives::Naga,
     };
 
     /// WebGPU's core WGSL: per-sample shading (`sample_index`, `@interpolate(..., sample)`) and cube array textures
     /// are core; `f16` (`shader-f16`), `primitive_index` (`primitive-index`) and the subgroup operations
     /// (`subgroups`, `Capabilities::SUBGROUP`) are optional device features a consumer adds with [`Profile::with`]
     /// when its device has them; WGSL has no 64-bit or 16-bit integers and no `f64`. Resources bind inside WebGPU's
-    /// default limits.
+    /// default limits, and the WGSL states the standard's directives.
     pub const BROWSER: Profile = Profile {
         name: "browser WGSL",
         capabilities: Capabilities::MULTISAMPLED_SHADING.union(Capabilities::CUBE_ARRAY_TEXTURES),
         bindings: Bindings::WebGpu,
+        directives: Directives::Standard,
     };
 
     /// This profile with `capabilities` allowed too.
@@ -69,6 +85,7 @@ impl Profile {
             name: self.name,
             capabilities: self.capabilities.union(capabilities),
             bindings: self.bindings,
+            directives: self.directives,
         }
     }
 }

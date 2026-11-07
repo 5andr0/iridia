@@ -36,7 +36,7 @@ pub use io::{EntryIo, Item, entry_io};
 pub use lower::module;
 #[cfg(feature = "wgsl")]
 pub use pipeline::{Pipeline, Written, wgsl_for};
-pub use profile::{Bindings, Profile, Requirement, preflight, requirements};
+pub use profile::{Bindings, Directives, Profile, Requirement, preflight, requirements};
 
 /// Why a program could not be lowered, validated or written.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -285,8 +285,30 @@ pub fn wgsl(program: &iridia_ir::Program, profile: &Profile) -> Result<String, E
             e.0
         ))
     })?;
-    naga::back::wgsl::write_string(&module, &info, naga::back::wgsl::WriterFlags::empty())
-        .map_err(|e| Error(format!("naga's WGSL writer: {e}")))
+    write(program, &module, &info, profile)
+}
+
+/// The WGSL of `program`'s validated `module`, with the directives of `profile`: naga's writer's, and for the
+/// standard's `enable subgroups;` where the program needs naga's subgroup capability.
+#[cfg(feature = "wgsl")]
+fn write(
+    program: &iridia_ir::Program,
+    module: &naga::Module,
+    info: &naga::valid::ModuleInfo,
+    profile: &Profile,
+) -> Result<String, Error> {
+    let text = naga::back::wgsl::write_string(module, info, naga::back::wgsl::WriterFlags::empty())
+        .map_err(|e| Error(format!("naga's WGSL writer: {e}")))?;
+    let subgroups = profile.directives == Directives::Standard
+        && requirements(program)
+            .iter()
+            .any(|r| r.capability == naga::valid::Capabilities::SUBGROUP);
+    // a directive comes before every declaration; naga's own are its first lines, and their order is free
+    Ok(if subgroups {
+        format!("enable subgroups;\n{text}")
+    } else {
+        text
+    })
 }
 
 // Run the examples in the README as doc tests.

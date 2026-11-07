@@ -84,8 +84,7 @@ pub fn wgsl_for(
             e.0
         ))
     })?;
-    let text = naga::back::wgsl::write_string(&module, &info, naga::back::wgsl::WriterFlags::empty())
-        .map_err(|e| Error(format!("naga's WGSL writer: {e}")))?;
+    let text = crate::write(program, &module, &info, profile)?;
     Ok(Written {
         text,
         next_location,

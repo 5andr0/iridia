@@ -263,3 +263,45 @@ fn main {
     .validate(&module)
     .unwrap_or_else(|e| panic!("{e:?}\n{wgsl}"));
 }
+
+#[test]
+fn browser_wgsl_enables_the_subgroups_it_uses() {
+    let p = program(
+        "iridia-ir 1
+fn main {
+  %0: f32 = input 0.x
+  %1: f32 = wave.add.reduce %0
+  output 0.x = %1
+  return
+}
+",
+        &[F4],
+        &[F4],
+        Vec::new(),
+    );
+    let subgroups = naga::valid::Capabilities::SUBGROUP;
+    // a browser requires the directive before a subgroup operation
+    let wgsl = iridia_naga::wgsl(&p, &iridia_naga::Profile::BROWSER.with(subgroups)).unwrap();
+    assert!(wgsl.starts_with("enable subgroups;\n"), "{wgsl}");
+    assert!(wgsl.contains("subgroupAdd("), "{wgsl}");
+    // naga's reader refuses it, and naga's dialect leaves it out
+    assert!(naga::front::wgsl::parse_str(&wgsl).is_err());
+    let wgsl = iridia_naga::wgsl(&p, &iridia_naga::Profile::NAGA).unwrap();
+    assert!(!wgsl.contains("enable subgroups"), "{wgsl}");
+    naga::front::wgsl::parse_str(&wgsl).unwrap_or_else(|e| panic!("{e}\n{wgsl}"));
+    // a program without one states no directive
+    let plain = program(
+        "iridia-ir 1
+fn main {
+  %0: f32 = input 0.x
+  output 0.x = %0
+  return
+}
+",
+        &[F4],
+        &[F4],
+        Vec::new(),
+    );
+    let wgsl = iridia_naga::wgsl(&plain, &iridia_naga::Profile::BROWSER.with(subgroups)).unwrap();
+    assert!(!wgsl.contains("enable"), "{wgsl}");
+}
