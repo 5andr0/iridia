@@ -1,0 +1,8 @@
+# MonoGame's GLSL of Direct3D 9 programs (iridia-mojo/tests/oracles/mojoshader.py)
+tool = "libmojoshader_64.dll of dotnet-mgfxc 3.8.1.303 (MonoGame's effect compiler, NuGet)"
+tool_sha256 = "ca6494636a62c7b5b4da681b6d85d3322f96302caf1931b8163e04a25ea54c2e"
+input = "d3d9"
+pattern = "*.[pv]s"
+programs = 7
+glsl = 7
+refused = 0

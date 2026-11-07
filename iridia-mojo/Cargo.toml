@@ -15,10 +15,23 @@ publish.workspace = true
 [dependencies]
 thiserror.workspace = true
 iridia.workspace = true
+iridia-ir.workspace = true
 naga.workspace = true
 
 [dev-dependencies]
+# tests/oracle.rs and tests/ir.rs run the IR lift beside the D3D9 program the GLSL was made from (iridia-d3d9-ir), in
+# both executors, and beside the older lift
+d3d9-reader.workspace = true
+iridia-d3d9-ir.workspace = true
+iridia-exec.workspace = true
+iridia-exec-ir.workspace = true
+iridia-naga = { workspace = true, features = ["wgsl"] }
+iridia-passes.workspace = true
 primase-testdata.workspace = true
+proptest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
 
 [lints]
 workspace = true

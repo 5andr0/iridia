@@ -67,6 +67,21 @@
   `Capability` has the two new variants. The DXBC 5.1 and DXIL fixtures'
   arrays (sized, unbounded, indexed per invocation, in spaces) lowered and run on naga's executor give, lane for lane,
   what the IR's executor gives.
+
+- `iridia-mojo::ir::lift` lifts MojoShader's GLSL onto an `iridia_ir::Program` (`LIFTER`, `LIFTER_VERSION`), with the
+  older lift's interface, resources and notes, and reads more of the dialect: `samplerCube` and `sampler3D`
+  (`textureCube`, `texture3D`), `break`, the fog varying (`varying float vFogFragCoord`), `bvec4` registers and booleans
+  converted to numbers (`float(a >= b)`, `vec4(greaterThanEqual(a, b))`). Where GLSL leaves a result undefined the
+  program does as Direct3D 9 does and states it (`glsl.float_to_int=saturate`, `glsl.uniform_oob=zero`). Its oracle is
+  the Direct3D 9 program the GLSL was made from: `tests/oracles/mojoshader.py` runs MonoGame's own `libmojoshader_64.dll`
+  (dotnet-mgfxc 3.8.1.303) as MonoGame's effect compiler does, and `tests/ir.rs` (fixtures compiled by fxc) and
+  `tests/oracle.rs` (real programs) run both lifted, `iridia-d3d9-ir`'s and this one's, in both executors. MojoShader
+  prints a `def` constant to six decimals, which the oracle allows for by a second Direct3D 9 program holding the
+  printed numbers, and a pair whose GLSL is not its program (`NRM` of four lanes, `TEXLDL` without its level, a `CMP`
+  reading a lane it just wrote, MojoShader's one-float fog) is counted by that departure. Breaking: the varyings are
+  named as MojoShader names them: `vFrontSecondaryColor` is colour 1 in both lifts, and `vFogFragCoord` the fog on the IR (a `float`, which the older lift does not read); `vBackColor` and
+  `vFogFactor`, which MojoShader never writes, are refused.
+
 - `iridia-passes`: `prepare(&mut Program)`, the passes every output and executor takes a lifted program through, on
   each of its functions: `structurize`, `promote`, `simplify` and `break_flags`. What it gives is what `iridia-exec`'s
   `::from_ir` constructors and `iridia-naga` take, so a caller no longer copies the sequence (the slim gate and the IR

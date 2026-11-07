@@ -1,0 +1,94 @@
+# What tests/oracle.rs counts of each oracle set: set, class, count (tab-separated); a change fails the test.
+general/sm3	agree on every run	1
+general/sm3	agree with D' (the def constants as the GLSL prints them), not D	1
+general/sm3	agree with D' (the def constants as the GLSL prints them), not D; the older lift (A) does not	1
+shaun-white/sdb2	agree on every run	977
+shaun-white/sdb2	agree on every run; some runs read past the constant arrays (not compared)	7
+shaun-white/sdb2	agree on every run; the older lift (A) does not	153
+shaun-white/sdb2	agree on every run; the older lift (A) does not; some runs read past the constant arrays (not compared)	2
+shaun-white/sdb2	agree on every run; the older lift (A) refuses it	14
+shaun-white/sdb2	agree with D' (the def constants as the GLSL prints them), not D	3617
+shaun-white/sdb2	agree with D' (the def constants as the GLSL prints them), not D; the older lift (A) does not	1522
+shaun-white/sdb2	agree with D' (the def constants as the GLSL prints them), not D; the older lift (A) does not; some runs read past the constant arrays (not compared)	2
+shaun-white/sdb2	agree with D' (the def constants as the GLSL prints them), not D; the older lift (A) refuses it	951
+shaun-white/sdb2	agree, killed on every run (outputs never compared)	61
+general/slim-d3d9	D3D9 lift refused: CTAB ran: an allocation of N registers ends inside an element of Array { element: Array { element: Scalar(Sint), count: N, stride: N }, count: N, stride: N }	1
+general/slim-d3d9	D3D9 lift refused: duplicate or modified sampler declaration	2
+general/slim-d3d9	D3D9 lift refused: missing END	2
+general/slim-d3d9	D3D9 lift refused: oN: uninitialized output lanes NxN	1
+general/slim-d3d9	D3D9 lift refused: oN: uninitialized output lanes Nxe	1
+general/slim-d3d9	D3D9 lift refused: pN is read before setp writes it	6
+general/slim-d3d9	D3D9 lift refused: register type N, index N outside the vs_N_N banks	2
+general/slim-d3d9	D3D9 lift refused: source modifier N (XNNegate), which ps_N_N does not have	1
+general/slim-d3d9	D3D9 lift refused: undeclared input tN	2
+general/slim-d3d9	D3D9 lift refused: uninitialized output oN	1
+general/slim-d3d9	D3D9 lift refused: uninitialized rN	23
+general/slim-d3d9	D3D9 lift refused: vertex program has no declared POSITIONN clip output	1
+general/slim-d3d9	D3D9 lift refused: vertex program never writes oPos	6
+general/slim-d3d9	GLSL lift refused: ) expected, found ,	2
+general/slim-d3d9	GLSL lift refused: ; expected, found =	3
+general/slim-d3d9	GLSL lift refused: a constant of type bool	1
+general/slim-d3d9	GLSL lift refused: a declaration beginning float	1
+general/slim-d3d9	GLSL lift refused: an assignment to gl_PointSize	4
+general/slim-d3d9	GLSL lift refused: an assignment to gl_PositionN	1
+general/slim-d3d9	GLSL lift refused: gl_FragCoord	8
+general/slim-d3d9	GLSL lift refused: the name ps_vN	8
+general/slim-d3d9	GLSL lift refused: the number N.N.N	1
+general/slim-d3d9	GLSL lift refused: the preprocessor directive #if	3
+general/slim-d3d9	GLSL lift refused: the sampler ps_sN used as a value	3
+general/slim-d3d9	GLSL lift refused: the uniform array ps_uniforms_bool	1
+general/slim-d3d9	GLSL lift refused: the uniform array ps_uniforms_ivecN	8
+general/slim-d3d9	GLSL lift refused: the uniform array vs_const_array_N_N	1
+general/slim-d3d9	MojoShader refused: BEM unimplemented in glsl profile (at N)	2
+general/slim-d3d9	MojoShader refused: BREAKC srcN must have replicate swizzle (at N)	2
+general/slim-d3d9	MojoShader refused: BUG: we used a register we don't know how to define. (at -N)	12
+general/slim-d3d9	MojoShader refused: CND src must be rN.a in this shader model (at N)	1
+general/slim-d3d9	MojoShader refused: Corrupted or truncated shader (at N)	2
+general/slim-d3d9	MojoShader refused: IF srcN must have replicate swizzle (at N)	3
+general/slim-d3d9	MojoShader refused: IFC srcN must have replicate swizzle (at N)	2
+general/slim-d3d9	MojoShader refused: LOG srcN must have replicate swizzle (at N)	1
+general/slim-d3d9	MojoShader refused: LOGP srcN must have replicate swizzle (at N)	1
+general/slim-d3d9	MojoShader refused: NOT only allowed on predicate register. (at N)	4
+general/slim-d3d9	MojoShader refused: POW srcN must have replicate swizzle (at N)	1
+general/slim-d3d9	MojoShader refused: Predicated instruction but not predicate register! (at N)	2
+general/slim-d3d9	MojoShader refused: RCP without replicate swizzzle (at N)	1
+general/slim-d3d9	MojoShader refused: Result shift scale in non-pixel shader (at N)	1
+general/slim-d3d9	MojoShader refused: SINCOS write mask must be .x or .y or .xy (at N)	2
+general/slim-d3d9	MojoShader refused: Shader has corrupt CTAB data (at N)	4
+general/slim-d3d9	MojoShader refused: TEXCRD unimplemented in glsl profile (at N)	10
+general/slim-d3d9	MojoShader refused: TEXDEPTH unimplemented in glsl profile (at N)	2
+general/slim-d3d9	MojoShader refused: TEXDPN unimplemented in glsl profile (at N)	1
+general/slim-d3d9	MojoShader refused: TEXDPNTEX unimplemented in glsl profile (at N)	2
+general/slim-d3d9	MojoShader refused: TEXKILL must use a temp or texture register (at N)	1
+general/slim-d3d9	MojoShader refused: TEXLD == Shader Model N.N unimplemented. (at N)	2
+general/slim-d3d9	MojoShader refused: TEXLD using undeclared sampler (at N)	3
+general/slim-d3d9	MojoShader refused: TEXMNXN needs a ND or Cubemap sampler (at N)	1
+general/slim-d3d9	MojoShader refused: TEXMNXNDEPTH unimplemented in glsl profile (at N)	1
+general/slim-d3d9	MojoShader refused: TEXREGNAR unimplemented in glsl profile (at N)	2
+general/slim-d3d9	MojoShader refused: TEXREGNGB unimplemented in glsl profile (at N)	1
+general/slim-d3d9	MojoShader refused: TEXREGNRGB unimplemented in glsl profile (at N)	1
+general/slim-d3d9	MojoShader refused: Unknown opcode. (at N)	1
+general/slim-d3d9	MojoShader refused: bit #N in relative address must be set (at N)	1
+general/slim-d3d9	MojoShader refused: centroid unsupported in glsl profile (at -N)	3
+general/slim-d3d9	MojoShader refused: coissue instruction in Shader Model >= N.N (at N)	1
+general/slim-d3d9	MojoShader refused: instruction token high bit must be zero. (at N)	1
+general/slim-d3d9	MojoShader refused: invalid DCL register type for this shader model (at N)	1
+general/slim-d3d9	MojoShader refused: label register number must be <= N (at N)	2
+general/slim-d3d9	MojoShader refused: rN (pixel shader N.x color output) never written to (at -N)	9
+general/slim-d3d9	MojoShader refused: relative address needs replicate swizzle (at N)	10
+general/slim-d3d9	MojoShader refused: relative addressing unsupported without a CTAB (at N)	8
+general/slim-d3d9	MojoShader refused: unknown token (NxabababN) (at N)	1
+general/slim-d3d9	MojoShader's GLSL departs from the program: CMP or CND that reads a lane of its destination that an earlier lane of it wrote (MojoShader writes the lanes one after the other, Direct3D 9 reads the old register)	1
+general/slim-d3d9	MojoShader's GLSL departs from the program: NRM of lanes other than xyz (GLSL's normalize takes the length of the lanes written, Direct3D 9's NRM of x, y and z)	1
+general/slim-d3d9	MojoShader's GLSL departs from the program: TEXLDL's level dropped (the GLSL samples at the implicit level)	2
+general/slim-d3d9	agree on every run	210
+general/slim-d3d9	agree on every run; some runs read past the constant arrays (not compared)	3
+general/slim-d3d9	agree on every run; the older lift (A) does not	8
+general/slim-d3d9	agree on every run; the older lift (A) does not; some runs read past the constant arrays (not compared)	1
+general/slim-d3d9	agree on every run; the older lift (A) refuses it	18
+general/slim-d3d9	agree on every run; the older lift (A) refuses it; the GLSL's fog is one float (the program's other fog lanes are not compared)	1
+general/slim-d3d9	agree with D' (the def constants as the GLSL prints them), not D	70
+general/slim-d3d9	agree with D' (the def constants as the GLSL prints them), not D; the older lift (A) does not	18
+general/slim-d3d9	agree with D' (the def constants as the GLSL prints them), not D; the older lift (A) does not; some runs read past the constant arrays (not compared)	2
+general/slim-d3d9	agree with D' (the def constants as the GLSL prints them), not D; the older lift (A) refuses it	21
+general/slim-d3d9	an output the GLSL does not write: Varying("COLOR", 2)	1

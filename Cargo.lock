@@ -414,9 +414,20 @@ dependencies = [
 name = "iridia-mojo"
 version = "0.6.0"
 dependencies = [
+ "d3d9-reader",
  "iridia",
+ "iridia-d3d9-ir",
+ "iridia-exec",
+ "iridia-exec-ir",
+ "iridia-ir",
+ "iridia-naga",
+ "iridia-passes",
  "primase-naga",
  "primase-testdata",
+ "proptest",
+ "serde",
+ "serde_json",
+ "sha2",
  "thiserror",
 ]
 

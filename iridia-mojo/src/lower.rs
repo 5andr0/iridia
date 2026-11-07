@@ -17,7 +17,8 @@ use naga::{
     RelationalFunction, ResourceBinding, SampleLevel, ScalarKind, Statement, TypeInner, UnaryOperator as Uo,
 };
 
-use crate::lex::{self, Spanned, Token};
+use crate::lex::{self, Token};
+use crate::parse::{Cursor, swizzle_lanes, varying_semantic};
 use crate::{Hints, LIFTER_VERSION, Result, error};
 
 /// What a name stands for.
@@ -63,8 +64,7 @@ struct Sampler {
 
 struct Lower<'a> {
     b: Builder,
-    tokens: Vec<Spanned>,
-    pos: usize,
+    c: Cursor,
     stage: Stage,
     hints: &'a Hints,
     symbols: BTreeMap<String, Sym>,
@@ -85,25 +85,6 @@ fn float_value(width: u8) -> Value {
     }
 }
 
-/// The semantic a varying of the dialect stands for: `vFrontColor` is colour 0, `vTexCoord<n>` texture coordinate n.
-fn varying_semantic(name: &str) -> Option<(&'static str, u32)> {
-    match name {
-        "vFrontColor" => Some(("COLOR", 0)),
-        "vBackColor" => Some(("COLOR", 1)),
-        "vFogFactor" => Some(("FOG", 0)),
-        _ => {
-            let n = name.strip_prefix("vTexCoord")?;
-            Some(("TEXCOORD", n.parse().ok()?))
-        }
-    }
-}
-
-const EPILOGUE: [&str; 3] = [
-    "gl_Position . y = gl_Position . y * posFixup . y ;",
-    "gl_Position . xy += posFixup . zw * gl_Position . ww ;",
-    "gl_Position . z = gl_Position . z * 2.0 - gl_Position . w ;",
-];
-
 pub(crate) fn lift(source: &str, stage: Stage, hints: &Hints) -> Result<Program> {
     if !matches!(stage, Stage::Vertex | Stage::Pixel) {
         return Err(error(
@@ -120,8 +101,7 @@ pub(crate) fn lift(source: &str, stage: Stage, hints: &Hints) -> Result<Program>
     }
     let mut l = Lower {
         b: Builder::new(),
-        tokens: lexed.tokens,
-        pos: 0,
+        c: Cursor::new(lexed.tokens),
         stage,
         hints,
         symbols: BTreeMap::new(),
@@ -140,79 +120,6 @@ pub(crate) fn lift(source: &str, stage: Stage, hints: &Hints) -> Result<Program>
 }
 
 impl Lower<'_> {
-    fn line(&self) -> usize {
-        self.tokens
-            .get(self.pos)
-            .or_else(|| self.tokens.last())
-            .map_or(0, |t| t.line)
-    }
-
-    fn fail<T>(&self, detail: impl Into<String>) -> Result<T> {
-        Err(error(self.line(), detail))
-    }
-
-    fn peek(&self) -> Option<&Token> {
-        self.tokens.get(self.pos).map(|t| &t.token)
-    }
-
-    fn next(&mut self) -> Result<Token> {
-        match self.tokens.get(self.pos) {
-            Some(t) => {
-                self.pos = self.pos.saturating_add(1);
-                Ok(t.token.clone())
-            }
-            None => self.fail("the program ends in the middle of a statement"),
-        }
-    }
-
-    fn at(&self, punct: &str) -> bool {
-        self.peek().is_some_and(|t| t.is(punct))
-    }
-
-    fn at_ident(&self, word: &str) -> bool {
-        matches!(self.peek(), Some(Token::Ident(s)) if s == word)
-    }
-
-    fn accept(&mut self, punct: &str) -> bool {
-        let found = self.at(punct);
-        if found {
-            self.pos = self.pos.saturating_add(1);
-        }
-        found
-    }
-
-    fn expect(&mut self, punct: &str) -> Result<()> {
-        if self.accept(punct) {
-            Ok(())
-        } else {
-            let found = self.peek().map_or("the end".to_owned(), Token::text);
-            self.fail(format!("{punct} expected, found {found}"))
-        }
-    }
-
-    fn ident(&mut self) -> Result<String> {
-        match self.next()? {
-            Token::Ident(s) => Ok(s),
-            other => self.fail(format!("a name expected, found {}", other.text())),
-        }
-    }
-
-    fn word(&mut self, word: &str) -> Result<()> {
-        let found = self.ident()?;
-        if found == word {
-            Ok(())
-        } else {
-            self.fail(format!("{word} expected, found {found}"))
-        }
-    }
-
-    fn integer(&mut self) -> Result<i64> {
-        match self.next()? {
-            Token::Int(i) => Ok(i),
-            other => self.fail(format!("an integer expected, found {}", other.text())),
-        }
-    }
-
     // ---- the entry point's edges ----
 
     /// A pixel program writes `gl_FragColor` or `gl_FragData[n]`, which it never declares: the targets it writes are
@@ -240,35 +147,7 @@ impl Lower<'_> {
                 ));
             }
             _ => {
-                let mut targets = std::collections::BTreeSet::new();
-                for (i, t) in self.tokens.iter().enumerate() {
-                    match &t.token {
-                        Token::Ident(s) if s == "gl_FragColor" => {
-                            targets.insert(0u32);
-                        }
-                        Token::Ident(s) if s == "gl_FragData" => {
-                            let n = match (
-                                self.tokens.get(i.saturating_add(1)).map(|t| &t.token),
-                                self.tokens.get(i.saturating_add(2)).map(|t| &t.token),
-                            ) {
-                                (Some(open), Some(Token::Int(n))) if open.is("[") => *n,
-                                _ => {
-                                    return Err(error(
-                                        t.line,
-                                        "gl_FragData indexed by something that is not a number",
-                                    ));
-                                }
-                            };
-                            let n = u32::try_from(n)
-                                .ok()
-                                .filter(|n| *n < 4)
-                                .ok_or_else(|| error(t.line, format!("gl_FragData[{n}]")))?;
-                            targets.insert(n);
-                        }
-                        _ => {}
-                    }
-                }
-                for n in targets {
+                for n in self.c.fragment_targets()? {
                     let local = self.b.local(&format!("target{n}"), v4);
                     // `gl_FragColor` is target 0
                     self.symbols.insert(
@@ -302,16 +181,10 @@ impl Lower<'_> {
     /// Name `name` as `sym`; a name the program already declared (or the entry point's own outputs) is not declared again.
     fn declare_symbol(&mut self, name: &str, sym: Sym) -> Result<()> {
         if self.symbols.contains_key(name) {
-            return self.fail(format!("{name} declared twice"));
+            return self.c.fail(format!("{name} declared twice"));
         }
         self.symbols.insert(name.to_owned(), sym);
         Ok(())
-    }
-
-    fn has_ident(&self, word: &str) -> bool {
-        self.tokens
-            .iter()
-            .any(|t| matches!(&t.token, Token::Ident(s) if s == word))
     }
 
     // ---- declarations ----
@@ -319,63 +192,63 @@ impl Lower<'_> {
     fn declarations(&mut self) -> Result<()> {
         let prefix = if self.stage == Stage::Vertex { "vs_" } else { "ps_" };
         loop {
-            if self.at_ident("void") {
+            if self.c.at_ident("void") {
                 return Ok(());
             }
-            let storage = self.ident()?;
+            let storage = self.c.ident()?;
             match storage.as_str() {
                 "uniform" => {
-                    let ty = self.ident()?;
-                    let name = self.ident()?;
+                    let ty = self.c.ident()?;
+                    let name = self.c.ident()?;
                     match ty.as_str() {
-                        "vec4" if self.accept("[") => {
-                            let rows = self.integer()?;
-                            self.expect("]")?;
-                            self.expect(";")?;
+                        "vec4" if self.c.accept("[") => {
+                            let rows = self.c.integer()?;
+                            self.c.expect("]")?;
+                            self.c.expect(";")?;
                             if name != format!("{prefix}uniforms_vec4") {
-                                return self.fail(format!("the uniform array {name}"));
+                                return self.c.fail(format!("the uniform array {name}"));
                             }
                             let rows =
                                 u32::try_from(rows)
                                     .ok()
                                     .and_then(NonZeroU32::new)
                                     .ok_or_else(|| {
-                                        error(self.line(), format!("a uniform array of {rows} rows"))
+                                        error(self.c.line(), format!("a uniform array of {rows} rows"))
                                     })?;
                             self.declare_constants(&name, rows)?;
                         }
                         "vec4" if name == "posFixup" => {
-                            self.expect(";")?;
+                            self.c.expect(";")?;
                             self.declare_symbol(&name, Sym::PosFixup)?;
                         }
                         "sampler2D" => {
-                            self.expect(";")?;
+                            self.c.expect(";")?;
                             self.declare_sampler(&name)?;
                         }
-                        other => return self.fail(format!("a uniform {other} {name}")),
+                        other => return self.c.fail(format!("a uniform {other} {name}")),
                     }
                 }
                 "attribute" if self.stage == Stage::Vertex => {
-                    self.word("vec4")?;
-                    let name = self.ident()?;
-                    self.expect(";")?;
+                    self.c.word("vec4")?;
+                    let name = self.c.ident()?;
+                    self.c.expect(";")?;
                     self.declare_attribute(&name)?;
                 }
                 "varying" => {
-                    self.word("vec4")?;
-                    let name = self.ident()?;
-                    self.expect(";")?;
+                    self.c.word("vec4")?;
+                    let name = self.c.ident()?;
+                    self.c.expect(";")?;
                     self.declare_varying(&name)?;
                 }
                 "const" => {
-                    let ty = self.ident()?;
-                    let name = self.ident()?;
-                    self.expect("=")?;
+                    let ty = self.c.ident()?;
+                    let name = self.c.ident()?;
+                    self.c.expect("=")?;
                     self.declare_const(&ty, &name)?;
                 }
                 "vec4" | "ivec4" => {
-                    let name = self.ident()?;
-                    self.expect(";")?;
+                    let name = self.c.ident()?;
+                    self.c.expect(";")?;
                     let (kind, ty) = if storage == "vec4" {
                         (Kind::F, self.b.ty_of(Kind::F, Width::Four))
                     } else {
@@ -384,7 +257,7 @@ impl Lower<'_> {
                     let local = self.b.local(&name, ty);
                     self.declare_symbol(&name, Sym::Local(local, kind, Width::Four))?;
                 }
-                other => return self.fail(format!("a declaration beginning {other}")),
+                other => return self.c.fail(format!("a declaration beginning {other}")),
             }
         }
     }
@@ -410,7 +283,9 @@ impl Lower<'_> {
 
     fn declare_sampler(&mut self, name: &str) -> Result<()> {
         let Some(hint) = self.hints.samplers.iter().find(|s| s.glsl_name == name) else {
-            return self.fail(format!("the sampler {name}, which the caller does not describe"));
+            return self
+                .c
+                .fail(format!("the sampler {name}, which the caller does not describe"));
         };
         let (slot, texture_name) = (hint.slot, hint.name.clone());
         let image = self.b.ty(TypeInner::Image {
@@ -457,7 +332,7 @@ impl Lower<'_> {
 
     fn declare_attribute(&mut self, name: &str) -> Result<()> {
         let Some(hint) = self.hints.attributes.iter().find(|a| a.glsl_name == name) else {
-            return self.fail(format!(
+            return self.c.fail(format!(
                 "the attribute {name}, which the caller does not describe"
             ));
         };
@@ -486,7 +361,7 @@ impl Lower<'_> {
 
     fn declare_varying(&mut self, name: &str) -> Result<()> {
         let Some((semantic, index)) = varying_semantic(name) else {
-            return self.fail(format!("the varying {name}"));
+            return self.c.fail(format!("the varying {name}"));
         };
         let label = Label {
             name: semantic.into(),
@@ -528,37 +403,37 @@ impl Lower<'_> {
     fn declare_const(&mut self, ty: &str, name: &str) -> Result<()> {
         match ty {
             "ivec4" => {
-                self.word("ivec4")?;
-                self.expect("(")?;
+                self.c.word("ivec4")?;
+                self.c.expect("(")?;
                 let mut lanes = [0i64; 4];
                 let mut parts = Vec::new();
                 for (k, lane) in lanes.iter_mut().enumerate() {
                     if k > 0 {
-                        self.expect(",")?;
+                        self.c.expect(",")?;
                     }
-                    let negative = self.accept("-");
-                    let n = self.integer()?;
+                    let negative = self.c.accept("-");
+                    let n = self.c.integer()?;
                     *lane = if negative {
                         n.checked_neg()
-                            .ok_or_else(|| error(self.line(), "an integer constant over 64 bits"))?
+                            .ok_or_else(|| error(self.c.line(), "an integer constant over 64 bits"))?
                     } else {
                         n
                     };
                     let value = i32::try_from(*lane)
-                        .map_err(|_| error(self.line(), "an integer constant over 32 bits"))?;
+                        .map_err(|_| error(self.c.line(), "an integer constant over 32 bits"))?;
                     parts.push(self.b.lit_i(value));
                 }
-                self.expect(")")?;
-                self.expect(";")?;
+                self.c.expect(")")?;
+                self.c.expect(";")?;
                 let v = self.b.compose(&parts);
                 self.declare_symbol(name, Sym::Const(v, Some(lanes)))?;
             }
             "vec4" => {
                 let v = self.expression()?;
-                self.expect(";")?;
+                self.c.expect(";")?;
                 self.declare_symbol(name, Sym::Const(v.v, None))?;
             }
-            other => return self.fail(format!("a constant of type {other}")),
+            other => return self.c.fail(format!("a constant of type {other}")),
         }
         Ok(())
     }
@@ -566,73 +441,44 @@ impl Lower<'_> {
     // ---- main ----
 
     fn main(&mut self) -> Result<()> {
-        self.word("void")?;
-        self.word("main")?;
-        self.expect("(")?;
-        self.expect(")")?;
-        self.expect("{")?;
-        // the end of the body: its closing brace is the last token
-        if self.tokens.last().is_none_or(|t| !t.token.is("}")) {
-            return self.fail("main does not end with a closing brace");
+        if let Some(note) = self.c.open_main(self.stage == Stage::Vertex)? {
+            self.notes.push(note);
         }
-        let end = self.tokens.len().saturating_sub(1);
-        // the clip-space epilogue MojoShader appends to a vertex program
-        if self.stage == Stage::Vertex && self.has_ident("posFixup") {
-            let tail: Vec<String> = self.tokens.iter().take(end).map(|t| t.token.text()).collect();
-            let mut matched = 0usize;
-            let joined = tail.join(" ");
-            let epilogue = EPILOGUE.join(" ");
-            if joined.ends_with(&epilogue) {
-                matched = EPILOGUE.iter().map(|s| s.split(' ').count()).sum();
-            }
-            if matched == 0 {
-                return self
-                    .fail("posFixup used outside the clip-space fix MojoShader ends a vertex program with");
-            }
-            let keep = end.saturating_sub(matched);
-            self.tokens.drain(keep..end);
-            self.notes.push(
-                "the clip-space fix for OpenGL that MojoShader ends a vertex program with (posFixup: flip y, \
-                 half-pixel offset, depth 0..1 to -1..1) is dropped: the program keeps Direct3D's clip space"
-                    .into(),
-            );
-        }
-        let end = self.tokens.len().saturating_sub(1);
-        while self.pos < end {
+        while !self.c.main_done() {
             self.statement()?;
         }
         Ok(())
     }
 
     fn block_or_statement(&mut self) -> Result<()> {
-        if self.accept("{") {
-            while !self.at("}") {
-                if self.peek().is_none() {
-                    return self.fail("a block that is not closed");
+        if self.c.accept("{") {
+            while !self.c.at("}") {
+                if self.c.peek().is_none() {
+                    return self.c.fail("a block that is not closed");
                 }
                 self.statement()?;
             }
-            self.expect("}")
+            self.c.expect("}")
         } else {
             self.statement()
         }
     }
 
     fn statement(&mut self) -> Result<()> {
-        if self.at_ident("if") {
-            self.pos = self.pos.saturating_add(1);
-            self.expect("(")?;
+        if self.c.at_ident("if") {
+            self.c.pos = self.c.pos.saturating_add(1);
+            self.c.expect("(")?;
             let c = self.expression()?;
-            self.expect(")")?;
+            self.c.expect(")")?;
             if c.v.kind != Kind::B || c.v.width != Width::One {
-                return self.fail("an if on something that is not one boolean");
+                return self.c.fail("an if on something that is not one boolean");
             }
             self.b.blocks.push(Block::new());
             self.block_or_statement()?;
             let accept = self.b.blocks.pop().expect("the block just pushed");
             let mut reject = Block::new();
-            if self.at_ident("else") {
-                self.pos = self.pos.saturating_add(1);
+            if self.c.at_ident("else") {
+                self.c.pos = self.c.pos.saturating_add(1);
                 self.b.blocks.push(Block::new());
                 self.block_or_statement()?;
                 reject = self.b.blocks.pop().expect("the block just pushed");
@@ -644,49 +490,49 @@ impl Lower<'_> {
             });
             return Ok(());
         }
-        if self.at_ident("for") {
+        if self.c.at_ident("for") {
             return self.for_loop();
         }
-        if self.at_ident("discard") {
+        if self.c.at_ident("discard") {
             if self.stage != Stage::Pixel {
-                return self.fail("discard in a vertex program");
+                return self.c.fail("discard in a vertex program");
             }
-            self.pos = self.pos.saturating_add(1);
-            self.expect(";")?;
+            self.c.pos = self.c.pos.saturating_add(1);
+            self.c.expect(";")?;
             self.b.push(Statement::Kill);
             return Ok(());
         }
-        if self.at_ident("break") || self.at_ident("return") || self.at_ident("while") {
-            let word = self.ident()?;
-            return self.fail(word);
+        if self.c.at_ident("break") || self.c.at_ident("return") || self.c.at_ident("while") {
+            let word = self.c.ident()?;
+            return self.c.fail(word);
         }
         self.assignment()
     }
 
     /// `for (int repN = A; repN < ps_iM.x; repN++) { .. }`, a `rep` loop of constant count.
     fn for_loop(&mut self) -> Result<()> {
-        self.pos = self.pos.saturating_add(1);
-        self.expect("(")?;
-        self.word("int")?;
-        let counter = self.ident()?;
-        self.expect("=")?;
-        let start = self.integer()?;
-        self.expect(";")?;
-        if self.ident()? != counter {
-            return self.fail("a loop that tests something other than its counter");
+        self.c.pos = self.c.pos.saturating_add(1);
+        self.c.expect("(")?;
+        self.c.word("int")?;
+        let counter = self.c.ident()?;
+        self.c.expect("=")?;
+        let start = self.c.integer()?;
+        self.c.expect(";")?;
+        if self.c.ident()? != counter {
+            return self.c.fail("a loop that tests something other than its counter");
         }
-        self.expect("<")?;
-        let bound = self.ident()?;
-        self.expect(".")?;
-        let lane = self.ident()?;
-        self.expect(";")?;
-        if self.ident()? != counter {
-            return self.fail("a loop that steps something other than its counter");
+        self.c.expect("<")?;
+        let bound = self.c.ident()?;
+        self.c.expect(".")?;
+        let lane = self.c.ident()?;
+        self.c.expect(";")?;
+        if self.c.ident()? != counter {
+            return self.c.fail("a loop that steps something other than its counter");
         }
-        self.expect("++")?;
-        self.expect(")")?;
+        self.c.expect("++")?;
+        self.c.expect(")")?;
         let Some(Sym::Const(_, Some(lanes))) = self.symbols.get(&bound).cloned() else {
-            return self.fail(format!(
+            return self.c.fail(format!(
                 "a loop bounded by {bound}, which is not a constant integer vector"
             ));
         };
@@ -695,16 +541,16 @@ impl Lower<'_> {
             _ => None,
         });
         let Some(lane) = lane else {
-            return self.fail("a loop bound that is not one lane");
+            return self.c.fail("a loop bound that is not one lane");
         };
         let count = lanes
             .get(usize::from(lane))
             .and_then(|end| end.checked_sub(start))
             .and_then(|n| u32::try_from(n).ok())
-            .ok_or_else(|| error(self.line(), "a loop that does not count up"))?;
+            .ok_or_else(|| error(self.c.line(), "a loop that does not count up"))?;
         let (i, local) = self.b.begin_repeat(count);
         let i = self.b.bitcast(i, Kind::I);
-        let start = i32::try_from(start).map_err(|_| error(self.line(), "a loop start over 32 bits"))?;
+        let start = i32::try_from(start).map_err(|_| error(self.c.line(), "a loop start over 32 bits"))?;
         let offset = self.b.lit_i(start);
         let value = self.b.binary(Bo::Add, i, offset);
         self.loops = self.loops.saturating_add(1);
@@ -719,19 +565,19 @@ impl Lower<'_> {
     }
 
     fn assignment(&mut self) -> Result<()> {
-        let line = self.line();
-        let name = self.ident()?;
+        let line = self.c.line();
+        let name = self.c.ident()?;
         // `gl_FragData[n]` is one name
         let name = if name == "gl_FragData" {
-            self.expect("[")?;
-            let n = self.integer()?;
-            self.expect("]")?;
+            self.c.expect("[")?;
+            let n = self.c.integer()?;
+            self.c.expect("]")?;
             format!("gl_FragData[{n}]")
         } else {
             name
         };
-        let lanes = if self.accept(".") {
-            let w = self.ident()?;
+        let lanes = if self.c.accept(".") {
+            let w = self.c.ident()?;
             swizzle_lanes(&w).ok_or_else(|| error(line, format!("the swizzle {w}")))?
         } else {
             Vec::new()
@@ -755,12 +601,12 @@ impl Lower<'_> {
                 format!("a write mask of {name} that repeats or leaves it"),
             ));
         }
-        if !self.accept("=") {
-            let op = self.next()?.text();
+        if !self.c.accept("=") {
+            let op = self.c.next()?.text();
             return Err(error(line, format!("the assignment {op}")));
         }
         let value = self.expression()?;
-        self.expect(";")?;
+        self.c.expect(";")?;
         let mut value = value.v;
         if value.kind != kind {
             return Err(error(
@@ -807,30 +653,30 @@ impl Lower<'_> {
 
     /// The builder's first fault since the last check, as a refusal of the line being read.
     fn checked(&mut self) -> Result<()> {
-        let line = self.line();
+        let line = self.c.line();
         self.b.check().map_err(|detail| error(line, detail))
     }
 
     fn ternary(&mut self) -> Result<V> {
         let c = self.or()?;
-        if !self.accept("?") {
+        if !self.c.accept("?") {
             return Ok(c);
         }
         let a = self.expression()?;
-        self.expect(":")?;
+        self.c.expect(":")?;
         let b = self.expression()?;
         if c.v.kind != Kind::B || c.v.width != Width::One {
-            return self.fail("a condition that is not one boolean");
+            return self.c.fail("a condition that is not one boolean");
         }
         if a.v.kind != b.v.kind || a.v.width != b.v.width {
-            return self.fail("the two sides of ?: differ in type or width");
+            return self.c.fail("the two sides of ?: differ in type or width");
         }
         Ok(self.b.select(c.v, a.v, b.v).into())
     }
 
     fn or(&mut self) -> Result<V> {
         let mut a = self.and()?;
-        while self.accept("||") {
+        while self.c.accept("||") {
             let b = self.and()?;
             a = self.logical(Bo::LogicalOr, a, b)?;
         }
@@ -839,7 +685,7 @@ impl Lower<'_> {
 
     fn and(&mut self) -> Result<V> {
         let mut a = self.equality()?;
-        while self.accept("&&") {
+        while self.c.accept("&&") {
             let b = self.equality()?;
             a = self.logical(Bo::LogicalAnd, a, b)?;
         }
@@ -848,7 +694,9 @@ impl Lower<'_> {
 
     fn logical(&mut self, op: Bo, a: V, b: V) -> Result<V> {
         if a.v.kind != Kind::B || b.v.kind != Kind::B || a.v.width != Width::One || b.v.width != Width::One {
-            return self.fail("a logical operator on something that is not one boolean");
+            return self
+                .c
+                .fail("a logical operator on something that is not one boolean");
         }
         Ok(self.b.binary(op, a.v, b.v).into())
     }
@@ -856,14 +704,14 @@ impl Lower<'_> {
     fn equality(&mut self) -> Result<V> {
         let mut a = self.relational()?;
         loop {
-            let op = if self.at("==") {
+            let op = if self.c.at("==") {
                 Bo::Equal
-            } else if self.at("!=") {
+            } else if self.c.at("!=") {
                 Bo::NotEqual
             } else {
                 return Ok(a);
             };
-            self.pos = self.pos.saturating_add(1);
+            self.c.pos = self.c.pos.saturating_add(1);
             let b = self.relational()?;
             a = self.compare(op, a, b)?;
         }
@@ -872,18 +720,18 @@ impl Lower<'_> {
     fn relational(&mut self) -> Result<V> {
         let mut a = self.additive()?;
         loop {
-            let op = if self.at("<") {
+            let op = if self.c.at("<") {
                 Bo::Less
-            } else if self.at(">") {
+            } else if self.c.at(">") {
                 Bo::Greater
-            } else if self.at("<=") {
+            } else if self.c.at("<=") {
                 Bo::LessEqual
-            } else if self.at(">=") {
+            } else if self.c.at(">=") {
                 Bo::GreaterEqual
             } else {
                 return Ok(a);
             };
-            self.pos = self.pos.saturating_add(1);
+            self.c.pos = self.c.pos.saturating_add(1);
             let b = self.additive()?;
             a = self.compare(op, a, b)?;
         }
@@ -891,7 +739,9 @@ impl Lower<'_> {
 
     fn compare(&mut self, op: Bo, a: V, b: V) -> Result<V> {
         if a.v.kind != b.v.kind || a.v.width != Width::One || b.v.width != Width::One {
-            return self.fail("a comparison of values that are not scalars of one type");
+            return self
+                .c
+                .fail("a comparison of values that are not scalars of one type");
         }
         Ok(self.b.binary(op, a.v, b.v).into())
     }
@@ -899,14 +749,14 @@ impl Lower<'_> {
     fn additive(&mut self) -> Result<V> {
         let mut a = self.multiplicative()?;
         loop {
-            let op = if self.at("+") {
+            let op = if self.c.at("+") {
                 Bo::Add
-            } else if self.at("-") {
+            } else if self.c.at("-") {
                 Bo::Subtract
             } else {
                 return Ok(a);
             };
-            self.pos = self.pos.saturating_add(1);
+            self.c.pos = self.c.pos.saturating_add(1);
             let b = self.multiplicative()?;
             a = self.arithmetic(op, a, b)?;
         }
@@ -915,14 +765,14 @@ impl Lower<'_> {
     fn multiplicative(&mut self) -> Result<V> {
         let mut a = self.unary()?;
         loop {
-            let op = if self.at("*") {
+            let op = if self.c.at("*") {
                 Bo::Multiply
-            } else if self.at("/") {
+            } else if self.c.at("/") {
                 Bo::Divide
             } else {
                 return Ok(a);
             };
-            self.pos = self.pos.saturating_add(1);
+            self.c.pos = self.c.pos.saturating_add(1);
             let b = self.unary()?;
             a = self.arithmetic(op, a, b)?;
         }
@@ -930,13 +780,15 @@ impl Lower<'_> {
 
     fn arithmetic(&mut self, op: Bo, a: V, b: V) -> Result<V> {
         if a.v.kind != b.v.kind || !matches!(a.v.kind, Kind::F | Kind::I) {
-            return self.fail("arithmetic on values of different types (or booleans)");
+            return self
+                .c
+                .fail("arithmetic on values of different types (or booleans)");
         }
         if a.v.kind == Kind::I && op == Bo::Divide {
-            return self.fail("integer division");
+            return self.c.fail("integer division");
         }
         if a.v.width != b.v.width && a.v.width != Width::One && b.v.width != Width::One {
-            return self.fail(format!(
+            return self.c.fail(format!(
                 "arithmetic on vectors of {} and {} lanes",
                 a.v.width, b.v.width
             ));
@@ -952,10 +804,10 @@ impl Lower<'_> {
     }
 
     fn unary(&mut self) -> Result<V> {
-        if self.accept("-") {
+        if self.c.accept("-") {
             let a = self.unary()?;
             if !matches!(a.v.kind, Kind::F | Kind::I) {
-                return self.fail("a negation of a boolean");
+                return self.c.fail("a negation of a boolean");
             }
             let v = self.b.unary(Uo::Negate, a.v);
             return Ok(V {
@@ -963,10 +815,10 @@ impl Lower<'_> {
                 literal: a.literal.and_then(i64::checked_neg),
             });
         }
-        if self.accept("!") {
+        if self.c.accept("!") {
             let a = self.unary()?;
             if a.v.kind != Kind::B {
-                return self.fail("! on something that is not a boolean");
+                return self.c.fail("! on something that is not a boolean");
             }
             return Ok(self.b.unary(Uo::LogicalNot, a.v).into());
         }
@@ -976,13 +828,15 @@ impl Lower<'_> {
     fn postfix(&mut self) -> Result<V> {
         let mut v = self.primary()?;
         loop {
-            if self.accept(".") {
-                let w = self.ident()?;
+            if self.c.accept(".") {
+                let w = self.c.ident()?;
                 let Some(lanes) = swizzle_lanes(&w) else {
-                    return self.fail(format!("the swizzle {w}"));
+                    return self.c.fail(format!("the swizzle {w}"));
                 };
                 if lanes.iter().any(|l| *l >= v.v.width.get()) {
-                    return self.fail(format!("the swizzle {w} of a value {} lanes wide", v.v.width));
+                    return self
+                        .c
+                        .fail(format!("the swizzle {w} of a value {} lanes wide", v.v.width));
                 }
                 let r = match lanes[..] {
                     [one] => self.b.lane(v.v, one),
@@ -996,10 +850,10 @@ impl Lower<'_> {
     }
 
     fn primary(&mut self) -> Result<V> {
-        match self.next()? {
+        match self.c.next()? {
             Token::Float(f) => Ok(self.b.lit_f(f).into()),
             Token::Int(i) => {
-                let value = i32::try_from(i).map_err(|_| error(self.line(), "an integer over 32 bits"))?;
+                let value = i32::try_from(i).map_err(|_| error(self.c.line(), "an integer over 32 bits"))?;
                 Ok(V {
                     v: self.b.lit_i(value),
                     literal: Some(i),
@@ -1007,29 +861,29 @@ impl Lower<'_> {
             }
             Token::Punct("(") => {
                 let v = self.expression()?;
-                self.expect(")")?;
+                self.c.expect(")")?;
                 Ok(v)
             }
             Token::Ident(name) => self.name(&name),
-            Token::Punct(p) => self.fail(format!("{p} where a value was expected")),
+            Token::Punct(p) => self.c.fail(format!("{p} where a value was expected")),
         }
     }
 
     fn name(&mut self, name: &str) -> Result<V> {
-        if self.at("(") {
+        if self.c.at("(") {
             return self.call(name);
         }
         if name == "gl_FragData" {
-            return self.fail("gl_FragData read");
+            return self.c.fail("gl_FragData read");
         }
         if matches!(
             name,
             "gl_FragCoord" | "gl_FrontFacing" | "gl_PointCoord" | "gl_FragDepth"
         ) {
-            return self.fail(name);
+            return self.c.fail(name);
         }
         let Some(sym) = self.symbols.get(name).cloned() else {
-            return self.fail(format!("the name {name}"));
+            return self.c.fail(format!("the name {name}"));
         };
         match sym {
             Sym::Local(local, kind, width) => {
@@ -1038,7 +892,8 @@ impl Lower<'_> {
             }
             Sym::Const(v, _) => Ok(v.into()),
             Sym::Argument(index) => {
-                let index = u32::try_from(index).or_else(|_| self.fail("more than 4294967295 arguments"))?;
+                let index =
+                    u32::try_from(index).or_else(|_| self.c.fail("more than 4294967295 arguments"))?;
                 let expr = self.b.app(E::FunctionArgument(index));
                 Ok(Val {
                     expr,
@@ -1049,25 +904,27 @@ impl Lower<'_> {
             }
             Sym::Loop(v) => Ok(v.into()),
             Sym::Constants(rows) => {
-                self.expect("[")?;
+                self.c.expect("[")?;
                 let index = self.expression()?;
-                self.expect("]")?;
+                self.c.expect("]")?;
                 self.constant_row(rows, index)
             }
-            Sym::Sampler(_) => self.fail(format!("the sampler {name} used as a value")),
-            Sym::PosFixup => {
-                self.fail("posFixup used outside the clip-space fix MojoShader ends a vertex program with")
-            }
+            Sym::Sampler(_) => self.c.fail(format!("the sampler {name} used as a value")),
+            Sym::PosFixup => self
+                .c
+                .fail("posFixup used outside the clip-space fix MojoShader ends a vertex program with"),
         }
     }
 
     /// Row `index` of the uniform array as four floats; past the array, zero (D3D9's relative addressing).
     fn constant_row(&mut self, rows: u32, index: V) -> Result<V> {
         let Some((global, _)) = self.constants else {
-            return self.fail("the uniform array is not declared");
+            return self.c.fail("the uniform array is not declared");
         };
         if index.v.kind != Kind::I || index.v.width != Width::One {
-            return self.fail("a constant row indexed by something that is not an integer");
+            return self
+                .c
+                .fail("a constant row indexed by something that is not an integer");
         }
         let pointer = self.b.global_ptr(global);
         if let Some(row) = index.literal {
@@ -1080,7 +937,7 @@ impl Lower<'_> {
                     let words = self.b.load(element, Kind::U, Width::Four);
                     Ok(self.b.bitcast(words, Kind::F).into())
                 }
-                None => self.fail(format!("constant row {row} of {rows}")),
+                None => self.c.fail(format!("constant row {row} of {rows}")),
             };
         }
         let row = self.b.bitcast(index.v, Kind::U);
@@ -1099,35 +956,37 @@ impl Lower<'_> {
     }
 
     fn arguments(&mut self) -> Result<Vec<V>> {
-        self.expect("(")?;
+        self.c.expect("(")?;
         let mut out = Vec::new();
-        if self.accept(")") {
+        if self.c.accept(")") {
             return Ok(out);
         }
         loop {
             out.push(self.expression()?);
-            if self.accept(")") {
+            if self.c.accept(")") {
                 return Ok(out);
             }
-            self.expect(",")?;
+            self.c.expect(",")?;
         }
     }
 
     fn call(&mut self, name: &str) -> Result<V> {
         if name == "texture2D" {
-            self.expect("(")?;
-            let sampler = self.ident()?;
-            self.expect(",")?;
+            self.c.expect("(")?;
+            let sampler = self.c.ident()?;
+            self.c.expect(",")?;
             let coordinate = self.expression()?;
-            self.expect(")")?;
+            self.c.expect(")")?;
             let Some(Sym::Sampler(index)) = self.symbols.get(&sampler).cloned() else {
-                return self.fail(format!("texture2D of {sampler}, which is not a sampler"));
+                return self
+                    .c
+                    .fail(format!("texture2D of {sampler}, which is not a sampler"));
             };
             if coordinate.v.kind != Kind::F || coordinate.v.width != Width::Two {
-                return self.fail("texture2D at a coordinate that is not two floats");
+                return self.c.fail("texture2D at a coordinate that is not two floats");
             }
             let Some(&Sampler { texture, sampler, .. }) = self.samplers.get(index) else {
-                return self.fail(format!(
+                return self.c.fail(format!(
                     "texture2D of {sampler}, which is sampler {index} of {}",
                     self.samplers.len()
                 ));
@@ -1157,10 +1016,10 @@ impl Lower<'_> {
             "vec2" | "vec3" | "vec4" | "ivec2" | "ivec3" | "ivec4" => self.construct(name, &args),
             "float" | "int" => {
                 let [a] = args.as_slice() else {
-                    return self.fail(format!("{name}() of {} arguments", args.len()));
+                    return self.c.fail(format!("{name}() of {} arguments", args.len()));
                 };
                 if a.v.width != Width::One {
-                    return self.fail(format!("{name}() of a vector"));
+                    return self.c.fail(format!("{name}() of a vector"));
                 }
                 let kind = if name == "float" { Kind::F } else { Kind::I };
                 Ok(if a.v.kind == kind {
@@ -1171,10 +1030,10 @@ impl Lower<'_> {
             }
             "dFdx" | "dFdy" => {
                 let [a] = args.as_slice() else {
-                    return self.fail(format!("{name} of {} arguments", args.len()));
+                    return self.c.fail(format!("{name} of {} arguments", args.len()));
                 };
                 if self.stage != Stage::Pixel {
-                    return self.fail(format!("{name} in a vertex program"));
+                    return self.c.fail(format!("{name} in a vertex program"));
                 }
                 let expr = self.b.app(E::Derivative {
                     axis: if name == "dFdx" {
@@ -1189,10 +1048,10 @@ impl Lower<'_> {
             }
             "any" | "all" => {
                 let [a] = args.as_slice() else {
-                    return self.fail(format!("{name} of {} arguments", args.len()));
+                    return self.c.fail(format!("{name} of {} arguments", args.len()));
                 };
                 if a.v.kind != Kind::B {
-                    return self.fail(format!("{name} of something that is not boolean"));
+                    return self.c.fail(format!("{name} of something that is not boolean"));
                 }
                 if a.v.width == Width::One {
                     return Ok(*a);
@@ -1214,10 +1073,12 @@ impl Lower<'_> {
             }
             "lessThan" | "lessThanEqual" | "greaterThan" | "greaterThanEqual" | "equal" | "notEqual" => {
                 let [a, b] = args.as_slice() else {
-                    return self.fail(format!("{name} of {} arguments", args.len()));
+                    return self.c.fail(format!("{name} of {} arguments", args.len()));
                 };
                 if a.v.kind != b.v.kind || a.v.width != b.v.width || a.v.kind == Kind::B {
-                    return self.fail(format!("{name} of values that differ in type or width"));
+                    return self
+                        .c
+                        .fail(format!("{name} of values that differ in type or width"));
                 }
                 let op = match name {
                     "lessThan" => Bo::Less,
@@ -1231,20 +1092,20 @@ impl Lower<'_> {
             }
             _ => {
                 let Some((fun, arity)) = builtin(name) else {
-                    return self.fail(format!("the function {name}"));
+                    return self.c.fail(format!("the function {name}"));
                 };
                 if args.len() != arity {
-                    return self.fail(format!("{name} of {} arguments", args.len()));
+                    return self.c.fail(format!("{name} of {} arguments", args.len()));
                 }
                 if args.iter().any(|a| a.v.kind != Kind::F) {
-                    return self.fail(format!("{name} of something that is not a float"));
+                    return self.c.fail(format!("{name} of something that is not a float"));
                 }
                 let widest = args.iter().map(|a| a.v.width).max().unwrap_or(Width::One);
                 if args
                     .iter()
                     .any(|a| a.v.width != Width::One && a.v.width != widest)
                 {
-                    return self.fail(format!("{name} of vectors of different widths"));
+                    return self.c.fail(format!("{name} of vectors of different widths"));
                 }
                 let vals: Vec<Val> = args.iter().map(|a| a.v).collect();
                 Ok(self.b.math(fun, &vals).into())
@@ -1256,7 +1117,7 @@ impl Lower<'_> {
     /// integer one, as GLSL's constructor does (truncating).
     fn construct(&mut self, name: &str, args: &[V]) -> Result<V> {
         let width = match name.chars().last().and_then(|c| c.to_digit(10)) {
-            Some(lanes) => Width::try_from(lanes).or_else(|e| self.fail(format!("{name}() of {e}")))?,
+            Some(lanes) => Width::try_from(lanes).or_else(|e| self.c.fail(format!("{name}() of {e}")))?,
             None => Width::Four,
         };
         let kind = if name.starts_with('i') { Kind::I } else { Kind::F };
@@ -1267,7 +1128,7 @@ impl Lower<'_> {
             } else if matches!(a.v.kind, Kind::F | Kind::I) {
                 self.b.convert(a.v, kind)
             } else {
-                return self.fail(format!("{name}() of a boolean"));
+                return self.c.fail(format!("{name}() of a boolean"));
             };
             for k in v.width.lanes() {
                 lanes.push(self.b.lane(v, k));
@@ -1279,7 +1140,7 @@ impl Lower<'_> {
                 Ok(v.into())
             }
             _ if lanes.len() == usize::from(width) => Ok(self.b.compose(&lanes).into()),
-            _ => self.fail(format!("{name}() of {} lanes", lanes.len())),
+            _ => self.c.fail(format!("{name}() of {} lanes", lanes.len())),
         }
     }
 
@@ -1473,22 +1334,6 @@ impl Lower<'_> {
             notes,
         })
     }
-}
-
-/// The lanes a swizzle names (`xyzw`, `rgba`, `stpq`), none when it is not one.
-fn swizzle_lanes(word: &str) -> Option<Vec<u8>> {
-    if word.is_empty() || word.len() > 4 {
-        return None;
-    }
-    word.chars()
-        .map(|c| match c {
-            'x' | 'r' | 's' => Some(0),
-            'y' | 'g' | 't' => Some(1),
-            'z' | 'b' | 'p' => Some(2),
-            'w' | 'a' | 'q' => Some(3),
-            _ => None,
-        })
-        .collect()
 }
 
 /// The built-in functions of the dialect that are one naga math function, and their number of arguments.

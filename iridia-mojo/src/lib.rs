@@ -6,11 +6,18 @@
 //! ([`iridia::emit::wgsl`]) or handed to any naga backend. It is not a GLSL front end. It reads exactly what the
 //! translation writes and refuses anything else by name ([`Error`], an [`iridia::Refusal`] naming the line).
 //!
+//! [`ir::lift`] lifts the same dialect onto an [`iridia_ir::Program`], with the same interface, resources and notes,
+//! and reads more of it: `samplerCube` and `sampler3D` (`textureCube`, `texture3D`), `break`, the fog varying
+//! (`varying float vFogFragCoord`), `bvec4` registers and the conversions of booleans (`float(a >= b)`,
+//! `vec4(greaterThanEqual(a, b))`). Its programs run as the Direct3D 9 programs MonoGame's MojoShader translated
+//! (`tests/ir.rs`, `tests/oracle.rs`). [`lift`], onto naga, stays until the IR path replaces it.
+//!
 //! The dialect: no `#version` (GLSL 1.10); `attribute` and `varying` declarations; registers as global `vec4` variables
-//! (`ps_r0`, and `vs_a0`, an `ivec4`); constants as `const` declarations and `#define` aliases of a
-//! `uniform vec4 ps_uniforms_vec4[N]` array; one statement per instruction on swizzled registers; `if`/`else`; `rep`
-//! loops with constant counts; relative addressing through `vs_a0`; `texture2D`; and the handful of built-in functions
-//! the translation emits.
+//! (`ps_r0`, and `vs_a0`, an `ivec4`); the varyings `vFrontColor`, `vFrontSecondaryColor`, `vFogFragCoord` and
+//! `vTexCoord<n>` (colours 0 and 1, the fog, texture coordinates); constants as `const` declarations and `#define`
+//! aliases of a `uniform vec4 ps_uniforms_vec4[N]` array; one statement per instruction on swizzled registers;
+//! `if`/`else`; `rep` loops with constant counts; relative addressing through `vs_a0`; `texture2D`; and the handful of
+//! built-in functions the translation emits.
 //!
 //! What the program is:
 //! - a vertex program reads its attributes (each a `vec4` argument named after the semantic the caller states in
@@ -78,8 +85,10 @@
 #[doc = include_str!("../README.md")]
 struct ReadmeExamples;
 
+pub mod ir;
 mod lex;
 mod lower;
+mod parse;
 
 use iridia::{Program, Stage};
 
