@@ -3,13 +3,13 @@
 //! derived from the HLSL by hand, every truncation refused, and a seeded mutation run that must never panic.
 mod inputs;
 
-use iridia::{
+use iridia_dxil::ir::lift;
+use iridia_exec::ProgramShader;
+use iridia_exec::{PixelShader, Sample};
+use iridia_ir::interface::{
     ConstantType, InterpMode, InterpSampling, ResourceKind, SampleType, ScalarType, SystemValue, TextureDim,
     Value,
 };
-use iridia_dxil::lift;
-use iridia_exec::ProgramShader;
-use iridia_exec::{PixelShader, Sample};
 
 const BLEND: &[u8] = include_bytes!("fixtures/blend.dxil");
 
@@ -320,7 +320,7 @@ fn integer_rounding_and_unary_operations_match_the_hlsl() {
 #[test]
 fn the_ops_fixture_lifts_to_the_outputs_it_writes() {
     let program = lift(OPS).unwrap();
-    program.validate().unwrap_or_else(|p| panic!("{p:?}"));
+    iridia_ir::validate(&program).unwrap_or_else(|p| panic!("{p:?}"));
     let outputs: Vec<_> = program
         .interface
         .outputs

@@ -5,7 +5,7 @@
 use dxbc_reader::decode;
 use dxbc_reader::decode::Declared;
 use dxcontainer::chunks;
-use iridia_dxbc::lift;
+use iridia_dxbc::ir::lift;
 
 fn fixture(name: &str) -> Vec<u8> {
     std::fs::read(format!("{}/tests/fixtures/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap()
@@ -202,10 +202,10 @@ fn an_instruction_with_another_operand_count_is_refused() {
 fn an_opcode_the_lifter_does_not_carry_is_refused_with_its_number() {
     let bytes = edited("tessellation.vs.dxbc", |w| {
         let at = instruction(w, "mov");
-        w[at] = (w[at] & !0x7ff) | 199;
+        w[at] = (w[at] & !0x7ff) | 121;
     });
-    // `dmov` takes two operands, as the `mov` it replaces: the reader accepts the instruction and the lifter does not carry it
-    assert!(refusal(&bytes).contains("opcode 199 is not lifted"));
+    // `bufinfo` takes two operands, as the `mov` it replaces: the reader accepts the instruction and the lifter does not carry it
+    assert!(refusal(&bytes).contains("opcode 121 is not lifted"));
 }
 
 #[test]
@@ -215,7 +215,7 @@ fn a_resource_operand_of_another_register_is_refused() {
         let at = instruction(w, "store_uav_typed");
         w[at + 1] &= !(255 << 12);
     });
-    assert!(refusal(&bytes).contains("operand 0 is Temp"));
+    assert!(refusal(&bytes).contains("Temp, where a typed unordered-access view is taken"));
 }
 
 #[test]
@@ -271,12 +271,12 @@ fn changed(name: &str, at: usize, was: u8, now: u8) -> Vec<u8> {
 }
 
 #[test]
-fn a_control_flow_construct_left_open_is_refused_at_the_word_that_opened_it() {
+fn a_control_flow_construct_left_open_is_refused() {
     // the opcode of an `endif` changed to another instruction's: its `if` is never closed
     let bytes = changed("compute_basic.od.dxbc", 796, 0x15, 0x95);
     let detail = refusal(&bytes);
     assert!(
-        detail.contains("if is not closed: the program ends without its endif"),
+        detail.contains("If { otherwise: false } is not closed at the end of the function"),
         "{detail}"
     );
 }

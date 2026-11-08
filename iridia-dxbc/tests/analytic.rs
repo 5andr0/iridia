@@ -5,7 +5,7 @@
 //! legacy evaluator's and now stand for the executor's.
 use dxbc_reader::decode;
 use dxbc_reader::decode::Declared;
-use iridia_dxbc::lift;
+use iridia_dxbc::ir::lift;
 use iridia_exec::ProgramShader;
 use iridia_exec::{Execution, PixelShader, Sample, Sampler};
 

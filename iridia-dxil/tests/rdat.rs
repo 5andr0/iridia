@@ -1,15 +1,15 @@
 #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 //! The subobjects of a library's runtime data as dxc wrote them, mapped into the interface vocabulary
 //! (`iridia_dxil::subobjects`), and carried by every program of the library the lift makes.
-use iridia::{HitGroup, HitGroupKind, Subobject};
 use iridia_dxil::subobjects;
+use iridia_ir::interface::{HitGroup, HitGroupKind, Subobject};
 
 /// `ray_subobjects.hlsl` as dxc compiled it (the whole library and one program of it each, `-exports`): the runtime data
 /// dxc wrote reads to the subobjects the source declares, every program of the library carries them, and the lifted
 /// program's facts name its own export.
 #[test]
 fn the_subobjects_dxc_wrote_are_the_ones_the_source_declares() {
-    use iridia::StageFacts;
+    use iridia_ir::interface::StageFacts;
     let fixture = |name: &str| {
         std::fs::read(
             std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -93,7 +93,7 @@ fn the_subobjects_dxc_wrote_are_the_ones_the_source_declares() {
         ]
     );
     for export in ["closest_hit", "any_hit", "intersection", "miss"] {
-        let program = iridia_dxil::lift(&fixture(&format!("ray_subobjects.{export}.dxil"))).unwrap();
+        let program = iridia_dxil::ir::lift(&fixture(&format!("ray_subobjects.{export}.dxil"))).unwrap();
         let StageFacts::RayTracing(facts) = &program.interface.facts else {
             panic!("{export}: {:?}", program.interface.facts)
         };

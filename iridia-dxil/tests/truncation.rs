@@ -1,6 +1,6 @@
 //! Every strict prefix of every DXIL fixture is refused: no length of a truncated container is read as a program, and
 //! none makes the reader panic. (`fixtures.rs` does this for one fixture; the corpus covers every stage and shader model.)
-use iridia_dxil::lift;
+use iridia_dxil::ir::lift;
 
 #[test]
 fn every_truncation_of_every_fixture_is_refused() {
@@ -13,7 +13,7 @@ fn every_truncation_of_every_fixture_is_refused() {
             continue;
         }
         let bytes = std::fs::read(&path).expect("a fixture");
-        // a fixture that is refused whole (a library the lifter has no model for) has no prefixes worth trying
+        // a fixture that is refused whole (a library of several programs) has no prefixes worth trying
         if lift(&bytes).is_err() {
             continue;
         }
