@@ -797,7 +797,7 @@ fn with_resinfo_return(bytes: &[u8], ret: u32) -> (Vec<u8>, usize) {
 
 /// `resinfo` against WARP, in each of its three return types: float and uint as `fxc` writes them, and `_rcpFloat`,
 /// which no compiler writes (the float program with its instructions' return type changed): the reciprocals of the
-/// size's lanes, the layers and the level count as they are. Each program runs through both lifts.
+/// size's lanes, the layers and the level count as they are. Each program runs on the IR lift.
 #[test]
 fn resinfo_agrees_with_warp() {
     let (Some(fxc), Some(warp)) = (program(Tool::Fxc), program(Tool::Warp)) else {
@@ -861,7 +861,7 @@ fn resinfo_agrees_with_warp() {
         ("resinfo_uint.dxbc", &uint),
         ("resinfo_rcp.dxbc", &rcp),
     ] {
-        if let Err(e) = iridia_dxbc::lift(bytes) {
+        if let Err(e) = iridia_dxbc::ir::lift(bytes) {
             panic!("{name}: {e}");
         }
         run_program(name, bytes, 4, true, &tools, &mut t);
@@ -1003,7 +1003,7 @@ float4 main(float4 pos : SV_Position, float4 s : SELECT) : SV_Target {
 /// `ps_4_0` program and a `ps_5_0` one alike.
 const FALLING: [usize; 6] = [1, 4, 6, 7, 8, 10];
 
-/// [`SWITCH_HLSL`] as `ps_4_0` and `ps_5_0` against WARP, through both lifts; with [`FALLING`]'s breaks made `nop`,
+/// [`SWITCH_HLSL`] as `ps_4_0` and `ps_5_0` against WARP on the IR lift; with [`FALLING`]'s breaks made `nop`,
 /// the IR lift refuses each by name.
 #[test]
 fn switches_agree_with_warp_and_a_falling_case_is_refused() {
@@ -1056,7 +1056,7 @@ fn switches_agree_with_warp_and_a_falling_case_is_refused() {
         ("switch_breaks4.dxbc", &breaks4),
         ("switch_breaks5.dxbc", &breaks5),
     ] {
-        if let Err(e) = iridia_dxbc::lift(bytes) {
+        if let Err(e) = iridia_dxbc::ir::lift(bytes) {
             panic!("{name}: {e}");
         }
         run_program(name, bytes, 48, true, &tools, &mut t);
@@ -1106,7 +1106,7 @@ Out main(float4 p : SV_Position, float4 s : SELECT) {
 "#;
 
 /// [`DOUBLES_HLSL`] against WARP through the IR lift: each double's bits exact, each conversion to float within the
-/// comparison's tolerance (`drcp` is within one unit in the last place). The older lift refuses the program.
+/// comparison's tolerance (`drcp` is within one unit in the last place).
 #[test]
 fn doubles_agree_with_warp() {
     let (Some(fxc), Some(warp)) = (program(Tool::Fxc), program(Tool::Warp)) else {
@@ -1153,7 +1153,6 @@ fn doubles_agree_with_warp() {
     ] {
         assert!(names.contains(name), "fxc wrote no {name}");
     }
-    assert!(iridia_dxbc::lift(&bytes).is_err(), "the older lift takes doubles");
     let tools = (fxc, warp, scratch);
     let mut t = Tally::default();
     run_program("doubles.dxbc", &bytes, 64, true, &tools, &mut t);
@@ -1178,7 +1177,7 @@ uint4 main(float4 p : SV_Position, nointerpolation uint4 b : BITS) : SV_Target {
 }
 "#;
 
-/// [`DENORMAL_MOVES_HLSL`] against WARP through both lifts, every lane exact: which moves keep a denormal and which
+/// [`DENORMAL_MOVES_HLSL`] against WARP on the IR lift, every lane exact: which moves keep a denormal and which
 /// flush it are Direct3D's.
 #[test]
 fn denormals_through_moves_agree_with_warp() {
@@ -1241,7 +1240,6 @@ impl iridia_exec::Backend for Holding {
 
 /// [`MIXED_MIN_MAX_HLSL`] through the IR lift on words that start at 5: `imin` and `imax` compare as signed, `umin`
 /// and `umax` as unsigned (-1 is the largest), as their definitions state (the Direct3D 11.3 specification, 22.17).
-/// The older lift refuses it by name: its atomics compare as the memory's one type.
 #[test]
 fn a_buffer_takes_signed_and_unsigned_minimums() {
     let Some(fxc) = program(Tool::Fxc) else {
@@ -1264,8 +1262,6 @@ fn a_buffer_takes_signed_and_unsigned_minimums() {
         String::from_utf8_lossy(&compiled.stderr)
     );
     let bytes = std::fs::read(&out).unwrap();
-    let refused = iridia_dxbc::lift(&bytes).unwrap_err().to_string();
-    assert!(refused.contains("on memory whose atomics are"), "{refused}");
     let program = iridia_dxbc::ir::lift(&bytes).unwrap();
     let exe = iridia_exec::Executable::from_ir(&program).unwrap();
     let id = program.interface.resources[0].id;
@@ -1285,7 +1281,7 @@ uint4 main(float4 p : SV_Position, uint f : SV_IsFrontFace) : SV_Target {
 }
 "#;
 
-/// [`FRONT_FACE_HLSL`] against WARP through both lifts, on front and back faces: the flag's word is Direct3D's.
+/// [`FRONT_FACE_HLSL`] against WARP on the IR lift, on front and back faces: the flag's word is Direct3D's.
 #[test]
 fn a_front_face_flag_is_all_ones() {
     let (Some(fxc), Some(warp)) = (program(Tool::Fxc), program(Tool::Warp)) else {
@@ -1381,7 +1377,7 @@ impl Sampler for Effects {
 }
 
 /// A pixel discarded changes no memory after its `discard` and keeps what it changed before (the Direct3D 11.3
-/// specification, 16.13), in both lifts: the program writes a structured buffer, a texture and atomics either side.
+/// specification, 16.13), on the IR lift: the program writes a structured buffer, a texture and atomics either side.
 #[test]
 fn a_discarded_pixel_changes_no_memory_after_it() {
     let Some(fxc) = program(Tool::Fxc) else {
@@ -1478,7 +1474,7 @@ Out main(float4 p : POSITION, float4 q : TEXCOORD0) {
 "#;
 
 /// The register view of a program whose clip distances are an array of several: the outputs after them are their own
-/// (each distance one result member), in both lifts.
+/// (each distance one result member), on the IR lift.
 #[test]
 fn outputs_after_several_clip_distances_are_their_own() {
     let Some(fxc) = program(Tool::Fxc) else {
@@ -1554,7 +1550,7 @@ float4 main(float4 pos : SV_Position) : SV_Target {
 "#;
 
 /// Two texture views of a Shader Model 5.1 program at registers other than their ids (`U0[3:3]`, `U1[5:5]`): each
-/// store reaches the view at its register, in both lifts and at 5.0 alike.
+/// store reaches the view at its register, on the IR lift and at 5.0 alike.
 const UAV_REGISTERS_HLSL: &str = r#"
 RWTexture2D<float> u : register(u3);
 RWTexture2D<float4> v : register(u5);
@@ -1616,7 +1612,7 @@ fn a_view_is_stored_at_its_register_not_its_id() {
 }
 
 /// A pixel program's store to a typed buffer reaches its sampler as the element and the element's lanes ([`Store`]'s
-/// typed address), in both lifts: `u[1]` is element 1, not word 4; an atomic on `v[5]` is element 5.
+/// typed address), on the IR lift: `u[1]` is element 1, not word 4; an atomic on `v[5]` is element 5.
 ///
 /// [`Store`]: iridia_exec::Store
 #[test]
