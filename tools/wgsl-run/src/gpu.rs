@@ -1139,8 +1139,10 @@ fn main(@builtin(sample_index) s: u32) -> {fragment}
             .get_mapped_range()
             .map_err(|e| Failure::Error(format!("mapping a copy: {e}")))?;
         let words = |b: &[u8]| -> Vec<u32> {
-            b.chunks_exact(4)
-                .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+            b.as_chunks::<4>()
+                .0
+                .iter()
+                .map(|c| u32::from_le_bytes(*c))
                 .collect()
         };
         let out = match layout {

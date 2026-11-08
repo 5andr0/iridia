@@ -21,3 +21,8 @@ wgpu = { version = "=30.0.1", default-features = false, features = ["dx12", "nag
 
 [lints.rust]
 unsafe_code = "deny"
+
+# a program that reads its arguments, standard input and the environment: the library rules of clippy.toml do not apply
+[lints.clippy]
+disallowed_methods = "allow"
+disallowed_types = "allow"

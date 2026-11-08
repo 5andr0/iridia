@@ -15,6 +15,9 @@ step() {
 [ -n "${GAME_DATA:-}" ] || echo "GAME_DATA is not set: the tests that read game data skip"
 step cargo fmt --all --check
 step cargo clippy --workspace --all-targets --locked -- -D warnings
+# tools/wgsl-run is a workspace of its own (wgpu stays out of the lockfile): checked by its manifest
+step cargo fmt --manifest-path tools/wgsl-run/Cargo.toml --check
+step cargo clippy --manifest-path tools/wgsl-run/Cargo.toml --all-targets --locked -- -D warnings
 if cargo nextest --version >/dev/null 2>&1; then
   step cargo nextest run --workspace --locked --release
   step cargo test --workspace --locked --release --doc

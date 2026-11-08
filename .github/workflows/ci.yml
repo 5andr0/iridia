@@ -17,6 +17,10 @@ jobs:
           components: rustfmt, clippy
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      # tools/wgsl-run is a workspace of its own; it drives Direct3D 12, so it is built where that exists
+      - run: cargo fmt --manifest-path tools/wgsl-run/Cargo.toml --check
+      - run: cargo clippy --manifest-path tools/wgsl-run/Cargo.toml --all-targets --locked -- -D warnings
+        if: runner.os == 'Windows'
       - run: cargo test --workspace --locked
       - run: cargo doc --workspace --no-deps --locked
         env:
