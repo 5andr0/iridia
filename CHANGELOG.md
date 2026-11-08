@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `iridia-passes`: `flatten_sampler_heaps`, each array of samplers (a Shader Model 6 sampler heap, indexed at run time)
+  made one sampler, for a pipeline that binds one: the program's notes say every index reads the same sampler. It is
+  the older writer's `single_samplers` option as a pass over the IR.
 - `iridia-passes`: `clip_distances_as_varyings` and `discard_clipped`, the clip distances of a vertex program carried as
   plain varyings for a pipeline whose clipper cannot take them (WebGPU without `clip-distances`), and the pixel
   program's discard on them. Each `SV_ClipDistance` output becomes an ordinary varying of the same label and width, code

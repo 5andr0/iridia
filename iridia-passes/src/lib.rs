@@ -4,6 +4,7 @@
 //! - [`clip_distances_as_varyings`], [`discard_clipped`]: clip distances carried as plain varyings, and the pixel
 //!   program's discard on them.
 //! - [`break_flags`]: exits innermost-only `break` and `continue` cannot take, routed through a jump variable.
+//! - [`flatten_sampler_heaps`]: arrays of samplers made one sampler.
 //! - [`flatten`]: a `Regions` body made a `Cfg`, the form a graph-shaped source lifts to.
 //! - [`fold`]: values computed from literals, where every target computes them alike, made literals.
 //! - [`prepare`]: the sequence every output and executor takes a lifted program through: `structurize`, `promote`,
@@ -35,6 +36,7 @@ mod fold;
 mod material;
 mod prepare;
 mod promote;
+mod sampler_heap;
 mod simplify;
 mod specialise;
 pub mod structure;
@@ -47,6 +49,7 @@ pub use fold::fold;
 pub use material::{SpecialiseError, Specialised, Words, feature_words, specialise};
 pub use prepare::prepare;
 pub use promote::promote;
+pub use sampler_heap::flatten_sampler_heaps;
 pub use simplify::simplify;
 pub use specialise::specialise_state;
 pub use structurize::structurize;
