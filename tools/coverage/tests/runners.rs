@@ -413,6 +413,22 @@ fn sixteen_bit_lanes_of_a_structured_buffer_run_on_the_ir() {
     }
 }
 
+/// A comparison gather compares the lane its component names, as the view's component mapping gives it: with the shadow
+/// texture viewed `0r00`, `GatherCmpGreen` compares the depths (the view's green is the texture's red), not the view's
+/// red, which is 0.
+#[test]
+fn a_comparison_gather_compares_the_lane_of_its_component() {
+    for cases in ["vkd3d/dxbc.json.gz", "vkd3d/dxil.json.gz"] {
+        let runs = vkd3d_runs(cases, "gather-cmp.shader_test");
+        assert!(
+            runs.iter()
+                .any(|r| r.runner.starts_with("d3d12") && r.probes.iter().any(|p| p.selected && p.line == 74)),
+            "{cases}: a Direct3D 12 run probes line 74, the swizzled green gather"
+        );
+        assert_selected_pass(&runs);
+    }
+}
+
 /// `Texture2DMS::GetDimensions` reads the sample count from the fourth lane of DXIL's `getDimensions`, which is the
 /// level count only for a texture that is not multisampled.
 #[test]

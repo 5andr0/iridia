@@ -14,9 +14,9 @@
 //! - A cube is sampled on the face of the coordinate's major axis (7.18.6, Table 7.18.6.1). A linear tap past a face's
 //!   edge reads the texel of the face its direction falls on, as a seamless cube does (7.18.6.4); a tap past a corner
 //!   reads the mean of the corner's two other texels.
-//! - A comparison compares each texel's first lane with the reference (a texel that passes is 1, one that fails 0)
-//!   before filtering (7.18.13); a minimum or maximum reduction takes the least or greatest of the texels a linear
-//!   filter weighs (not 0).
+//! - A comparison compares each texel's first lane, as the view's component mapping gives it, with the reference (a
+//!   gather's, the lane its component names; a texel that passes is 1, one that fails 0) before filtering (7.18.13); a
+//!   minimum or maximum reduction takes the least or greatest of the texels a linear filter weighs (not 0).
 use super::resource::{Dim, Resource};
 use crate::vkd3d::cases::SamplerDesc;
 
@@ -294,6 +294,8 @@ struct Level<'a> {
     layer: u32,
     s: &'a Sampler,
     reference: Option<f32>,
+    /// The lane of a texel a comparison compares: the first, or a gather's component.
+    compare_lane: usize,
 }
 
 impl Level<'_> {
@@ -316,7 +318,11 @@ impl Level<'_> {
     fn compared(&self, t: [f32; 4]) -> [f32; 4] {
         match (self.reference, self.s.reduction) {
             (Some(reference), Reduction::Comparison(c)) => {
-                let pass = if c.passes(reference, t[0]) { 1.0 } else { 0.0 };
+                let pass = if c.passes(reference, t[self.compare_lane]) {
+                    1.0
+                } else {
+                    0.0
+                };
                 [pass, pass, pass, pass]
             }
             _ => t,
@@ -444,12 +450,11 @@ impl Level<'_> {
         let y = (c[1] - 0.5).floor() as i64 + i64::from(offset[1]);
         let z = c[2].floor() as i64;
         let k = usize::from(component.min(3));
-        let comp = if self.reference.is_some() { 0 } else { k };
         [
-            fetch([x, y + 1, z])[comp],
-            fetch([x + 1, y + 1, z])[comp],
-            fetch([x + 1, y, z])[comp],
-            fetch([x, y, z])[comp],
+            fetch([x, y + 1, z])[k],
+            fetch([x + 1, y + 1, z])[k],
+            fetch([x + 1, y, z])[k],
+            fetch([x, y, z])[k],
         ]
     }
 }
@@ -511,6 +516,7 @@ pub fn sample(r: &Resource, s: &Sampler, req: &Request, one_d: bool) -> [f32; 4]
         layer,
         s,
         reference: req.reference,
+        compare_lane: req.gather.map_or(0, |component| usize::from(component.min(3))),
     };
     let at_level = |l: u32| -> [f32; 4] {
         let lv = level_at(l);
