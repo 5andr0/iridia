@@ -2,18 +2,28 @@
 //! Lifting the D3D behaviour fixture (tests/fixtures/modes.hlsl, our own HLSL, compiled with fxc /T ps_5_0 /E main):
 //! the interface and resources as worked out from the HLSL, and the D3D behaviours present in the lifted body as
 //! plain operations.
-use iridia::{BufferKind, D3dClass, ResourceKind, ScalarType, Stage, SystemValue};
-use iridia_dxbc::lift;
+use iridia_dxbc::ir::lift;
+use iridia_ir::interface::{
+    Access, BufferKind, D3dClass, ResourceKind, SampleType, ScalarType, Stage, StageFacts, StorageTarget,
+    SystemValue, TextureDim,
+};
+use iridia_ir::{Op, Unary};
+use iridia_wgsl::{Profile, wgsl};
+
+/// The program in the form the writers take, written for naga's WGSL reader.
+fn written(program: &mut iridia_ir::Program) -> String {
+    iridia_passes::prepare(program).unwrap_or_else(|e| panic!("{e}"));
+    wgsl(program, &Profile::NAGA).unwrap_or_else(|e| panic!("{e}"))
+}
 
 const MODES: &[u8] = include_bytes!("fixtures/modes.dxbc");
 
 #[test]
 fn the_fixture_lifts_validates_and_writes_wgsl() {
-    let program = lift(MODES).unwrap();
+    let mut program = lift(MODES).unwrap();
     assert_eq!(program.stage, Stage::Pixel);
     assert_eq!(program.provenance.target, "ps_5_0");
-    assert!(program.modes.divide_by_zero && program.modes.float_to_int && program.modes.min_max_nan);
-    program.validate().unwrap_or_else(|p| panic!("{p:?}"));
+    iridia_ir::validate(&program).unwrap_or_else(|p| panic!("{p:?}"));
 
     // the program takes SV_Position as a parameter but never reads it: the signature lists it, and it is unused
     let inputs: Vec<_> = program
@@ -58,7 +68,7 @@ fn the_fixture_lifts_validates_and_writes_wgsl() {
     assert_eq!(names, [("f", 0), ("u", 16), ("i", 32)]);
     let _ = BufferKind::Raw;
 
-    let wgsl = iridia::emit::wgsl(&program).unwrap();
+    let wgsl = written(&mut program);
     // NaN is tested on its bits (never `x != x`, which a driver may fold away): |x| bits above the infinity's
     assert!(
         wgsl.contains("2147483647u") && wgsl.contains("2139095040u"),
@@ -69,19 +79,14 @@ fn the_fixture_lifts_validates_and_writes_wgsl() {
 }
 
 #[test]
-fn the_text_form_names_what_the_lift_decided() {
-    let text = lift(MODES).unwrap().text().unwrap();
-    assert!(
-        text.contains("// d3d divide_by_zero=true float_to_int=true min_max_nan=true saturate_nan=true"),
-        "{text}"
-    );
-    assert!(
-        text.contains(&format!(
-            "// source Dxbc ps_5_0 lifted by iridia-dxbc {}",
-            iridia_dxbc::LIFTER_VERSION
-        )),
-        "{text}"
-    );
+fn the_provenance_names_what_the_lift_decided() {
+    // the IR states D3D's behaviours as plain operations (the WGSL checks above find them), and what the lift chose
+    // between implementation-defined ones as policies beside where the program came from
+    let provenance = lift(MODES).unwrap().provenance;
+    assert_eq!(provenance.format, iridia_ir::interface::ShaderFormat::Dxbc);
+    assert_eq!(provenance.target, "ps_5_0");
+    assert_eq!(provenance.lifter_version, iridia_dxbc::ir::LIFTER_VERSION);
+    assert_eq!(provenance.policies, ["dxbc.mul=ieee"]);
 }
 
 /// A ps_5_0 container around `body` (declarations and instructions), with empty signatures.
@@ -141,23 +146,18 @@ fn a_destination_that_aliases_the_source_does_not_change_the_second_result() {
         instruction(62, &[]),
     ]);
     let program = lift(&container).unwrap();
-    program.validate().unwrap_or_else(|p| panic!("{p:?}"));
-    let function = &program.module.entry_points[0].function;
-    let argument_of = |wanted: naga::MathFunction| {
-        function.expressions.iter().find_map(|(_, e)| match e {
-            naga::Expression::Math { fun, arg, .. } if *fun == wanted => Some(*arg),
+    iridia_ir::validate(&program).unwrap_or_else(|p| panic!("{p:?}"));
+    let argument_of = |wanted: Unary| {
+        program.entry.values.iter().find_map(|v| match v.op {
+            Op::Unary(op, arg) if op == wanted => Some(arg),
             _ => None,
         })
     };
-    let base_of = |h| match &function.expressions[h] {
-        naga::Expression::AccessIndex { base, .. } => *base,
-        other => panic!("{other:?}"),
-    };
     let (sin, cos) = (
-        argument_of(naga::MathFunction::Sin).unwrap(),
-        argument_of(naga::MathFunction::Cos).unwrap(),
+        argument_of(Unary::FSin).unwrap(),
+        argument_of(Unary::FCos).unwrap(),
     );
-    assert_eq!(base_of(sin), base_of(cos), "both read the one loaded source");
+    assert_eq!(sin, cos, "both read the one loaded source");
 }
 
 /// A typed unordered-access texture view, stored to and loaded from: `dcl_uav_typed_texture2d (float,float,float,
@@ -186,41 +186,44 @@ fn a_typed_view_is_a_storage_image_stored_and_loaded() {
         instruction(163, &load),
         instruction(62, &[]),
     ]);
-    let program = lift(&container).unwrap();
-    program.validate().unwrap_or_else(|p| panic!("{p:?}"));
+    let mut program = lift(&container).unwrap();
+    iridia_ir::validate(&program).unwrap_or_else(|p| panic!("{p:?}"));
     let [resource] = program.interface.resources.as_slice() else {
         panic!("{:?}", program.interface.resources)
     };
     assert_eq!(resource.provenance.name, "u3");
     assert_eq!(
         resource.provenance.d3d.map(|b| (b.class, b.register)),
-        Some((iridia::D3dClass::UnorderedAccess, 3))
+        Some((D3dClass::UnorderedAccess, 3))
     );
     assert_eq!(
         resource.kind,
         ResourceKind::Storage {
-            target: iridia::StorageTarget::Image {
-                dim: iridia::TextureDim::D2,
+            target: StorageTarget::Image {
+                dim: TextureDim::D2,
                 arrayed: false,
-                sample: iridia::SampleType::Float,
+                sample: SampleType::Float,
             },
-            access: iridia::Access::ReadWrite,
+            access: Access::ReadWrite,
         }
     );
-    let wgsl = iridia::emit::wgsl(&program).unwrap();
-    assert!(wgsl.contains("@group(3) @binding(3)"), "{wgsl}");
-    assert!(
-        wgsl.contains("texture_storage_2d<rgba32float,read_write>"),
-        "{wgsl}"
-    );
-    assert!(wgsl.contains("textureStore(u3_"), "{wgsl}");
-    assert!(wgsl.contains("textureLoad(u3_"), "{wgsl}");
+    // the load's result is unused, so the writers' form drops it: it is in the lift
     assert!(
         program
-            .notes
+            .entry
+            .values
             .iter()
-            .any(|n| n.contains("storage image of four 32-bit lanes"))
+            .any(|v| matches!(v.op, Op::LoadTexel { .. })),
+        "{:?}",
+        program.entry.values
     );
+    let wgsl = written(&mut program);
+    assert!(wgsl.contains("@group(3) @binding(3)"), "{wgsl}");
+    assert!(
+        wgsl.contains("texture_storage_2d<rgba32float, read_write>"),
+        "{wgsl}"
+    );
+    assert!(wgsl.contains("textureStore(u3"), "{wgsl}");
 }
 
 /// A store through a view with a partial write mask would keep the other lanes, which a store of four lanes cannot:
@@ -241,7 +244,7 @@ fn a_partial_write_mask_on_a_view_is_refused() {
         instruction(62, &[]),
     ]);
     let e = lift(&container).unwrap_err();
-    assert!(e.detail.contains("partial write mask"), "{e}");
+    assert!(e.detail.contains("a typed store whose mask is not .xyzw"), "{e}");
 }
 
 const COMPUTE: [&[u8]; 2] = [
@@ -254,11 +257,11 @@ const COMPUTE: [&[u8]; 2] = [
 #[test]
 fn the_compute_fixture_lifts_validates_and_writes_wgsl() {
     for (name, container) in ["default", "/Od"].into_iter().zip(COMPUTE) {
-        let program = lift(container).unwrap_or_else(|e| panic!("{name}: {e}"));
-        program.validate().unwrap_or_else(|p| panic!("{name}: {p:?}"));
+        let mut program = lift(container).unwrap_or_else(|e| panic!("{name}: {e}"));
+        iridia_ir::validate(&program).unwrap_or_else(|p| panic!("{name}: {p:?}"));
         assert_eq!(program.stage, Stage::Compute, "{name}");
         assert_eq!(program.provenance.target, "cs_5_0", "{name}");
-        assert_eq!(program.module.entry_points[0].workgroup_size, [8, 4, 2], "{name}");
+        assert_eq!(program.workgroup, Some([8, 4, 2]), "{name}");
         let systems: Vec<_> = program.interface.inputs.iter().filter_map(|v| v.system).collect();
         for id in [
             SystemValue::GroupId,
@@ -275,7 +278,7 @@ fn the_compute_fixture_lifts_validates_and_writes_wgsl() {
             .iter()
             .filter_map(|r| match &r.kind {
                 ResourceKind::Storage {
-                    target: iridia::StorageTarget::Buffer(kind),
+                    target: StorageTarget::Buffer(kind),
                     ..
                 } => Some((r.provenance.d3d.unwrap().register, *kind)),
                 _ => None,
@@ -333,7 +336,7 @@ fn the_compute_fixture_lifts_validates_and_writes_wgsl() {
             [("scale", 0)],
             "{name}"
         );
-        let wgsl = iridia::emit::wgsl(&program).unwrap();
+        let wgsl = written(&mut program);
         for needle in [
             "@compute @workgroup_size(8, 4, 2)",
             "var<workgroup>",
@@ -351,16 +354,13 @@ fn the_compute_fixture_lifts_validates_and_writes_wgsl() {
 /// declared, so the program has the most any of them declares.
 #[test]
 fn a_hull_program_whose_phases_declare_different_temporaries_lifts() {
-    let program = lift(include_bytes!("fixtures/hull_phases.hs.dxbc")).unwrap_or_else(|e| panic!("{e}"));
-    program.validate().unwrap_or_else(|p| panic!("{p:?}"));
+    let mut program = lift(include_bytes!("fixtures/hull_phases.hs.dxbc")).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(program.stage, Stage::Hull);
-    // on the IR too, and each phase's function compiles for the executor
-    let mut ir = iridia_dxbc::ir::lift(include_bytes!("fixtures/hull_phases.hs.dxbc"))
-        .unwrap_or_else(|e| panic!("{e}"));
-    iridia_passes::prepare(&mut ir).unwrap_or_else(|e| panic!("{e}"));
-    iridia_ir::validate(&ir).unwrap_or_else(|p| panic!("{p:?}"));
+    // each phase's function compiles for the executor
+    iridia_passes::prepare(&mut program).unwrap_or_else(|e| panic!("{e}"));
+    iridia_ir::validate(&program).unwrap_or_else(|p| panic!("{p:?}"));
     for name in ["main", "patch_constant"] {
-        iridia_exec::Executable::function_from_ir(&ir, name).unwrap_or_else(|e| panic!("{name}: {e}"));
+        iridia_exec::Executable::function_from_ir(&program, name).unwrap_or_else(|e| panic!("{name}: {e}"));
     }
 }
 
@@ -382,19 +382,44 @@ fn a_patch_constant_signature_in_a_psg1_part_lifts_as_the_pcsg_one_does() {
             Stage::Domain,
         ),
     ] {
-        let from_psg1 = lift(min16).unwrap_or_else(|e| panic!("{stage:?}: {e}"));
+        let mut from_psg1 = lift(min16).unwrap_or_else(|e| panic!("{stage:?}: {e}"));
         let from_pcsg = lift(plain).unwrap_or_else(|e| panic!("{stage:?}: {e}"));
-        from_psg1.validate().unwrap_or_else(|p| panic!("{p:?}"));
+        iridia_ir::validate(&from_psg1).unwrap_or_else(|p| panic!("{p:?}"));
         assert_eq!(from_psg1.stage, stage);
-        // both are tessellation programs, written as functions; the text forms differ in the container's digest and
-        // in the note that the minimum precision operands are computed at 32 bits
-        let wgsl = iridia::emit::wgsl_functions(&from_psg1).unwrap_or_else(|e| panic!("{stage:?}: {e}"));
+        // both are tessellation programs of the same source: the same functions, interface and patch constants (the
+        // PCDATA0 varying); they differ in the container's digest and in the note that the minimum precision operands
+        // are computed at 32 bits
+        assert_eq!(from_psg1.interface, from_pcsg.interface, "{stage:?}");
         assert_eq!(
-            wgsl,
-            iridia::emit::wgsl_functions(&from_pcsg).unwrap(),
+            iridia_ir::text::print(&from_psg1.entry),
+            iridia_ir::text::print(&from_pcsg.entry),
             "{stage:?}"
         );
-        assert!(wgsl.contains("PCDATA0_"), "{stage:?}");
-        assert!(from_psg1.text().unwrap().contains("min-precision"), "{stage:?}");
+        assert_eq!(
+            from_psg1.patch.as_ref().map(iridia_ir::text::print),
+            from_pcsg.patch.as_ref().map(iridia_ir::text::print),
+            "{stage:?}"
+        );
+        let patch_constants = match &from_psg1.interface.facts {
+            StageFacts::Hull(h) => &h.patch_constants,
+            StageFacts::Domain(d) => &d.patch_constants,
+            other => panic!("{stage:?}: {other:?}"),
+        };
+        assert!(
+            patch_constants.iter().any(|v| v.label.name == "PCDATA"),
+            "{stage:?}"
+        );
+        assert!(
+            from_psg1.notes.iter().any(|n| n.contains("min-precision")),
+            "{stage:?}"
+        );
+        // neither IR writer writes the functions of a stage with no entry point yet (the naga-path writer did): the
+        // refusal names the stage, so a writer that learns to write it fails here and this test gets its text check back
+        iridia_passes::prepare(&mut from_psg1).unwrap_or_else(|e| panic!("{stage:?}: {e}"));
+        let refusal = wgsl(&from_psg1, &Profile::NAGA).unwrap_err().to_string();
+        assert!(
+            refusal.contains(&format!("{stage:?} program is not")),
+            "{stage:?}: {refusal}"
+        );
     }
 }

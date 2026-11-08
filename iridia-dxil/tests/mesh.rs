@@ -1,9 +1,9 @@
 #![allow(clippy::unwrap_used)]
 //! The mesh fixture (`mesh.hlsl`: a quad as two triangles, a thread group of 32) in each build: its facts are the ones the
-//! entry point states, it is a mesh entry point with D3D's thread group and the group index as its one argument, it
-//! validates and is written as WGSL with the mesh stage's attributes, and its IR lift draws the quad the HLSL writes.
-use iridia::{MeshFacts, MeshTopology, Stage, StageFacts};
-use iridia_dxil::lift;
+//! entry point states, it is a mesh program with D3D's thread group and the group index as its one input, it validates
+//! and is refused by name by the IR's WGSL writers, and its IR lift draws the quad the HLSL writes.
+use iridia_dxil::ir::lift;
+use iridia_ir::interface::{MeshFacts, MeshTopology, Stage, StageFacts};
 
 #[test]
 fn a_mesh_program_is_a_mesh_entry_point_with_its_facts() {
@@ -14,7 +14,7 @@ fn a_mesh_program_is_a_mesh_entry_point_with_its_facts() {
                 .join(name),
         )
         .unwrap();
-        let p = lift(&bytes).unwrap_or_else(|e| panic!("{name}: {e}"));
+        let mut p = lift(&bytes).unwrap_or_else(|e| panic!("{name}: {e}"));
         assert_eq!(p.stage, Stage::Mesh, "{name}");
         assert_eq!(
             p.interface.facts,
@@ -26,18 +26,14 @@ fn a_mesh_program_is_a_mesh_entry_point_with_its_facts() {
             }),
             "{name}"
         );
-        let [entry] = p.module.entry_points.as_slice() else {
-            panic!("{name}")
-        };
-        assert_eq!(entry.stage, naga::ShaderStage::Mesh, "{name}");
-        assert_eq!(entry.workgroup_size, [32, 1, 1], "{name}");
-        let arguments: Vec<_> = entry
-            .function
-            .arguments
+        assert_eq!(p.workgroup, Some([32, 1, 1]), "{name}");
+        let inputs: Vec<_> = p
+            .interface
+            .inputs
             .iter()
-            .map(|a| a.name.as_deref().unwrap_or(""))
+            .map(|v| format!("{}{}", v.label.name, v.label.index))
             .collect();
-        assert_eq!(arguments, ["SV_GroupIndex0"], "{name}");
+        assert_eq!(inputs, ["SV_GroupIndex0"], "{name}");
         let outputs: Vec<_> = p
             .interface
             .outputs
@@ -45,11 +41,20 @@ fn a_mesh_program_is_a_mesh_entry_point_with_its_facts() {
             .map(|v| v.label.name.as_str())
             .collect();
         assert_eq!(outputs, ["SV_Position", "COLOR"], "{name}");
-        p.validate().unwrap_or_else(|e| panic!("{name}: {e:?}"));
-        let wgsl = iridia::emit::wgsl(&p).unwrap();
-        assert!(wgsl.contains("@mesh(mesh_output)"), "{name}: {wgsl}");
-        assert!(wgsl.contains("@workgroup_size(32, 1, 1)"), "{name}");
-        assert!(wgsl.contains("@builtin(triangle_indices)"), "{name}");
+        iridia_ir::validate(&p).unwrap_or_else(|e| panic!("{name}: {e:?}"));
+        // neither IR writer writes a mesh program yet (the naga-path writer did, with the mesh stage's attributes): the
+        // refusal names the stage, so a writer that learns to write it fails here and this test gets its text check back
+        iridia_passes::prepare(&mut p).unwrap_or_else(|e| panic!("{name}: {e}"));
+        for refusal in [
+            iridia_wgsl::wgsl(&p, &iridia_wgsl::Profile::BROWSER)
+                .unwrap_err()
+                .to_string(),
+            iridia_naga::wgsl(&p, &iridia_naga::Profile::NAGA)
+                .unwrap_err()
+                .to_string(),
+        ] {
+            assert!(refusal.contains("Mesh program is not"), "{name}: {refusal}");
+        }
     }
 }
 
