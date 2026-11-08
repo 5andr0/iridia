@@ -241,9 +241,7 @@ fn what_the_ir_lift_makes_of_its_programs_is_the_versions() {
 }
 
 /// Each fixture's GLSL beside the Direct3D 9 program it was made from, run in both executors on seeded inputs: the
-/// class each pair gives. `colour.ps`'s `pow` is naga's in the older lift, which `iridia-exec` computes otherwise; the
-/// older lift reads none of `reach.ps` (a cube and a volume sample, `break`), `skin.vs` or `step.vs` (the fog varying,
-/// a float).
+/// class each pair gives.
 #[test]
 fn the_fixtures_glsl_runs_as_the_d3d9_programs_it_was_made_from() {
     let mut classes = Vec::new();
@@ -262,23 +260,16 @@ fn the_fixtures_glsl_runs_as_the_d3d9_programs_it_was_made_from() {
         assert!(class.starts_with("agree"), "{class}: {example}");
         classes.push((line.name.clone(), class));
     }
-    let refused = format!("{}; the older lift (A) refuses it", pairing::AGREE);
     let expected = [
-        (
-            "colour.ps",
-            format!("{}; the older lift (A) does not", pairing::AGREE),
-        ),
-        ("flow.ps", pairing::AGREE.to_owned()),
-        ("reach.ps", refused.clone()),
-        ("simple.ps", pairing::AGREE.to_owned()),
-        ("simple.vs", pairing::AGREE.to_owned()),
+        ("colour.ps", pairing::AGREE),
+        ("flow.ps", pairing::AGREE),
+        ("reach.ps", pairing::AGREE),
+        ("simple.ps", pairing::AGREE),
+        ("simple.vs", pairing::AGREE),
         // MojoShader prints `sincos`'s range reduction, 0.159154937 and 6.28318548, as 0.159155 and 6.283185
-        (
-            "skin.vs",
-            format!("{}; the older lift (A) refuses it", pairing::PRINTED),
-        ),
-        ("step.vs", refused),
+        ("skin.vs", pairing::PRINTED),
+        ("step.vs", pairing::AGREE),
     ];
-    let expected: Vec<(String, String)> = expected.into_iter().map(|(n, c)| (n.to_owned(), c)).collect();
+    let expected: Vec<(String, String)> = expected.into_iter().map(|(n, c)| (n.to_owned(), c.to_owned())).collect();
     assert_eq!(classes, expected);
 }
