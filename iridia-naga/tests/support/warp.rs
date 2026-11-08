@@ -94,8 +94,18 @@ impl Warp {
     /// A pixel program's result target 0 for each invocation's arguments, four lanes of bits (zero past the lanes the
     /// output has): `None` for an invocation that did not return.
     pub fn pixel(&mut self, wgsl: &str, given: &[Vec<[u32; 4]>]) -> Result<Vec<Option<[u32; 4]>>, String> {
-        let reply =
-            self.run(&serde_json::json!({"id": 0, "wgsl": wgsl, "invocations": given, "resources": []}))?;
+        self.pixel_with(wgsl, given, &serde_json::json!([]))
+    }
+
+    /// [`Warp::pixel`] with the job's `resources`.
+    pub fn pixel_with(
+        &mut self,
+        wgsl: &str,
+        given: &[Vec<[u32; 4]>],
+        resources: &serde_json::Value,
+    ) -> Result<Vec<Option<[u32; 4]>>, String> {
+        let reply = self
+            .run(&serde_json::json!({"id": 0, "wgsl": wgsl, "invocations": given, "resources": resources}))?;
         let got = reply["invocations"]
             .as_array()
             .ok_or("no invocations in the reply")?;

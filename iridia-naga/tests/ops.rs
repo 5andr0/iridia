@@ -720,9 +720,7 @@ fn a_sample_position_is_direct3d_s_standard_one_for_every_count() {
         })
         .collect();
     assert_eq!(standard.len(), 31);
-    // the written table holds them, in the order the lowering indexes them (count n starts at row n - 1), in both
-    // writers' text; a count with no standard pattern or an index past the count answers (0, 0) by the lowering's select
-    // alone (WARP has no multisampled texture the harness can bind to run it)
+    // the written table holds them, in the order the lowering indexes them (count n starts at row n - 1)
     for profile in [iridia_naga::Profile::NAGA, iridia_naga::Profile::BROWSER] {
         let text = written(&p, &profile);
         let table = text
@@ -739,5 +737,41 @@ fn a_sample_position_is_direct3d_s_standard_one_for_every_count() {
             .collect();
         let flat: Vec<f32> = standard.iter().flatten().copied().collect();
         assert_eq!(numbers, flat, "the table is not the standard positions\n{text}");
+    }
+    // and WARP, given a multisampled texture of each count it supports for the format (2, 4, 8 and 16; a count with no
+    // standard pattern has no such texture), answers each index as the IR defines it: the sample's position, or (0, 0)
+    // for an index past the count
+    let Some(mut warp) = warp::Warp::shared() else {
+        return;
+    };
+    for text in warp_texts(&p) {
+        assert!(
+            text.contains("@group(1) @binding(0)"),
+            "the texture is not at group 1 binding 0\n{text}"
+        );
+        for count in [2u32, 4, 8, 16] {
+            let mut indices: Vec<u32> = (0..count + 2).chain([u32::MAX]).collect();
+            // a pixel program runs four invocations at a time
+            while !indices.len().is_multiple_of(4) {
+                indices.push(0);
+            }
+            let given: Vec<Vec<[u32; 4]>> = indices
+                .iter()
+                .map(|&i| vec![[i, 0, 0, 0], [0; 4], [0; 4]])
+                .collect();
+            let resources = serde_json::json!([
+                {"group": 1, "binding": 0, "texture": {"texel": [0, 0, 0, 0], "samples": count}}
+            ]);
+            let got = warp
+                .pixel_with(&text, &given, &resources)
+                .unwrap_or_else(|e| panic!("{e}\n{text}"));
+            for (&index, got) in indices.iter().zip(got) {
+                let want = iridia_ir::standard_sample_position(count, index)
+                    .unwrap_or([0.0, 0.0])
+                    .map(f32::to_bits);
+                let got = got.unwrap_or_else(|| panic!("sample {index} of {count} did not return"));
+                assert_eq!([got[0], got[1]], want, "sample {index} of {count}\n{text}");
+            }
+        }
     }
 }
