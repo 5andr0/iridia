@@ -460,16 +460,14 @@ dependencies = [
 name = "iridia-naga"
 version = "0.6.0"
 dependencies = [
- "iridia",
  "iridia-exec",
  "iridia-exec-ir",
  "iridia-ir",
  "iridia-wgsl",
  "naga",
- "primase-naga",
  "primase-testdata",
- "serde_json",
  "proptest",
+ "serde_json",
 ]
 
 [[package]]

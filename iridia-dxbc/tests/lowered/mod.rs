@@ -4,7 +4,7 @@
 #![allow(dead_code)]
 
 use naga as oracle_naga;
-#[path = "../../../iridia-naga/tests/support/inline.rs"]
+#[path = "inline.rs"]
 mod pure_helpers;
 
 /// What naga's WGSL front end makes of the lowering's text cannot say everything the older module says, which the

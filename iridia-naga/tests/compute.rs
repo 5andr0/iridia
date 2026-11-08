@@ -1,8 +1,10 @@
 //! Compute programs lowered and run: each program in IR text is compiled into `iridia-exec` as the IR itself
-//! (`Executable::from_ir`) and, written as WGSL by this crate and read back by naga's front end, as the naga module it
-//! is; dispatched on the same memory, the two must leave the same memory. A property test generates the programs:
-//! stores, loads and atomics of a raw buffer and of workgroup memory at addresses inside and past their ends, with
-//! barriers between, each invocation storing what its loads and atomics gave at a word of its own.
+//! (`Executable::from_ir`) and, written as WGSL by both writers, run on Direct3D 12's WARP through `tools.wgsl_run`
+//! (where it is configured); dispatched on the same memory, the two must leave the same memory. Upstream naga reads and
+//! validates this crate's text either way. A property test generates the programs: stores, loads and atomics of a raw
+//! buffer and of workgroup memory at addresses inside and past their ends, with barriers between, each invocation
+//! storing what its loads and atomics gave at a word of its own. A GPU runs invocations in no order the IR executor
+//! shares, so every address a program touches inside its memory is one invocation's own (see [`place`]).
 
 #![allow(clippy::unwrap_used, reason = "fixtures and generated programs")]
 
@@ -20,9 +22,13 @@ use iridia_ir::{
 };
 use proptest::prelude::*;
 
-/// The thread group: eight invocations along x; two groups are dispatched.
+mod inputs;
+#[path = "support/warp.rs"]
+mod warp;
+
+/// The thread group: eight invocations along x; the generated programs dispatch one group.
 const GROUP: u32 = 8;
-const GROUPS: [u32; 3] = [2, 1, 1];
+const GROUPS: [u32; 3] = [1, 1, 1];
 /// The words of the raw buffer `r0`: past them a read gives zero and a write does nothing.
 const WORDS: u32 = 256;
 
@@ -96,40 +102,41 @@ fn program(text: &str) -> Program {
     p
 }
 
-/// The WGSL of `p` read back by naga's front end, as a program `iridia-exec` runs: the IR's interface, the entry point's
-/// arguments named and bound as the interface gives them, and the buffer bound to the global its plan names.
-fn from_wgsl(p: &Program, wgsl: &str) -> iridia::Program {
-    let mut module = naga_fork::front::wgsl::parse_str(wgsl).unwrap_or_else(|e| panic!("{e}\n{wgsl}"));
-    let io = iridia::entry_io(&p.interface).unwrap();
-    let ep = module.entry_points.first_mut().unwrap();
-    for (a, item) in ep.function.arguments.iter_mut().zip(&io.arguments) {
-        a.name = Some(item.name.clone());
-        a.binding = Some(item.binding.clone());
-    }
-    let buffer = module
-        .global_variables
-        .iter()
-        .find(|(_, g)| g.name.as_deref().is_some_and(|n| n.trim_end_matches('_') == "u0"))
-        .map(|(h, _)| h)
-        .unwrap_or_else(|| panic!("no global u0\n{wgsl}"));
-    iridia::Program {
-        module,
-        stage: Stage::Compute,
-        entry: "main".into(),
-        interface: p.interface.clone(),
-        bindings: vec![(ResourceId(0), buffer)],
-        conventions: iridia::Conventions::D3D,
-        modes: iridia::D3dModes::default(),
-        provenance: iridia::Provenance {
-            format: ShaderFormat::Dxbc,
-            target: "fixture".into(),
-            lifter: "iridia-naga through WGSL".into(),
-            lifter_version: 0,
-            source_hash: None,
-            instruction_count: None,
-        },
-        notes: Vec::new(),
-    }
+/// The group and binding the WGSL gives the raw buffer `r0` (`u0` in the text), as the harness's resources name them.
+fn buffer_slot(wgsl: &str) -> (u32, u32) {
+    let at = wgsl
+        .find("var<storage, read_write> u0")
+        .unwrap_or_else(|| panic!("no u0\n{wgsl}"));
+    // the attributes are on the declaration's line or the one before it
+    let head = &wgsl[..at];
+    let from = head
+        .rfind("@group(")
+        .unwrap_or_else(|| panic!("no @group( before u0\n{wgsl}"));
+    let line = &head[from..];
+    let number = |after: &str| {
+        let rest = line
+            .split(after)
+            .nth(1)
+            .unwrap_or_else(|| panic!("no {after} before u0\n{wgsl}"));
+        rest.chars()
+            .take_while(char::is_ascii_digit)
+            .collect::<String>()
+            .parse()
+            .unwrap_or_else(|_| panic!("no number after {after}\n{wgsl}"))
+    };
+    (number("@group("), number("@binding("))
+}
+
+/// The buffer as the IR executor leaves it after dispatching `groups`, from `words`.
+fn ir_memory(p: &Program, words: &[u32], groups: [u32; 3]) -> Vec<u32> {
+    let exe = Executable::from_ir(p).unwrap_or_else(|e| panic!("{e}"));
+    let resources = Resources::default();
+    let bound = exe.bind_resources(&resources).unwrap();
+    let mut buffers = BTreeMap::from([(ResourceId(0), words.to_vec())]);
+    let mut elements = BTreeMap::new();
+    exe.dispatch_elements(&bound, &mut NoTextures, &mut buffers, &mut elements, groups, 32)
+        .unwrap();
+    buffers.remove(&ResourceId(0)).unwrap_or_default()
 }
 
 /// Textures are no compute program's here.
@@ -140,24 +147,33 @@ impl iridia_exec::Backend for NoTextures {
     }
 }
 
-/// The buffer as a dispatch of `exe` leaves it, from `words`.
-fn dispatch(exe: &Executable, words: &[u32]) -> Result<Vec<u32>, String> {
-    let resources = Resources::default();
-    let bound = exe.bind_resources(&resources)?;
-    let mut buffers = BTreeMap::from([(ResourceId(0), words.to_vec())]);
-    let mut elements = BTreeMap::new();
-    exe.dispatch_elements(&bound, &mut NoTextures, &mut buffers, &mut elements, GROUPS, 32)?;
-    Ok(buffers.remove(&ResourceId(0)).unwrap_or_default())
+/// The buffer as WARP leaves it after running the WGSL `wgsl` of `p` over `groups`, from `words`.
+fn warp_memory(warp: &mut warp::Warp, wgsl: &str, words: &[u32], groups: [u32; 3]) -> Vec<u32> {
+    let (group, binding) = buffer_slot(wgsl);
+    let reply = warp
+        .run(&serde_json::json!({
+            "id": 0,
+            "wgsl": wgsl,
+            "dispatch": groups,
+            "resources": [{"group": group, "binding": binding, "buffer": {"words": words}}],
+        }))
+        .unwrap_or_else(|e| panic!("{e}\n{wgsl}"));
+    reply["resources"][0]["words"]
+        .as_array()
+        .unwrap_or_else(|| panic!("no buffer in the reply {reply}\n{wgsl}"))
+        .iter()
+        .map(|w| u32::try_from(w.as_u64().unwrap()).unwrap())
+        .collect()
 }
 
-/// The memory the IR leaves and the memory its WGSL leaves, from the same words; the WGSL with them.
-fn both(p: &Program, words: &[u32]) -> (Vec<u32>, Vec<u32>, String) {
-    let wgsl = iridia_naga::wgsl(p, &iridia_naga::Profile::NAGA).unwrap_or_else(|e| panic!("{e}"));
-    let ir = Executable::from_ir(p).unwrap_or_else(|e| panic!("{e}"));
-    let lowered = Executable::new(&from_wgsl(p, &wgsl)).unwrap_or_else(|e| panic!("{e}\n{wgsl}"));
-    let a = dispatch(&ir, words).unwrap();
-    let b = dispatch(&lowered, words).unwrap_or_else(|e| panic!("{e}\n{wgsl}"));
-    (a, b, wgsl)
+/// Both writers' WGSL for a browser, read and validated by upstream naga (the profile's own checks for this crate's).
+fn texts(p: &Program) -> [String; 2] {
+    let ours = iridia_naga::wgsl(p, &iridia_naga::Profile::BROWSER).unwrap_or_else(|e| panic!("{e}"));
+    let module =
+        naga::front::wgsl::parse_str(&ours).unwrap_or_else(|e| panic!("{}", e.emit_to_string(&ours)));
+    iridia_naga::validate(&module, &iridia_naga::Profile::BROWSER).unwrap_or_else(|e| panic!("{e}\n{ours}"));
+    let theirs = iridia_wgsl::wgsl(p, &iridia_wgsl::Profile::BROWSER).unwrap_or_else(|e| panic!("{e}"));
+    [ours, theirs]
 }
 
 fn seeded_words(seed: u64) -> Vec<u32> {
@@ -201,24 +217,27 @@ const ATOMICS: [iridia_ir::AtomicOp; 11] = [
     iridia_ir::AtomicOp::CompareExchange,
 ];
 
+/// The places a program reaches. Inside its memory an invocation reaches only addresses of its own, so no two
+/// invocations race and the answer does not depend on an order: a buffer address is `48 * id + offset` for an offset
+/// within the 48 bytes (the accumulators are at the end, past every invocation's), a workgroup element `2 * id + base`
+/// for a base of 0 or 1. Past the memory every invocation may reach: a buffer address past 1024 bytes, the word that
+/// an offset of 1000, 1016 or 1020 puts only invocation 0 inside the buffer at, and a workgroup base of 16 or more.
 fn place() -> impl Strategy<Value = Place> {
     prop_oneof![
         (
             any::<bool>(),
-            prop::sample::select(vec![0u32, 4, 8, 12]),
-            prop::sample::select(vec![0u32, 4, 64, 1016, 1020, 1024, 4096])
+            prop::sample::select(vec![0u32, 4, 8, 12, 20, 44, 1000, 1016, 1020, 1024, 4096])
         )
-            .prop_map(|(local, stride, offset)| Place::Buffer {
+            .prop_map(|(local, offset)| Place::Buffer {
                 local,
-                stride,
+                stride: 48,
                 offset
             }),
-        (
-            any::<bool>(),
-            0..3u32,
-            prop::sample::select(vec![0u32, 1, 7, 15, 16, 40])
-        )
-            .prop_map(|(local, scale, base)| Place::Group { local, scale, base }),
+        (any::<bool>(), prop::sample::select(vec![0u32, 1, 16, 40])).prop_map(|(local, base)| Place::Group {
+            local,
+            scale: 2,
+            base
+        }),
     ]
 }
 
@@ -372,6 +391,21 @@ fn main {
     t.out
 }
 
+/// The WARP half of a case: for each writer's text, WARP leaves from `words` the memory the IR executor leaves.
+fn agree(p: &Program, text: &str, words: &[u32], groups: [u32; 3], warp: Option<&mut warp::Warp>) {
+    let ir = ir_memory(p, words, groups);
+    let [ours, theirs] = texts(p);
+    if let Some(warp) = warp {
+        for (writer, wgsl) in [("iridia-naga", ours), ("iridia-wgsl", theirs)] {
+            assert_eq!(
+                ir,
+                warp_memory(warp, &wgsl, words, groups),
+                "{writer}\n{text}\n{wgsl}"
+            );
+        }
+    }
+}
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(1000))]
 
@@ -385,8 +419,8 @@ proptest! {
     ) {
         let text = text(&steps);
         let p = program(&text);
-        let (ir, wgsl, written) = both(&p, &seeded_words(seed));
-        prop_assert_eq!(ir, wgsl, "{}\n{}", text, written);
+        let mut warp = warp::Warp::shared();
+        agree(&p, &text, &seeded_words(seed), GROUPS, warp.as_deref_mut());
     }
 }
 
@@ -409,8 +443,39 @@ fn main {
 }
 ";
     let p = program(text);
-    let (ir, wgsl, written) = both(&p, &seeded_words(1));
-    assert_eq!(ir, wgsl, "{written}");
+    let mut warp = warp::Warp::shared();
+    agree(&p, text, &seeded_words(1), GROUPS, warp.as_deref_mut());
+    let ir = ir_memory(&p, &seeded_words(1), GROUPS);
     // every invocation stored 0 + 0 at its word
-    assert!(ir.iter().take(16).all(|&w| w == 0), "{ir:?}");
+    assert!(ir.iter().take(8).all(|&w| w == 0), "{ir:?}");
+}
+
+/// Two groups: each invocation has its dispatch-wide id and its id in the group, and each group its own workgroup memory.
+#[test]
+fn groups_have_their_own_ids_and_workgroup_memory() {
+    let text = "iridia-ir 1
+fn main {
+  var g: [u32; 16] workgroup
+  %0: vec3<u32> = input 0.xyz
+  %1: u32 = %0.x
+  %2: vec3<u32> = input 1.xyz
+  %3: u32 = %2.x
+  g[%3] = %1 oob.zero
+  barrier execution workgroup storage.workgroup
+  %4: u32 = load g[%3] oob.zero
+  store buffer r0[%1 * 4] + 0 = %4
+  store buffer r0[%1 * 4] + 64 = %3
+  return
+}
+";
+    let p = program(text);
+    let groups = [2, 1, 1];
+    let words = seeded_words(2);
+    let ir = ir_memory(&p, &words, groups);
+    // the first 16 words are the dispatch-wide ids (each group's memory held its own invocations' ids), the next 16 the ids
+    // in the group
+    let want: Vec<u32> = (0..16).chain((0..16).map(|g| g % GROUP)).collect();
+    assert_eq!(ir.get(..32), Some(want.as_slice()), "{ir:?}");
+    let mut warp = warp::Warp::shared();
+    agree(&p, text, &words, groups, warp.as_deref_mut());
 }

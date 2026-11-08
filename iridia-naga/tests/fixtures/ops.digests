@@ -1,0 +1,39 @@
+bitextract.unsigned u32	8f9def1a5e36c6c7
+bitextract.signed i32	999a80f39c6cc24a
+bitinsert	32d91c36e49ff911
+fma f32	2b7714d7fa48c858
+ftan f32 -> f32	c692c4bd4897b614
+fasin f32 -> f32	f2481ed337e43dfa
+facos f32 -> f32	02d39a2f281a8270
+fatan f32 -> f32	29f217e922487d39
+fsinh f32 -> f32	82f88aadf8218eb2
+fcosh f32 -> f32	4c9fc7ab016253fa
+ftanh f32 -> f32	7ba0321e73667b18
+fsign f32 -> f32	fef0f3f2c371a305
+countones u32 -> u32	48a0880bb2699b58
+bitreverse u32 -> u32	c7b8b2821e231568
+firstbithigh u32 -> u32	c06b7fc1ab89bb48
+firstbitlow u32 -> u32	bba120e76f9e14ee
+not u32 -> u32	2356507428c1a3f0
+firstbithighsigned i32 -> i32	dac99a0b207848a9
+firstbithigh i32 -> i32	c06b7fc1ab89bb48
+f32tof16 f32 -> u32	fdcbb3909da4d0a9
+f16tof32 u32 -> f32	17e037b77b05241e
+umulhigh u32 u32 -> u32	45ca4bcf514c64f6
+uaddcarry u32 u32 -> u32	3332bcc0c11c26f5
+usubborrow u32 u32 -> u32	1f621a313652a7a4
+umin u32 u32 -> u32	21f3bd6bf22bf2e9
+umax u32 u32 -> u32	d8305b7504ff0fee
+shl u32 u32 -> u32	32e56ebf5d485af2
+shru u32 u32 -> u32	07615bfc5d2f1f61
+shrs i32 u32 -> i32	ff38280f1a87545d
+smulhigh i32 i32 -> i32	8e776c6e43a48c7e
+sdiv.allones i32 i32 -> i32	a2fb46924121f61a
+srem.allones i32 i32 -> i32	7f22adee2ca07044
+sdiv.byone i32 i32 -> i32	09d03bd982592d29
+srem.byone i32 i32 -> i32	183274028073a064
+udiv.allones u32 u32 -> u32	9c172389ceb89337
+urem.allones u32 u32 -> u32	09e8aebb8a1dc56e
+udiv.byone u32 u32 -> u32	d9db6d1f10a33e90
+urem.byone u32 u32 -> u32	c9f772b1e765f16e
+frem f32 f32 -> f32	ae45b9c497ef1473
