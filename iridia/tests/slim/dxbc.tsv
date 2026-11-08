@@ -914,7 +914,6 @@ bbdc3ec3c1b9c17a1c21c0e8f4d3c2de5fb3850e1a0ebda87181b477a063d102	IR WGSL	not rea
 bc4c0757184223ff8f49c52b78d0bf92dae08f013a59b1ae68b89877539b7f62	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 bc9062085c0de0d20e057b49b2a157d569e7ff3d9a602b51496a68743f24efd0	IR WGSL	lower: a Domain program is not lowered yet
 bccff626ad63502d65142514ebab2b5eb9fe3314982c1e10306a5157d78bc967	A	WGSL read back: error: Float literal is NaN    ┌─ wgsl:N:N    │ N │     rN_.x = bitcast<uN>(inverseSqrt(-Nf));    │                          ^^^^^^^^^^^ see msg  
-bccff626ad63502d65142514ebab2b5eb9fe3314982c1e10306a5157d78bc967	IR WGSL	WGSL read back: error: Float literal is NaN   ┌─ wgsl:N:N   │ N │     let _eN = bitcast<vecN<fN>>(vecN<uN>(_eN.x, bitcast<uN>((Nf / bitcast<fN>(bitcast<uN>(inverseSqrt(-Nf))))), _eN.y));   │                                                                                                 ^^^^^^^^^^^ see msg  
 bd750ab987c71659930e45ab10643f6b17d053205fac077622a9915a14524198	A	lift: dcl_gs_output_primitive_topology: N is not mapped
 bd750ab987c71659930e45ab10643f6b17d053205fac077622a9915a14524198	IR	lift: dcl_gs_output_primitive_topology: N is not mapped
 bd750ab987c71659930e45ab10643f6b17d053205fac077622a9915a14524198	IR WGSL	not reached

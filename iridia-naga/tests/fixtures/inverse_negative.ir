@@ -1,0 +1,7 @@
+iridia-ir 1
+fn main {
+  %0: f32 = f32(-1.0)
+  %1: f32 = finversesqrt %0
+  output 0.x = %1
+  return
+}

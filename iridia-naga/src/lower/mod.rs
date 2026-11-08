@@ -234,6 +234,24 @@ impl Lower<'_> {
         }
         h
     }
+    /// Keep an IR constant a runtime value in the written shader. WGSL `let` values are runtime expressions, even
+    /// with constant initializers; inlining a literal into `log2`, division or another operation instead makes WGSL
+    /// evaluate that operation at compile time, where a non-finite result is an error. naga's literals and zero values
+    /// cannot be emitted (and hence cannot be named), so an identity conversion provides their binding expression.
+    fn runtime_value(&mut self, h: Handle<E>, ty: Type, name: String) -> Result<Handle<E>, Error> {
+        let h = if self.func.expressions[h].needs_pre_emit() {
+            let scalar = naga_scalar(ty.scalar)?;
+            self.expr(E::As {
+                expr: h,
+                kind: scalar.kind,
+                convert: Some(scalar.width),
+            })
+        } else {
+            h
+        };
+        self.func.named_expressions.insert(h, name);
+        Ok(h)
+    }
     /// An expression naga takes outside any emit range (a constant a sample's offset is).
     fn unemitted(&mut self, e: E) -> Handle<E> {
         self.flush();
@@ -311,6 +329,8 @@ impl Lower<'_> {
         let f = f32::from_bits(low(bits));
         if scalar == Scalar::F32 && (f.abs() == f32::MAX || !f.is_finite()) {
             let word = self.expr(E::Literal(Literal::U32(low(bits))));
+            // The bitcast must be runtime too: WGSL constant evaluation cannot represent NaNs or infinities.
+            let word = self.runtime_value(word, Type::U32, format!("bits{}", word.index()))?;
             return Ok(self.bitcast(word, ScalarKind::Float));
         }
         let l = match scalar {
@@ -1294,10 +1314,14 @@ impl Lower<'_> {
         let t = def.ty;
         let op = def.op.clone();
         Ok(match op {
-            Op::Literal(bits) => self.literal_value(t, bits)?,
+            Op::Literal(bits) => {
+                let h = self.literal_value(t, bits)?;
+                self.runtime_value(h, t, format!("v{}", v.0))?
+            }
             Op::Undef => {
                 let ty = self.ty_of(t)?;
-                self.expr(E::ZeroValue(ty))
+                let h = self.expr(E::ZeroValue(ty));
+                self.runtime_value(h, t, format!("v{}", v.0))?
             }
             Op::Param => return Err(err(format!("parameter %{} has no value here", v.0))),
             Op::Unary(u, a) => {

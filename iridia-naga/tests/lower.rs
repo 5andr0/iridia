@@ -249,14 +249,39 @@ fn main {
     let wgsl = iridia_naga::wgsl(&p, &iridia_naga::Profile::BROWSER).unwrap();
     // its shortest decimal, 3.4028235e38, lies above it: Tint refuses it as out of range (WGSL rounds it back)
     assert!(!wgsl.contains("34028235"), "{wgsl}");
-    assert!(wgsl.contains("bitcast<f32>(2139095039u)"), "{wgsl}");
-    assert!(wgsl.contains("bitcast<f32>(4286578687u)"), "{wgsl}");
     // the float below it has a shortest decimal below it, written as ever
     assert!(
         wgsl.contains("340282330000000000000000000000000000000f"),
         "{wgsl}"
     );
     let module = naga::front::wgsl::parse_str(&wgsl).unwrap_or_else(|e| panic!("{e}\n{wgsl}"));
+    // Runtime bindings may sit between the word and its bitcast. Check the bits
+    // in the parsed expression graph instead of requiring an inline operand.
+    let expressions = &module.entry_points[0].function.expressions;
+    fn word(expressions: &naga::Arena<naga::Expression>, h: naga::Handle<naga::Expression>) -> Option<u32> {
+        match expressions[h] {
+            naga::Expression::Literal(naga::Literal::U32(bits)) => Some(bits),
+            naga::Expression::As {
+                expr,
+                kind: naga::ScalarKind::Uint,
+                convert: Some(4),
+            } => word(expressions, expr),
+            _ => None,
+        }
+    }
+    let bitcasts: Vec<_> = expressions
+        .iter()
+        .filter_map(|(_, e)| match *e {
+            naga::Expression::As {
+                expr,
+                kind: naga::ScalarKind::Float,
+                convert: None,
+            } => word(expressions, expr),
+            _ => None,
+        })
+        .collect();
+    assert!(bitcasts.contains(&0x7f7fffff), "{wgsl}");
+    assert!(bitcasts.contains(&0xff7fffff), "{wgsl}");
     naga::valid::Validator::new(
         naga::valid::ValidationFlags::all(),
         naga::valid::Capabilities::empty(),

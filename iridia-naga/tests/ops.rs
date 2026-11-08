@@ -173,12 +173,16 @@ fn inputs(n: u64) -> [[u32; 4]; 3] {
 fn disagreement(body: &str, runs: u64) -> Option<String> {
     let p = program(body);
     let wgsl = iridia_naga::wgsl(&p, &iridia_naga::Profile::NAGA).unwrap_or_else(|e| panic!("{e}\n{body}"));
-    let shader = ProgramShader::new(from_wgsl(&p, &wgsl)).unwrap_or_else(|e| panic!("{e}\n{wgsl}"));
+    disagreement_written(&p, &wgsl, runs)
+}
+
+fn disagreement_written(p: &Program, wgsl: &str, runs: u64) -> Option<String> {
+    let shader = ProgramShader::new(from_wgsl(p, wgsl)).unwrap_or_else(|e| panic!("{e}\n{wgsl}"));
     let alike = |a: u32, b: u32| a == b || f32::from_bits(a).is_nan() && f32::from_bits(b).is_nan();
     for n in 0..runs {
         let given = inputs(n);
         let b = iridia_exec_ir::run(
-            &p,
+            p,
             &mut iridia_exec_ir::Bound {
                 inputs: &given,
                 buffers: &[],
@@ -187,7 +191,7 @@ fn disagreement(body: &str, runs: u64) -> Option<String> {
                 denormals: iridia_ir::Denormals::Preserve,
             },
         )
-        .unwrap_or_else(|e| panic!("{e}\n{body}"));
+        .unwrap_or_else(|e| panic!("{e}\n{wgsl}"));
         let b = b.outputs[0].unwrap_or([0; 4]);
         let c = shader
             .execute(&given, &[], &mut NoTextures)
@@ -200,6 +204,58 @@ fn disagreement(body: &str, runs: u64) -> Option<String> {
         }
     }
     None
+}
+
+/// A reduced specialised pixel program: its constants already contain the pinned feature words.
+fn specialised_fixture(text: &str) -> Program {
+    let mut p = program("");
+    p.entry = iridia_ir::text::parse(text).unwrap();
+    p.interface.inputs.clear();
+    p.interface.outputs[0].value = Value {
+        scalar: ScalarType::Float,
+        width: 1,
+    };
+    iridia_ir::validate(&p).unwrap();
+    p
+}
+
+fn check_literal_fixture(p: &Program) {
+    for profile in [iridia_naga::Profile::NAGA, iridia_naga::Profile::BROWSER] {
+        let text = iridia_naga::wgsl(p, &profile).unwrap();
+        let module =
+            naga::front::wgsl::parse_str(&text).unwrap_or_else(|e| panic!("{}", e.emit_to_string(&text)));
+        iridia_naga::validate(&module, &profile).unwrap();
+        assert_eq!(disagreement_written(p, &text, 1), None);
+    }
+}
+
+#[test]
+fn specialised_literal_domain_operations_stay_runtime_in_both_profiles() {
+    for text in [
+        include_str!("fixtures/log_zero.ir"),
+        include_str!("fixtures/inverse_zero.ir"),
+        include_str!("fixtures/inverse_negative.ir"),
+        include_str!("fixtures/divide_zero.ir"),
+    ] {
+        check_literal_fixture(&specialised_fixture(text));
+    }
+}
+
+#[test]
+fn nonfinite_literal_bits_and_signed_zero_survive_the_written_runtime_binding() {
+    let mut p =
+        specialised_fixture("iridia-ir 1\nfn main {\n  %0: f32 = f32(0.0)\n  output 0.x = %0\n  return\n}\n");
+    for bits in [
+        0x8000_0000u32,
+        1,
+        f32::MAX.to_bits(),
+        f32::INFINITY.to_bits(),
+        f32::NEG_INFINITY.to_bits(),
+        0x7fc0_1234,
+    ] {
+        p.entry.values[0].op = iridia_ir::Op::Literal([u64::from(bits), 0, 0, 0]);
+        check_literal_fixture(&p);
+    }
 }
 
 /// A unary operation `name` on the first input as `ty` (`f32` or `u32` or `i32`, four lanes), its result `result`.
