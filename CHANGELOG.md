@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `iridia-d3d9-ir`: `frame` and `sampler_states`, the two functions of `iridia-d3d9` that read bytes and states rather than
+  lift them, with the same behaviour and tests (`frame` returns `iridia_ir::interface::Stage`; errors are this crate's `Error`).
+  `iridia-d3d9` keeps its own until it is removed.
 - `iridia-dxbc`, `iridia-dxil`: the readers the IR lift and the naga-path lift share (`setup`, and for DXIL the small helpers
   and the `dx.op` argument counts) are modules of their own, not parts of the naga-path lift. Nothing they produce changes.
 - Route nonlocal structured exits through typed result payloads only across the boundaries they cross. Keep ordinary

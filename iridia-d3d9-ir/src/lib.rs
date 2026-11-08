@@ -18,6 +18,7 @@
 
 mod lift;
 mod model;
+mod sampler;
 mod signature;
 
 pub use d3d9_reader::{Comment, Constant, ConstantTable, Type, TypeMember};
@@ -29,6 +30,7 @@ pub use model::{
     Comparison, Destination, Index, Input, Instruction, Opcode, Output, Register, Shader, Source, Version,
     read, usage,
 };
+pub use sampler::sampler_states;
 pub use signature::{
     Bank, PARTIAL_PRECISION, PIXEL_CONSTANTS, Sampler, Signature, VERTEX_CONSTANTS, lanes_in, outputs,
     read_input, signature, varying,
@@ -46,3 +48,23 @@ pub(crate) fn error(at: usize, detail: impl Into<String>) -> Error {
 #[cfg(doctest)]
 #[doc = include_str!("../README.md")]
 struct ReadmeExamples;
+
+/// Frame the first raw SM3 vertex or pixel program in a container's remaining bytes.
+/// Returns its stage and exact bytes through END; subsequent container metadata is not consumed.
+/// `d3d9-reader` reads every record up to END, so END is never searched for inside operands or comments; an
+/// operation the lifter does not support is retained as bytecode for [`lift`] to refuse.
+pub fn frame(bytes: &[u8]) -> Result<(iridia_ir::interface::Stage, &[u8])> {
+    use iridia_ir::interface::Stage;
+    let (program, span) = d3d9_reader::frame(bytes).map_err(|e| error(e.word, e.detail))?;
+    let stage = match program.version.token() {
+        0xfffe_0300 => Stage::Vertex,
+        0xffff_0300 => Stage::Pixel,
+        _ => {
+            return Err(error(
+                0,
+                format!("version {}: only vs_3_0 and ps_3_0 are framed", program.version),
+            ));
+        }
+    };
+    Ok((stage, span))
+}
