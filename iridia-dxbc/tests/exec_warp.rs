@@ -671,7 +671,16 @@ fn corpus_over(corpus: &common::Corpus) {
     let all = debug("shader.warp_all").is_some_and(|v| v == "1");
     let tools = (fxc, warp, scratch);
     let mut t = Tally::default();
-    for file in corpus.names.iter().take(common::diff_limit()) {
+    // `shader.only`: `|`-separated parts of program names; only the programs with one of them in their name run
+    let only: Vec<String> = debug("shader.only")
+        .map(|s| s.split('|').map(str::to_owned).collect())
+        .unwrap_or_default();
+    for file in corpus
+        .names
+        .iter()
+        .filter(|n| only.is_empty() || only.iter().any(|o| n.contains(o.as_str())))
+        .take(common::diff_limit())
+    {
         let bytes = corpus.read(file);
         run_program(&corpus.at(file), &bytes, 3, all, &tools, &mut t);
     }
