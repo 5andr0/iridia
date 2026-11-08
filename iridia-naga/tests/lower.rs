@@ -527,7 +527,12 @@ fn main {
         wgsl.contains("@group(2) @binding(0) \nvar s0_: binding_array<sampler>;"),
         "{wgsl}"
     );
-    assert!(wgsl.contains("textureSampleLevel(t0_[_e3], s0_[_e3], "), "{wgsl}");
+    let call = wgsl
+        .lines()
+        .find(|line| line.contains("textureSampleLevel(t0_["))
+        .unwrap();
+    let index = call.split("t0_[").nth(1).unwrap().split(']').next().unwrap();
+    assert!(call.contains(&format!("s0_[{index}], ")), "{wgsl}");
     let module = naga::front::wgsl::parse_str(&wgsl).unwrap_or_else(|e| panic!("{e}\n{wgsl}"));
     iridia_naga::validate(&module, &iridia_naga::Profile::NAGA).unwrap_or_else(|e| panic!("{e}\n{wgsl}"));
 }

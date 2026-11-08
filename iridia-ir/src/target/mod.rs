@@ -8,6 +8,8 @@
 mod bind;
 mod capability;
 mod entry;
+mod origins;
+pub use origins::{LaneOrigin, LaneOrigins};
 
 pub use bind::{Bind, BindingPlan, Bindings};
 pub use capability::{ArrayClass, Capability, Requirement, requirements};

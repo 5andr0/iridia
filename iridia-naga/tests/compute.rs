@@ -479,3 +479,41 @@ fn main {
     let mut warp = warp::Warp::shared();
     agree(&p, text, &words, groups, warp.as_deref_mut());
 }
+
+/// A loop transfers its lanes in parallel, including when scalar locals replace packed state.
+#[test]
+fn loop_parameter_lanes_are_transferred_simultaneously() {
+    let text = "iridia-ir 1
+fn main {
+  %0: vec3<u32> = input 0.xyz
+  %1: u32 = %0.x
+  %2: u32 = u32(0)
+  %3: u32 = u32(1)
+  %4: u32 = u32(3)
+  %5: vec2<u32> = compose %1, %3
+  loop '0 (%6: vec2<u32>, %7: u32) = (%5, %2) {
+    %8: bool = ucmp.ge %7, %4
+    if %8 {
+      br '0 %6
+    } else {
+      yield
+    }
+    %9: vec2<u32> = %6.yx
+    %10: u32 = iadd %7, %3
+    continue '0 %9, %10
+  } -> %11: vec2<u32>
+  %12: u32 = %11.x
+  %13: u32 = %11.y
+  store buffer r0[%1 * 4] + 0 = %12
+  store buffer r0[%1 * 4] + 64 = %13
+  return
+}
+";
+    let p = program(text);
+    let words = seeded_words(3);
+    let mut warp = warp::Warp::shared();
+    agree(&p, text, &words, GROUPS, warp.as_deref_mut());
+    let got = ir_memory(&p, &words, GROUPS);
+    assert!(got.iter().take(8).all(|&v| v == 1), "{got:?}");
+    assert_eq!(got.get(16..24), Some((0..8).collect::<Vec<u32>>().as_slice()));
+}

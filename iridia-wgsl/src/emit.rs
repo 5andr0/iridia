@@ -17,9 +17,9 @@ use crate::flow::Construct;
 use crate::helpers::Helper;
 use crate::memory::Atomics;
 use crate::names::Names;
-use crate::origin::Sites;
 use crate::profile::Profile;
 use crate::text::{self, err};
+use iridia_ir::target::LaneOrigins as Sites;
 
 /// A result that may be an error of the writer.
 pub(crate) type R<T = String> = Result<T, Error>;

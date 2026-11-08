@@ -32,7 +32,6 @@ mod memory;
 mod module;
 mod names;
 mod ops;
-mod origin;
 mod pipeline;
 mod profile;
 mod rayquery;

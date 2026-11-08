@@ -211,7 +211,7 @@ impl<'a> Writer<'a> {
             split: BTreeMap::new(),
             gathered: None,
             read: crate::flow::read_values(f, body),
-            sites: crate::origin::Sites::of(f, body),
+            sites: iridia_ir::target::LaneOrigins::of(f, body),
             forward: BTreeMap::new(),
             outputs: alloc::vec![None; program.interface.outputs.len()],
             decls: Vec::new(),

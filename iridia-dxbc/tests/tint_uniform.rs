@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used)]
 
-//! The scan loop of `iridia-wgsl`'s `tests/uniform.rs` held to Tint, whose uniformity analysis is stricter than naga's: a loop
+//! Both writers held to Tint, whose uniformity analysis is stricter than naga's: a loop
 //! whose counter shares a `vec4` with a thread-dependent lane is refused when the state is one vector variable and accepted
 //! when the writer keeps it a lane at a time. Needs `tools.tint`.
 
@@ -97,12 +97,18 @@ fn tint_takes_the_scan_loop_a_lane_at_a_time_and_refuses_it_as_a_vector() {
         return;
     };
     let p = program(SCAN);
-    let wgsl = iridia_wgsl::wgsl(&p, &iridia_wgsl::Profile::BROWSER).unwrap_or_else(|e| panic!("{e}"));
-    if let Err(e) = tint.check("scan", &wgsl) {
-        panic!(
-            "{e}
-{wgsl}"
-        );
+    for (name, wgsl) in [
+        ("scan-own", iridia_wgsl::wgsl(&p, &iridia_wgsl::Profile::BROWSER)),
+        (
+            "scan-naga",
+            iridia_naga::wgsl(&p, &iridia_naga::Profile::BROWSER)
+                .map_err(|e| iridia_wgsl::Error(e.to_string())),
+        ),
+    ] {
+        let wgsl = wgsl.unwrap_or_else(|e| panic!("{e}"));
+        if let Err(e) = tint.check(name, &wgsl) {
+            panic!("{e}\n{wgsl}");
+        }
     }
     let vector = "@compute @workgroup_size(64)
 fn main(@builtin(local_invocation_id) id: vec3<u32>) {
@@ -119,4 +125,107 @@ fn main(@builtin(local_invocation_id) id: vec3<u32>) {
 
     let e = tint.check("scan-vector", vector).unwrap_err();
     assert!(e.contains("workgroupBarrier"), "{e}");
+}
+
+const THROUGH_AN_INNER_LOOP: &str = "iridia-ir 1
+fn main {
+  %0: vec3<u32> = input 0.xyz
+  %1: u32 = %0.x
+  %2: u32 = u32(0)
+  %3: u32 = u32(64)
+  %7: u32 = u32(1)
+  %4: vec4<u32> = compose %3, %2, %2, %2
+  loop '0 (%5: vec4<u32>) = (%4) {
+    %6: u32 = %5.x
+    %8: bool = ucmp.lt %6, %7
+    if %8 {
+      br '0 %5
+    } else {
+      yield
+    }
+    %9: bool = ucmp.lt %1, %6
+    if %9 {
+      loop '1 (%10: vec4<u32>) = (%5) {
+        %11: u32 = %10.y
+        %12: u32 = u32(10)
+        %13: bool = ucmp.ge %11, %12
+        if %13 {
+          br '1 %10
+        } else {
+          yield
+        }
+        %14: u32 = iadd %11, %7
+        %15: u32 = %10.x
+        %16: u32 = %10.z
+        %17: u32 = %10.w
+        %18: vec4<u32> = compose %15, %14, %16, %17
+        continue '1 %18
+      } -> %19: vec4<u32>
+      yield %19
+    } else {
+      yield %5
+    } -> %20: vec4<u32>
+    barrier execution workgroup storage.workgroup
+    %21: u32 = %20.x
+    %23: u32 = shru %21, %7
+    %25: vec4<u32> = compose %23, %2, %2, %2
+    continue '0 %25
+  } -> %26: vec4<u32>
+  return
+}
+";
+
+#[test]
+fn tint_keeps_a_counter_forwarded_through_a_divergent_inner_loop_uniform() {
+    let Some(tint) = wgsl_run::tint() else {
+        println!("tools.tint is not configured: skipped");
+        return;
+    };
+    let p = program(THROUGH_AN_INNER_LOOP);
+    let wgsl = iridia_naga::wgsl(&p, &iridia_naga::Profile::BROWSER).unwrap_or_else(|e| panic!("{e}"));
+    if let Err(e) = tint.check("forwarded-counter-naga", &wgsl) {
+        panic!("{e}\n{wgsl}");
+    }
+}
+
+const FROM_A_CLOSED_ARM: &str = "iridia-ir 1
+fn main {
+  %0: vec3<u32> = input 0.xyz
+  %1: u32 = %0.x
+  %2: u32 = u32(8)
+  %3: bool = ucmp.lt %1, %2
+  if %3 {
+    %4: u32 = iadd %1, %2
+    yield %4
+  } else {
+    return
+  } -> %5: u32
+  %6: u32 = u32(0)
+  loop '0 (%7: u32, %8: u32) = (%5, %6) {
+    %9: u32 = u32(4)
+    %10: bool = ucmp.ge %8, %9
+    if %10 {
+      br '0 %7
+    } else {
+      yield
+    }
+    %11: u32 = u32(1)
+    %12: u32 = iadd %8, %11
+    continue '0 %7, %12
+  } -> %13: u32
+  return
+}
+";
+
+#[test]
+fn a_branch_local_origin_remains_in_storage_after_its_scope_ends() {
+    let Some(tint) = wgsl_run::tint() else {
+        println!("tools.tint is not configured: skipped");
+        return;
+    };
+    let p = program(FROM_A_CLOSED_ARM);
+    let wgsl = iridia_naga::wgsl(&p, &iridia_naga::Profile::BROWSER).unwrap_or_else(|e| panic!("{e}"));
+    if let Err(e) = tint.check("closed-origin-naga", &wgsl) {
+        panic!("{e}\n{wgsl}");
+    }
 }

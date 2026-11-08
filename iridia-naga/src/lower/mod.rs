@@ -8,7 +8,13 @@ mod image;
 mod memory;
 mod rayquery;
 
-use alloc::{collections::BTreeMap, format, string::String, vec, vec::Vec};
+use alloc::{
+    collections::{BTreeMap, BTreeSet},
+    format,
+    string::String,
+    vec,
+    vec::Vec,
+};
 
 use iridia_ir::{
     Axis, Binary, Body, Cmp, End, Fineness, FloatToInt, Function, Memory, MinMaxNan, MulZero, Node, OnZero,
@@ -105,13 +111,25 @@ fn value_type(v: Value) -> Type {
     iridia_ir::value_type(v)
 }
 
+/// One scalar of a construct value. A dominating lane passed through unchanged needs no mutable variable.
+#[derive(Clone)]
+enum LocalLane {
+    Forward(Handle<E>),
+    Local(Handle<LocalVariable>),
+}
+#[derive(Clone)]
+struct LocalValue {
+    ty: Type,
+    lanes: Vec<LocalLane>,
+}
+
 /// A construct being lowered: the label exits name, and where they put their values.
 struct Construct {
     label: iridia_ir::LabelId,
     /// The locals a yield or a break stores the construct's results in.
-    results: Vec<Handle<LocalVariable>>,
+    results: Vec<LocalValue>,
     /// The locals a continue stores the loop's parameters in; `None` for a construct that is not a loop.
-    params: Option<Vec<Handle<LocalVariable>>>,
+    params: Option<Vec<LocalValue>>,
     /// What naga construct it is lowered as: a loop (`Break` and `Continue` reach it), a switch (`Break` reaches it), or
     /// a block (neither does).
     kind: Kind,
@@ -130,9 +148,9 @@ enum Yield<'a> {
     /// The function's body: a yield of nothing falls off its end.
     Top,
     /// An `If` arm or a `Block` body: store the results and fall through.
-    Fall(&'a [Handle<LocalVariable>]),
+    Fall(&'a [LocalValue]),
     /// A loop body: store the results and leave the loop.
-    Break(&'a [Handle<LocalVariable>]),
+    Break(&'a [LocalValue]),
 }
 
 /// A member of the output structure: the value it carries, and the output slots whose values it is made of (one; or
@@ -182,6 +200,9 @@ struct Lower<'a> {
     func: naga::Function,
     /// The expression of each value, once it is computed.
     values: Vec<Option<Handle<E>>>,
+    lane_values: Vec<Option<Vec<Handle<E>>>>,
+    sites: iridia_ir::target::LaneOrigins<'a>,
+    visible: Vec<BTreeSet<ValueId>>,
     /// Whether each value is read (by [`read_values`]).
     read: Vec<bool>,
     /// The global of each resource.
@@ -388,11 +409,68 @@ impl Lower<'_> {
         self.f.ty(v).ok_or_else(|| err(format!("%{} has no type", v.0)))
     }
     fn set(&mut self, v: ValueId, h: Handle<E>) -> Result<(), Error> {
+        if let Some(scope) = self.visible.last_mut() {
+            scope.insert(v);
+        }
         *self
             .values
             .get_mut(v.0 as usize)
             .ok_or_else(|| err(format!("%{} is out of range", v.0)))? = Some(h);
         Ok(())
+    }
+
+    fn visible(&self, v: ValueId) -> bool {
+        self.visible.iter().any(|scope| scope.contains(&v))
+    }
+    /// Read one scalar without reconstructing the varying neighbouring lanes of a packed register.
+    fn scalar_lane(&mut self, v: ValueId, k: u8) -> Result<Handle<E>, Error> {
+        if let Some(lane) = self
+            .lane_values
+            .get(v.0 as usize)
+            .and_then(Option::as_ref)
+            .and_then(|v| v.get(usize::from(k)))
+            .copied()
+        {
+            return Ok(lane);
+        }
+        let value = self.get(v)?;
+        let t = self.vty(v)?;
+        if t.lanes == 1 {
+            return Ok(value);
+        }
+        match self.f.value(v).map(|v| v.op.clone()) {
+            Some(Op::Compose(parts)) => {
+                let mut offset = 0u8;
+                for p in parts {
+                    let lanes = self.vty(p)?.lanes;
+                    if k < offset.saturating_add(lanes) {
+                        return self.scalar_lane(p, k.saturating_sub(offset));
+                    }
+                    offset = offset.saturating_add(lanes);
+                }
+                Err(err("missing composition lane"))
+            }
+            Some(Op::Swizzle(a, lanes)) => self.scalar_lane(
+                a,
+                lanes
+                    .get(usize::from(k))
+                    .copied()
+                    .ok_or_else(|| err("missing swizzle lane"))?,
+            ),
+            Some(Op::Splat(a)) => self.scalar_lane(a, 0),
+            Some(Op::Bitcast(a)) if self.vty(a)?.lanes == t.lanes => {
+                let source = self.scalar_lane(a, k)?;
+                Ok(self.expr(E::As {
+                    expr: source,
+                    kind: naga_scalar(t.scalar)?.kind,
+                    convert: None,
+                }))
+            }
+            _ => Ok(self.expr(E::AccessIndex {
+                base: value,
+                index: u32::from(k),
+            })),
+        }
     }
 
     // literals and the small expansions
@@ -1624,26 +1702,27 @@ impl Lower<'_> {
                 self.expr(E::Compose { ty, components })
             }
             Op::Swizzle(a, lanes) => {
-                let x = self.get(a)?;
-                if self.vty(a)?.lanes == 1 {
-                    // every lane of a scalar is the scalar
-                    self.splat_to(x, t.lanes)?
-                } else if t.lanes == 1 {
-                    self.expr(E::AccessIndex {
-                        base: x,
-                        index: u32::from(lanes[0]),
-                    })
-                } else {
-                    let mut pattern = [SwizzleComponent::X; 4];
-                    for (p, &l) in pattern.iter_mut().zip(lanes.iter()).take(usize::from(t.lanes)) {
-                        *p = component(l)?;
-                    }
-                    self.expr(E::Swizzle {
-                        size: size(t.lanes)?,
-                        vector: x,
-                        pattern,
-                    })
+                let mut components = Vec::new();
+                for k in 0..t.lanes {
+                    let from = lanes
+                        .get(usize::from(k))
+                        .copied()
+                        .ok_or_else(|| err("missing swizzle lane"))?;
+                    components.push(self.scalar_lane(a, from)?);
                 }
+                let value = if t.lanes == 1 {
+                    *components.first().ok_or_else(|| err("empty swizzle"))?
+                } else {
+                    let ty = self.ty_of(t)?;
+                    self.expr(E::Compose {
+                        ty,
+                        components: components.clone(),
+                    })
+                };
+                if let Some(slot) = self.lane_values.get_mut(v.0 as usize) {
+                    *slot = Some(components);
+                }
+                value
             }
             Op::Splat(a) => {
                 let x = self.get(a)?;
@@ -1854,24 +1933,54 @@ impl Lower<'_> {
         let pointer = self.expr(E::LocalVariable(local));
         self.statement(Statement::Store { pointer, value })
     }
-    /// The construct values `params` take the values the locals hold.
-    fn load_locals(&mut self, params: &[ValueId], locals: &[Handle<LocalVariable>]) -> Result<(), Error> {
-        for (&p, &l) in params.iter().zip(locals) {
-            let pointer = self.expr(E::LocalVariable(l));
-            let v = self.expr(E::Load { pointer });
-            self.set(p, v)?;
+    /// Construct values read scalar locals; forwarded lanes retain their dominating expressions.
+    fn load_locals(&mut self, params: &[ValueId], locals: &[LocalValue]) -> Result<(), Error> {
+        for (&p, local) in params.iter().zip(locals) {
+            let mut components = Vec::new();
+            for lane in &local.lanes {
+                components.push(match *lane {
+                    LocalLane::Forward(v) => v,
+                    LocalLane::Local(l) => {
+                        let pointer = self.expr(E::LocalVariable(l));
+                        self.expr(E::Load { pointer })
+                    }
+                });
+            }
+            let value = if local.ty.lanes == 1 {
+                *components.first().ok_or_else(|| err("empty scalar local"))?
+            } else {
+                let ty = self.ty_of(local.ty)?;
+                self.expr(E::Compose {
+                    ty,
+                    components: components.clone(),
+                })
+            };
+            self.set(p, value)?;
+            *self
+                .lane_values
+                .get_mut(p.0 as usize)
+                .ok_or_else(|| err("missing local lanes"))? = Some(components);
         }
         Ok(())
     }
-    fn store_all(&mut self, locals: &[Handle<LocalVariable>], vs: &[ValueId]) -> Result<(), Error> {
+    fn store_all(&mut self, locals: &[LocalValue], vs: &[ValueId]) -> Result<(), Error> {
         if locals.len() != vs.len() {
             return Err(err(
                 "an exit with another number of values than its construct takes",
             ));
         }
-        for (&l, &v) in locals.iter().zip(vs) {
-            let value = self.get(v)?;
-            self.store_local(l, value)?;
+        // All right sides are captured before the first store: loop parameter transfers are simultaneous.
+        let mut stores = Vec::new();
+        for (local, &value) in locals.iter().zip(vs) {
+            for (k, lane) in local.lanes.iter().enumerate() {
+                if let LocalLane::Local(l) = lane {
+                    let k = u8::try_from(k).map_err(|_| err("too many local lanes"))?;
+                    stores.push((*l, self.scalar_lane(value, k)?));
+                }
+            }
+        }
+        for (local, value) in stores {
+            self.store_local(local, value)?;
         }
         Ok(())
     }
@@ -2096,18 +2205,29 @@ impl Lower<'_> {
     fn open(&mut self) {
         self.flush();
         self.blocks.push((Block::new(), None));
+        self.visible.push(BTreeSet::new());
     }
     fn close(&mut self) -> Result<Block, Error> {
         self.flush();
+        self.visible.pop();
         Ok(self.blocks.pop().ok_or_else(|| err("no open block"))?.0)
     }
-    fn locals_for(&mut self, vs: &[ValueId]) -> Result<Vec<Handle<LocalVariable>>, Error> {
-        vs.iter()
-            .map(|v| {
-                let t = self.vty(*v)?;
-                self.local(t)
-            })
-            .collect()
+    fn locals_for(&mut self, vs: &[ValueId]) -> Result<Vec<LocalValue>, Error> {
+        let mut result = Vec::new();
+        for &v in vs {
+            let ty = self.vty(v)?;
+            let mut lanes = Vec::new();
+            for k in 0..ty.lanes {
+                let (origin, lane) = self.sites.origin(v, k);
+                lanes.push(if (origin, lane) != (v, k) && self.visible(origin) {
+                    LocalLane::Forward(self.scalar_lane(origin, lane)?)
+                } else {
+                    LocalLane::Local(self.local(Type::scalar(ty.scalar))?)
+                });
+            }
+            result.push(LocalValue { ty, lanes });
+        }
+        Ok(result)
     }
     fn node(&mut self, n: &Node) -> Result<(), Error> {
         match n {
@@ -2406,6 +2526,9 @@ pub fn module(program: &Program, plan: &BindingPlan) -> Result<naga::Module, Err
         module: naga::Module::default(),
         func: naga::Function::default(),
         values: vec![None; f.values.len()],
+        lane_values: vec![None; f.values.len()],
+        sites: iridia_ir::target::LaneOrigins::of(f, body),
+        visible: vec![BTreeSet::new()],
         read,
         globals: Vec::new(),
         arguments: vec![None; program.interface.inputs.len()],

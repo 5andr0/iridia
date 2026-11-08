@@ -8,10 +8,10 @@
 use alloc::{collections::BTreeMap, vec::Vec};
 use core::cell::RefCell;
 
-use iridia_ir::{End, Function, LabelId, Node, Op, Region, ValueId};
+use crate::{End, Function, LabelId, Node, Op, Region, ValueId};
 
 /// A lane of a value that is not a composition or a pass-through of another: the value and the lane.
-pub(crate) type Origin = (ValueId, u8);
+pub type LaneOrigin = (ValueId, u8);
 
 /// Where a value is defined by a construct.
 #[derive(Clone, Copy)]
@@ -38,19 +38,28 @@ enum Site<'a> {
 }
 
 /// The constructs of a function that define values, by value.
-pub(crate) struct Sites<'a> {
+pub struct LaneOrigins<'a> {
     f: &'a Function,
     at: BTreeMap<u32, Site<'a>>,
     /// The answers of `resolve` found so far, by lane.
     memo: RefCell<BTreeMap<(u32, u8), Vec<Entry>>>,
 }
 
+impl core::fmt::Debug for LaneOrigins<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("LaneOrigins")
+            .field("function", &self.f.name)
+            .finish_non_exhaustive()
+    }
+}
+
 /// How deep a chain of passes-on is followed before a lane is taken as its own origin.
 const DEPTH: u32 = 512;
 
-impl<'a> Sites<'a> {
-    pub(crate) fn of(f: &'a Function, body: &'a Region) -> Sites<'a> {
-        let mut s = Sites {
+impl<'a> LaneOrigins<'a> {
+    /// Index the constructs of a structured function for lane-origin queries.
+    pub fn of(f: &'a Function, body: &'a Region) -> LaneOrigins<'a> {
+        let mut s = LaneOrigins {
             f,
             at: BTreeMap::new(),
             memo: RefCell::new(BTreeMap::new()),
@@ -124,13 +133,13 @@ impl<'a> Sites<'a> {
     }
 
     /// The origin of lane `k` of `v`.
-    pub(crate) fn origin(&self, v: ValueId, k: u8) -> Origin {
+    pub fn origin(&self, v: ValueId, k: u8) -> LaneOrigin {
         self.resolve(v, k, &mut Vec::new(), 0).origin
     }
 
     /// `compute`, or the answer it gave before where that is the answer it would give now (see `Entry::holds`): what is
     /// resolved through an `If` or a loop is resolved once, not once for every way to reach it.
-    fn resolve(&self, v: ValueId, k: u8, visiting: &mut Vec<Origin>, depth: u32) -> Res {
+    fn resolve(&self, v: ValueId, k: u8, visiting: &mut Vec<LaneOrigin>, depth: u32) -> Res {
         if depth > DEPTH {
             return Res {
                 origin: (v, k),
@@ -163,7 +172,7 @@ impl<'a> Sites<'a> {
         res
     }
 
-    fn compute(&self, v: ValueId, k: u8, visiting: &mut Vec<Origin>, depth: u32) -> Res {
+    fn compute(&self, v: ValueId, k: u8, visiting: &mut Vec<LaneOrigin>, depth: u32) -> Res {
         let own = (v, k);
         let next = depth.saturating_add(1);
         if let Some(site) = self.at.get(&v.0) {
@@ -195,7 +204,7 @@ impl<'a> Sites<'a> {
                 }
                 Site::LoopResult { label, body, index } => {
                     let mut out = Res::at(own, depth);
-                    let mut agreed: Option<Origin> = None;
+                    let mut agreed: Option<LaneOrigin> = None;
                     let mut exits = Vec::new();
                     // a loop body that ends in a yield leaves the loop with those values
                     if let Some(End::Yield(vs)) = &body.end {
@@ -286,12 +295,12 @@ impl<'a> Sites<'a> {
     }
 }
 
-/// What `Sites::compute` found, and what the answer depends on beyond the lane's own definition.
+/// What `LaneOrigins::compute` found, and what the answer depends on beyond the lane's own definition.
 struct Res {
-    origin: Origin,
+    origin: LaneOrigin,
     /// The loop parameters whose place on the way here was asked, and whether they were on it: the answer is the same
     /// wherever those are on the way as they were.
-    ext: Vec<(Origin, bool)>,
+    ext: Vec<(LaneOrigin, bool)>,
     /// The deepest chain of passes-on followed to find it.
     deepest: u32,
     /// The chain was cut short at `DEPTH`: the answer depends on how deep it was asked at.
@@ -299,7 +308,7 @@ struct Res {
 }
 
 impl Res {
-    fn at(origin: Origin, depth: u32) -> Res {
+    fn at(origin: LaneOrigin, depth: u32) -> Res {
         Res {
             origin,
             ext: Vec::new(),
@@ -309,7 +318,7 @@ impl Res {
     }
 
     /// What `other`, asked on the way, depends on too (but not on `except` being on the way, which it was only inside).
-    fn absorb(&mut self, other: &Res, except: Option<Origin>) {
+    fn absorb(&mut self, other: &Res, except: Option<LaneOrigin>) {
         for e in &other.ext {
             if except == Some(e.0) && e.1 {
                 continue;
@@ -323,18 +332,18 @@ impl Res {
     }
 }
 
-/// An answer of `Sites::resolve` kept for a lane: it is the answer wherever the same loop parameters are on the way as were
+/// An answer of `LaneOrigins::resolve` kept for a lane: it is the answer wherever the same loop parameters are on the way as were
 /// when it was found, and the chain it followed still fits under `DEPTH`; one cut short at `DEPTH` is the answer only at the
 /// depth it was found at (where it was cut depends on that).
 struct Entry {
-    origin: Origin,
-    ext: Vec<(Origin, bool)>,
+    origin: LaneOrigin,
+    ext: Vec<(LaneOrigin, bool)>,
     height: u32,
     capped_at: Option<u32>,
 }
 
 impl Entry {
-    fn holds(&self, visiting: &[Origin], depth: u32) -> bool {
+    fn holds(&self, visiting: &[LaneOrigin], depth: u32) -> bool {
         let depth_ok = match self.capped_at {
             Some(at) => depth == at,
             None => depth.saturating_add(self.height) <= DEPTH,
@@ -373,9 +382,15 @@ mod tests {
     use super::*;
     use alloc::{format, string::String};
 
-    /// The recursion `Sites::resolve` replaced, as it was: no memory, so it does the work again for every way to reach a
+    /// The recursion `LaneOrigins::resolve` replaced, as it was: no memory, so it does the work again for every way to reach a
     /// lane.
-    fn reference(s: &Sites<'_>, v: ValueId, k: u8, visiting: &mut Vec<Origin>, depth: u32) -> Origin {
+    fn reference(
+        s: &LaneOrigins<'_>,
+        v: ValueId,
+        k: u8,
+        visiting: &mut Vec<LaneOrigin>,
+        depth: u32,
+    ) -> LaneOrigin {
         let own = (v, k);
         if depth > DEPTH {
             return own;
@@ -405,7 +420,7 @@ mod tests {
                     }
                 }
                 Site::LoopResult { label, body, index } => {
-                    let mut agreed: Option<Origin> = None;
+                    let mut agreed: Option<LaneOrigin> = None;
                     let mut exits = Vec::new();
                     // a loop body that ends in a yield leaves the loop with those values
                     if let Some(End::Yield(vs)) = &body.end {
@@ -553,18 +568,18 @@ fn main {
 
     fn regions(f: &Function) -> &Region {
         match &f.body {
-            iridia_ir::Body::Regions(r) => r,
-            iridia_ir::Body::Cfg(_) => panic!("a control flow graph"),
+            crate::Body::Regions(r) => r,
+            crate::Body::Cfg(_) => panic!("a control flow graph"),
         }
     }
 
     /// Every lane of every value of `text` resolves as the recursion resolved it, whichever order they are asked in (the
     /// answers kept from one lane are used for the next, so the order is part of the test).
     fn agrees(text: &str) {
-        let f = iridia_ir::text::parse(text).unwrap_or_else(|e| panic!("{e:?}\n{text}"));
+        let f = crate::text::parse(text).unwrap_or_else(|e| panic!("{e:?}\n{text}"));
         let ids: Vec<ValueId> = (0..f.values.len() as u32).map(ValueId).collect();
         for order in 0..3 {
-            let sites = Sites::of(&f, regions(&f));
+            let sites = LaneOrigins::of(&f, regions(&f));
             let mut lanes: Vec<(ValueId, u8)> = ids
                 .iter()
                 .flat_map(|v| (0..f.ty(*v).map_or(1, |t| t.lanes)).map(move |k| (*v, k)))
@@ -575,7 +590,7 @@ fn main {
                 _ => {}
             }
             for (v, k) in lanes {
-                let want = reference(&Sites::of(&f, regions(&f)), v, k, &mut Vec::new(), 0);
+                let want = reference(&LaneOrigins::of(&f, regions(&f)), v, k, &mut Vec::new(), 0);
                 assert_eq!(
                     sites.origin(v, k),
                     want,
@@ -621,8 +636,8 @@ fn main {
     fn forty_nested_branches_resolve_at_once() {
         // 2^40 ways to reach the first value: the recursion would not finish
         let text = nested_ifs(40);
-        let f = iridia_ir::text::parse(&text).unwrap();
-        let sites = Sites::of(&f, regions(&f));
+        let f = crate::text::parse(&text).unwrap();
+        let sites = LaneOrigins::of(&f, regions(&f));
         let last = ValueId(41);
         assert_eq!(sites.origin(last, 0), (ValueId(0), 0));
     }
@@ -631,8 +646,8 @@ fn main {
     fn branches_nested_deeper_than_the_depth_limit_resolve_at_once() {
         // the chain is cut at `DEPTH` where it was asked from, and each way to reach the same value is cut in the same place
         let text = nested_ifs(DEPTH + 88);
-        let f = iridia_ir::text::parse(&text).unwrap();
-        let sites = Sites::of(&f, regions(&f));
+        let f = crate::text::parse(&text).unwrap();
+        let sites = LaneOrigins::of(&f, regions(&f));
         let last = ValueId(DEPTH + 89);
         assert_eq!(sites.origin(last, 0), (ValueId(last.0 - DEPTH - 1), 0));
     }
