@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Route nonlocal structured exits through typed result payloads only across the boundaries they cross. Keep ordinary
+  SSA values and loop parameters in place, replacing the whole-function demote/route/promote sequence that multiplied
+  transfer copies in nested control flow. Mutually exclusive payloads share a typed field pool selected by the route
+  tag. The IR form and version are unchanged.
+
 - `iridia-naga`: check unsupported operations, resource and variable shapes, and structured exits before allocating
   the lowering arena. Named limitations return without expanding the preceding operations; successful output is
   unchanged. Unused value-table entries are not treated as placed operations.

@@ -449,3 +449,142 @@ fn random_graphs_keep_their_values_when_structured() {
         "{structured} structured, {refused} refused, {routed} routed, {switched} with a switch"
     );
 }
+
+#[test]
+fn escaping_continue_transfers_loop_parameters_simultaneously_and_break_keeps_its_own_arity() {
+    let mut b = iridia_ir::Builder::new("main");
+    let t = b.value(Type::U32, Op::LoadInput(0, 1));
+    let zero = b.u32(0);
+    let one = b.u32(1);
+    let two = b.u32(2);
+    let (outer, params) = b.open_loop(&[one, two, zero]).unwrap();
+    let (a, c, i) = (params[0], params[1], params[2]);
+    b.open_loop(&[]).unwrap();
+    let done = b.op(Op::Binary(Binary::UCmp(Cmp::Ge), i, t)).unwrap();
+    b.open_if(done);
+    b.else_(End::Br(outer, vec![a, c])).unwrap();
+    let next = b.op(Op::Binary(Binary::IAdd, i, one)).unwrap();
+    b.close(End::Continue(outer, vec![c, a, next]), &[]).unwrap();
+    b.close(End::Unreachable, &[]).unwrap();
+    let results = b.close(End::Unreachable, &[Type::U32, Type::U32]).unwrap();
+    let hundred = b.u32(100);
+    let high = b.op(Op::Binary(Binary::IMul, results[0], hundred)).unwrap();
+    let sum = b.op(Op::Binary(Binary::IAdd, high, results[1])).unwrap();
+    b.store_output(0, 1, sum);
+    let p = program(b.finish(End::Return).unwrap(), ScalarType::Uint, Vec::new());
+    let mut q = p.clone();
+    iridia_ir::validate(&p).unwrap();
+    assert_eq!(iridia_passes::break_flags(&mut q.entry).unwrap(), 2);
+    iridia_ir::validate(&q).unwrap_or_else(|e| panic!("{e:?}\n{}", iridia_ir::text::print(&q.entry)));
+    assert!(q.entry.vars.is_empty());
+    fn bounded(r: &iridia_ir::Region) {
+        for node in &r.nodes {
+            match node {
+                Node::If { results, .. }
+                | Node::Loop { results, .. }
+                | Node::Block { results, .. }
+                | Node::Switch { results, .. } => assert!(
+                    results.len() <= 4,
+                    "exclusive two- and three-word payloads share three fields plus one tag"
+                ),
+                _ => {}
+            }
+            for child in node.regions() {
+                bounded(child);
+            }
+        }
+    }
+    if let Body::Regions(r) = &q.entry.body {
+        bounded(r);
+    }
+    for t in 0..8 {
+        let want = (if t % 2 == 0 { 102 } else { 201 }, false);
+        assert_eq!(run(&p, t, &[]).unwrap(), want);
+        assert_eq!(run(&q, t, &[]).unwrap(), want);
+        support::agrees_flat(&q, &[[t, 0, 0, 0]], &[]);
+    }
+    iridia_naga::wgsl(&q, &iridia_naga::Profile::NAGA).unwrap();
+    let once = iridia_ir::text::print(&q.entry);
+    assert_eq!(iridia_passes::break_flags(&mut q.entry).unwrap(), 0);
+    assert_eq!(iridia_ir::text::print(&q.entry), once);
+}
+
+#[test]
+fn routing_a_break_to_a_shadowed_block_stops_at_its_nearest_definition() {
+    let mut b = iridia_ir::Builder::new("main");
+    let input = b.value(Type::U32, Op::LoadInput(0, 1));
+    let outer = b.open_block();
+    let inner = b.open_block();
+    b.open_loop(&[]).unwrap();
+    b.close(End::Br(inner, vec![input]), &[]).unwrap();
+    let result = b.close(End::Unreachable, &[Type::U32]).unwrap()[0];
+    let hundred = b.u32(100);
+    let sum = b.op(Op::Binary(Binary::IAdd, result, hundred)).unwrap();
+    let result = b.close(End::Br(outer, vec![sum]), &[Type::U32]).unwrap()[0];
+    b.store_output(0, 1, result);
+    let mut f = b.finish(End::Return).unwrap();
+    // Labels have lexical scope; deliberately reuse the outer block's spelling.
+    fn shadow(r: &mut iridia_ir::Region, from: iridia_ir::LabelId, to: iridia_ir::LabelId) {
+        for n in &mut r.nodes {
+            if let Node::Block { label, .. } = n
+                && *label == from
+            {
+                *label = to;
+            }
+            for r in n.regions_mut() {
+                shadow(r, from, to);
+            }
+        }
+        if let Some(End::Br(label, _)) = &mut r.end
+            && *label == from
+        {
+            *label = to;
+        }
+    }
+    if let Body::Regions(r) = &mut f.body {
+        shadow(r, inner, outer);
+    }
+    let p = program(f, ScalarType::Uint, Vec::new());
+    iridia_ir::validate(&p).unwrap();
+    let mut q = p.clone();
+    assert_eq!(iridia_passes::break_flags(&mut q.entry).unwrap(), 1);
+    iridia_ir::validate(&q).unwrap_or_else(|e| panic!("{e:?}\n{}", iridia_ir::text::print(&q.entry)));
+    for t in [0, 7, u32::MAX] {
+        let want = (t.wrapping_add(100), false);
+        assert_eq!(run(&p, t, &[]).unwrap(), want);
+        assert_eq!(run(&q, t, &[]).unwrap(), want);
+    }
+    iridia_naga::wgsl(&q, &iridia_naga::Profile::NAGA).unwrap();
+}
+
+#[test]
+fn a_route_payload_shares_normal_result_fields_only_on_the_escaping_path() {
+    let mut b = iridia_ir::Builder::new("main");
+    let input = b.value(Type::U32, Op::LoadInput(0, 1));
+    let outer = b.open_block();
+    let (inner, _) = b.open_loop(&[]).unwrap();
+    let ten = b.u32(10);
+    let early = b.op(Op::Binary(Binary::UCmp(Cmp::Lt), input, ten)).unwrap();
+    b.open_if(early);
+    b.else_(End::Br(outer, vec![input])).unwrap();
+    b.close(End::Yield(vec![]), &[]).unwrap();
+    let hundred = b.u32(100);
+    let normal = b.op(Op::Binary(Binary::IAdd, input, hundred)).unwrap();
+    let normal = b.close(End::Br(inner, vec![normal]), &[Type::U32]).unwrap()[0];
+    let thousand = b.u32(1000);
+    let normal = b.op(Op::Binary(Binary::IAdd, normal, thousand)).unwrap();
+    let result = b.close(End::Yield(vec![normal]), &[Type::U32]).unwrap()[0];
+    b.store_output(0, 1, result);
+    let p = program(b.finish(End::Return).unwrap(), ScalarType::Uint, Vec::new());
+    let mut q = p.clone();
+    iridia_ir::validate(&p).unwrap();
+    assert_eq!(iridia_passes::break_flags(&mut q.entry).unwrap(), 1);
+    iridia_ir::validate(&q).unwrap_or_else(|e| panic!("{e:?}\n{}", iridia_ir::text::print(&q.entry)));
+    for t in [0u32, 7, 10, 12, u32::MAX] {
+        let want = (if t < 10 { t } else { t.wrapping_add(1100) }, false);
+        assert_eq!(run(&p, t, &[]).unwrap(), want);
+        assert_eq!(run(&q, t, &[]).unwrap(), want);
+        support::agrees_flat(&q, &[[t, 0, 0, 0]], &[]);
+    }
+    iridia_naga::wgsl(&q, &iridia_naga::Profile::NAGA).unwrap();
+}

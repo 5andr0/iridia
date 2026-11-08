@@ -3,7 +3,7 @@
 //!
 //! - [`clip_distances_as_varyings`], [`discard_clipped`]: clip distances carried as plain varyings, and the pixel
 //!   program's discard on them.
-//! - [`break_flags`]: exits innermost-only `break` and `continue` cannot take, routed through a jump variable.
+//! - [`break_flags`]: exits innermost-only `break` and `continue` cannot take, routed through typed result payloads.
 //! - [`flatten_sampler_heaps`]: arrays of samplers made one sampler.
 //! - [`flatten`]: a `Regions` body made a `Cfg`, the form a graph-shaped source lifts to.
 //! - [`fold`]: values computed from literals, where every target computes them alike, made literals.
