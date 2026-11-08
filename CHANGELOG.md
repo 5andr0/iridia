@@ -116,6 +116,8 @@
   into `log2`, inverse square root or division no longer asks WGSL constant evaluation to represent a non-finite
   result. Non-finite float literals likewise reconstruct their bits from a runtime integer binding. Reduced IR
   fixtures validate in both profiles and run against the IR interpreter.
+- `iridia-ir::target` owns `FnItem`, `FunctionSig`, `ItemList` and `stage_functions`, the function signatures of
+  stages without graphics entry points. `iridia` re-exports the same definitions for existing callers.
 - `iridia-dxbc`, `iridia-dxil`: the IR lifts have version gates, as the older lifts and `iridia-d3d9-ir` do: what
   `ir::lift` makes of each committed fixture is hashed with `iridia_ir::gate` under the IR lifter's `LIFTER_VERSION` in
   `tests/ir-lifted.hashes`, so a change to what the IR lift makes of a bytecode fails its tests until the version is
