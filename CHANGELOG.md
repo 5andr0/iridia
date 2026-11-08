@@ -62,6 +62,9 @@
 - `iridia_dxil::ir::LIFTER_VERSION` is 3 (was 2), invalidating cached lifts for the new ray-query representation.
   The fixture table includes seven newly lifted ray-query fixtures and the new object-space query fixture; existing
   successful fixture hashes are unchanged.
+- Material feature selection follows uniform lanes through structured block results when every exit carries the
+  same source lane. Other lanes remain dynamic, and enclosing-label breaks are distinguished from loop exits.
+
 - Material feature folding uses the IR reference evaluator, including integer bit operations, conversions and float
   arithmetic. Folded decisions now agree with reference execution by construction, including its portable math and
   denormal rules. Unsupported reference operations remain typed refusals.

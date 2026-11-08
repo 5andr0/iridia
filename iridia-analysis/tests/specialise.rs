@@ -305,6 +305,87 @@ fn main {{
     }
 }
 
+#[test]
+fn block_result_lanes_keep_uniform_features_separate_from_runtime_data() {
+    for kind in ["if", "block", "switch", "shadow"] {
+        for mixed in [false, true] {
+            let mut ir = float_decision();
+            let id = buffer(&ir);
+            let other = if mixed { "%4" } else { "%0" };
+            let left = "    %7: vec2<u32> = compose %0, %4";
+            let right = format!("    %9: vec2<u32> = compose {other}, %5");
+            let construct = match kind {
+                "if" => format!(
+                    "  if %3 {{\n{left}\n    yield %7\n  }} else {{\n{right}\n    yield %9\n  }} -> %10: vec2<u32>"
+                ),
+                "block" => format!(
+                    "  block '0 {{\n    if %3 {{\n{left}\n      br '0 %7\n    }} else {{\n      yield\n    }}\n{right}\n    yield %9\n  }} -> %10: vec2<u32>"
+                ),
+                "shadow" => format!(
+                    "  block '0 {{\n    loop '0 () = () {{\n      br '0 %4\n    }} -> %6: u32\n    %7: vec2<u32> = compose {other}, %6\n    yield %7\n  }} -> %10: vec2<u32>"
+                ),
+                _ => format!(
+                    "  switch '0 %4 {{\n  case 0:\n{left}\n    br '0 %7\n  default:\n{right}\n    yield %9\n  }} -> %10: vec2<u32>"
+                ),
+            };
+            ir.entry = iridia_ir::text::parse(&format!(
+                "iridia-ir 1
+fn main {{
+  %0: u32 = buffer r{} + 0 oob.zero
+  %1: f32 = input 1.x
+  %2: f32 = f32(0.0)
+  %3: bool = fcmp.ne %1, %2
+  %4: u32 = bitcast %1
+  %5: u32 = u32(5)
+{construct}
+  %11: u32 = %10.x
+  %12: u32 = u32(0)
+  %13: bool = ucmp.ne %11, %12
+  %14: f32 = buffer r{} + 4 oob.zero
+  %15: f32 = select %13, %1, %14
+  output 0.x = %15
+  return
+}}
+",
+                id.0, id.0
+            ))
+            .unwrap();
+            iridia_ir::validate(&ir).unwrap();
+            for flag in [0, 1, u32::MAX] {
+                let supplied = Words::from([((id, 0), flag), ((id, 4), 4f32.to_bits())]);
+                let expected = if mixed {
+                    Words::new()
+                } else {
+                    Words::from([((id, 0), flag)])
+                };
+                assert_eq!(
+                    feature_words(&ir, &supplied).unwrap(),
+                    expected,
+                    "{kind}, mixed={mixed}"
+                );
+                let result = specialise(&ir, &supplied).unwrap_or_else(|e| {
+                    panic!(
+                        "{kind}, mixed={mixed}, flag={flag}: {e}\n{}",
+                        iridia_ir::text::print(&ir.entry)
+                    )
+                });
+                assert_eq!(result.words, expected);
+                for data in [0f32, 0.5, 3.0] {
+                    for scale in [2f32, 7.0] {
+                        let inputs = [[0; 4], [data.to_bits(); 4]];
+                        let row = [flag, scale.to_bits(), 0, 0];
+                        assert_eq!(
+                            run(&ir, &inputs, id, row),
+                            run(&result.program, &inputs, id, row),
+                            "{kind}, mixed={mixed}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
 proptest::proptest! {
     #[test]
     fn arbitrary_feature_bits_preserve_runtime_inputs(flag: u32, scale in -64i16..64, x: u8, w: u8) {

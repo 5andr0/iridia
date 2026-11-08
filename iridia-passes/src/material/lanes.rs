@@ -1,14 +1,82 @@
-//! Lane identities through moves and equal literals; structured results remain unknown.
+//! Equal lane identities across structured results. No loop-carried value is assumed invariant.
 use alloc::{collections::BTreeMap, vec, vec::Vec};
-use iridia_ir::{Function, Op, ValueId};
+use iridia_ir::{Body, End, Function, LabelId, Node, Op, Region, ValueId};
 
 type Lane = (ValueId, u8);
 pub(super) type Aliases = BTreeMap<Lane, Option<Lane>>;
 
+fn incoming(f: &Function) -> BTreeMap<ValueId, Vec<ValueId>> {
+    fn add(results: &[ValueId], values: &[ValueId], out: &mut BTreeMap<ValueId, Vec<ValueId>>) {
+        for (&result, &value) in results.iter().zip(values) {
+            out.entry(result).or_default().push(value);
+        }
+    }
+    fn walk(
+        r: &Region,
+        results: &[ValueId],
+        exits: &mut Vec<(LabelId, Vec<ValueId>)>,
+        out: &mut BTreeMap<ValueId, Vec<ValueId>>,
+    ) {
+        for n in &r.nodes {
+            match n {
+                Node::If {
+                    accept,
+                    reject,
+                    results,
+                    ..
+                } => {
+                    walk(accept, results, exits, out);
+                    walk(reject, results, exits, out);
+                }
+                Node::Block { label, body, results } => {
+                    exits.push((*label, results.clone()));
+                    walk(body, results, exits, out);
+                    exits.pop();
+                }
+                Node::Switch {
+                    label,
+                    cases,
+                    default,
+                    results,
+                    ..
+                } => {
+                    exits.push((*label, results.clone()));
+                    for case in cases {
+                        walk(&case.body, results, exits, out);
+                    }
+                    walk(default, results, exits, out);
+                    exits.pop();
+                }
+                // Breaks to enclosing blocks still contribute, but neither loop parameters nor results are aliases.
+                Node::Loop { label, body, .. } => {
+                    exits.push((*label, Vec::new()));
+                    walk(body, &[], exits, out);
+                    exits.pop();
+                }
+                _ => {}
+            }
+        }
+        match &r.end {
+            Some(End::Yield(values)) => add(results, values, out),
+            Some(End::Br(label, values)) => {
+                if let Some((_, results)) = exits.iter().rev().find(|(at, _)| at == label) {
+                    add(results, values, out);
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut out = BTreeMap::new();
+    if let Body::Regions(r) = &f.body {
+        walk(r, &[], &mut Vec::new(), &mut out);
+    }
+    out
+}
+
 /// The same source lane must reach every exit. Other lanes of the same result may remain dynamic.
 /// The explicit stack and memoisation visit each lane once even with deeply nested shared results.
 pub(super) fn aliases(f: &Function) -> Aliases {
-    let incoming = BTreeMap::<ValueId, Vec<ValueId>>::new();
+    let incoming = incoming(f);
     let mut cache = Aliases::new();
     // Constant folding may turn only one arm's compose into a literal. Preserve lane identity across that change.
     let mut literals = BTreeMap::new();

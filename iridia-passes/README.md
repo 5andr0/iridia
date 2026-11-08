@@ -65,6 +65,7 @@ fn main {
 - Each pass keeps the meaning of every program the validator accepts, by the IR's definitions; the tests check that by running programs before and after in [`iridia-exec-ir`](../iridia-exec-ir), on hand-worked fixtures, on 1,500 generated control flow graphs and on the Direct3D 9 programs of the migration gate.
 - `structurize` does not split nodes: an irreducible graph is refused, not made reducible.
 - `specialise_state` folds state only where the caller states its value; a program that still reads state is for a target that binds it.
+- Material selection follows the same source lane through every exit of an `If`, `Block` or `Switch`, even where other result lanes remain dynamic. Loop-carried values are never assumed constant from their initial values.
 
 ## Tests
 
