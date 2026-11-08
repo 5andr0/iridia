@@ -133,3 +133,68 @@ fn the_webgpu_plan_binds_other_spaces_and_counters_after_space_0() {
         ]
     );
 }
+
+/// A resource of `kind` with no register of the source's own, as a descriptor heap's is.
+fn registerless(id: u32, kind: ResourceKind) -> Resource {
+    Resource {
+        id: ResourceId(id),
+        kind,
+        count: 1,
+        provenance: ResourceProvenance {
+            name: format!("heap{id}"),
+            d3d: None,
+            counter_of: None,
+            layout: None,
+        },
+    }
+}
+
+#[test]
+fn a_resource_with_no_register_binds_after_the_highest_register_of_its_class_by_resource_id() {
+    let sampler = || ResourceKind::Sampler { comparison: false };
+    let i = interface(vec![
+        resource(0, 2, 0, 0, false),
+        // a sampler of another space does not move the space-0 end
+        resource(1, 2, 7, 3, false),
+        resource(2, 2, 3, 0, false),
+        resource(3, 1, 1, 0, false),
+        registerless(4, sampler()),
+        registerless(5, ResourceKind::Buffer(BufferKind::Raw)),
+        registerless(6, sampler()),
+    ]);
+    for bindings in [Bindings::D3d, Bindings::WebGpu] {
+        let plan = BindingPlan::new(&i, bindings).unwrap();
+        let at: Vec<(u32, u32, u32)> = plan
+            .bindings
+            .iter()
+            .filter(|b| b.resource.0 >= 4)
+            .map(|b| (b.resource.0, b.group, b.binding))
+            .collect();
+        // samplers end at s3: the two take s4 and s5; the buffer takes t2 after t1
+        assert_eq!(at, vec![(4, 2, 4), (5, 1, 2), (6, 2, 5)], "{bindings:?}");
+        let names: Vec<&str> = plan
+            .bindings
+            .iter()
+            .filter(|b| b.resource.0 >= 4)
+            .map(|b| b.name.as_str())
+            .collect();
+        assert_eq!(names, ["s4", "t2", "s5"], "{bindings:?}");
+    }
+    // all alone, the first of a class is register 0
+    let alone = BindingPlan::d3d(&interface(vec![registerless(0, sampler())])).unwrap();
+    assert_eq!((alone.bindings[0].group, alone.bindings[0].binding), (2, 0));
+}
+
+#[test]
+fn a_hidden_counter_with_no_register_is_still_refused() {
+    let mut counter = registerless(
+        1,
+        ResourceKind::Storage {
+            target: StorageTarget::Buffer(BufferKind::Raw),
+            access: Access::ReadWrite,
+        },
+    );
+    counter.provenance.counter_of = Some(ResourceId(0));
+    let e = BindingPlan::d3d(&interface(vec![resource(0, 3, 0, 0, true), counter])).unwrap_err();
+    assert!(e.contains("no D3D register"), "{e}");
+}

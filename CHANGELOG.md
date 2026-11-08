@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `iridia-ir`: `BindingPlan::d3d` and `BindingPlan::webgpu` place a resource that has no Direct3D register (a descriptor
+  heap's, the sampler a flattened sampler heap leaves) in space 0 after the highest register of its class, in the order of
+  resource ids, where they refused it; a hidden counter is still refused. Of the slim set's Shader Model 6 programs, 38
+  that were refused for this reason are not: 35 are written as WGSL (the IR WGSL count of dxil 2604 -> 2639 of 4059), two
+  are refused as ray generation programs and one as a lowering bug naga's validator names.
 - `iridia-ir`: `BoundSizes`, the size each constant buffer is bound with (taken by `lift_with`), is `iridia_ir::interface::BoundSizes`,
   beside `ConstantBufferBinding`; `iridia_interface` and `iridia` re-export it, so no path breaks. The IR lifts of
   `iridia-dxbc` and `iridia-dxil` take it from there.

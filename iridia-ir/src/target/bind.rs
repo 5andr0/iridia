@@ -1,9 +1,11 @@
 //! Where a module binds each resource of a program: Direct3D's register classes as bind groups, as they are or kept
 //! inside WebGPU's default limits.
 
-use alloc::{format, string::String, vec::Vec};
+use alloc::{collections::BTreeMap, format, string::String, vec::Vec};
 
-use crate::interface::{BufferKind, D3dClass, Interface, ResourceId, ResourceKind, StorageTarget};
+use crate::interface::{
+    BufferKind, D3dBinding, D3dClass, Interface, ResourceId, ResourceKind, StorageTarget,
+};
 
 /// Where one resource is bound.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -48,20 +50,83 @@ struct Placed {
     counter: bool,
 }
 
-/// The interface's bound resources as Direct3D places them; pipeline state is not bound, and a resource with no D3D
-/// register is refused.
+/// The register class a resource of this kind is read through; pipeline state has none.
+fn class_of(kind: &ResourceKind) -> Option<D3dClass> {
+    Some(match kind {
+        ResourceKind::ConstantBuffer { .. } => D3dClass::ConstantBuffer,
+        ResourceKind::Texture { .. } | ResourceKind::Buffer(_) | ResourceKind::AccelerationStructure => {
+            D3dClass::ShaderResource
+        }
+        ResourceKind::Sampler { .. } => D3dClass::Sampler,
+        ResourceKind::Storage { .. } => D3dClass::UnorderedAccess,
+        ResourceKind::PipelineState(_) => return None,
+    })
+}
+
+/// The interface's bound resources as Direct3D places them; pipeline state is not bound. A resource with no register of
+/// the source's own (a descriptor heap's, a flattened sampler heap's sampler) is placed in space 0 after the highest
+/// register of its class, in the order of resource ids; a hidden counter, bound with its view, is refused.
 fn placed(interface: &Interface) -> Result<Vec<Placed>, String> {
     let mut out = Vec::new();
     // pipeline state is set with the draw, not bound: specialisation folds it (a state block would be planned here)
-    for r in interface
-        .resources
-        .iter()
-        .filter(|r| !matches!(r.kind, ResourceKind::PipelineState(_)))
+    let bound = || {
+        interface
+            .resources
+            .iter()
+            .filter(|r| !matches!(r.kind, ResourceKind::PipelineState(_)))
+    };
+    // the next free register of each class in space 0, for the resources that state none
+    let mut next = [0u32; 4];
+    let slot = |class: D3dClass| match class {
+        D3dClass::ConstantBuffer => 0,
+        D3dClass::ShaderResource => 1,
+        D3dClass::Sampler => 2,
+        D3dClass::UnorderedAccess => 3,
+    };
+    for d in bound()
+        .filter_map(|r| r.provenance.d3d.as_ref())
+        .filter(|d| d.space == 0)
     {
+        if let Some(n) = next.get_mut(slot(d.class)) {
+            *n = (*n).max(d.register.saturating_add(1));
+        }
+    }
+    let mut assigned = BTreeMap::new();
+    for r in bound().filter(|r| r.provenance.d3d.is_none()) {
+        if r.provenance.counter_of.is_some() {
+            return Err(format!(
+                "resource {} ({}) has no D3D register",
+                r.id.0, r.provenance.name
+            ));
+        }
+        let class = class_of(&r.kind).ok_or_else(|| {
+            format!(
+                "resource {} ({}) has no register class",
+                r.id.0, r.provenance.name
+            )
+        })?;
+        let n = next.get_mut(slot(class)).ok_or_else(|| {
+            format!(
+                "resource {} ({}) has no register class",
+                r.id.0, r.provenance.name
+            )
+        })?;
+        assigned.insert(
+            r.id,
+            D3dBinding {
+                class,
+                register: *n,
+                space: 0,
+            },
+        );
+        *n = n.saturating_add(1);
+    }
+    for r in bound() {
         let d = r
             .provenance
             .d3d
             .as_ref()
+            .or_else(|| assigned.get(&r.id))
             .ok_or_else(|| format!("resource {} ({}) has no D3D register", r.id.0, r.provenance.name))?;
         let (group, prefix) = match d.class {
             D3dClass::ConstantBuffer => (0, "cb"),
@@ -100,7 +165,10 @@ impl BindingPlan {
     /// shader resources in group 1 (`tN`), samplers in group 2 (`sN`), unordered-access views in group 3 (`uN`). A
     /// register of a space other than 0 binds at `(space << 16) | register` (`uN_spaceS`). A structured view's hidden
     /// counter binds in group 4 at the view's binding (`uN_counter`). Pipeline state is not bound. A resource with no
-    /// D3D register is refused. The bindings past 999 and group 4 are past WebGPU's default limits:
+    /// D3D register of the source's own (a descriptor heap's, the sampler a flattened sampler heap leaves) is placed in
+    /// space 0 after the highest register of its class that space has, in the order of resource ids, and named as a
+    /// register of that number is: the number is the plan's, not the source's. A hidden counter, bound with its view,
+    /// is refused. The bindings past 999 and group 4 are past WebGPU's default limits:
     /// [`BindingPlan::webgpu`] keeps inside them.
     pub fn d3d(interface: &Interface) -> Result<BindingPlan, String> {
         let mut bindings = Vec::new();

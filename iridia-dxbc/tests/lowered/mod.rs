@@ -120,10 +120,14 @@ pub fn lower_c(old: &iridia::Program, p: &iridia_ir::Program) -> Result<iridia::
             ),
             None => (r, ""),
         };
-        let d = owner
-            .provenance
-            .d3d
-            .ok_or_else(|| unbuilt(format!("resource {} has no D3D binding", r.provenance.name)))?;
+        // a resource of the older lift with no D3D register (a descriptor heap) is placed by the plan after the registers
+        // of its class: C cannot find its global by the older lift's binding
+        let d = owner.provenance.d3d.ok_or_else(|| {
+            Unlowered::Refused(format!(
+                "resource {} of the older lift has no D3D register to name its plan global by",
+                r.provenance.name
+            ))
+        })?;
         let prefix = match d.class {
             iridia::D3dClass::ConstantBuffer => "cb",
             iridia::D3dClass::ShaderResource => "t",
