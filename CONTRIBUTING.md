@@ -63,7 +63,7 @@ The library crates read the bytes and text they are given and never touch files,
 
 ## Changing what a lifter produces
 
-A cache keyed by a program's bytes trusts `LIFTER_VERSION` (each reader) and `PROGRAM_VERSION` (`iridia`) to know that a lifted program is stale. Each reader's `tests/versions.rs` (or `*versions.tsv` in `iridia-d3d9`, `tests/lift.rs` in `iridia-mojo`) hashes what it makes of its fixtures and compares the table with the committed one (`tests/lifted.hashes`). If you change what a lifter makes of an input, the test fails and says which version to bump; after the bump it fails once more until you replace the committed table with the current one, whose path the failure names.
+A cache keyed by a program's bytes trusts `LIFTER_VERSION` (each reader) and `PROGRAM_VERSION` (`iridia`) to know that a lifted program is stale. Each reader's `tests/versions.rs` (or `*versions.tsv` in `iridia-d3d9`, `tests/lift.rs` in `iridia-mojo`) hashes what it makes of its fixtures and compares the table with the committed one (`tests/ir-lifted.hashes` for the IR lifts). If you change what a lifter makes of an input, the test fails and says which version to bump; after the bump it fails once more until you replace the committed table with the current one, whose path the failure names.
 
 ## Releasing
 
