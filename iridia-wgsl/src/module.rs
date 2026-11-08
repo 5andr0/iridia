@@ -317,6 +317,10 @@ impl<'a> Writer<'a> {
                 .any(|r| r.capability == iridia_ir::target::Capability::Subgroup)
         {
             out.push_str("enable subgroups;\n");
+            // D3D wave operations use the active lanes at their original call site. WGSL with this
+            // diagnostic disabled has the same semantics; moving the call out of divergent control
+            // flow would change those lanes. This is a standard diagnostic filter, not a device feature.
+            out.push_str("diagnostic(off, subgroup_uniformity);\n");
         }
         // The source program takes these derivatives where it takes them, in divergent control flow as often as not
         // (Direct3D leaves the value past a non-uniform branch to the hardware); a browser refuses the text unless told

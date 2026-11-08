@@ -74,7 +74,8 @@ pub enum Directives {
     /// subgroup operations without it.
     Naga,
     /// The WGSL standard's: `enable subgroups;` where the program uses a subgroup operation or built-in, which a browser
-    /// requires.
+    /// requires. The standard uniformity diagnostic filters preserve the source's derivative and
+    /// active-lane subgroup call sites without moving them to uniform control flow.
     Standard,
 }
 

@@ -229,3 +229,51 @@ fn a_branch_local_origin_remains_in_storage_after_its_scope_ends() {
         panic!("{e}\n{wgsl}");
     }
 }
+
+/// D3D wave reductions operate on the active lanes at the call site, including divergent flow.
+#[test]
+fn subgroup_diagnostics_preserve_a_divergent_call_site() {
+    let Some(tint) = wgsl_run::tint() else {
+        println!("tools.tint is not configured: skipped");
+        return;
+    };
+    let p = program(
+        "iridia-ir 1
+fn main {
+  var sink: u32
+  %0: vec3<u32> = input 0.xyz
+  %1: u32 = %0.x
+  %2: u32 = u32(1)
+  %3: u32 = and %1, %2
+  %4: bool = ucmp.eq %3, %2
+  if %4 {
+    %5: u32 = wave.add.reduce %1
+    sink = %5
+    yield
+  } else {
+    yield
+  }
+  return
+}
+",
+    );
+    let profile = iridia_wgsl::Profile::BROWSER.with(iridia_wgsl::Capabilities::of(&[
+        iridia_wgsl::Capability::Subgroup,
+    ]));
+    let wgsl = iridia_wgsl::wgsl(&p, &profile).unwrap_or_else(|e| panic!("{e}"));
+    assert!(wgsl.contains("diagnostic(off, subgroup_uniformity);"), "{wgsl}");
+    tint.check("subgroup-divergent-filtered", &wgsl)
+        .unwrap_or_else(|e| panic!("{e}\n{wgsl}"));
+    let unfiltered = wgsl.replace("diagnostic(off, subgroup_uniformity);\n", "");
+    let e = tint.check("subgroup-divergent-control", &unfiltered).unwrap_err();
+    assert!(e.contains("subgroupAdd"), "{e}");
+    // Unknown diagnostic rules are warnings: only remove Naga 30's unsupported enable directive.
+    let native = wgsl.strip_prefix("enable subgroups;\n").unwrap();
+    let module = naga::front::wgsl::parse_str(native).unwrap_or_else(|e| panic!("{e}\n{native}"));
+    naga::valid::Validator::new(
+        naga::valid::ValidationFlags::all(),
+        naga::valid::Capabilities::all(),
+    )
+    .validate(&module)
+    .unwrap();
+}

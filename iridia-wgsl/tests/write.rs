@@ -618,6 +618,21 @@ fn main {
     let wgsl = iridia_wgsl::wgsl(&p, &browser).unwrap();
     assert!(wgsl.starts_with("enable subgroups;\n"), "{wgsl}");
     assert!(wgsl.contains("subgroupAdd("), "{wgsl}");
+    assert!(wgsl.contains("diagnostic(off, subgroup_uniformity);"), "{wgsl}");
+    // Naga 30's existing lack of `enable subgroups` is independent of the standard filter.
+    let body = wgsl.strip_prefix("enable subgroups;\n").unwrap();
+    let module = naga::front::wgsl::parse_str(body).unwrap();
+    naga::valid::Validator::new(
+        naga::valid::ValidationFlags::all(),
+        naga::valid::Capabilities::all(),
+    )
+    .validate(&module)
+    .unwrap();
+    let native = iridia_wgsl::wgsl(&p, &Profile::NAGA).unwrap();
+    assert!(
+        !native.contains("diagnostic(off, subgroup_uniformity);"),
+        "{native}"
+    );
     // naga's reader refuses it, and naga's dialect leaves it out
     assert!(naga::front::wgsl::parse_str(&wgsl).is_err());
     let wgsl = written(&p, &Profile::NAGA);
