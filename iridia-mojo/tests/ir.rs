@@ -270,6 +270,9 @@ fn the_fixtures_glsl_runs_as_the_d3d9_programs_it_was_made_from() {
         ("skin.vs", pairing::PRINTED),
         ("step.vs", pairing::AGREE),
     ];
-    let expected: Vec<(String, String)> = expected.into_iter().map(|(n, c)| (n.to_owned(), c.to_owned())).collect();
+    let expected: Vec<(String, String)> = expected
+        .into_iter()
+        .map(|(n, c)| (n.to_owned(), c.to_owned()))
+        .collect();
     assert_eq!(classes, expected);
 }
