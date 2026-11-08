@@ -738,7 +738,7 @@ fn signature_elements_the_program_does_not_declare_are_listed_unused() {
     let mut program = iridia_dxbc::ir::lift(&bytes).unwrap();
     iridia_passes::prepare(&mut program).unwrap();
     iridia_ir::validate(&program).unwrap_or_else(|p| panic!("{p:?}"));
-    let listed = |list: &[iridia::Varying]| {
+    let listed = |list: &[iridia_ir::interface::Varying]| {
         list.iter()
             .map(|v| (v.label.name.clone(), v.label.index, v.used))
             .collect::<Vec<_>>()

@@ -52,7 +52,7 @@ fn has_part(bytes: &[u8], kind: &[u8; 4]) -> bool {
 }
 
 fn lift_ir(bytes: &[u8]) -> Result<iridia_ir::Program, String> {
-    let text = |e: iridia::Refusal| e.to_string();
+    let text = |e: iridia_ir::Refusal| e.to_string();
     if !bytes.starts_with(b"DXBC") {
         iridia_d3d9_ir::lift(bytes).map_err(text)
     } else if has_part(bytes, b"DXIL") {

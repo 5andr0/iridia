@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 mod inputs;
 
-use iridia::{BufferKind, ConstantType, D3dClass, ResourceKind, ScalarType, Value};
+use iridia_ir::interface::{BufferKind, ConstantType, D3dClass, ResourceKind, ScalarType, Value};
 mod common;
 use std::collections::BTreeMap;
 
@@ -285,7 +285,7 @@ fn a_reflection_is_read_where_it_is_one_this_reader_reads() {
     let mut compute = rdef();
     set(&mut compute, 16, 0x4353_0500);
     let reflected = iridia_dxbc::reflection(&fixture(&compute)).unwrap();
-    assert_eq!(reflected.stage, iridia::Stage::Compute);
+    assert_eq!(reflected.stage, iridia_ir::interface::Stage::Compute);
     assert!(reflected.inputs.is_empty() && reflected.outputs.is_empty());
     for stage in [0xffff, 0xfffe, 0x4753, 0x4853, 0x4453, 0x4353] {
         let mut other = rdef();
@@ -462,8 +462,8 @@ fn listed_layouts(listing: &str) -> (Layouts, usize) {
 }
 
 /// The texture shape a listing's dimension names: dimensionality, array, multisampled.
-fn listed_shape(dim: &str) -> Option<(iridia::TextureDim, bool, bool)> {
-    use iridia::TextureDim::{Cube, D1, D2, D3};
+fn listed_shape(dim: &str) -> Option<(iridia_ir::interface::TextureDim, bool, bool)> {
+    use iridia_ir::interface::TextureDim::{Cube, D1, D2, D3};
     Some(match dim {
         "1d" => (D1, false, false),
         "1darray" => (D1, true, false),
@@ -558,8 +558,8 @@ fn every_stage_and_model_reflects_as_fxc_lists_it() {
                     };
                     assert_eq!((*dim, *arrayed, *multisampled), shape, "{at}: {}", row.name);
                     let scalar = match sample {
-                        iridia::SampleType::Sint => "int",
-                        iridia::SampleType::Uint => "uint",
+                        iridia_ir::interface::SampleType::Sint => "int",
+                        iridia_ir::interface::SampleType::Uint => "uint",
                         _ => "float",
                     };
                     assert_eq!(

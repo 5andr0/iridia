@@ -13,13 +13,15 @@
 mod inputs;
 
 use inputs::{OwnScratch, Tool, own_scratch, program};
-use iridia::{D3dClass, Interface, InterpMode, InterpSampling, ResourceId, ScalarType, SystemValue};
 use iridia_exec::{
     Backend, Element, Executable, ImageLoad, ImageQuery, ImageSample, ProgramShader, QueryKind, Resources,
     Runner,
 };
 use iridia_exec::{PixelShader, Sample};
 use iridia_ir::Program;
+use iridia_ir::interface::{
+    D3dClass, Interface, InterpMode, InterpSampling, ResourceId, ScalarType, SystemValue,
+};
 use std::collections::BTreeMap;
 use std::path::Path;
 

@@ -2,9 +2,9 @@
 //! The ray tracing pipeline on the CPU, run on the lifted programs of `ray_tracing.hlsl` (raygen, miss, closest_hit,
 //! any_hit, intersection, callable) over scenes built here, lifted onto the IR ([`iridia_dxil::ir`], run by
 //! [`Pipeline::from_ir`]) as lifted and after `iridia_passes::prepare`. The values are the arithmetic of the HLSL.
-use iridia::{HitGroup, HitGroupKind};
 use iridia_exec::{Geometry, Instance, InstanceFlags, Pipeline, PipelineResources, Scene, ShaderTable};
 use iridia_exec::{Sampler, Store};
+use iridia_ir::interface::{HitGroup, HitGroupKind};
 use std::collections::BTreeMap;
 use std::path::Path;
 

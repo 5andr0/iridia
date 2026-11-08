@@ -134,10 +134,10 @@ pub fn lower_c(old: &iridia::Program, p: &iridia_ir::Program) -> Result<iridia::
             ))
         })?;
         let prefix = match d.class {
-            iridia::D3dClass::ConstantBuffer => "cb",
-            iridia::D3dClass::ShaderResource => "t",
-            iridia::D3dClass::Sampler => "s",
-            iridia::D3dClass::UnorderedAccess => "u",
+            iridia_ir::interface::D3dClass::ConstantBuffer => "cb",
+            iridia_ir::interface::D3dClass::ShaderResource => "t",
+            iridia_ir::interface::D3dClass::Sampler => "s",
+            iridia_ir::interface::D3dClass::UnorderedAccess => "u",
         };
         // the binding plan's names (`iridia_naga::BindingPlan::d3d`)
         let name = if d.space == 0 {

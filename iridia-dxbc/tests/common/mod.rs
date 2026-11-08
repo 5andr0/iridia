@@ -9,8 +9,8 @@ use std::sync::Mutex;
 use crate::inputs::{Game, OracleSet, Query, expect_found};
 use primase_testdata::Tree;
 
-use iridia::{ConstantType, Majorness, ResourceKind, ScalarType, SystemValue};
 use iridia_exec::PixelShader;
+use iridia_ir::interface::{ConstantType, Majorness, ResourceKind, ScalarType, SystemValue};
 
 pub fn mix64(mut x: u64) -> u64 {
     x = x.wrapping_add(0x9e37_79b9_7f4a_7c15);

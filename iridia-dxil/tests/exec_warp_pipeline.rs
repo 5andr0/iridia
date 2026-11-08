@@ -11,9 +11,9 @@
 mod inputs;
 
 use inputs::{Tool, own_scratch, program};
-use iridia::{HitGroup, HitGroupKind};
 use iridia_exec::{Geometry, Instance, InstanceFlags, Pipeline, PipelineResources, Scene, ShaderTable};
 use iridia_exec::{Sample, Sampler, Store};
+use iridia_ir::interface::{HitGroup, HitGroupKind};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 

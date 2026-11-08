@@ -3,9 +3,9 @@
 //! both the default and the -Od build of each (different instruction streams of one source). The evaluator cannot run
 //! them (loops, switches, memory); the values below are the arithmetic of the source, not of the lifter. Each program
 //! is the IR lift's after `iridia_passes::prepare`, as the executor takes it.
-use iridia::{ResourceId, ResourceKind};
 use iridia_exec::{Backend, Element, Executable, ImageSample, Output, Resources};
 use iridia_ir::Program;
+use iridia_ir::interface::{ResourceId, ResourceKind};
 use std::path::Path;
 
 fn f(x: f32) -> u32 {
@@ -452,7 +452,7 @@ mod resources {
     fn buffer_views_and_an_unordered_access_texture() {
         for v in BOTH {
             let (program, exe) = lifted(&fixture("resources", v));
-            let by_register = |register: u32, class: iridia::D3dClass| {
+            let by_register = |register: u32, class: iridia_ir::interface::D3dClass| {
                 program
                     .interface
                     .resources
@@ -468,7 +468,7 @@ mod resources {
             let mut resources = Resources::default();
             // Values { int4 n; }: n = (2, 1, 3, 4)
             resources.constants.insert(
-                by_register(0, iridia::D3dClass::ConstantBuffer),
+                by_register(0, iridia_ir::interface::D3dClass::ConstantBuffer),
                 vec![[2u32, 1, 3, 4]],
             );
             // t0 StructuredBuffer<float4>: element e lane l is 10e + l; t2 Buffer<float4>: 100 + 10e + l; t1 raw: 1000 + word
@@ -477,13 +477,15 @@ mod resources {
             let raw: Vec<u32> = (0..16).map(|w| 1000 + w).collect();
             resources
                 .buffers
-                .insert(by_register(0, iridia::D3dClass::ShaderResource), sb);
-            resources
-                .buffers
-                .insert(by_register(1, iridia::D3dClass::ShaderResource), raw);
-            resources
-                .buffers
-                .insert(by_register(2, iridia::D3dClass::ShaderResource), typed);
+                .insert(by_register(0, iridia_ir::interface::D3dClass::ShaderResource), sb);
+            resources.buffers.insert(
+                by_register(1, iridia_ir::interface::D3dClass::ShaderResource),
+                raw,
+            );
+            resources.buffers.insert(
+                by_register(2, iridia_ir::interface::D3dClass::ShaderResource),
+                typed,
+            );
             let bound = exe.bind_resources(&resources).unwrap();
             let mut backend = Views::default();
             let mut runner = Runner::<1>::new(&exe, &bound, &mut backend, None);
@@ -538,7 +540,7 @@ mod resource_arrays {
     fn run(variant: &str, which: [u32; 2]) -> Result<Output, String> {
         let (program, exe) = lifted(&fixture("resource_arrays", variant));
         iridia_ir::validate(&program).unwrap();
-        let find = |register: u32, class: iridia::D3dClass| {
+        let find = |register: u32, class: iridia_ir::interface::D3dClass| {
             program
                 .interface
                 .resources
@@ -551,14 +553,18 @@ mod resource_arrays {
                 .unwrap_or_else(|| panic!("{variant}: no {class:?} {register}"))
         };
         // the arrays are arrays: four textures, and samplers the program does not size
-        let tex = find(0, iridia::D3dClass::ShaderResource);
+        let tex = find(0, iridia_ir::interface::D3dClass::ShaderResource);
         assert_eq!(tex.count, 4, "{variant}");
-        let smp = find(0, iridia::D3dClass::Sampler);
+        let smp = find(0, iridia_ir::interface::D3dClass::Sampler);
         assert!(smp.is_unbounded(), "{variant}");
-        assert_eq!(find(8, iridia::D3dClass::ShaderResource).count, 1, "{variant}");
+        assert_eq!(
+            find(8, iridia_ir::interface::D3dClass::ShaderResource).count,
+            1,
+            "{variant}"
+        );
         let mut resources = Resources::default();
         // Select { uint2 which; float2 uv; }
-        let cb = find(0, iridia::D3dClass::ConstantBuffer).id;
+        let cb = find(0, iridia_ir::interface::D3dClass::ConstantBuffer).id;
         resources
             .constants
             .insert(cb, vec![[which[0], which[1], f(0.25), f(0.75)]]);
@@ -678,7 +684,7 @@ mod pixel_ops {
 
 mod compute {
     use super::*;
-    use iridia::D3dClass;
+    use iridia_ir::interface::D3dClass;
     use std::collections::BTreeMap;
 
     /// `compute_basic.hlsl` dispatched as (2, 2, 1) groups of 8 by 4 by 2 with scale 0xff. Per group g = gx + 2 gy
@@ -748,7 +754,7 @@ mod compute {
 
 mod waves {
     use super::*;
-    use iridia::D3dClass;
+    use iridia_ir::interface::D3dClass;
     use std::collections::BTreeMap;
 
     /// `waves.hlsl`: 64 invocations in one group, 13 result words each, on waves of 32 lanes (invocation i is lane
@@ -802,8 +808,9 @@ mod waves {
 
 mod stage_functions {
     use super::*;
-    use iridia::{D3dClass, stage_functions};
     use iridia_exec::Runner;
+    use iridia_ir::interface::D3dClass;
+    use iridia_ir::target::stage_functions;
     use std::collections::BTreeMap;
 
     /// Run function `name` of the lifted program `base` once, its constant buffer 0 `constants`, giving each argument
@@ -985,8 +992,8 @@ mod half_ops {
 
 mod image_atomics {
     use super::*;
-    use iridia::D3dClass;
     use iridia_exec::{ImageAtomic, ImageAtomicOp};
+    use iridia_ir::interface::D3dClass;
     use std::collections::BTreeMap;
 
     /// Two textures that apply the atomic operations they are asked for: the words of each by texel, absent ones 0
@@ -1145,7 +1152,7 @@ mod image_atomics {
 
 mod buffer_arrays {
     use super::*;
-    use iridia::D3dClass;
+    use iridia_ir::interface::D3dClass;
     use std::collections::BTreeMap;
 
     /// `buffer_arrays.hlsl`: one group of 4 with which = 1. Thread i writes bufs[1][i] = n1 * 100 + i, where n1 is the
@@ -1200,8 +1207,8 @@ mod buffer_arrays {
 
 mod image_arrays {
     use super::*;
-    use iridia::D3dClass;
     use iridia_exec::ImageStore;
+    use iridia_ir::interface::D3dClass;
     use std::collections::BTreeMap;
 
     /// Keeps the stores by view and element, and by texel.
@@ -1257,7 +1264,7 @@ mod image_arrays {
 
 mod wide_ints {
     use super::*;
-    use iridia::D3dClass;
+    use iridia_ir::interface::D3dClass;
     use std::collections::BTreeMap;
 
     /// The 32 words `wide_ints.hlsl` writes for a, b and n: thirteen 64-bit results as low then high word (a + b, a - b,
@@ -1348,7 +1355,7 @@ mod wide_ints {
 
 mod lane_2d {
     use super::*;
-    use iridia::D3dClass;
+    use iridia_ir::interface::D3dClass;
     use std::collections::BTreeMap;
 
     /// `lane_2d.hlsl`: 64 invocations in an 8 by 8 group, on waves of 32 lanes (invocation i, the group's flattened
@@ -1398,8 +1405,8 @@ mod lane_2d {
 
 mod ray_queries {
     use super::*;
-    use iridia::D3dClass;
     use iridia_exec::{Geometry, Instance, InstanceFlags, Scene};
+    use iridia_ir::interface::D3dClass;
     use std::collections::BTreeMap;
 
     /// Two bottom-level geometries in one bottom level, the triangle (0,0), (4,0), (0,4) at z = 5 (opaque, geometry 0)
@@ -1524,7 +1531,7 @@ mod ray_queries {
 
 mod uav_counter {
     use super::*;
-    use iridia::D3dClass;
+    use iridia_ir::interface::D3dClass;
     use std::collections::BTreeMap;
 
     /// The views' hidden counters, by view: an increment gives the count before it, a decrement the count after it.
@@ -1622,8 +1629,8 @@ mod uav_counter {
 
 mod procedural_primitives {
     use super::*;
-    use iridia::D3dClass;
     use iridia_exec::{Geometry, Instance, InstanceFlags, Scene};
+    use iridia_ir::interface::D3dClass;
     use std::collections::BTreeMap;
 
     /// `ray_query_procedural.hlsl` on one sphere (centre (0.5, 0, 1), radius 1, in the object space of an instance)
@@ -1699,8 +1706,8 @@ mod procedural_primitives {
 
 mod instance_matrices {
     use super::*;
-    use iridia::D3dClass;
     use iridia_exec::{Geometry, Instance, InstanceFlags, Scene};
+    use iridia_ir::interface::D3dClass;
     use std::collections::BTreeMap;
 
     /// `ray_query_matrices.hlsl` on an instance that rotates a little, scales unevenly and translates: the matrices a

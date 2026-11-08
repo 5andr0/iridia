@@ -18,12 +18,12 @@ mod common;
 mod inputs;
 use common::case;
 use inputs::{Game, Tool, debug, program};
-use iridia::{
+use iridia_exec::{Dim, ImageLoad, ImageQuery, ImageSample, ProgramShader, QueryKind};
+use iridia_exec::{PixelShader, Sampler};
+use iridia_ir::interface::{
     Interface, InterpMode, InterpSampling, ResourceKind, SampleType, ScalarType, StorageTarget, SystemValue,
     TextureDim,
 };
-use iridia_exec::{Dim, ImageLoad, ImageQuery, ImageSample, ProgramShader, QueryKind};
-use iridia_exec::{PixelShader, Sampler};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -112,7 +112,7 @@ fn unbindable(program: &iridia_ir::Program) -> Option<String> {
 }
 
 /// The interpolation modifiers of an input in HLSL.
-fn modifiers(v: &iridia::Varying) -> String {
+fn modifiers(v: &iridia_ir::interface::Varying) -> String {
     match (v.value.scalar, v.interp) {
         (ScalarType::Float, Some(i)) => {
             let mut m = String::new();
@@ -161,8 +161,9 @@ fn vertex_hlsl(interface: &Interface) -> Option<String> {
         // elements that share a register share their interpolation (the compiler packs by it), so the register has one
         // style: the one of the first element the program reads, and an element it does not read (whose interpolation
         // its signature does not state) takes it too
-        let in_register =
-            |v: &iridia::Varying| v.provenance.d3d.is_some_and(|s| s.register + shift == register);
+        let in_register = |v: &iridia_ir::interface::Varying| {
+            v.provenance.d3d.is_some_and(|s| s.register + shift == register)
+        };
         let style = inputs
             .iter()
             .copied()
@@ -401,7 +402,7 @@ fn run_program(
 ) {
     let (fxc, warp, scratch) = tools;
     t.programs += 1;
-    if iridia_dxbc::signatures(bytes).map(|i| i.stage).ok() != Some(iridia::Stage::Pixel) {
+    if iridia_dxbc::signatures(bytes).map(|i| i.stage).ok() != Some(iridia_ir::interface::Stage::Pixel) {
         return;
     }
     let program = match iridia_dxbc::ir::lift(bytes) {

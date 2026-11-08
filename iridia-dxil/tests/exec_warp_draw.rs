@@ -704,7 +704,7 @@ fn the_vertex_register_view_carries_the_position() {
         .interface()
         .outputs
         .iter()
-        .find(|o| o.system == Some(iridia::SystemValue::ClipPosition))
+        .find(|o| o.system == Some(iridia_ir::interface::SystemValue::ClipPosition))
         .and_then(|o| o.provenance.d3d)
         .unwrap();
     let mut sampler = ramp;

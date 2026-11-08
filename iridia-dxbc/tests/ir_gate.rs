@@ -16,14 +16,13 @@ use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
 use inputs::Game;
-use iridia::{
-    BufferKind, FunctionSig, IoType, ItemList, ResourceId, ResourceKind, Stage, StageFacts, StorageTarget,
-};
+use iridia::{FunctionSig, IoType, ItemList};
 use iridia_exec::{
     Atomic, Backend, BufferAtomic, CallShader, Dim, Element, Executable, ImageAtomic, ImageLoad, ImageLod,
     ImageQuery, ImageSample, ImageStore, Load, PixelShader, ProgramShader, QueryKind, ReportHit, Resources,
     Runner, Sample, Sampler, Store, TraceRay,
 };
+use iridia_ir::interface::{BufferKind, ResourceId, ResourceKind, Stage, StageFacts, StorageTarget};
 
 mod common;
 mod lowered;
@@ -648,8 +647,9 @@ fn gate_case(a: &ProgramShader, c: u32, quad: bool, inputs: QuadInputs) -> Vec<c
     if inputs == QuadInputs::Coherent {
         for v in &a.interface().inputs {
             let interpolated = v.system.is_none()
-                && v.value.scalar == iridia::ScalarType::Float
-                && v.interp.is_none_or(|i| i.mode != iridia::InterpMode::Flat);
+                && v.value.scalar == iridia_ir::interface::ScalarType::Float
+                && v.interp
+                    .is_none_or(|i| i.mode != iridia_ir::interface::InterpMode::Flat);
             let Some(sig) = v.provenance.d3d.filter(|_| interpolated) else {
                 continue;
             };
@@ -670,14 +670,14 @@ fn gate_case(a: &ProgramShader, c: u32, quad: bool, inputs: QuadInputs) -> Vec<c
         .interface()
         .inputs
         .iter()
-        .filter(|v| v.system == Some(iridia::SystemValue::FrontFacing))
+        .filter(|v| v.system == Some(iridia_ir::interface::SystemValue::FrontFacing))
         .filter_map(|v| v.provenance.d3d.map(|d| d.register as usize))
         .collect::<Vec<_>>();
     let position = a
         .interface()
         .inputs
         .iter()
-        .find(|v| v.system == Some(iridia::SystemValue::FragCoord))
+        .find(|v| v.system == Some(iridia_ir::interface::SystemValue::FragCoord))
         .and_then(|v| v.provenance.d3d.map(|d| d.register as usize));
     // an input the program does not read may lie past the registers the case seeds
     let seeded = lanes[0].inputs.len();
@@ -1885,11 +1885,11 @@ fn compute(g: &mut Gate, old: &iridia::Program, p: iridia_ir::Program, at: &str,
 
 /// A lane of seeded words of a varying of `scalar`, as [`common::case_with`] seeds an input's: a float in about
 /// [-0.25, 1.75), a small integer.
-fn seeded_lane(scalar: iridia::ScalarType, h: u32) -> u32 {
+fn seeded_lane(scalar: iridia_ir::interface::ScalarType, h: u32) -> u32 {
     match scalar {
-        iridia::ScalarType::Float => (common::unit(h) * 2.0 - 0.25).to_bits(),
-        iridia::ScalarType::Uint => h % 4,
-        iridia::ScalarType::Sint => (h % 5).wrapping_sub(2),
+        iridia_ir::interface::ScalarType::Float => (common::unit(h) * 2.0 - 0.25).to_bits(),
+        iridia_ir::interface::ScalarType::Uint => h % 4,
+        iridia_ir::interface::ScalarType::Sint => (h % 5).wrapping_sub(2),
         _ => h & 1,
     }
 }
@@ -1899,7 +1899,7 @@ fn seeded_lane(scalar: iridia::ScalarType, h: u32) -> u32 {
 /// output point the hull program has, a domain location inside the patch, an instance the geometry program runs).
 fn arguments(program: &iridia::Program, sig: &FunctionSig, c: u32, pointers: &[Vec<u32>]) -> Vec<[u32; 4]> {
     let interface = &program.interface;
-    let patch: &[iridia::Varying] = match &interface.facts {
+    let patch: &[iridia_ir::interface::Varying] = match &interface.facts {
         StageFacts::Hull(h) => &h.patch_constants,
         StageFacts::Domain(d) => &d.patch_constants,
         _ => &[],
@@ -1912,9 +1912,9 @@ fn arguments(program: &iridia::Program, sig: &FunctionSig, c: u32, pointers: &[V
             ItemList::Pipeline => &[],
         };
         v.and_then(|v| varyings.get(v))
-            .map_or(iridia::ScalarType::Uint, |v| v.value.scalar)
+            .map_or(iridia_ir::interface::ScalarType::Uint, |v| v.value.scalar)
     };
-    let seeded = |k: usize, point: u32, s: iridia::ScalarType| -> [u32; 4] {
+    let seeded = |k: usize, point: u32, s: iridia_ir::interface::ScalarType| -> [u32; 4] {
         std::array::from_fn(|lane| {
             seeded_lane(s, common::mix(hash_words(&[9, c, k as u32, point, lane as u32])))
         })
@@ -1956,7 +1956,9 @@ fn arguments(program: &iridia::Program, sig: &FunctionSig, c: u32, pointers: &[V
                 let u = common::unit(h);
                 let v = common::unit(common::mix(u64::from(h) ^ 1)) * (1.0 - u);
                 let w = match &interface.facts {
-                    StageFacts::Domain(d) if d.domain == iridia::TessDomain::Triangle => 1.0 - u - v,
+                    StageFacts::Domain(d) if d.domain == iridia_ir::interface::TessDomain::Triangle => {
+                        1.0 - u - v
+                    }
                     _ => 0.0,
                 };
                 registers.push([u.to_bits(), v.to_bits(), w.to_bits(), 0]);
@@ -1973,7 +1975,10 @@ fn arguments(program: &iridia::Program, sig: &FunctionSig, c: u32, pointers: &[V
 /// to (a ray tracing program's payload, then its attributes), in order. Both columns pass the structure as a word per
 /// leaf, in order: the executor lays A's naga structure out so, and the IR lays it out as Direct3D does, which for
 /// leaves of 32 bits (the naga-path lift refuses memory of other widths) is one word after another.
-fn pointer_leaves(old: &iridia::Program, name: &str) -> Result<Vec<Vec<iridia::ScalarType>>, String> {
+fn pointer_leaves(
+    old: &iridia::Program,
+    name: &str,
+) -> Result<Vec<Vec<iridia_ir::interface::ScalarType>>, String> {
     let module = &old.module;
     let f = module
         .functions
@@ -1984,14 +1989,14 @@ fn pointer_leaves(old: &iridia::Program, name: &str) -> Result<Vec<Vec<iridia::S
     fn leaves(
         module: &naga::Module,
         ty: naga::Handle<naga::Type>,
-        out: &mut Vec<iridia::ScalarType>,
+        out: &mut Vec<iridia_ir::interface::ScalarType>,
     ) -> Result<(), String> {
-        let scalar = |s: naga::Scalar| -> Result<iridia::ScalarType, String> {
+        let scalar = |s: naga::Scalar| -> Result<iridia_ir::interface::ScalarType, String> {
             match (s.kind, s.width) {
-                (naga::ScalarKind::Float, 4) => Ok(iridia::ScalarType::Float),
-                (naga::ScalarKind::Uint, 4) => Ok(iridia::ScalarType::Uint),
-                (naga::ScalarKind::Sint, 4) => Ok(iridia::ScalarType::Sint),
-                (naga::ScalarKind::Bool, _) => Ok(iridia::ScalarType::Bool),
+                (naga::ScalarKind::Float, 4) => Ok(iridia_ir::interface::ScalarType::Float),
+                (naga::ScalarKind::Uint, 4) => Ok(iridia_ir::interface::ScalarType::Uint),
+                (naga::ScalarKind::Sint, 4) => Ok(iridia_ir::interface::ScalarType::Sint),
+                (naga::ScalarKind::Bool, _) => Ok(iridia_ir::interface::ScalarType::Bool),
                 _ => Err(format!("a pointer argument's leaf of {s:?}")),
             }
         };
@@ -2038,7 +2043,7 @@ fn call(
     program: &iridia::Program,
     sig: &FunctionSig,
     c: u32,
-    leaves: &[Vec<iridia::ScalarType>],
+    leaves: &[Vec<iridia_ir::interface::ScalarType>],
 ) -> Result<Call, String> {
     let s = seeded(program, c);
     let bound = exe.bind_resources(&s.resources)?;

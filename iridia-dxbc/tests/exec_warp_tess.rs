@@ -17,10 +17,10 @@
 mod inputs;
 
 use inputs::{Tool, own_scratch, program};
-use iridia::TessTopology;
 use iridia_exec::Constants;
 use iridia_exec::tessellation::TessellationShader;
 use iridia_exec::{Sample, Sampler};
+use iridia_ir::interface::TessTopology;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 

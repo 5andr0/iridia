@@ -179,7 +179,7 @@ pub fn from_wgsl(p: &iridia_ir::Program, wgsl: &str) -> Result<iridia::Program, 
             ..Default::default()
         },
         provenance: iridia::Provenance {
-            format: iridia::ShaderFormat::D3d9,
+            format: iridia_ir::interface::ShaderFormat::D3d9,
             target: p.provenance.target.clone(),
             lifter: "iridia-d3d9-ir through WGSL".into(),
             lifter_version: 0,

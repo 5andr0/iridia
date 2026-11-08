@@ -14,10 +14,10 @@
 mod inputs;
 
 use inputs::{Tool, own_scratch, program};
-use iridia::D3dClass;
 use iridia_exec::{
     Backend, Element, Executable, Geometry, ImageSample, Instance, InstanceFlags, Resources, Scene,
 };
+use iridia_ir::interface::D3dClass;
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -555,7 +555,7 @@ fn gate(fixture_name: &str, procedural: bool, words: usize, cs: Cs) -> Option<Ru
             .iter()
             .find(|r| match class {
                 Some(c) => r.provenance.d3d.is_some_and(|d| d.class == c && d.register == 0),
-                None => matches!(r.kind, iridia::ResourceKind::AccelerationStructure),
+                None => matches!(r.kind, iridia_ir::interface::ResourceKind::AccelerationStructure),
             })
             .unwrap()
             .id

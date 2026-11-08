@@ -2,8 +2,8 @@
 //! Programs lifted onto the IR ([`iridia_dxil::ir`]) and run on the executor against the memory Direct3D 12 WARP leaves,
 //! recorded beside each fixture (`<name>.warp.json`, written by `<name>.warp.cpp` from the same starting words): every
 //! word must agree bit for bit.
-use iridia::D3dClass;
 use iridia_exec::{Backend, Element, Executable, ImageSample, Resources};
+use iridia_ir::interface::D3dClass;
 use std::collections::BTreeMap;
 use std::path::Path;
 
