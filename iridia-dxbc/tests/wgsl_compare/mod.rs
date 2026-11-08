@@ -1,6 +1,8 @@
 //! Physical inputs and comparisons shared by the WARP corpus tests and the IR gate.
 use crate::{common, inputs, wgsl_run};
 
+mod word_types;
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use iridia_exec::{
@@ -190,6 +192,9 @@ impl Sampler for Uniform {
 
 #[derive(Default)]
 struct Tally {
+    compute_class_changes: BTreeMap<String, BTreeMap<String, usize>>,
+    compute_program_class_changes: BTreeMap<String, (Class, Class)>,
+    compute_store_types: BTreeMap<String, BTreeMap<ResourceId, word_types::WordType>>,
     programs: usize,
     stages: BTreeMap<String, usize>,
     compared: usize,
@@ -830,6 +835,11 @@ const COMPUTE_EXPECTED: &[(&str, &str, &str)] = &[
         SOURCE_ORDER,
     ),
     (
+        "SpeedTree_5010ff8_w3129a7_Animation.cpo",
+        "sha256:92453537c491729ea6fc2d31e295ea7daf1d3718947c410f71e19b7e6eefe6ac",
+        WARP_FLOAT_BITS,
+    ),
+    (
         "SpeedTree_50777_w32082_Animation.cpo",
         "sha256:4f6accfeb935a49d4831fc9d58502b5ed9c14b7cea158920f247b921506ebf79",
         WARP_SIN,
@@ -1243,6 +1253,13 @@ const WARP_SIN: &str =
 const SOURCE_ORDER: &str =
     "invocations store different words to one word: the result is order-dependent in the source";
 
+/// Float computations become integer words through bitcasts and permitted inexact conversions.
+// D3D11.3 functional specification, 22.13.6 (normative; the shorter Learn page omits this latitude):
+// https://microsoft.github.io/DirectX-Specs/d3d/archive/D3D11_3_FunctionalSpec.htm
+const WARP_FLOAT_BITS: &str = "integer words built from float bits; upstream 1-3 ulp differences and u32->f32 rounding, \
+where D3D11.3 22.13.6 recommends but does not require nearest-even (executor: nearest-even; WARP: toward zero); \
+proven by lane capture 567964d0";
+
 /// WARP gives different words on different runs of the same job.
 const WARP_UNSTABLE: &str = "WARP gives different words on different runs of the same job (intermittent)";
 
@@ -1407,15 +1424,16 @@ impl Backend for Memory {
     }
 }
 
-/// How far apart two words of a written buffer are: a word that reads as a float in either (an integer below 2^23 reads
-/// as a denormal) is classed as a float, any other must be equal.
-fn compute_class(a: u32, b: u32) -> Class {
-    wgsl_run::classify(a >= 0x0080_0000 || b >= 0x0080_0000, a, b)
+/// A store's declared IR view decides the comparison: integers and unknown/mixed views are exact.
+fn compute_class(view: word_types::WordType, a: u32, b: u32) -> Class {
+    wgsl_run::classify(view == word_types::WordType::Float32, a, b)
 }
 
 /// A compute program (the executor's `dispatch`) against the harness: every written buffer, every vector, word for word.
 fn run_compute(harness: &Harness, name: &str, hash: &str, p: iridia_ir::Program, t: &mut Tally) {
     let excused = compute_expected(name, hash);
+    let store_types = word_types::stores(&p);
+    t.compute_store_types.insert(name.to_owned(), store_types.clone());
     *t.stages.entry("Compute".to_owned()).or_default() += 1;
     if let Some(why) = compute_gap(&p) {
         tally(&mut t.gaps, &why, name);
@@ -1462,6 +1480,7 @@ fn run_compute(harness: &Harness, name: &str, hash: &str, p: iridia_ir::Program,
         _ => true,
     };
     let mut worst = Class::Exact;
+    let mut previous_worst = Class::Exact;
     let mut counts: BTreeMap<Class, usize> = BTreeMap::new();
     let mut changed = false;
     for c in 0..COMPUTE_CASES {
@@ -1577,7 +1596,13 @@ fn run_compute(harness: &Harness, name: &str, hash: &str, p: iridia_ir::Program,
             }
             changed |= ours != &initial[id] || warp != &initial[id];
             for (k, (&o, &w)) in ours.iter().zip(warp).enumerate() {
-                let class = compute_class(o, w);
+                let view = store_types
+                    .get(id)
+                    .copied()
+                    .unwrap_or(word_types::WordType::Unknown);
+                let class = compute_class(view, o, w);
+                // Shadow the retired heuristic only to count the policy change; it never chooses the verdict.
+                let previous = wgsl_run::classify(o >= 0x0080_0000 || w >= 0x0080_0000, o, w);
                 // a word two stores gave different values, or WARP gave differently on its second run
                 let stores = memory.stored.get(&(*id, k as u32));
                 let second = runs[1..]
@@ -1631,6 +1656,14 @@ fn run_compute(harness: &Harness, name: &str, hash: &str, p: iridia_ir::Program,
                     }
                     continue;
                 }
+                if previous != class {
+                    *t.compute_class_changes
+                        .entry(name.to_owned())
+                        .or_default()
+                        .entry(format!("{previous:?} -> {class:?}"))
+                        .or_default() += 1;
+                }
+                previous_worst = previous_worst.max(previous);
                 *t.lanes.entry(class).or_default() += 1;
                 *counts.entry(class).or_default() += 1;
                 worst = worst.max(class);
@@ -1653,10 +1686,14 @@ fn run_compute(harness: &Harness, name: &str, hash: &str, p: iridia_ir::Program,
             }
         }
     }
+    if previous_worst != worst {
+        t.compute_program_class_changes
+            .insert(name.to_owned(), (previous_worst, worst));
+    }
     if worst == Class::Beyond || t.unordered.contains_key(name) {
         t.differs.insert(name.to_owned(), (hash.to_owned(), excused));
     } else if let Some(why) = excused
-        && [WARP_SIN, SOURCE_ORDER].contains(&why)
+        && [WARP_SIN, SOURCE_ORDER, WARP_FLOAT_BITS].contains(&why)
     {
         // an intermittent excuse is exact on some runs; a deterministic one that is exact in every vector is stale
         tally(
@@ -1679,6 +1716,25 @@ fn run_compute(harness: &Harness, name: &str, hash: &str, p: iridia_ir::Program,
 }
 
 fn report(title: &str, t: &Tally) {
+    for (name, (previous, current)) in &t.compute_program_class_changes {
+        println!("compute-program-class-change {name}: {previous:?} -> {current:?}");
+    }
+    for (name, changes) in &t.compute_class_changes {
+        println!(
+            "compute-class-change {name}: {} words {changes:?}",
+            changes.values().sum::<usize>()
+        );
+    }
+    for (name, views) in &t.compute_store_types {
+        let unknown: Vec<_> = views
+            .iter()
+            .filter(|(_, view)| **view == word_types::WordType::Unknown)
+            .map(|(id, _)| id.0)
+            .collect();
+        if !unknown.is_empty() {
+            println!("compute-unknown-store-view {name}: resources {unknown:?}; compared exactly");
+        }
+    }
     // `shader.worst`: a file that takes each program's worst class, to set one writer's run against another's
     if let Some(path) = inputs::debug("shader.worst") {
         let lines: String = t
@@ -1852,6 +1908,10 @@ pub(crate) fn corpus_over(corpus: &common::Corpus) {
         t.unordered.extend(one.unordered);
         t.differs.extend(one.differs);
         t.graphics_differs.extend(one.graphics_differs);
+        t.compute_class_changes.extend(one.compute_class_changes);
+        t.compute_program_class_changes
+            .extend(one.compute_program_class_changes);
+        t.compute_store_types.extend(one.compute_store_types);
         t.unordered_why.extend(one.unordered_why);
         for (source, (lanes, programs)) in one.amplified {
             let (n, all) = t.amplified.entry(source).or_default();
