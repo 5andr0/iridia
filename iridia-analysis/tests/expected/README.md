@@ -77,6 +77,12 @@ The patch function's result registers come from its patch-constant signature, in
 than the control-point output signature. This is the same cause pinned by `hull_unwritten`; its lifted analysis has
 an empty reach and scalar execution completes with zero counted steps. No previously successful answer changes.
 
+The two sampler-heap fixtures add two fixture rows and 83 demand pairs, none recorded before. `sampler_heap.dxil` samples
+with `SamplerDescriptorHeap[Indices.sampler_index]`: its row differs from the legacy answer by one added word, the constant
+word that selects the sampler, and by the read of it, with nothing dropped. That is the descriptor-selection class above
+(IR more precise), with the executor's refusal of an element of an array of resources retained in the row.
+`sampler_heap.vs.dxil` agrees in one counted step. None of the 83 demand pairs differs between the graphs.
+
 ## Execution inputs and work budgets
 
 Constants are filled using reflected scalar declarations. Where reflection is absent, direct word moves are traced
