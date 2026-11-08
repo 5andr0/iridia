@@ -380,6 +380,7 @@ dependencies = [
  "iridia-ir",
  "iridia-naga",
  "iridia-passes",
+ "naga",
  "primase-naga",
  "primase-testdata",
  "serde_json",

@@ -198,17 +198,29 @@ fn close(x: u32, y: u32) -> bool {
 
 #[test]
 fn ray_queries_agree_with_warp() {
-    hits("ray_query_grid", false);
+    hits("ray_query_grid", false, Cs::Fixture);
 }
 
 #[test]
 fn procedural_primitives_agree_with_warp() {
-    hits("ray_query_procedural", true);
+    hits("ray_query_procedural", true, Cs::Fixture);
+}
+
+/// The same scenes and rays through the program's naga module (iridia-naga's lowering) written as HLSL by stock naga: the
+/// module's ray queries as naga's HLSL writer, the one wgpu runs on Direct3D 12, gives them.
+#[test]
+fn ray_queries_through_naga_hlsl_agree_with_warp() {
+    hits("ray_query_grid", false, Cs::NagaHlsl);
+}
+
+#[test]
+fn procedural_primitives_through_naga_hlsl_agree_with_warp() {
+    hits("ray_query_procedural", true, Cs::NagaHlsl);
 }
 
 /// `ray_query_grid.hlsl` and `ray_query_procedural.hlsl`: the committed hit of every ray, ten words.
-fn hits(fixture_name: &str, procedural: bool) {
-    let Some(run) = gate(fixture_name, procedural, 10) else {
+fn hits(fixture_name: &str, procedural: bool, cs: Cs) {
+    let Some(run) = gate(fixture_name, procedural, 10, cs) else {
         return;
     };
     let (mut hits, mut misses, mut mismatches) = (0, 0, Vec::new());
@@ -254,9 +266,23 @@ fn hits(fixture_name: &str, procedural: bool) {
 /// nothing is offered (whether it is non-opaque, the ray in its instance's object space).
 #[test]
 fn object_space_rays_and_candidate_opacity_agree_with_warp() {
-    let Some(run) = gate("ray_query_object", true, 132) else {
+    object_space("ray_query_object", Cs::Fixture);
+}
+
+/// `ray_query_object` without the candidate's opacity, which iridia-naga does not lower ([`fixture_dxil`]), through the
+/// program's naga module written as HLSL.
+#[test]
+fn object_space_rays_through_naga_hlsl_agree_with_warp() {
+    object_space("ray_query_object_fields", Cs::NagaHlsl);
+}
+
+fn object_space(fixture_name: &str, cs: Cs) {
+    let Some(run) = gate(fixture_name, true, 132, cs) else {
         return;
     };
+    // the fixture with the candidate's opacity tells a non-opaque primitive from an opaque one; without it every candidate
+    // is a 1
+    let opacity = fixture_name == "ray_query_object";
     let (mut hits, mut candidates, mut non_opaque, mut mismatches) = (0, 0, 0, Vec::new());
     for (name, rays, a, b) in run.rays() {
         let i = rays.0;
@@ -301,7 +327,12 @@ fn object_space_rays_and_candidate_opacity_agree_with_warp() {
     for m in &mismatches {
         println!("MISMATCH {m}");
     }
-    assert!(hits > 0 && candidates > non_opaque && non_opaque > 0 && mismatches.is_empty());
+    assert!(
+        hits > 0
+            && candidates > 0
+            && (!opacity || (candidates > non_opaque && non_opaque > 0))
+            && mismatches.is_empty()
+    );
 }
 
 /// A ray's origin, direction, flags and mask.
@@ -333,6 +364,122 @@ impl Run {
     }
 }
 
+/// The DXIL of a fixture: the committed `tests/fixtures/<name>.dxil`, or for `ray_query_object_fields` the committed
+/// `ray_query_object.hlsl` with the candidate procedural primitive's opacity left out (`CandidateProceduralPrimitiveNonOpaque`
+/// is the one query field iridia-naga does not lower), compiled by `dxc` here so that no second fixture can go stale.
+fn fixture_dxil(name: &str, dxc: Option<&inputs::Program>, scratch: &Path) -> std::path::PathBuf {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    if name != "ray_query_object_fields" {
+        return dir.join(format!("{name}.dxil"));
+    }
+    let text = std::fs::read_to_string(dir.join("ray_query_object.hlsl")).unwrap();
+    let from = "results[slot] = p.CandidateProceduralPrimitiveNonOpaque() ? 2 : 1;";
+    assert!(
+        text.contains(from),
+        "ray_query_object.hlsl has changed under this test"
+    );
+    let hlsl = scratch.join(format!("{name}.hlsl"));
+    let dxil = scratch.join(format!("{name}.dxil"));
+    std::fs::write(&hlsl, text.replace(from, "results[slot] = 1;")).unwrap();
+    let out = dxc
+        .unwrap()
+        .command()
+        .args(["-T", "cs_6_5", "-E", "main", "-Fo"])
+        .path_arg(&dxil)
+        .path_arg(&hlsl)
+        .output_within(inputs::COMPILE_LIMIT)
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert!(
+        out.status.success(),
+        "dxc on {}: {}",
+        hlsl.display(),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    dxil
+}
+
+/// What a case file has WARP run.
+#[derive(Clone, Copy)]
+enum Cs {
+    /// The fixture's own DXIL.
+    Fixture,
+    /// The program's naga module as iridia-naga lowers it, written as HLSL by stock naga (the writer wgpu runs on
+    /// Direct3D 12) and compiled by `tools.dxc`.
+    NagaHlsl,
+}
+
+impl Cs {
+    fn label(self) -> &'static str {
+        match self {
+            Cs::Fixture => "fixture",
+            Cs::NagaHlsl => "naga-hlsl",
+        }
+    }
+}
+
+/// A validated naga module written as Shader Model 6.5 HLSL, each resource in the register of the program it came from,
+/// and compiled to DXIL by `dxc`; the path of the DXIL. The binding plan says which group and binding of the module a
+/// resource has.
+fn hlsl_dxil(
+    module: &naga_hlsl::Module,
+    info: &naga_hlsl::valid::ModuleInfo,
+    interface: &iridia_ir::interface::Interface,
+    plan: &iridia_naga::BindingPlan,
+    dxc: &inputs::Program,
+    scratch: &Path,
+    label: &str,
+) -> std::path::PathBuf {
+    use naga_hlsl::back::hlsl;
+    let mut options = hlsl::Options {
+        shader_model: hlsl::ShaderModel::V6_5,
+        ..hlsl::Options::default()
+    };
+    for b in &plan.bindings {
+        let d3d = interface
+            .resources
+            .iter()
+            .find(|r| r.id == b.resource)
+            .and_then(|r| r.provenance.d3d)
+            .unwrap();
+        options.binding_map.insert(
+            naga_hlsl::ResourceBinding {
+                group: b.group,
+                binding: b.binding,
+            },
+            hlsl::BindTarget {
+                space: u8::try_from(d3d.space).unwrap(),
+                register: d3d.register,
+                binding_array_size: None,
+                dynamic_storage_buffer_offsets_index: None,
+                restrict_indexing: false,
+            },
+        );
+    }
+    let pipeline = hlsl::PipelineOptions::default();
+    let mut text = String::new();
+    hlsl::Writer::new(&mut text, &options, &pipeline)
+        .write(module, info, None)
+        .unwrap();
+    let hlsl_file = scratch.join(format!("{label}.hlsl"));
+    let dxil = scratch.join(format!("{label}.dxil"));
+    std::fs::write(&hlsl_file, text).unwrap();
+    // `-HV 2018`: naga's HLSL uses `&&` on vectors, which HLSL 2021 refuses
+    let out = dxc
+        .command()
+        .args(["-T", "cs_6_5", "-E", "main", "-HV", "2018", "-Fo"])
+        .path_arg(&dxil)
+        .path_arg(&hlsl_file)
+        .output_within(inputs::COMPILE_LIMIT)
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert!(
+        out.status.success(),
+        "dxc on {}: {}",
+        hlsl_file.display(),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    dxil
+}
+
 /// The fixture lifted onto the IR and prepared as the executor takes it.
 fn on_ir(bytes: &[u8]) -> iridia_ir::Program {
     let mut program = iridia_dxil::ir::lift(bytes).unwrap();
@@ -341,12 +488,30 @@ fn on_ir(bytes: &[u8]) -> iridia_ir::Program {
 }
 
 /// Twelve scenes of 64 rays each through `fixture_name` on the executor and on WARP, or `None` without WARP.
-fn gate(fixture_name: &str, procedural: bool, words: usize) -> Option<Run> {
+fn gate(fixture_name: &str, procedural: bool, words: usize, cs: Cs) -> Option<Run> {
     let warp = program(Tool::Warp)?;
+    let derived = fixture_name == "ray_query_object_fields";
+    let dxc = match cs {
+        Cs::NagaHlsl => Some(program(Tool::Dxc)?),
+        Cs::Fixture if derived => Some(program(Tool::Dxc)?),
+        Cs::Fixture => None,
+    };
     let scratch = own_scratch("warp");
-    let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("tests/fixtures/{fixture_name}.dxil"));
+    let fixture = fixture_dxil(fixture_name, dxc.as_ref(), &scratch);
     let bytes = std::fs::read(&fixture).unwrap();
     let program = on_ir(&bytes);
+    let label = format!("{fixture_name}.{}", cs.label());
+    // what WARP runs: the fixture itself, or the program as the other route gives it
+    let shader = match (cs, &dxc) {
+        (Cs::NagaHlsl, Some(dxc)) => {
+            let profile = iridia_naga::Profile::NAGA;
+            let plan = iridia_naga::BindingPlan::new(&program.interface, profile.bindings).unwrap();
+            let module = iridia_naga::module(&program, &plan).unwrap();
+            let info = iridia_naga::validate(&module, &profile).unwrap();
+            hlsl_dxil(&module, &info, &program.interface, &plan, dxc, &scratch, &label)
+        }
+        _ => fixture.clone(),
+    };
     let exe = Executable::from_ir(&program).unwrap();
     let find = |class: Option<D3dClass>| {
         program
@@ -389,7 +554,7 @@ fn gate(fixture_name: &str, procedural: bool, words: usize) -> Option<Run> {
 
         text.push_str(&format!(
             "case {name}\napi d3d12rt\ncs {}\nresults {}\ngroups 1 1 1\ncb 0 {}\n",
-            fixture.display(),
+            shader.display(),
             64 * words,
             rows.len()
         ));
@@ -470,11 +635,11 @@ fn gate(fixture_name: &str, procedural: bool, words: usize) -> Option<Run> {
         ours.insert(name.clone(), buffers.remove(&results).unwrap());
         cases.push((name, rays));
     }
-    let cases_file = scratch.join(format!("{fixture_name}.cases.txt"));
+    let cases_file = scratch.join(format!("{label}.cases.txt"));
     std::fs::write(&cases_file, text).unwrap();
     let _oracle = inputs::warp_exclusive();
     let run_warp = |attempt| {
-        let out_file = scratch.join(format!("{fixture_name}.warp-{attempt}.jsonl"));
+        let out_file = scratch.join(format!("{label}.warp-{attempt}.jsonl"));
         let run = warp
             .command()
             .path_arg(&cases_file)
@@ -528,7 +693,7 @@ fn gate(fixture_name: &str, procedural: bool, words: usize) -> Option<Run> {
             }
         }
     }
-    println!("{fixture_name}: {unstable} WARP self-disagreements");
+    println!("{label}: {unstable} WARP self-disagreements");
     Some(Run {
         words,
         ours,
