@@ -180,7 +180,7 @@ impl Lift<'_> {
                 Constant::Data(words) => {
                     let mut lanes = Vec::new();
                     for &w in words {
-                        lanes.push(self.constant_bits(&Constant::Integer(w as i64), element)?);
+                        lanes.push(self.element_bits(w, element)?);
                     }
                     lanes
                 }
@@ -234,32 +234,41 @@ impl Lift<'_> {
         Ok(Lv::Value(self.g.value(t, Op::Literal([bits, 0, 0, 0]))))
     }
 
-    /// The bits of a scalar constant as its carried type holds them.
+    /// The bits of a scalar constant as its carried type holds them. An integer constant is of an integer type and a
+    /// float constant of a float type: a damaged module's constant of the other kind is refused where it is read, as
+    /// the naga-path lift refuses it.
     fn constant_bits(&self, c: &Constant, ty: TypeId) -> Result<u64> {
-        Ok(match (c, self.type_at(ty)?) {
-            (Constant::Null | Constant::Undef, _) => 0,
-            (Constant::Integer(i), LlvmType::Integer(1)) => (*i & 1) as u64,
-            (Constant::Integer(i), LlvmType::Integer(64)) => *i as u64,
-            (Constant::Integer(i), LlvmType::Integer(w @ 2..=32)) => {
-                let mask = u64::MAX.checked_shl(*w).map_or(u64::MAX, |high| !high);
-                (*i as u64) & mask
+        match (c, self.type_at(ty)?) {
+            (Constant::Null | Constant::Undef, _) => Ok(0),
+            (Constant::Integer(i), LlvmType::Integer(_)) => self.element_bits(*i as u64, ty),
+            (Constant::Float(bits), LlvmType::Float | LlvmType::Half | LlvmType::Double) => {
+                self.element_bits(*bits, ty)
             }
-            (Constant::Float(bits), LlvmType::Float) => u64::from(crate::lift::low32(*bits)),
-            (Constant::Float(bits), LlvmType::Half) => u64::from(
-                f16::from_bits(u16::try_from(bits & 0xffff).unwrap_or(0))
+            (Constant::Integer(_), t) => {
+                self.refuse(format!("an integer constant of a type that holds none ({t:?})"))
+            }
+            (Constant::Float(_), t) => {
+                self.refuse(format!("a float constant of a type that holds none ({t:?})"))
+            }
+            (other, t) => self.refuse(format!("a constant {other:?} of type {t:?}")),
+        }
+    }
+
+    /// The bits an element of `ty` holds as its carried type holds them, from the word a constant gives: a scalar
+    /// constant's value, or a word of a constant array's or vector's data (`CST_CODE_DATA`), which are their
+    /// elements' bits whatever their type.
+    fn element_bits(&self, word: u64, ty: TypeId) -> Result<u64> {
+        Ok(match self.type_at(ty)? {
+            LlvmType::Integer(1) => word & 1,
+            LlvmType::Integer(64) | LlvmType::Double => word,
+            LlvmType::Integer(w @ 2..=32) => word & u64::MAX.checked_shl(*w).map_or(u64::MAX, |high| !high),
+            LlvmType::Float => u64::from(crate::lift::low32(word)),
+            LlvmType::Half => u64::from(
+                f16::from_bits(u16::try_from(word & 0xffff).unwrap_or(0))
                     .to_f32()
                     .to_bits(),
             ),
-            (Constant::Float(bits), LlvmType::Double) => *bits,
-            // a constant array's data are its elements' bits, whatever their type
-            (Constant::Integer(i), LlvmType::Float) => u64::from(crate::lift::low32(*i as u64)),
-            (Constant::Integer(i), LlvmType::Half) => u64::from(
-                f16::from_bits(u16::try_from(i & 0xffff).unwrap_or(0))
-                    .to_f32()
-                    .to_bits(),
-            ),
-            (Constant::Integer(i), LlvmType::Double) => *i as u64,
-            (other, t) => return self.refuse(format!("a constant {other:?} of type {t:?}")),
+            t => return self.refuse(format!("a constant of type {t:?}")),
         })
     }
 
@@ -427,6 +436,11 @@ impl Lift<'_> {
                 let r = self.gep(*base, indices)?;
                 define(self, r)
             }
+            // a volatile or atomic load or store would be lifted as a plain one, losing what it asks
+            LlvmOp::Load { volatile: true, .. } => self.refuse("a volatile load"),
+            LlvmOp::Load { atomic: Some(_), .. } => self.refuse("an atomic load"),
+            LlvmOp::Store { volatile: true, .. } => self.refuse("a volatile store"),
+            LlvmOp::Store { atomic: Some(_), .. } => self.refuse("an atomic store"),
             LlvmOp::Load { pointer, .. } => {
                 // the value of a library's resource global is the resource's handle
                 if let Some(i) = self.setup.resource_of_variable(*pointer) {
@@ -1100,7 +1114,7 @@ impl Lift<'_> {
             }
             (Constant::Data(words), LlvmType::Array(_, e) | LlvmType::Vector(_, e)) => {
                 for w in words {
-                    let bits = self.constant_bits(&Constant::Integer(w as i64), e)?;
+                    let bits = self.element_bits(w, e)?;
                     self.push_bits(bits, e, out)?;
                 }
             }

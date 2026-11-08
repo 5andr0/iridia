@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `iridia-dxil::ir` distinguishes typed scalar constants from raw constant-array data words, and refuses scalar
+  constants of the wrong kind and volatile or atomic loads and stores. The damaged-input regression tests now use
+  the IR lift and its diagnostics.
 - `iridia-ir`: ray queries (DXR 1.1's inline ray tracing, Direct3D's `RayQuery<flags>`). A function declares its
   queries (`Function::queries`, a `QueryDecl` of the template's flags each, `QueryId` their index: an object of the
   function, not a variable, which no pass promotes); `Node::RayQueryInit` (the acceleration structure and a `RayDesc`
