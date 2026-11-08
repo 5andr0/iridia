@@ -258,6 +258,28 @@ fn nonfinite_literal_bits_and_signed_zero_survive_the_written_runtime_binding() 
     }
 }
 
+proptest::proptest! {
+    #![proptest_config(proptest::test_runner::Config::with_cases(32))]
+    #[test]
+    fn binding_deep_chains_preserves_each_inputs_bits(depth in 24usize..320) {
+        let mut body = String::from("  %0: vec4<u32> = input 0.xyzw\n  %1: vec4<u32> = input 1.xyzw\n");
+        let mut previous = 0;
+        for n in 2..depth + 2 {
+            let op = if n % 2 == 0 { "iadd" } else { "xor" };
+            body.push_str(&format!("  %{n}: vec4<u32> = {op} %{previous}, %1\n"));
+            previous = n;
+        }
+        body.push_str(&format!("  output 0.xyzw = %{previous}\n"));
+        let p = program(&body);
+        for profile in [iridia_naga::Profile::NAGA, iridia_naga::Profile::BROWSER] {
+            let text = iridia_naga::wgsl(&p, &profile).unwrap();
+            let module = naga::front::wgsl::parse_str(&text).unwrap();
+            iridia_naga::validate(&module, &profile).unwrap();
+            proptest::prop_assert_eq!(disagreement_written(&p, &text, 32), None);
+        }
+    }
+}
+
 /// A unary operation `name` on the first input as `ty` (`f32` or `u32` or `i32`, four lanes), its result `result`.
 fn unary(name: &str, ty: &str, result: &str) -> String {
     let cast = |t: &str, v: &str| {

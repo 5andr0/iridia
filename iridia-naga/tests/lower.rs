@@ -231,6 +231,22 @@ fn main {
 }
 
 #[test]
+fn deep_single_use_expressions_parse_in_both_profiles() {
+    let p = program(
+        include_str!("fixtures/deep_single_use.ir"),
+        &[(ScalarType::Float, 1)],
+        &[(ScalarType::Float, 1)],
+        Vec::new(),
+    );
+    for profile in [iridia_naga::Profile::NAGA, iridia_naga::Profile::BROWSER] {
+        let text = iridia_naga::wgsl(&p, &profile).unwrap();
+        let module =
+            naga::front::wgsl::parse_str(&text).unwrap_or_else(|e| panic!("{}", e.emit_to_string(&text)));
+        iridia_naga::validate(&module, &profile).unwrap();
+    }
+}
+
+#[test]
 fn the_largest_float_is_written_as_its_bits() {
     let p = program(
         "iridia-ir 1

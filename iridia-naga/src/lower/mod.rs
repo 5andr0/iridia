@@ -2817,7 +2817,8 @@ fn baked(f: &naga::Function, refs: &[usize], h: Handle<E>) -> bool {
 /// Name every access referenced more than once whose base the writer would write in place, so each IR value is
 /// computed once in the text. naga's writers never give an access a `let` of its own (a pointer access must stay a
 /// place), so a lane of an unnamed expression used twice would repeat the whole expression at each use; a value
-/// here is never a pointer, so naming it is safe. Named for its IR value (`vN`) where it is one.
+/// here is never a pointer, so naming it is safe. Also break long inline expression chains before they exceed
+/// readers' recursion limits. Named for its IR value (`vN`) where it is one.
 fn name_shared(
     module: &naga::Module,
     entry: &mut EntryPoint,
@@ -2899,7 +2900,151 @@ fn name_shared(
             .map_or_else(|| format!("x{}", h.index()), |n| format!("v{n}"));
         f.named_expressions.insert(h, name);
     }
+    // Operands precede their users in naga's arena. One forward walk computes the depth the writer would inline;
+    // a binding starts a fresh expression at each use. This needs neither recursive traversal nor repeated walks
+    // of a shared subgraph. Leave room for the writer's surrounding constructors and the reader's grammar frames.
+    let mut depths = Vec::with_capacity(f.expressions.len());
+    for (h, expression) in f.expressions.iter() {
+        let depth = if baked(f, &refs, h) {
+            0
+        } else {
+            inline_depth(expression, &depths)?
+        };
+        let pointer = matches!(
+            fi[h].ty.inner_with(&module.types),
+            naga::TypeInner::Pointer { .. } | naga::TypeInner::ValuePointer { .. }
+        );
+        if depth >= 32 && !pointer && !expression.needs_pre_emit() {
+            let name = value_of
+                .get(&h)
+                .map_or_else(|| format!("x{}", h.index()), |n| format!("v{n}"));
+            f.named_expressions.insert(h, name);
+            depths.push(0);
+        } else {
+            depths.push(depth);
+        }
+    }
     Ok(())
+}
+
+/// Depth of a single inline expression, with already-bound operands counted as names.
+fn inline_depth(expression: &E, depths: &[usize]) -> Result<usize, Error> {
+    let mut max = 0;
+    let mut missing = false;
+    let mut read = |h: Handle<E>| match depths.get(h.index()) {
+        Some(depth) => max = max.max(*depth),
+        None => missing = true,
+    };
+    match *expression {
+        E::Literal(_)
+        | E::Constant(_)
+        | E::Override(_)
+        | E::ZeroValue(_)
+        | E::FunctionArgument(_)
+        | E::GlobalVariable(_)
+        | E::LocalVariable(_)
+        | E::CallResult(_)
+        | E::AtomicResult { .. }
+        | E::WorkGroupUniformLoadResult { .. }
+        | E::SubgroupBallotResult
+        | E::SubgroupOperationResult { .. }
+        | E::RayQueryProceedResult => return Ok(0),
+        E::Compose { ref components, .. } => components.iter().copied().for_each(read),
+        E::Access { base, index } => {
+            read(base);
+            read(index);
+        }
+        E::AccessIndex { base, .. } => read(base),
+        E::Splat { value, .. } => read(value),
+        E::Swizzle { vector, .. } => read(vector),
+        E::Load { pointer } => read(pointer),
+        E::ImageSample {
+            image,
+            sampler,
+            coordinate,
+            array_index,
+            offset,
+            ref level,
+            depth_ref,
+            ..
+        } => {
+            read(image);
+            read(sampler);
+            read(coordinate);
+            array_index
+                .into_iter()
+                .chain(offset)
+                .chain(depth_ref)
+                .for_each(&mut read);
+            match *level {
+                naga::SampleLevel::Auto | naga::SampleLevel::Zero => {}
+                naga::SampleLevel::Exact(h) | naga::SampleLevel::Bias(h) => read(h),
+                naga::SampleLevel::Gradient { x, y } => {
+                    read(x);
+                    read(y);
+                }
+            }
+        }
+        E::ImageLoad {
+            image,
+            coordinate,
+            array_index,
+            sample,
+            level,
+        } => {
+            read(image);
+            read(coordinate);
+            array_index.into_iter().chain(sample).chain(level).for_each(read);
+        }
+        E::ImageQuery { image, query } => {
+            read(image);
+            if let naga::ImageQuery::Size { level } = query {
+                level.into_iter().for_each(read);
+            }
+        }
+        E::Unary { expr, .. } | E::Derivative { expr, .. } | E::As { expr, .. } | E::ArrayLength(expr) => {
+            read(expr)
+        }
+        E::Binary { left, right, .. } => {
+            read(left);
+            read(right);
+        }
+        E::Select {
+            condition,
+            accept,
+            reject,
+        } => {
+            read(condition);
+            read(accept);
+            read(reject);
+        }
+        E::Relational { argument, .. } => read(argument),
+        E::Math {
+            arg,
+            arg1,
+            arg2,
+            arg3,
+            ..
+        } => {
+            read(arg);
+            arg1.into_iter().chain(arg2).chain(arg3).for_each(read);
+        }
+        E::RayQueryVertexPositions { query, .. } | E::RayQueryGetIntersection { query, .. } => read(query),
+        E::CooperativeLoad { ref data, .. } => {
+            read(data.pointer);
+            read(data.stride);
+        }
+        E::CooperativeMultiplyAdd { a, b, c } => {
+            read(a);
+            read(b);
+            read(c);
+        }
+    }
+    if missing {
+        Err(err("an expression's operand has no preceding inline depth"))
+    } else {
+        Ok(max.saturating_add(1))
+    }
 }
 
 #[cfg(test)]

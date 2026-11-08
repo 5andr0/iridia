@@ -65,6 +65,8 @@
 - `iridia-exec`: raster helper invocations evaluate for derivatives and private variables but perform no external
   writes, image or buffer atomics, or append/consume counter operations. A fullscreen triangle writes each covered
   pixel once; helper lanes previously wrote UAVs too.
+- `iridia-naga`: long single-use expression chains are bound to intermediate WGSL `let` values, keeping parser
+  nesting bounded. The reduced deep-chain fixture validates in both profiles; generated chains agree with IR execution.
 - `iridia-naga`: IR literals and zero values have runtime `let` bindings in written WGSL. Specialising a constant
   into `log2`, inverse square root or division no longer asks WGSL constant evaluation to represent a non-finite
   result. Non-finite float literals likewise reconstruct their bits from a runtime integer binding. Reduced IR

@@ -477,7 +477,6 @@
 60e54bed7664c58808b173ca2e525db8ede3120b238e4a248d8b973273e90c54	A	lift: reflection: DXBC at word N: N constant buffers named cb: their declarations do not tell which binding takes which layout
 60e54bed7664c58808b173ca2e525db8ede3120b238e4a248d8b973273e90c54	IR	lift: reflection: DXBC at word N: N constant buffers named cb: their declarations do not tell which binding takes which layout
 60e54bed7664c58808b173ca2e525db8ede3120b238e4a248d8b973273e90c54	IR WGSL	not reached
-610720f0e909e58e0634dc91de53db48a54e99922d37638ad105299275a5d3bb	IR WGSL	WGSL read back: error: internal WGSL front end error  = note: Parser recursion limit exceeded  
 621e0091b958ebf2a94d293ca7ffd1f5ae99c6589dc76920d3c216e9c9b00760	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 6229a4d81be21c4591503379ebfa7db5bcc3316fd1c06e1edb1f86b2eee35f5f	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 632afadc01c3ca07374ef80a91413391088b58ed887eb93716753cfe1cecdfb3	IR WGSL	lower: a Geometry program is not lowered yet
@@ -710,7 +709,6 @@
 93a1fb2ce90cb6419766b9081158514da53dca0a220f819e8b61ecae9c00e23f	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 93beaab42c0e25285be42d7585d33daaa5239d97d85d8d8f2fb1fc713b93e79e	A	validate: module: Entry point main at Compute is invalid: Expression [N] is invalid: Sample level (exact) type [N] has an invalid type
 94274ee89aeaa7bc502d0ac1fa7772b6531c7e30abcbc6ed59cb836ddead93e5	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-94ca98ea4f9f0b6aacf2a6d36be56e11e76ecfeb5eb8ad8eb61eefd157a8a46b	IR WGSL	WGSL read back: error: internal WGSL front end error  = note: Parser recursion limit exceeded  
 951e6ca62287244feba3476a5db86a9d27a6d03e4b07d151baa432d65276955f	IR WGSL	lower: a Domain program is not lowered yet
 95754202b9c75c0439c0a1f331a7a18d7b97f00d9bcd6d60748d970cb26632f2	IR WGSL	lower: a Geometry program is not lowered yet
 9593bea6375a1939dbe0706e9d27cf53da9ce7696d43ac7ae1b1202faff4672f	IR WGSL	lower: a Hull program is not lowered yet
@@ -1003,7 +1001,6 @@ d4052cc922c5a4994960386c735480d9a14c06b035f371b2b6e5f9c609b4d062	IR	lift: dcl_in
 d4052cc922c5a4994960386c735480d9a14c06b035f371b2b6e5f9c609b4d062	IR WGSL	not reached
 d4e77ac8c0b758533f6ea08bbe0428ac3c96a2e688776e602dc4a7b78ea2005b	IR WGSL	lower: a Hull program is not lowered yet
 d4ec161ae66158017ab59f9b99681b9afda465a4e8caa148692390a9a276dd1f	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-d4fbf3b5e2a3606f30c1ec585d01a9f4bb9868ea71ce1955e102469553a07b35	IR WGSL	WGSL read back: error: internal WGSL front end error  = note: Parser recursion limit exceeded  
 d53a5b25be19be6b18bbd9a5c550b810067b5ee7075874acbf46d02f98a85055	A	lift: sample_clamp_feedback: opcode N is not lifted
 d53a5b25be19be6b18bbd9a5c550b810067b5ee7075874acbf46d02f98a85055	IR	lift: sample_clamp_feedback: opcode N is not lifted to the IR yet
 d53a5b25be19be6b18bbd9a5c550b810067b5ee7075874acbf46d02f98a85055	IR WGSL	not reached
@@ -1052,7 +1049,6 @@ dd628f6cebd6b459c32e957dfce2f2240c477e9a608e82d251a6c26aeb9b1af8	A	lift: bufinfo
 dd628f6cebd6b459c32e957dfce2f2240c477e9a608e82d251a6c26aeb9b1af8	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 dd628f6cebd6b459c32e957dfce2f2240c477e9a608e82d251a6c26aeb9b1af8	IR WGSL	not reached
 de407cf21d365a58376c34097512a9fe9863ed52e6637a4f1d8531270357bd22	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-de83cbb1332b870f203463d824120c40d8f042e03f1b486a676b230ecb6c8f2e	IR WGSL	WGSL read back: error: internal WGSL front end error  = note: Parser recursion limit exceeded  
 df100bf2fd18c7b9ef06c53ad26089a75b09097676dab978d174a3c7571269c8	A	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 df100bf2fd18c7b9ef06c53ad26089a75b09097676dab978d174a3c7571269c8	IR	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 df100bf2fd18c7b9ef06c53ad26089a75b09097676dab978d174a3c7571269c8	IR WGSL	not reached
