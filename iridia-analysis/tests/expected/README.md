@@ -83,6 +83,17 @@ word that selects the sampler, and by the read of it, with nothing dropped. That
 (IR more precise), with the executor's refusal of an element of an array of resources retained in the row.
 `sampler_heap.vs.dxil` agrees in one counted step. None of the 83 demand pairs differs between the graphs.
 
+## Early-depth fixtures
+
+The four `early_depth` and `late_depth` fixtures (one of each in DXBC and DXIL) add four fixture rows and 48 demand
+pairs. All existing fixture and demand answers remain unchanged. All four analyses agree with the legacy graph,
+with the same answer hash: their output reads position.xy and their UAV store uses position.x as its address.
+Early depth changes when the rasterizer permits that store, rather than the shader's dataflow. The analysis
+oracle explicitly records `execution not compared` for storage writes; its agreement is not a runtime witness.
+The draw executor's separate early-depth test checks the stores and visible pixels under passing, failing and
+mixed depth tests, with the late-depth fixtures as controls. All 48 new demand pairs succeed and agree between
+the two graphs, bringing the comparison to 1,371 pairs with no differences.
+
 ## Execution inputs and work budgets
 
 Constants are filled using reflected scalar declarations. Where reflection is absent, direct word moves are traced

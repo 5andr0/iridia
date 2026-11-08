@@ -1176,7 +1176,12 @@ impl<'a> Raster<'a> {
                 .map_err(|_| error(format!("pixel ({px}, {py}) is outside the surface")))
         };
         // a program that forces early tests (`[earlydepthstencil]`) runs only where they pass
-        let early = self
+        let early = self.pixel.ir().is_some_and(|p| {
+            matches!(
+                p.interface.facts,
+                iridia_ir::interface::StageFacts::EarlyDepthStencil
+            )
+        }) || self
             .pixel
             .program()
             .and_then(|p| p.module.entry_points.first())

@@ -100,6 +100,11 @@ fn write(
     }
     let text = naga::back::wgsl::write_string(module, info, naga::back::wgsl::WriterFlags::empty())
         .map_err(|e| Error(format!("naga's WGSL writer: {e}")))?;
+    let text = if program.interface.facts == iridia_ir::interface::StageFacts::EarlyDepthStencil {
+        format!("// early_depth_stencil: WGSL has no early depth/stencil guarantee.\n{text}")
+    } else {
+        text
+    };
     let subgroups = profile.directives == Directives::Standard
         && requirements(program)
             .iter()

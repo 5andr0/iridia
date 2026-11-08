@@ -538,9 +538,8 @@ fn direct3d_9_fogs_the_first_target_by_its_mode_and_source() {
 
 /// Direct3D 12's depth bounds pass a pixel only where the depth buffer's value is within them, ends included, and a
 /// program that forces early tests (`[earlydepthstencil]`) runs only where they pass, so its UAV store is not made
-/// where they fail (depth-bounds.shader_test). The IR does not record that a program forces early tests, so on the IR
-/// the program runs where they fail and the probes of its UAV after those draws (lines 41 and 65) read its store; on
-/// the lift the IR replaces every probe holds.
+/// where they fail (depth-bounds.shader_test). The IR preserves the forced-early-tests fact, so the probes of its UAV
+/// after rejected draws (lines 41 and 65) see no shader store, as on the reference lift.
 #[test]
 fn the_depth_bounds_and_early_tests_hold_back_a_pixel_and_its_program() {
     let runs = vkd3d_runs("vkd3d/dxbc.json.gz", "depth-bounds.shader_test");
@@ -553,13 +552,13 @@ fn the_depth_bounds_and_early_tests_hold_back_a_pixel_and_its_program() {
         !selected.is_empty(),
         "a probe of depth-bounds.shader_test is selected"
     );
-    for p in selected {
-        let expected = match p.line {
-            41 | 65 => "fail",
-            _ => "pass",
-        };
-        assert_eq!(p.outcome.class(), expected, "line {}: {:?}", p.line, p.outcome);
+    for line in [41, 65] {
+        assert!(
+            selected.iter().any(|p| p.line == line),
+            "the early-depth UAV probe at line {line} is selected"
+        );
     }
+    assert_selected_pass(&runs);
     assert_selected_pass(&vkd3d_runs_on(
         front::Path::Reference,
         "vkd3d/dxbc.json.gz",

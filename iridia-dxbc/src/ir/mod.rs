@@ -31,7 +31,7 @@ use dxbc_reader::decode::{Declared, Decoded, Register, decode};
 pub const LIFTER: &str = "iridia-dxbc-ir";
 
 /// Increment when the same bytecode lifts differently (`tests/versions.rs` holds the IR lift's fixtures to it).
-pub const LIFTER_VERSION: u32 = 3;
+pub const LIFTER_VERSION: u32 = 4;
 
 /// Lift a DXBC container's program onto the IR. What the lift does not carry is an `Err` naming the word and why.
 pub fn lift(bytes: &[u8]) -> Result<Program> {
@@ -62,6 +62,9 @@ pub fn lift_with(bytes: &[u8], bound: &iridia_ir::interface::BoundSizes) -> Resu
     let stage = crate::reflection::stage_of(decoded.kind);
     let mut setup = Setup::new(bytes, &decoded, stage)?;
     setup.bind_sizes(bound)?;
+    if setup.early_depth_test {
+        setup.interface.facts = StageFacts::EarlyDepthStencil;
+    }
     let mut lift = Lift::new(&decoded, stage, setup);
     let (entry, patch) = if stage == Stage::Hull {
         let (entry, patch) = lift.hull()?;

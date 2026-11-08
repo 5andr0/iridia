@@ -29,6 +29,11 @@
 - `iridia-ir`: `BoundSizes`, the size each constant buffer is bound with (taken by `lift_with`), is `iridia_ir::interface::BoundSizes`,
   beside `ConstantBufferBinding`; `iridia_interface` and `iridia` re-export it, so no path breaks. The IR lifts of
   `iridia-dxbc` and `iridia-dxil` take it from there.
+- `iridia-ir`: `StageFacts::EarlyDepthStencil` carries a pixel program's forced early depth/stencil tests. DXBC and
+  DXIL IR lifts preserve the source flag; the draw executor suppresses external side effects on depth-rejected
+  pixels while helper invocations still evaluate for derivatives. WGSL writers retain a note that WGSL has no early
+  depth/stencil guarantee and continue writing the shader. The IR version is 3 (was 2); DXBC and DXIL IR lifter
+  versions are 4, invalidating cached lifts made without the stage fact.
 - `iridia-dxil::ir` distinguishes typed scalar constants from raw constant-array data words, and refuses scalar
   constants of the wrong kind and volatile or atomic loads and stores. The damaged-input regression tests now use
   the IR lift and its diagnostics.

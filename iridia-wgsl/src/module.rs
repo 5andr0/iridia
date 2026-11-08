@@ -218,6 +218,9 @@ impl<'a> Writer<'a> {
         w.region(body, crate::flow::Yield::Top)?;
         let body_text = core::mem::take(&mut w.out);
         let mut text = String::new();
+        if program.interface.facts == StageFacts::EarlyDepthStencil {
+            text.push_str("// early_depth_stencil: WGSL has no early depth/stencil guarantee.\n");
+        }
         text.push_str(&w.enables(&body_text)?);
         for d in &w.decls {
             text.push_str(d);

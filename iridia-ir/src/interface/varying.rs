@@ -506,6 +506,9 @@ pub enum StageFacts {
     /// The program states nothing beyond its varyings and resources.
     #[default]
     None,
+    /// A pixel program that forces depth and stencil tests before shader execution (`[earlydepthstencil]`), so
+    /// invocations that fail those tests have no shader side effects.
+    EarlyDepthStencil,
     /// A vertex program that writes no clip-space position: its outputs feed a hull program (or a stream-output
     /// stage), so the program is a function (`main`) and not an entry point.
     VertexWithoutPosition,
@@ -584,6 +587,7 @@ impl Interface {
                 Ok(())
             }
             (Stage::Vertex, StageFacts::VertexWithoutPosition) => Ok(()),
+            (Stage::Pixel, StageFacts::EarlyDepthStencil) => Ok(()),
             (Stage::Hull | Stage::Domain, _) => Err(format!(
                 "{} program without its patch facts",
                 self.stage.with_article()

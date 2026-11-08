@@ -30,7 +30,7 @@ use iridia_ir::{
     Block, Body, Conventions, Denormals, FloatEnv, Function, Node, Op, Origin, Precision, Program,
     Provenance, QueryDecl, QueryId, Res, Target, Terminator, Type, Unit, ValueDef, ValueId as IrValue, Var,
     VarId,
-    interface::{InstructionCount, InstructionUnit, ShaderFormat, Stage},
+    interface::{InstructionCount, InstructionUnit, ShaderFormat, Stage, StageFacts},
 };
 
 use crate::lift::setup::{Setup, dx_opcode};
@@ -44,7 +44,7 @@ use dxil_reader::reflection;
 pub const LIFTER: &str = "iridia-dxil-ir";
 
 /// Increment when the same bytecode lifts differently (`tests/versions.rs` holds the IR lift's fixtures to it).
-pub const LIFTER_VERSION: u32 = 3;
+pub const LIFTER_VERSION: u32 = 4;
 
 /// Lift a DXIL container's entry function onto the IR: a vertex, pixel, compute, hull, domain, geometry, mesh,
 /// amplification or ray tracing program (a library of one export). What the lift does not carry is an `Err` naming the
@@ -77,6 +77,10 @@ pub fn lift_with(container: &[u8], bound: &iridia_ir::interface::BoundSizes) -> 
     let mut functions = vec![entry];
     functions.extend(patch_constant);
     let mut setup = Setup::new(&chunks, &module, &functions)?;
+    // DXIL's ForceEarlyDepthStencil shader flag, in the entry properties.
+    if reflection::shader_flags(&module).map_err(read)?.unwrap_or(0) & 0x8 != 0 {
+        setup.interface.facts = StageFacts::EarlyDepthStencil;
+    }
     bound
         .apply(&mut setup.interface)
         .map_err(|why| error(0, format!("bound sizes: {why}")))?;
