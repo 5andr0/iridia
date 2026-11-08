@@ -74,6 +74,22 @@ fn a_half_bitcast_to_a_sixteen_bit_integer_is_the_halfs_bits() {
     ]));
 }
 
+/// A 16-bit integer is carried in the low bits of a 32-bit word, so what orders or counts its bits must take its own
+/// width: a signed compare and `min`/`max` (`abs`, `clamp`, `sign`) sign-extend it, `reversebits` reverses 16 bits, and
+/// `firstbithigh` counts the bits above the highest set one of 16.
+#[test]
+fn sixteen_bit_integers_order_and_count_by_their_own_width() {
+    assert_pass(&offload_outcomes(&[
+        "Feature/HLSLLib/abs.int16.test",
+        "Feature/HLSLLib/sign.int16.test",
+        "Feature/HLSLLib/clamp.int16.test",
+        "Feature/HLSLLib/max.int16.test",
+        "Feature/HLSLLib/min.int16.test",
+        "Feature/HLSLLib/reversebits.16.test",
+        "Feature/HLSLLib/firstbithigh.16.test",
+    ]));
+}
+
 /// Arrays of views, stated and unbounded, bind element by element at consecutive registers.
 #[test]
 fn the_offload_resource_array_tests_bind_every_element() {

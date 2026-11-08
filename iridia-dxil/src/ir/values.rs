@@ -951,7 +951,13 @@ impl Lift<'_> {
         } else {
             Scalar::I32
         });
+        // a narrow integer is carried in the low bits of a word, so a signed order needs its sign extension
+        let narrow = self.type_of(lhs).and_then(|t| self.narrow_of_type(t));
         let s = |l: &mut Self, c: Cmp| {
+            let (a, b) = match narrow {
+                Some(w) => (l.sign_extend_narrow(a, w), l.sign_extend_narrow(b, w)),
+                None => (a, b),
+            };
             let (sa, sb) = (l.bitcast(signed, a), l.bitcast(signed, b));
             l.binary(bt, Binary::SCmp(c), sa, sb)
         };

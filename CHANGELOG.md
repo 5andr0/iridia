@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- `iridia-dxil` (IR lift, `LIFTER_VERSION` 7): a 16-bit integer is carried in the low bits of a 32-bit word, and the lift
+  had ordered and counted it as that word: a signed `icmp` on an `i16` compared the zero extension (so `sign(int16_t)` of a
+  negative gave 0), `dx.op` `IMax` and `IMin` did the same (`abs` of a negative `int16_t` stayed negative, `max`, `min` and `clamp`
+  took the wrong bound), `Bfrev` reversed 32 bits of it, and `FirstbitHi` and `FirstbitSHi` counted the 16 bits
+  of the extension (dxc subtracts that count from 15, so `firstbithigh` gave 4294967283 where it should give 3). A signed
+  compare and `IMax`/`IMin` sign-extend an `i16`, `Bfrev` shifts the reversed word down by 16 and `FirstbitHi`/`FirstbitSHi`
+  take the 16 off; no fixture's lift changes, the version is bumped for the programs that did.
 - `iridia-dxil` (the older lift, `iridia_dxil::lift`): the older lift had the same bug as the IR lift's `LIFTER_VERSION` 6: a bitcast between a half and a
   16-bit integer took the widened float's 32 bits as the integer (the exponent and mantissa tests dxc makes of a half in
   `isnan`, `isinf`, `isfinite` and `isnormal`, `asint16`, `asuint16`, a 16-bit store of a half), so those programs ran and gave wrong

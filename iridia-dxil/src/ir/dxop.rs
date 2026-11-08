@@ -26,6 +26,12 @@ impl Lift<'_> {
         )
     }
 
+    /// The width of argument `n` of a call where it is a narrow integer (16 for an `i16`).
+    fn narrow_arg(&self, args: &[ValueId], n: usize) -> Option<u32> {
+        let ty = args.get(n).and_then(|&a| self.type_of(a))?;
+        self.narrow_of_type(ty)
+    }
+
     /// The constant integer argument `n`.
     pub(crate) fn const_arg(&self, args: &[ValueId], n: usize) -> Option<i64> {
         args.get(n).and_then(|&a| const_int(self.m, self.f, a))
@@ -130,6 +136,7 @@ impl Lift<'_> {
                 value(self, r)
             }
             30 | 31 => {
+                let width = self.narrow_arg(args, 1);
                 let x = self.uint(self.arg(args, 1)?)?;
                 let op = if code == 30 {
                     Unary::BitReverse
@@ -137,16 +144,39 @@ impl Lift<'_> {
                     Unary::CountOnes
                 };
                 let r = self.unary(u, op, x);
+                // the bits of a narrow operand are the word's low ones, so reversed they are its high ones
+                let r = match (code, width) {
+                    (30, Some(w)) => {
+                        let by = self.u32_lit(32u32.saturating_sub(w));
+                        self.binary(u, Binary::ShrU, r, by)
+                    }
+                    _ => r,
+                };
                 value(self, r)
             }
             32..=34 => {
-                let x = self.uint(self.arg(args, 1)?)?;
+                let width = self.narrow_arg(args, 1);
+                let mut x = self.uint(self.arg(args, 1)?)?;
+                if let (34, Some(w)) = (code, width) {
+                    x = self.sign_extend_narrow(x, w);
+                }
                 let op = match code {
                     32 => Unary::FirstBitLow,
                     33 => Unary::FirstBitHigh,
                     _ => Unary::FirstBitHighSigned,
                 };
                 let r = self.unary(u, op, x);
+                // the bits above the highest set one of a narrow operand count from its own width, not the word's
+                let r = match (code, width) {
+                    (33 | 34, Some(w)) => {
+                        let none = self.u32_lit(u32::MAX);
+                        let missing = self.binary(Type::BOOL, Binary::UCmp(Cmp::Eq), r, none);
+                        let by = self.u32_lit(32u32.saturating_sub(w));
+                        let own = self.binary(u, Binary::ISub, r, by);
+                        self.select(u, missing, none, own)
+                    }
+                    _ => r,
+                };
                 value(self, r)
             }
             35 | 36 => {
@@ -155,13 +185,23 @@ impl Lift<'_> {
                 value(self, r)
             }
             37..=40 => {
+                let width = self.narrow_arg(args, 1);
                 let (a, b) = (self.uint(self.arg(args, 1)?)?, self.uint(self.arg(args, 2)?)?);
                 let r = match code {
                     37 | 38 => {
+                        // a narrow operand is signed through its sign extension, the result cut back to its width
+                        let (a, b) = match width {
+                            Some(w) => (self.sign_extend_narrow(a, w), self.sign_extend_narrow(b, w)),
+                            None => (a, b),
+                        };
                         let (sa, sb) = (self.bitcast(Type::I32, a), self.bitcast(Type::I32, b));
                         let op = if code == 37 { Binary::SMax } else { Binary::SMin };
                         let r = self.binary(Type::I32, op, sa, sb);
-                        self.bitcast(u, r)
+                        let r = self.bitcast(u, r);
+                        match width {
+                            Some(w) => self.mask_narrow(r, w),
+                            None => r,
+                        }
                     }
                     39 => self.binary(u, Binary::UMax, a, b),
                     _ => self.binary(u, Binary::UMin, a, b),
