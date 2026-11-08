@@ -1,1193 +1,814 @@
 # What the slim set's dxbc programs give that is not ok (tests/slim.rs): program, column, where it stopped.
-003a15cceaa9a532ab0930a9e9129af9913777a36cc8b5544dadc384c7eeb421	A	lift: double precision is enabled (global flag): doubles are not lifted
 003a15cceaa9a532ab0930a9e9129af9913777a36cc8b5544dadc384c7eeb421	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-00794d5e986c52e76d2354b374d2e1b7f3fd892fbea714c1ebdf01336781c014	A	lift: sample_clamp_feedback: opcode N is not lifted
 00794d5e986c52e76d2354b374d2e1b7f3fd892fbea714c1ebdf01336781c014	IR	lift: sample_clamp_feedback: opcode N is not lifted to the IR yet
 00794d5e986c52e76d2354b374d2e1b7f3fd892fbea714c1ebdf01336781c014	IR WGSL	not reached
 010837ce2d0159c0d004d558fc07aa7ca5633f3b8b678cb943e33d8f41b06b8c	IR WGSL	lower: a Domain program is not lowered yet
-01c3144e14bfb7e8db4a5d3d5ac695b11d012f7523e8ab52d37b0a84ad82637e	A	lift: reflection: DXBC at word N: g_VisibleParticles: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 01c3144e14bfb7e8db4a5d3d5ac695b11d012f7523e8ab52d37b0a84ad82637e	IR	lift: reflection: DXBC at word N: g_VisibleParticles: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 01c3144e14bfb7e8db4a5d3d5ac695b11d012f7523e8ab52d37b0a84ad82637e	IR WGSL	not reached
-02877e8ad0b784ee26168763029d2f4fb3b5482041b1f9b3dc1461456c952cc0	A	lift: double precision is enabled (global flag): doubles are not lifted
 02dfae2403b30aa402489e4233109d46399540ba405acafd7ca1eb41b259dbca	IR WGSL	lower: a Geometry program is not lowered yet
-032ff52e28a3114416e186e06adf233efaa128f6166d83c2cdd90376b9f4e31a	A	lift: SV_ClipDistanceN: clip distances as a Pixel input have no built-in binding
 032ff52e28a3114416e186e06adf233efaa128f6166d83c2cdd90376b9f4e31a	IR	lift: SV_ClipDistanceN: clip distances as a Pixel input have no built-in binding
 032ff52e28a3114416e186e06adf233efaa128f6166d83c2cdd90376b9f4e31a	IR WGSL	not reached
-03921525e0d75c4b3e723f97e8fa29487918db3a586ffee8ee29aa6b0de70a23	A	WGSL read back: error: no definition in scope for identifier: `texture_multisampled_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: texture_multisampled_Nd_array<iN>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
 03921525e0d75c4b3e723f97e8fa29487918db3a586ffee8ee29aa6b0de70a23	IR WGSL	lower: a multisampled array texture has no WGSL form
-039820cbdcf76301c450bce1f2ca8902f4921a01bc5bb96c34e4193fcef20e1d	A	lift: sample_clamp_feedback: opcode N is not lifted
 039820cbdcf76301c450bce1f2ca8902f4921a01bc5bb96c34e4193fcef20e1d	IR	lift: sample_clamp_feedback: opcode N is not lifted to the IR yet
 039820cbdcf76301c450bce1f2ca8902f4921a01bc5bb96c34e4193fcef20e1d	IR WGSL	not reached
-03c6c8171dc34da199c612dc9a56f34163a5d2e8af06e7f08b871434c7702559	A	lift: double precision is enabled (global flag): doubles are not lifted
 041278c581d2d7ff5a46b7a87aff3ddf9466d4a396bb893ae08c00a49d44feee	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-044248b92f42e36ebf74e137fa32a1c10b55309a29ace5ef73ea11be87d9d036	A	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 044248b92f42e36ebf74e137fa32a1c10b55309a29ace5ef73ea11be87d9d036	IR	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 044248b92f42e36ebf74e137fa32a1c10b55309a29ace5ef73ea11be87d9d036	IR WGSL	not reached
-0489e5f3beb89fa9a06cff08c0d255d3777bf85fd3e85440885816a8381d187e	A	lift: bufinfo: opcode N is not lifted
 0489e5f3beb89fa9a06cff08c0d255d3777bf85fd3e85440885816a8381d187e	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 0489e5f3beb89fa9a06cff08c0d255d3777bf85fd3e85440885816a8381d187e	IR WGSL	not reached
-04a6d39a7afb2517f827c45fe122ce85f9f04e540df1081e9ecc52e52f44cf22	A	lift: a declared input of register type InnerCoverage
 04a6d39a7afb2517f827c45fe122ce85f9f04e540df1081e9ecc52e52f44cf22	IR	lift: a declared input of register type InnerCoverage
 04a6d39a7afb2517f827c45fe122ce85f9f04e540df1081e9ecc52e52f44cf22	IR WGSL	not reached
-04af602090af2ca36b59c8155d9ca311963442c7120d5a7e10485e4b5c00bb46	A	lift: sample_pos: opcode N is not lifted
 04af602090af2ca36b59c8155d9ca311963442c7120d5a7e10485e4b5c00bb46	IR	lift: sample_pos: opcode N is not lifted to the IR yet
 04af602090af2ca36b59c8155d9ca311963442c7120d5a7e10485e4b5c00bb46	IR WGSL	not reached
-053e19eb5aa88f0db89634bb6b2009ebcb910516b20d2cc05150bb7b5af57627	A	lift: reflection: DXBC at word N: buf: DND_SIT_UAV_CONSUME_STRUCTURED (N) is not mapped
 053e19eb5aa88f0db89634bb6b2009ebcb910516b20d2cc05150bb7b5af57627	IR	lift: reflection: DXBC at word N: buf: DND_SIT_UAV_CONSUME_STRUCTURED (N) is not mapped
 053e19eb5aa88f0db89634bb6b2009ebcb910516b20d2cc05150bb7b5af57627	IR WGSL	not reached
-05c588713e60d8dabb71570607a7a91805c8126a2685f952f60c3efdb9d62e5a	A	lift: a declared input of register type GsInstanceId
 05c588713e60d8dabb71570607a7a91805c8126a2685f952f60c3efdb9d62e5a	IR	lift: a declared input of register type GsInstanceId
 05c588713e60d8dabb71570607a7a91805c8126a2685f952f60c3efdb9d62e5a	IR WGSL	not reached
 05dfc7ba8fe20804a1e44fc543298c220fdeaeae8c1f75e92bdd0cbce2394dc9	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 0613550c1fc13908e27b8bcd68f4f62af60bc545cdf8a1aa4381ec8f910dffdb	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-062072b55def165d1b94450fe02dd529b921b39d63fe929be6bae5b1f70193be	A	lift: atomic_umax on memory whose atomics are signed
-06bb2e745b978359c2e6cd70b4cc6301c4e4ef0ec92b651045b072c217f61e45	A	lift: reflection: DXBC at word N: output_i: DND_SIT_UAV_APPEND_STRUCTURED (N) is not mapped
 06bb2e745b978359c2e6cd70b4cc6301c4e4ef0ec92b651045b072c217f61e45	IR	lift: reflection: DXBC at word N: output_i: DND_SIT_UAV_APPEND_STRUCTURED (N) is not mapped
 06bb2e745b978359c2e6cd70b4cc6301c4e4ef0ec92b651045b072c217f61e45	IR WGSL	not reached
-06dab8243e78a873f0eb9271f81c494ec6a6d664bbf1ba558069619ea2f7dc7c	A	lift: abort: opcode N is not lifted
 06dab8243e78a873f0eb9271f81c494ec6a6d664bbf1ba558069619ea2f7dc7c	IR	lift: abort: opcode N is not lifted to the IR yet
 06dab8243e78a873f0eb9271f81c494ec6a6d664bbf1ba558069619ea2f7dc7c	IR WGSL	not reached
 076494fdd4608c5c5d84cb6706007358bad1abe4f16f15641de9538296f65766	IR WGSL	lower: a Geometry program is not lowered yet
 07f34ac8613264ea8c4bc5ff440c60786c19bbe0f655efee0351d70846f4eb07	IR WGSL	lower: a Domain program is not lowered yet
 08b7bc97671192fab1bdda45f90da309e06307ca8a137476aa97c51010fe2955	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-08fe2bb8de06633be3006ca6a4817ba111ab03ce199a9829bd3372cb92c981ff	A	lift: a declared input of register type InnerCoverage
 08fe2bb8de06633be3006ca6a4817ba111ab03ce199a9829bd3372cb92c981ff	IR	lift: a declared input of register type InnerCoverage
 08fe2bb8de06633be3006ca6a4817ba111ab03ce199a9829bd3372cb92c981ff	IR WGSL	not reached
 09541d2ef3d6ee0af5ce9219b46488019e68edf582c52f8bf06f8c0481a6aa4a	IR WGSL	lower: a Domain program is not lowered yet
 0a7faf4b898a8e483f3a99aa241d76cbc65307ebfcb7ef523c046beed31cee6d	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-0af880bae6068722cb48f63556a0cac4de8ac6c5d1c76ca05982178323de1593	A	lift: reflection: DXBC at word N: asb: DND_SIT_UAV_APPEND_STRUCTURED (N) is not mapped
 0af880bae6068722cb48f63556a0cac4de8ac6c5d1c76ca05982178323de1593	IR	lift: reflection: DXBC at word N: asb: DND_SIT_UAV_APPEND_STRUCTURED (N) is not mapped
 0af880bae6068722cb48f63556a0cac4de8ac6c5d1c76ca05982178323de1593	IR WGSL	not reached
 0d6315e1c401e3784d0d442fd3066cc4b49859bd8dfd80a7cae36bd4c3519fdc	IR WGSL	lower: a Geometry program is not lowered yet
-0d958705cd5bf951ea929aea4a10caf619aedd593bedbd3094ead6a35cd55525	A	lift: ld_ms_feedback: opcode N is not lifted
 0d958705cd5bf951ea929aea4a10caf619aedd593bedbd3094ead6a35cd55525	IR	lift: ld_ms_feedback: opcode N is not lifted to the IR yet
 0d958705cd5bf951ea929aea4a10caf619aedd593bedbd3094ead6a35cd55525	IR WGSL	not reached
-0e6534d211cf15d6ab6103b9fd6282ab271845c6393fc740478202cea3296a37	A	lift: reflection: DXBC at word N: buf: DND_SIT_UAV_CONSUME_STRUCTURED (N) is not mapped
 0e6534d211cf15d6ab6103b9fd6282ab271845c6393fc740478202cea3296a37	IR	lift: reflection: DXBC at word N: buf: DND_SIT_UAV_CONSUME_STRUCTURED (N) is not mapped
 0e6534d211cf15d6ab6103b9fd6282ab271845c6393fc740478202cea3296a37	IR WGSL	not reached
 0e91ec918335fcd5b4bad7f70ce33ac01e2c2deb44d9995ce51aacb569cf1ace	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-0f729128f67d158d1555cb82819dd099037406770fbf5cbd1dc872d82a9c7e23	A	lift: reflection: DXBC at word N: constant buffer StructuredBufferArray[N][N] has no resource binding
 0f729128f67d158d1555cb82819dd099037406770fbf5cbd1dc872d82a9c7e23	IR	lift: reflection: DXBC at word N: constant buffer StructuredBufferArray[N][N] has no resource binding
 0f729128f67d158d1555cb82819dd099037406770fbf5cbd1dc872d82a9c7e23	IR WGSL	not reached
-10a5ece6e907fac5ec1b8f315c74931500d8a06b41a94f452930a6bdd68090d9	A	lift: bufinfo: opcode N is not lifted
 10a5ece6e907fac5ec1b8f315c74931500d8a06b41a94f452930a6bdd68090d9	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 10a5ece6e907fac5ec1b8f315c74931500d8a06b41a94f452930a6bdd68090d9	IR WGSL	not reached
-10bb899f96626f61c0b059f34b5d11644275faa9f07051d4509a3995d373342f	A	lift: double precision is enabled (global flag): doubles are not lifted
-10efa5fead377dd438f5d8626e5bcd964a0486e6851ee66fb41c51ee523cb419	A	lift: reflection: DXBC at word N: bufN: DND_SIT_UAV_APPEND_STRUCTURED (N) is not mapped
 10efa5fead377dd438f5d8626e5bcd964a0486e6851ee66fb41c51ee523cb419	IR	lift: reflection: DXBC at word N: bufN: DND_SIT_UAV_APPEND_STRUCTURED (N) is not mapped
 10efa5fead377dd438f5d8626e5bcd964a0486e6851ee66fb41c51ee523cb419	IR WGSL	not reached
 10f4432fba00cc0ae45b8f9d1604d2f99469336d47ab2a86fb2c3f8b42bc0be9	IR WGSL	lower: a Hull program is not lowered yet
-11147632c2babda7112b0c195caaa4fd05fdc445c61f2a49ea49830e421c829e	A	WGSL read back: error: no definition in scope for identifier: `texture_multisampled_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: texture_multisampled_Nd_array<fN>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
 11147632c2babda7112b0c195caaa4fd05fdc445c61f2a49ea49830e421c829e	IR WGSL	lower: a multisampled array texture has no WGSL form
-117a2029ec356b5c8580385d2db88587c3190e32bd61ef4a8bd8621559df64d1	A	lift: sample_clamp_feedback: opcode N is not lifted
 117a2029ec356b5c8580385d2db88587c3190e32bd61ef4a8bd8621559df64d1	IR	lift: sample_clamp_feedback: opcode N is not lifted to the IR yet
 117a2029ec356b5c8580385d2db88587c3190e32bd61ef4a8bd8621559df64d1	IR WGSL	not reached
-119405eee10af0b318b45152d4f19202f23c5a86d5057c632af5233d958cfb14	A	lift: reflection: DXBC at word N: sbuf_a: DND_SIT_UAV_APPEND_STRUCTURED (N) is not mapped
 119405eee10af0b318b45152d4f19202f23c5a86d5057c632af5233d958cfb14	IR	lift: reflection: DXBC at word N: sbuf_a: DND_SIT_UAV_APPEND_STRUCTURED (N) is not mapped
 119405eee10af0b318b45152d4f19202f23c5a86d5057c632af5233d958cfb14	IR WGSL	not reached
-120087b1eeed90373566585382f77ffa6d427459a06c6890f408d6893b517259	A	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 120087b1eeed90373566585382f77ffa6d427459a06c6890f408d6893b517259	IR	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 120087b1eeed90373566585382f77ffa6d427459a06c6890f408d6893b517259	IR WGSL	not reached
-12329703201fd45a13fded3a757664df3e7441ef28da475b9950c9b2599e8081	A	lift: bufinfo: opcode N is not lifted
 12329703201fd45a13fded3a757664df3e7441ef28da475b9950c9b2599e8081	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 12329703201fd45a13fded3a757664df3e7441ef28da475b9950c9b2599e8081	IR WGSL	not reached
-12f605bc5a7701985fcacc404b0c943c79e14e9ee116431be1d530a75d38f368	A	lift: reflection: DXBC at word N: g_VertexBuffer: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 12f605bc5a7701985fcacc404b0c943c79e14e9ee116431be1d530a75d38f368	IR	lift: reflection: DXBC at word N: g_VertexBuffer: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 12f605bc5a7701985fcacc404b0c943c79e14e9ee116431be1d530a75d38f368	IR WGSL	not reached
-13cee2994a6e1a1aed9610acc40f081495cc842a5056a18eab411ac87ee31d3b	A	lift: double precision is enabled (global flag): doubles are not lifted
 140c9c59f792217af275f53e62307de2897b71e1d2b8fc53969fefcbb82f8b72	IR WGSL	lower: a Hull program is not lowered yet
 1436b4ecda7b5b0132f53b6ab809cc83d25a78ba1bcc11d200b9fbe895a7813d	IR WGSL	lower: a Geometry program is not lowered yet
 143afa66605d0288d3ec0b68940e5b848e0ce42c9d8c0f99b1c4b0953f72c5b2	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 144741d3d68dfc533a83d6ebf66374ca5c9f0c393e47e2135dad0a0bf5a0036d	IR WGSL	lower: a Hull program is not lowered yet
-14b578659bcacddee6032cb94c2e685553c92f4e1f8c55bb0e50d8297c2aa97e	A	WGSL: wgsl cannot write this program: Unsupported texture atomic result (WGSL's texture atomics return nothing): [N]
 14b578659bcacddee6032cb94c2e685553c92f4e1f8c55bb0e50d8297c2aa97e	IR WGSL	lower: a texel atomic whose old value is read, or a compare-exchange of a texel, has no naga form: naga's image atomic gives no old value and takes no comparand
-14b624e3c3bf0427b160fe1e28ac70bc068f9b1a153a7ba86f67f7122591da7e	A	lift: ld_raw_feedback: opcode N is not lifted
 14b624e3c3bf0427b160fe1e28ac70bc068f9b1a153a7ba86f67f7122591da7e	IR	lift: ld_raw_feedback: opcode N is not lifted to the IR yet
 14b624e3c3bf0427b160fe1e28ac70bc068f9b1a153a7ba86f67f7122591da7e	IR WGSL	not reached
-14bccbc05f7513dcfc0305b151666859089c3ab9dbc4e9f073e75359ae939931	A	WGSL read back: error: no definition in scope for identifier: `texture_multisampled_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: texture_multisampled_Nd_array<uN>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
 14bccbc05f7513dcfc0305b151666859089c3ab9dbc4e9f073e75359ae939931	IR WGSL	lower: a multisampled array texture has no WGSL form
-14c34f69a2b739003f11c1033ae268fabefcf7ba9c187e80e81b0f26e273a191	A	lift: msad: opcode N is not lifted
 14c34f69a2b739003f11c1033ae268fabefcf7ba9c187e80e81b0f26e273a191	IR	lift: msad: opcode N is not lifted to the IR yet
 14c34f69a2b739003f11c1033ae268fabefcf7ba9c187e80e81b0f26e273a191	IR WGSL	not reached
-14e7e205dc650afa9b26556d2410a5a1090db90ce978ec4f772be3be8e34d52a	A	lift: a geometry program's output to a stream other than N is not lifted
 14e7e205dc650afa9b26556d2410a5a1090db90ce978ec4f772be3be8e34d52a	IR	lift: a geometry program's output to a stream other than N is not lifted
 14e7e205dc650afa9b26556d2410a5a1090db90ce978ec4f772be3be8e34d52a	IR WGSL	not reached
 153276c476f7d2905dad4d6081bdf6ee6f0e221ecd923205699be77675f5710d	IR WGSL	lower: a Domain program is not lowered yet
 1559f515a0da6a32ac97ad76f66e489dc2b18ff1bf0731060c2a413c81951a99	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-159d129b2a5d532d49aff565347680083a1a5c9a5b6c4a65418944614a6a548d	A	lift: bufinfo: opcode N is not lifted
 159d129b2a5d532d49aff565347680083a1a5c9a5b6c4a65418944614a6a548d	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 159d129b2a5d532d49aff565347680083a1a5c9a5b6c4a65418944614a6a548d	IR WGSL	not reached
-161daeeb7a199e2268ddd5d0e17a1e328f389f67ab0c2fe14e7732ff6d7beb5b	A	WGSL read back: error: no definition in scope for identifier: `texture_multisampled_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: texture_multisampled_Nd_array<uN>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
 161daeeb7a199e2268ddd5d0e17a1e328f389f67ab0c2fe14e7732ff6d7beb5b	IR WGSL	lower: a multisampled array texture has no WGSL form
 164af34515febd77c079c668998112e7b22d4f1f7c23a1bef8a2605279443c4e	IR WGSL	lower: a Domain program is not lowered yet
-16fcf5de21aca18013aa1f7e094481c2988b6d192a7230f6417f16bad053a699	A	lift: atomic_cmp_store: atomic operation cmp_store on a texture view
 16fcf5de21aca18013aa1f7e094481c2988b6d192a7230f6417f16bad053a699	IR WGSL	lower: a ND array storage image has no WGSL form
-1713ae33bb91a16254a789d2725daf49a42de37cfcaa1e09648c6e39f24b60ac	A	lift: double precision is enabled (global flag): doubles are not lifted
 178bb97e307c618f286b5a827da0e24f1d6f22af793b5ac955aa8011dffd2652	IR WGSL	lower: a Geometry program is not lowered yet
-185fc13de669e6ddc38ab5d4506403b76552aa2fef245af7ff7cdacff5d207d8	A	WGSL read back: error: no definition in scope for identifier: `texture_multisampled_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: texture_multisampled_Nd_array<iN>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
 185fc13de669e6ddc38ab5d4506403b76552aa2fef245af7ff7cdacff5d207d8	IR WGSL	lower: a multisampled array texture has no WGSL form
-1861f214b088b1c536105d27a55b36051ba22475c1d1f7c2c78ea68b90b434d9	A	WGSL: wgsl cannot write this program: Unsupported texture atomic result (WGSL's texture atomics return nothing): [N]
 1861f214b088b1c536105d27a55b36051ba22475c1d1f7c2c78ea68b90b434d9	IR WGSL	lower: a texel atomic whose old value is read, or a compare-exchange of a texel, has no naga form: naga's image atomic gives no old value and takes no comparand
 19160a083313f30671520e37f1317f60bc992869596ecf15a80bec6c360dd28c	IR WGSL	lower: a Domain program is not lowered yet
-1a2428ba100813e2bdee1247c9b52f35853f8ece5015f4571c72851fa8ff5aa0	A	lift: eval_sample_index: opcode N is not lifted
 1a2428ba100813e2bdee1247c9b52f35853f8ece5015f4571c72851fa8ff5aa0	IR	lift: eval_sample_index: opcode N is not lifted to the IR yet
 1a2428ba100813e2bdee1247c9b52f35853f8ece5015f4571c72851fa8ff5aa0	IR WGSL	not reached
-1afce2bafafe07f3fb3ae6f2d5346e0d279c5d942ff934f7babecaca031cd6de	A	lift: reflection: DXBC at word N: bufN: DND_SIT_UAV_APPEND_STRUCTURED (N) is not mapped
 1afce2bafafe07f3fb3ae6f2d5346e0d279c5d942ff934f7babecaca031cd6de	IR	lift: reflection: DXBC at word N: bufN: DND_SIT_UAV_APPEND_STRUCTURED (N) is not mapped
 1afce2bafafe07f3fb3ae6f2d5346e0d279c5d942ff934f7babecaca031cd6de	IR WGSL	not reached
-1b6f32458012b2af57cf439e9c8d65b94561029ee6327ffcb878cc42425dc8c0	A	lift: call: opcode N is not lifted
 1b6f32458012b2af57cf439e9c8d65b94561029ee6327ffcb878cc42425dc8c0	IR	lift: call: opcode N is not lifted to the IR yet
 1b6f32458012b2af57cf439e9c8d65b94561029ee6327ffcb878cc42425dc8c0	IR WGSL	not reached
 1bee3f50d96814a6f31c02bdebe7ed3578860d1a02f0c2cc2d7e7e2ac7d652ae	IR WGSL	lower: a Geometry program is not lowered yet
 1c0fba1a4223816b6ce3ba28dd1d75784175763a9e82c83177e6da3f46c23b83	IR WGSL	lower: a Hull program is not lowered yet
-1c940d9ac1a6544f80eb86ccfb8fe6114231c6c809c5e6f831f99050ac60abe7	A	lift: a declared input of register type InnerCoverage
 1c940d9ac1a6544f80eb86ccfb8fe6114231c6c809c5e6f831f99050ac60abe7	IR	lift: a declared input of register type InnerCoverage
 1c940d9ac1a6544f80eb86ccfb8fe6114231c6c809c5e6f831f99050ac60abe7	IR WGSL	not reached
-1d63b099fe50df64f3bcfa89fa421183a0754161ee5154f916a60d2534401510	A	lift: double precision is enabled (global flag): doubles are not lifted
 1dd04775c55e52f48db1885b2fb6c915b3b59e37c8f4aadc8e3694c8b6748ee6	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-1ddad95c9870848b23f265509d04e76f0a644d4fc3a41424a0efe64f34295383	A	lift: sample_clamp_feedback: opcode N is not lifted
 1ddad95c9870848b23f265509d04e76f0a644d4fc3a41424a0efe64f34295383	IR	lift: sample_clamp_feedback: opcode N is not lifted to the IR yet
 1ddad95c9870848b23f265509d04e76f0a644d4fc3a41424a0efe64f34295383	IR WGSL	not reached
-1e28f6cb30c201041bf90398e9b11b7d2f88a7ea6c8050336d3bf6f5b1d17ac3	A	lift: double precision is enabled (global flag): doubles are not lifted
 1e2ae62ab6ec0a611c07d03965d2893fb9d991dc993878c37a16ebf61760732a	IR WGSL	lower: a Geometry program is not lowered yet
 1e528df66041afb30feb60a3b9951aed06fe8e18891824c46b1d2ed9ee1bc985	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 1eb922b9015a5f9447a76c584bb4b9857812a426970826f2bf41bca1ad300247	IR WGSL	lower: a Hull program is not lowered yet
-1f905b31346d72befeef7bcd61f6123153424b6d3b8d6db206da5fc1feb5dec7	A	lift: a declared input of register type GsInstanceId
 1f905b31346d72befeef7bcd61f6123153424b6d3b8d6db206da5fc1feb5dec7	IR	lift: a declared input of register type GsInstanceId
 1f905b31346d72befeef7bcd61f6123153424b6d3b8d6db206da5fc1feb5dec7	IR WGSL	not reached
 201b7a955e9e37da6cdd56a30802d23947cc80e55ac0ce0b8d94e4f89cd32d88	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-203262dbea3b44218a22a1503b577e6a252a14e08a1b18090e334ce935ffd3f0	A	WGSL read back: error: no definition in scope for identifier: `texture_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: texture_Nd_array<fN>;   │          ^^^^^^^^^^^^^^^^ unknown identifier  
 203262dbea3b44218a22a1503b577e6a252a14e08a1b18090e334ce935ffd3f0	IR WGSL	lower: a ND array texture has no WGSL form
 20853fbb82e5bd59217d06d0f38374804c154a42a06952937fc9e420ad68f46b	IR WGSL	lower: a Hull program is not lowered yet
 210ed3f0f27b58aa9b3c6d9563db1ef2e0dee9cd3870ec8afbdb4813f7574834	IR WGSL	lower: a Geometry program is not lowered yet
 2125ebd1d6b553348cac2c44284ad1b06d98db941865d5ae18218f737e9caf01	IR WGSL	lower: a Domain program is not lowered yet
 2178afa7e10def94becc2fe48142ee2da57246211b753f6be0bf979e984cce20	IR WGSL	lower: a Hull program is not lowered yet
-21a0b64e4cdba87d27f46f5aa846b5bc5e3b7c4341aee7cc58d6714c0ef7dd8d	A	WGSL read back: error: no definition in scope for identifier: `texture_multisampled_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: texture_multisampled_Nd_array<fN>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
 21a0b64e4cdba87d27f46f5aa846b5bc5e3b7c4341aee7cc58d6714c0ef7dd8d	IR WGSL	lower: a multisampled array texture has no WGSL form
-21a915f262297f5ba03d2703f6f9dde7477d5e9f017419cb329128e13597d186	A	lift: lod: opcode N is not lifted
 21a915f262297f5ba03d2703f6f9dde7477d5e9f017419cb329128e13597d186	IR	lift: lod: opcode N is not lifted to the IR yet
 21a915f262297f5ba03d2703f6f9dde7477d5e9f017419cb329128e13597d186	IR WGSL	not reached
-21e6837d64e1724a99dfb53de3c6bc18b561610ab70a7bf30c908f4e383dec79	A	lift: ld_feedback: opcode N is not lifted
 21e6837d64e1724a99dfb53de3c6bc18b561610ab70a7bf30c908f4e383dec79	IR	lift: ld_feedback: opcode N is not lifted to the IR yet
 21e6837d64e1724a99dfb53de3c6bc18b561610ab70a7bf30c908f4e383dec79	IR WGSL	not reached
-2203f0a14a2467f73ea314a89cb65bc112806d4a3022b462ce9a90d9acb5684f	A	lift: abort: opcode N is not lifted
 2203f0a14a2467f73ea314a89cb65bc112806d4a3022b462ce9a90d9acb5684f	IR	lift: abort: opcode N is not lifted to the IR yet
 2203f0a14a2467f73ea314a89cb65bc112806d4a3022b462ce9a90d9acb5684f	IR WGSL	not reached
 2327a30fb3604d8b390266600e511958122af024377b165466bbb39283fe77e8	IR WGSL	lower: a Hull program is not lowered yet
 235dbf6197891a0521ec193aad99cb97157665e91adf598b3030dcfe692b0931	IR WGSL	lower: a sample of a ND texture at an explicit level with an offset or a comparison has no WGSL form
-23aee0131baea038584dfc740b47e45109147118387163b4e2b9c232fe737aed	A	lift: ld_feedback: opcode N is not lifted
 23aee0131baea038584dfc740b47e45109147118387163b4e2b9c232fe737aed	IR	lift: ld_feedback: opcode N is not lifted to the IR yet
 23aee0131baea038584dfc740b47e45109147118387163b4e2b9c232fe737aed	IR WGSL	not reached
-23c4220cab88e135f052261db94e5c6bf2732e950bed3d3febbdb9450ca3bf50	A	lift: a declared input of register type OutputControlPoint
 23c4220cab88e135f052261db94e5c6bf2732e950bed3d3febbdb9450ca3bf50	IR	lift: a declared input of register type OutputControlPoint
 23c4220cab88e135f052261db94e5c6bf2732e950bed3d3febbdb9450ca3bf50	IR WGSL	not reached
-24283b53f2148df93120121fc7ae0372711c9ad554398d07d117b4ac7f485ac7	A	WGSL read back: error: no definition in scope for identifier: `texture_storage_Nd_array`   ┌─ wgsl:N:N   │ N │ var uN_: texture_storage_Nd_array<rgbaNfloat,read>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
 24283b53f2148df93120121fc7ae0372711c9ad554398d07d117b4ac7f485ac7	IR WGSL	lower: a ND array storage image has no WGSL form
-25eb3d1b0ef4ae18bf97888d45a7bd1f5ea22d5a4209c4980dd27ed2ed555445	A	WGSL: wgsl cannot write this program: Unsupported texture atomic result (WGSL's texture atomics return nothing): [N]
 25eb3d1b0ef4ae18bf97888d45a7bd1f5ea22d5a4209c4980dd27ed2ed555445	IR WGSL	lower: a texel atomic whose old value is read, or a compare-exchange of a texel, has no naga form: naga's image atomic gives no old value and takes no comparand
-260bada5f1dbe1e4c546410176dfa6143673e2d39195c5868c0cbc4cda866df1	A	lift: a declared input of register type OutputControlPoint
 260bada5f1dbe1e4c546410176dfa6143673e2d39195c5868c0cbc4cda866df1	IR	lift: a declared input of register type OutputControlPoint
 260bada5f1dbe1e4c546410176dfa6143673e2d39195c5868c0cbc4cda866df1	IR WGSL	not reached
-2620713599be13fb4f026976ba80f500012c4e80b255d421bc4116b378be8bfc	A	lift: gatherN_c: a gather of lane N of a depth texture
 2620713599be13fb4f026976ba80f500012c4e80b255d421bc4116b378be8bfc	IR WGSL	lower: a gather of lane N of a depth texture
-2667d9f1a4ac8e23d82cac87e62d070e090b7677496da77ab24845f118b29cfd	A	lift: ld_uav_typed_feedback: opcode N is not lifted
 2667d9f1a4ac8e23d82cac87e62d070e090b7677496da77ab24845f118b29cfd	IR	lift: ld_uav_typed_feedback: opcode N is not lifted to the IR yet
 2667d9f1a4ac8e23d82cac87e62d070e090b7677496da77ab24845f118b29cfd	IR WGSL	not reached
 26775276bc99b6441957d86654cc332cb97c96557cd0223865d3bf2e09c65017	IR WGSL	lower: a Domain program is not lowered yet
-26a8bfed53940cf72faf7b840e2488b7a3fb1df55edcc68a705a538964c35b55	A	lift: SV_CLIPDISTANCEN: clip distances as a Pixel input have no built-in binding
 26a8bfed53940cf72faf7b840e2488b7a3fb1df55edcc68a705a538964c35b55	IR	lift: SV_CLIPDISTANCEN: clip distances as a Pixel input have no built-in binding
 26a8bfed53940cf72faf7b840e2488b7a3fb1df55edcc68a705a538964c35b55	IR WGSL	not reached
-273a4b28efc7cc4bcaf7c039f00e991aba25223e4a1252a0a0beedb70184fcb0	A	lift: call: opcode N is not lifted
 273a4b28efc7cc4bcaf7c039f00e991aba25223e4a1252a0a0beedb70184fcb0	IR	lift: call: opcode N is not lifted to the IR yet
 273a4b28efc7cc4bcaf7c039f00e991aba25223e4a1252a0a0beedb70184fcb0	IR WGSL	not reached
-2745524a95dc3ff805115d39b27103344b17fc4e80346f6ef8cd619622451a99	A	lift: gatherN_po_feedback: opcode N is not lifted
 2745524a95dc3ff805115d39b27103344b17fc4e80346f6ef8cd619622451a99	IR	lift: gatherN_po_feedback: opcode N is not lifted to the IR yet
 2745524a95dc3ff805115d39b27103344b17fc4e80346f6ef8cd619622451a99	IR WGSL	not reached
-27b32901d0100cb4da548ad74a2127cb7868a38f25b1a3fa760bbf48c1d87b76	A	WGSL: wgsl cannot write this program: Unsupported texture atomic result (WGSL's texture atomics return nothing): [N]
 27b32901d0100cb4da548ad74a2127cb7868a38f25b1a3fa760bbf48c1d87b76	IR WGSL	lower: a texel atomic whose old value is read, or a compare-exchange of a texel, has no naga form: naga's image atomic gives no old value and takes no comparand
 27bde87f5bb5690c2332c3564b38e51ef3e67dc88057bf36de20028fd3d06a59	IR WGSL	lower: a Domain program is not lowered yet
 28c415261f4d2c688cb9507a744070e3452e5185cad44b27cc22ef50a054cb08	IR WGSL	lower: a Geometry program is not lowered yet
 28e40168912f0b17e1055dedb1ab93e72a49a3b0b7050686db055860f21830f6	IR WGSL	lower: a Domain program is not lowered yet
-28f32e6d45ecd38775dfce73a4da128a83e19fffca9bd6b647d04589ce9b9026	A	lift: bufinfo: opcode N is not lifted
 28f32e6d45ecd38775dfce73a4da128a83e19fffca9bd6b647d04589ce9b9026	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 28f32e6d45ecd38775dfce73a4da128a83e19fffca9bd6b647d04589ce9b9026	IR WGSL	not reached
-290b3bc701796e6e18d0aa769badb27d4a7e75c1bbd1e6e7ed77f03cbd9baf81	A	lift: lod: opcode N is not lifted
 290b3bc701796e6e18d0aa769badb27d4a7e75c1bbd1e6e7ed77f03cbd9baf81	IR	lift: lod: opcode N is not lifted to the IR yet
 290b3bc701796e6e18d0aa769badb27d4a7e75c1bbd1e6e7ed77f03cbd9baf81	IR WGSL	not reached
 298f4521d788206e1b7fbb42e218d01587c12c83ec7cdde6a7cc68069e03fd9e	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 29a07bcd640a5026d68dfbf438e9aa3cf9faf8f70b41dbfd02367b6a51ae2f83	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 2a9f8296fdee82a8cff73cd23be9f1d44ddfb7c5a8e303197a9965eceda9ca92	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-2aad363dad2e3f4355b67d7e155e1b63c036333bf5e4ada4e8e3a7d017629293	A	lift: atomic_cmp_store: atomic operation cmp_store on a texture view
 2aad363dad2e3f4355b67d7e155e1b63c036333bf5e4ada4e8e3a7d017629293	IR WGSL	lower: a texel atomic whose old value is read, or a compare-exchange of a texel, has no naga form: naga's image atomic gives no old value and takes no comparand
 2ae0182e7bc337bba630aa82e85df1b7629af8857258f2f74ecf39336c33b3ee	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 2d13065499f377df9c0e001cd63b5e699c1f83cb999a5c6a60dca24961d3d47e	IR WGSL	lower: a Domain program is not lowered yet
-2da93f8656e7b11931afb9879ae814271355568edefa3785546023b07a834357	A	lift: gatherN_po: opcode N is not lifted
 2da93f8656e7b11931afb9879ae814271355568edefa3785546023b07a834357	IR	lift: gatherN_po: opcode N is not lifted to the IR yet
 2da93f8656e7b11931afb9879ae814271355568edefa3785546023b07a834357	IR WGSL	not reached
-2e3a5798ec9d463107a3f222d26df2179381c206d5aecb7ad38b34a99e8dfa51	A	WGSL read back: error: no definition in scope for identifier: `texture_multisampled_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: texture_multisampled_Nd_array<uN>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
 2e3a5798ec9d463107a3f222d26df2179381c206d5aecb7ad38b34a99e8dfa51	IR WGSL	lower: a multisampled array texture has no WGSL form
 2e3b17289311ead216f1aa8dee6556795d1bc2d8cf594fcd5cfd483ad4fc74e3	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-2e8eec716b23660af19a29ba21fa43ffa6959a13eb4dee5b10a4b7961108065e	A	lift: double precision is enabled (global flag): doubles are not lifted
-2ef9967c72fd34ac4044447e1176e439d68f16f13fcc22c1606338d1d70b9164	A	lift: add: a patch constant is read where the function has none
 2ef9967c72fd34ac4044447e1176e439d68f16f13fcc22c1606338d1d70b9164	IR WGSL	lower: a Hull program is not lowered yet
-2fb71d216a9966057d1f9cc63b23d1e2dbd8849c960a2e500b14b85a10975f63	A	lift: imm_atomic_alloc: append and consume buffer counters are not lifted
-2febea6f0504bdbf6de88f0d69d50ca6b52ad8be9ec54d3e817177bfe8099883	A	lift: a declared input of register type OutputControlPoint
 2febea6f0504bdbf6de88f0d69d50ca6b52ad8be9ec54d3e817177bfe8099883	IR	lift: a declared input of register type OutputControlPoint
 2febea6f0504bdbf6de88f0d69d50ca6b52ad8be9ec54d3e817177bfe8099883	IR WGSL	not reached
-30cde22336aa4af05a85d6f3a0be2941a90e9f8c1dada2a22dec82c301803c21	A	lift: gatherN_feedback: opcode N is not lifted
 30cde22336aa4af05a85d6f3a0be2941a90e9f8c1dada2a22dec82c301803c21	IR	lift: gatherN_feedback: opcode N is not lifted to the IR yet
 30cde22336aa4af05a85d6f3a0be2941a90e9f8c1dada2a22dec82c301803c21	IR WGSL	not reached
 314e75d2f4b68742aa8ff5a1ed16646699adaec37f3b73be847e6ef0d2cebb1e	IR WGSL	lower: a Domain program is not lowered yet
-315ba1e32667946408a14dba55d29e71a39ebb089d053c37574899dbb6e11eba	A	lift: sample_clamp_feedback: opcode N is not lifted
 315ba1e32667946408a14dba55d29e71a39ebb089d053c37574899dbb6e11eba	IR	lift: sample_clamp_feedback: opcode N is not lifted to the IR yet
 315ba1e32667946408a14dba55d29e71a39ebb089d053c37574899dbb6e11eba	IR WGSL	not reached
 3163763ae14c1de8e8d08ab31981f1f2765db2663bcfe9075a0254d416126c7e	IR WGSL	lower: a Geometry program is not lowered yet
-317a10b7f9eb6590c06aaa796534612f39eea988a3433b70a119ab0a88160f5b	A	lift: double precision is enabled (global flag): doubles are not lifted
-31b0752f75186d96d8978ef1f2161683930d95f2b4518034ba22241fcd7f2387	A	lift: double precision is enabled (global flag): doubles are not lifted
 31b0752f75186d96d8978ef1f2161683930d95f2b4518034ba22241fcd7f2387	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-31b66efe867cee3685882607eea769219a28976e117badd8af0425be7bade4c4	A	lift: call: opcode N is not lifted
 31b66efe867cee3685882607eea769219a28976e117badd8af0425be7bade4c4	IR	lift: call: opcode N is not lifted to the IR yet
 31b66efe867cee3685882607eea769219a28976e117badd8af0425be7bade4c4	IR WGSL	not reached
 31c0e671b194989fc613362421d318c5a16686ef3b24ae76f1f31574c795a9b5	IR WGSL	lower: a Hull program is not lowered yet
-3230ed4efb1a7d56646354aca9bab86be04c9f60ec4de0a4d990f473c8e7c281	A	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 3230ed4efb1a7d56646354aca9bab86be04c9f60ec4de0a4d990f473c8e7c281	IR	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 3230ed4efb1a7d56646354aca9bab86be04c9f60ec4de0a4d990f473c8e7c281	IR WGSL	not reached
-32a4616e8558b8802686397792dd3b52a8a66f745fc2cafda9da82cdae160101	A	lift: dcl_index_range of an operand of N indices, where it has N
 32a4616e8558b8802686397792dd3b52a8a66f745fc2cafda9da82cdae160101	IR	lift: dcl_index_range of an operand of N indices, where it has N
 32a4616e8558b8802686397792dd3b52a8a66f745fc2cafda9da82cdae160101	IR WGSL	not reached
 33e8f9d55f383f32a5b4fc2a56dc17433d70baeb1e6b358a1c46c59e2df11bff	IR WGSL	lower: a Domain program is not lowered yet
 346c4bdbe47880b07afda1e5cf323f0f5de9a254025bfdfb2ee76c59ab44cc33	IR WGSL	lower: a Hull program is not lowered yet
 3472fdfc7adae420dbf1cb060fb5d04fd8fc946d4843291a0a72e1b3df9c3b0b	IR WGSL	lower: a Geometry program is not lowered yet
 34ed7fe97f3c218f1255f08f7ab799d358bea5d69ed697c22cebeaeb963f01b1	IR WGSL	lower: a Geometry program is not lowered yet
-3542f2dfb40372be602323327f1be812543aa6c1966282ffbea088360f4293a0	A	lift: reflection: DXBC at word N: u: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 3542f2dfb40372be602323327f1be812543aa6c1966282ffbea088360f4293a0	IR	lift: reflection: DXBC at word N: u: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 3542f2dfb40372be602323327f1be812543aa6c1966282ffbea088360f4293a0	IR WGSL	not reached
 360a157fe7cc84de9313923d25051608da6edf691721d0f49ec94a49c6909a4a	IR WGSL	lower: a Geometry program is not lowered yet
-362c6ae7a8fe18d41f1d1631e442605a492e5581bc8cbd7db2656491d68a9f33	A	lift: gatherN_po: opcode N is not lifted
 362c6ae7a8fe18d41f1d1631e442605a492e5581bc8cbd7db2656491d68a9f33	IR	lift: gatherN_po: opcode N is not lifted to the IR yet
 362c6ae7a8fe18d41f1d1631e442605a492e5581bc8cbd7db2656491d68a9f33	IR WGSL	not reached
-36378d5994cce3e292fa02ade1fdb891ae82044966b031e52f14ffd1d621e558	A	WGSL read back: error: no definition in scope for identifier: `texture_multisampled_Nd_array`    ┌─ wgsl:N:N    │ N │ var tN_: texture_multisampled_Nd_array<fN>;    │          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
 36378d5994cce3e292fa02ade1fdb891ae82044966b031e52f14ffd1d621e558	IR WGSL	lower: a multisampled array texture has no WGSL form
-3637b52df10f4051338e3d881db578bef265279c8028b7e2e3469779cd9f89d8	A	lift: eval_sample_index: opcode N is not lifted
 3637b52df10f4051338e3d881db578bef265279c8028b7e2e3469779cd9f89d8	IR	lift: eval_sample_index: opcode N is not lifted to the IR yet
 3637b52df10f4051338e3d881db578bef265279c8028b7e2e3469779cd9f89d8	IR WGSL	not reached
 36ae1c1157e5265e3ebc0f675be79cd61a5d9cf234e553b0c7b41346a97ce9c1	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-36c10959ba71084e8917ec92448eec3dc8c68f63d32b64e413b4de73de16662a	A	lift: imm_atomic_umin on memory whose atomics are signed
-36f30600898194c4c2db16520f26f8116a3c0abe609219086a600271599d8b5c	A	lift: double precision is enabled (global flag): doubles are not lifted
-375e929f30a4cac7c0c8065e25966aa5fc783530c234c5c38998446fe055962f	A	lift: double precision is enabled (global flag): doubles are not lifted
-378261feb5e3a4677d6e4f759cd65b3d79d41d07b18ff4c8c3257bf11e70836e	A	lift: double precision is enabled (global flag): doubles are not lifted
 383e415d6a430e750e88a343691b645ee9051deab1ca07e9ea981f6c9feb3d20	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-386c6da5edd4ee30b91bd817c1c32664cbf8e6006c3e82a8f6541918a9570231	A	WGSL: wgsl cannot write this program: Unsupported texture atomic result (WGSL's texture atomics return nothing): [N]
 386c6da5edd4ee30b91bd817c1c32664cbf8e6006c3e82a8f6541918a9570231	IR WGSL	lower: a texel atomic whose old value is read, or a compare-exchange of a texel, has no naga form: naga's image atomic gives no old value and takes no comparand
 38737f8be210c5302be6965d273e62df9b2d4078a6b6b8d7877b650f07bd9ba1	IR WGSL	lower: a Hull program is not lowered yet
-396f833ca2416d479df6993c8e7f9e69a2c6fc105f664e3905428e5357d98fc5	A	lift: double precision is enabled (global flag): doubles are not lifted
 399263061e9aec9746ba9782bc38b0c995097c00160ba776df8490edb2addd29	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 3992ebffd684237b93e9b23ef7ae81b88611d2654646fb20e0ccdcee1d596794	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-399cd85a2562ded863067c2437919ac3a44d203b82236485d8769c2764cf0e82	A	WGSL read back: error: no definition in scope for identifier: `texture_storage_Nd_array`    ┌─ wgsl:N:N    │ N │ var uN_: texture_storage_Nd_array<rgbaNfloat,read>;    │          ^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
 399cd85a2562ded863067c2437919ac3a44d203b82236485d8769c2764cf0e82	IR WGSL	lower: a ND array storage image has no WGSL form
-39e31d7a073fb65917aa8d5a4c50a18bd0aed92af762c22b3b14b584d9ea7991	A	lift: imm_atomic_alloc: append and consume buffer counters are not lifted
 3a4d17ced17798b9d8fbd14e28aa80e8361e9809e8047aa662cabeb0c4dcccc6	IR WGSL	lower: a Hull program is not lowered yet
-3a8f00ccfad757217f231ce5b0800a2bba185014e1a5795f7bbdebedbaff2c76	A	WGSL read back: error: no definition in scope for identifier: `texture_storage_Nd_array`   ┌─ wgsl:N:N   │ N │ var uN_: texture_storage_Nd_array<rgbaNfloat,read>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
 3a8f00ccfad757217f231ce5b0800a2bba185014e1a5795f7bbdebedbaff2c76	IR WGSL	lower: a ND array storage image has no WGSL form
-3ad87e95534413389c7280a63e48fcc7742e8d2775a8dbbfa955c91939b493b3	A	lift: reflection: DXBC at word N: variable ba is N bytes, its type packs to Some(N)
 3ad87e95534413389c7280a63e48fcc7742e8d2775a8dbbfa955c91939b493b3	IR	lift: reflection: DXBC at word N: variable ba is N bytes, its type packs to Some(N)
 3ad87e95534413389c7280a63e48fcc7742e8d2775a8dbbfa955c91939b493b3	IR WGSL	not reached
 3ae45a37f1ba0b2cd39b672c81ffee67f41a0cfaac4830636beebde1ef963ca0	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 3c57b0ded9418671878bddcd3d37ed4a7d55d893dca1ef1c5f76d5d164dfaa09	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 3cd9568fda3e94345b8a09f79a9a5fee388c1883f1a5223fb8f9af7f16eee570	IR WGSL	lower: a Hull program is not lowered yet
 3d87252277acef4bf9dff73b634fcbcdf1746615321f6c43d3f494428834c794	IR WGSL	lower: a Geometry program is not lowered yet
-3daeacdaa12cf5593667148f581d3d2ae5aa860449fd80bcbb0478df3ffa7eb5	A	lift: bufinfo: opcode N is not lifted
 3daeacdaa12cf5593667148f581d3d2ae5aa860449fd80bcbb0478df3ffa7eb5	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 3daeacdaa12cf5593667148f581d3d2ae5aa860449fd80bcbb0478df3ffa7eb5	IR WGSL	not reached
 3dec5dffd0937a7c9fc61cd94544b506e2dcc6bc8a792694558d54f6be9daa90	IR WGSL	lower: a Hull program is not lowered yet
-3e253dcbb9709628b003de130340f85ca99b51f542696a680d9d4a125fe18698	A	lift: bufinfo: opcode N is not lifted
 3e253dcbb9709628b003de130340f85ca99b51f542696a680d9d4a125fe18698	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 3e253dcbb9709628b003de130340f85ca99b51f542696a680d9d4a125fe18698	IR WGSL	not reached
-3e42ee1012364c7c67c9a7025976e105192fe8880f467a80be4e3803a02276f3	A	lift: sample_b_clamp_feedback: opcode N is not lifted
 3e42ee1012364c7c67c9a7025976e105192fe8880f467a80be4e3803a02276f3	IR	lift: sample_b_clamp_feedback: opcode N is not lifted to the IR yet
 3e42ee1012364c7c67c9a7025976e105192fe8880f467a80be4e3803a02276f3	IR WGSL	not reached
 3fe232128c1f0f8f95630b71d9cfdaeba31f2226c8bf5f5e253fe67dd6906f82	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-3feb7d46bfa0d3aa562482cd38ff48ebbfc85d083f4634d33c2f758c1b0bba95	A	lift: sample_pos: opcode N is not lifted
 3feb7d46bfa0d3aa562482cd38ff48ebbfc85d083f4634d33c2f758c1b0bba95	IR	lift: sample_pos: opcode N is not lifted to the IR yet
 3feb7d46bfa0d3aa562482cd38ff48ebbfc85d083f4634d33c2f758c1b0bba95	IR WGSL	not reached
-407bc0647572fe14183e5c4696b90daed8b93f254985515b0859496e3e472ebd	A	lift: reflection: DXBC at word N: globalCSBuffer: DND_SIT_UAV_CONSUME_STRUCTURED (N) is not mapped
 407bc0647572fe14183e5c4696b90daed8b93f254985515b0859496e3e472ebd	IR	lift: reflection: DXBC at word N: globalCSBuffer: DND_SIT_UAV_CONSUME_STRUCTURED (N) is not mapped
 407bc0647572fe14183e5c4696b90daed8b93f254985515b0859496e3e472ebd	IR WGSL	not reached
-408555ee8f0486329bb2a6d4a4845a723881c255204242cf3d2ab895c763d188	A	lift: double precision is enabled (global flag): doubles are not lifted
-40b3d3c07cdcb625b9a176bd425af321a916ec347c63250162adf0ee26017c35	A	lift: a declared input of register type GsInstanceId
 40b3d3c07cdcb625b9a176bd425af321a916ec347c63250162adf0ee26017c35	IR	lift: a declared input of register type GsInstanceId
 40b3d3c07cdcb625b9a176bd425af321a916ec347c63250162adf0ee26017c35	IR WGSL	not reached
 411c601f2a310b408792f6f82ff27f27100f9dbba43aee82510dde4cfbd2c16b	IR WGSL	lower: a Geometry program is not lowered yet
 4132dcb955e8b3537dbfb5b7d6e2e8085c5145bba8b1e987060300a9787858ff	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-41389e7cf2afff2eee6a20922c2d6605d050540ad5223e3d721ea76f89209fde	A	lift: bufinfo: opcode N is not lifted
 41389e7cf2afff2eee6a20922c2d6605d050540ad5223e3d721ea76f89209fde	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 41389e7cf2afff2eee6a20922c2d6605d050540ad5223e3d721ea76f89209fde	IR WGSL	not reached
-41600f14b4228615e935b33f0370f85d46239b4ff30210b00df98376a8e749c6	A	lift: sample_info: the sample count of the rasterizer is the pipeline's, not the program's
 41600f14b4228615e935b33f0370f85d46239b4ff30210b00df98376a8e749c6	IR	lift: sample_info: the sample count of the rasterizer is the pipeline's, not the program's
 41600f14b4228615e935b33f0370f85d46239b4ff30210b00df98376a8e749c6	IR WGSL	not reached
-4187688ded0d72f3a7ee49a5e02a8aa8ba39b72110d40d4c9e224678f6fef2c4	A	lift: bufinfo: opcode N is not lifted
 4187688ded0d72f3a7ee49a5e02a8aa8ba39b72110d40d4c9e224678f6fef2c4	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 4187688ded0d72f3a7ee49a5e02a8aa8ba39b72110d40d4c9e224678f6fef2c4	IR WGSL	not reached
-41dbec03eab497e6996fc8ef1e32800df1de082ef065af65d0dfcb2d9076077f	A	lift: eval_centroid: opcode N is not lifted
 41dbec03eab497e6996fc8ef1e32800df1de082ef065af65d0dfcb2d9076077f	IR	lift: eval_centroid: opcode N is not lifted to the IR yet
 41dbec03eab497e6996fc8ef1e32800df1de082ef065af65d0dfcb2d9076077f	IR WGSL	not reached
-41ec77eafcf0f65b7cee56289ec18687f818c79da1e4dd6a9361b2309f089ee7	A	WGSL read back: error: no definition in scope for identifier: `texture_multisampled_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: texture_multisampled_Nd_array<fN>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
 41ec77eafcf0f65b7cee56289ec18687f818c79da1e4dd6a9361b2309f089ee7	IR WGSL	lower: a multisampled array texture has no WGSL form
-428dc68d3a50e4e3eb65d0713522efe363b6bf77179a6d480736b6f6da5a1949	A	lift: bufinfo: opcode N is not lifted
 428dc68d3a50e4e3eb65d0713522efe363b6bf77179a6d480736b6f6da5a1949	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 428dc68d3a50e4e3eb65d0713522efe363b6bf77179a6d480736b6f6da5a1949	IR WGSL	not reached
-42bf559a6d2a2c04ef1bdd6e98cf43b9565bf76c931f370b953d38e3ad569363	A	lift: sample_info: the sample count of the rasterizer is the pipeline's, not the program's
 42bf559a6d2a2c04ef1bdd6e98cf43b9565bf76c931f370b953d38e3ad569363	IR	lift: sample_info: the sample count of the rasterizer is the pipeline's, not the program's
 42bf559a6d2a2c04ef1bdd6e98cf43b9565bf76c931f370b953d38e3ad569363	IR WGSL	not reached
-432dd9e8b4e94e9822821c9f1f60125cb766874d9f42dec1c2b5998267deb8f6	A	lift: reflection: DXBC at word N: tbufN: a tbuffer without its layout
 432dd9e8b4e94e9822821c9f1f60125cb766874d9f42dec1c2b5998267deb8f6	IR	lift: reflection: DXBC at word N: tbufN: a tbuffer without its layout
 432dd9e8b4e94e9822821c9f1f60125cb766874d9f42dec1c2b5998267deb8f6	IR WGSL	not reached
 43c1a8f2911a6067ca54519012bc648bb4384bd429bb3063084bc0c8dfdf7fb5	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 4413eba0af14d8f663adf57ace29000a861badeab2b385eaee3556cc910484b3	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 4575f4d755bdc5025569b18c7524d7558fe20afa04281aa85b9bbfd58b7fb89a	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-4582920ddc7c07a96f81cf05c79e8c59cddc6f98600634294fd9235434f00fed	A	lift: bufinfo: opcode N is not lifted
 4582920ddc7c07a96f81cf05c79e8c59cddc6f98600634294fd9235434f00fed	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 4582920ddc7c07a96f81cf05c79e8c59cddc6f98600634294fd9235434f00fed	IR WGSL	not reached
-45a70ca9d60a59482c91f361018c54c7a08feb5d92e8c5c0a5d3c18d0ee72796	A	lift: reflection: DXBC at word N: g_OutputBuffer: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 45a70ca9d60a59482c91f361018c54c7a08feb5d92e8c5c0a5d3c18d0ee72796	IR	lift: reflection: DXBC at word N: g_OutputBuffer: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 45a70ca9d60a59482c91f361018c54c7a08feb5d92e8c5c0a5d3c18d0ee72796	IR WGSL	not reached
-462f7ce4a8e33cc32af31352c016ddaef8a2e3ee78264b0840a80eebd5c8bbfa	A	lift: bufinfo: opcode N is not lifted
 462f7ce4a8e33cc32af31352c016ddaef8a2e3ee78264b0840a80eebd5c8bbfa	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 462f7ce4a8e33cc32af31352c016ddaef8a2e3ee78264b0840a80eebd5c8bbfa	IR WGSL	not reached
-4681068cca43200ef712cd7687423374b1407f26ae616b82ab78c55b63d45b31	A	lift: eval_centroid: opcode N is not lifted
 4681068cca43200ef712cd7687423374b1407f26ae616b82ab78c55b63d45b31	IR	lift: eval_centroid: opcode N is not lifted to the IR yet
 4681068cca43200ef712cd7687423374b1407f26ae616b82ab78c55b63d45b31	IR WGSL	not reached
-46b726ae3aaa89b2e470c1c0301094dba77a0096675ecd4a21e197e6754f90d4	A	lift: sample_info: the sample count of the rasterizer is the pipeline's, not the program's
 46b726ae3aaa89b2e470c1c0301094dba77a0096675ecd4a21e197e6754f90d4	IR	lift: sample_info: the sample count of the rasterizer is the pipeline's, not the program's
 46b726ae3aaa89b2e470c1c0301094dba77a0096675ecd4a21e197e6754f90d4	IR WGSL	not reached
-46e467884cf52df146882b14b378e15c6f1c43af695e3a31bf872906b0418148	A	lift: lod: opcode N is not lifted
 46e467884cf52df146882b14b378e15c6f1c43af695e3a31bf872906b0418148	IR	lift: lod: opcode N is not lifted to the IR yet
 46e467884cf52df146882b14b378e15c6f1c43af695e3a31bf872906b0418148	IR WGSL	not reached
-472034c9fdb190aa2dc7671eb40ca027bc2f3173217ca33e33fdf724bbea2740	A	lift: reflection: DXBC at word N: HWork: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 472034c9fdb190aa2dc7671eb40ca027bc2f3173217ca33e33fdf724bbea2740	IR	lift: reflection: DXBC at word N: HWork: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 472034c9fdb190aa2dc7671eb40ca027bc2f3173217ca33e33fdf724bbea2740	IR WGSL	not reached
-476eb11e83143116bc0a4c1ee6319bbdafd2de26b0750c112eeb14070c6d8f5c	A	lift: double precision is enabled (global flag): doubles are not lifted
 48014e403301a2efe5e593b896a29e533b034901679e89710612480c8a8536c0	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 488e4d4c62f857fae2aa657f5ee700f0bf075a011f32334e84ac6971abbed5f3	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 48ad484fc2ad7a92c0cc65b0e1d2a363a3018ad732e8fdc22ceb77bb0e0d3799	IR WGSL	lower: a Domain program is not lowered yet
 4912b0256390591b0abbd33748692a594010c55e2cc71d2b5d9a1c39a9fe8ddf	IR WGSL	lower: a Hull program is not lowered yet
-49888157e7b01687bc404008d6e50e6cff240707e090c731eef1f7f32eaf5d19	A	lift: bufinfo: opcode N is not lifted
 49888157e7b01687bc404008d6e50e6cff240707e090c731eef1f7f32eaf5d19	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 49888157e7b01687bc404008d6e50e6cff240707e090c731eef1f7f32eaf5d19	IR WGSL	not reached
 49d3255110b1e05adc32bd5c4b44b222d3a3ccc6a4ccd18d98a028c788f1c1ee	IR WGSL	lower: a Geometry program is not lowered yet
 4a36985af868b4d3f6bed08ca1ae41b9b01a7737cf79469ca54d20a372423e1c	IR WGSL	lower: a Hull program is not lowered yet
 4a95e66522abbd25342effd9343423b0555331d6f112d092ddf7080edb34f1ce	IR WGSL	lower: a Domain program is not lowered yet
-4ad02b930a0844c1cacffa326929314801a6c2f709f9b5f7bceb45a03d64e488	A	lift: ld_feedback: opcode N is not lifted
 4ad02b930a0844c1cacffa326929314801a6c2f709f9b5f7bceb45a03d64e488	IR	lift: ld_feedback: opcode N is not lifted to the IR yet
 4ad02b930a0844c1cacffa326929314801a6c2f709f9b5f7bceb45a03d64e488	IR WGSL	not reached
-4adb2150cec21be1325f119cc0dd6b853e1961b77c58eec657b300991cc6eece	A	lift: reflection: DXBC at word N: MyTB: a tbuffer without its layout
 4adb2150cec21be1325f119cc0dd6b853e1961b77c58eec657b300991cc6eece	IR	lift: reflection: DXBC at word N: MyTB: a tbuffer without its layout
 4adb2150cec21be1325f119cc0dd6b853e1961b77c58eec657b300991cc6eece	IR WGSL	not reached
 4b950aa51a79567f057d70bd2daf541bf37481f6b0d62e61096448424468ba57	IR WGSL	lower: a Domain program is not lowered yet
-4bc1ee3ff02e0045f67dc836a17badd7ee92f0717fc9beb0631e14b2d3d9b085	A	lift: reflection: DXBC at word N: g_OutputBuffer: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 4bc1ee3ff02e0045f67dc836a17badd7ee92f0717fc9beb0631e14b2d3d9b085	IR	lift: reflection: DXBC at word N: g_OutputBuffer: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 4bc1ee3ff02e0045f67dc836a17badd7ee92f0717fc9beb0631e14b2d3d9b085	IR WGSL	not reached
 4c03527f84bb24cbedcc92d9949fdc48f4b1088565f0f5f28e9f8102f8c204ed	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 4c0d59ecfa52829e090758263ea9f195d8d2d1e96469ab807037ff8fd18da9b5	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 4c466d3b93c098f8b7454b137977f4c584f2db431a7a8e1b641c0ce8845d356b	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 4d4e4b246a40d976586cbc06b7fc8eb13dcc946f1634dcca54f46c99c53cbd90	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-4e4edacd17127b16b33a4467ae6f7ac9767f04a58ebc824cf52647d73d4bccd1	A	lift: a declared input of register type InnerCoverage
 4e4edacd17127b16b33a4467ae6f7ac9767f04a58ebc824cf52647d73d4bccd1	IR	lift: a declared input of register type InnerCoverage
 4e4edacd17127b16b33a4467ae6f7ac9767f04a58ebc824cf52647d73d4bccd1	IR WGSL	not reached
-4e96b75be5415b98b8b86984b79594ceaa130fdec920e3e336e02ffa4b262ac8	A	lift: dcl_gs_output_primitive_topology: N is not mapped
 4e96b75be5415b98b8b86984b79594ceaa130fdec920e3e336e02ffa4b262ac8	IR	lift: dcl_gs_output_primitive_topology: N is not mapped
 4e96b75be5415b98b8b86984b79594ceaa130fdec920e3e336e02ffa4b262ac8	IR WGSL	not reached
-4f7cd886c9804add2ad8e1b3f46d42d345f708c3e67958a7a18854b77ed86381	A	lift: sample_clamp_feedback: opcode N is not lifted
 4f7cd886c9804add2ad8e1b3f46d42d345f708c3e67958a7a18854b77ed86381	IR	lift: sample_clamp_feedback: opcode N is not lifted to the IR yet
 4f7cd886c9804add2ad8e1b3f46d42d345f708c3e67958a7a18854b77ed86381	IR WGSL	not reached
 4fb551469f749b7f3585ef00f020202ca9aaec82ae91a877892a412d60698268	IR WGSL	lower: a Domain program is not lowered yet
 504b243fd0c02425827bd85db5dcb6de87f3b4849c5c228c538dc573607f5d7b	IR WGSL	lower: a Hull program is not lowered yet
-50b53f3d037869e44674e1310ae1f3a47ad28c0d4796b9084239439751e024e5	A	lift: ld_raw_feedback: opcode N is not lifted
 50b53f3d037869e44674e1310ae1f3a47ad28c0d4796b9084239439751e024e5	IR	lift: ld_raw_feedback: opcode N is not lifted to the IR yet
 50b53f3d037869e44674e1310ae1f3a47ad28c0d4796b9084239439751e024e5	IR WGSL	not reached
-51271337f863f94444a2366382df78fa25ed12bbafc13cc84871d63c26b48dbe	A	WGSL: wgsl cannot write this program: Unsupported texture atomic result (WGSL's texture atomics return nothing): [N]
 51271337f863f94444a2366382df78fa25ed12bbafc13cc84871d63c26b48dbe	IR WGSL	lower: a texel atomic whose old value is read, or a compare-exchange of a texel, has no naga form: naga's image atomic gives no old value and takes no comparand
-513e22097be6ede9cd1b2172a1c4227a03052c9f6c70fd4c9a82be1773db4b63	A	lift: dcl_index_range of operand register type InputControlPoint: only inputs and outputs are lifted
 513e22097be6ede9cd1b2172a1c4227a03052c9f6c70fd4c9a82be1773db4b63	IR	lift: dcl_index_range of operand register type InputControlPoint: only inputs and outputs are lifted
 513e22097be6ede9cd1b2172a1c4227a03052c9f6c70fd4c9a82be1773db4b63	IR WGSL	not reached
 5243ef624249c752a10a1be7e0426f8db1631106c824a860cca3fcb832cd498a	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-526d061536b9d453f11ea08549043cc7ed8d69502d694e06e0966e103a7fe1d9	A	WGSL read back: error: no definition in scope for identifier: `texture_multisampled_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: texture_multisampled_Nd_array<fN>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
 526d061536b9d453f11ea08549043cc7ed8d69502d694e06e0966e103a7fe1d9	IR WGSL	lower: a multisampled array texture has no WGSL form
 53e2ebf9409aed822342c50e994a1bfc35bb12383fdd4ae1cd1ee2764a06eee6	IR WGSL	lower: a Geometry program is not lowered yet
 543a1a7f953de58b83084961801dcae586ca49fbe4900b6153906a8445ad3773	IR WGSL	lower: a Geometry program is not lowered yet
 55076dfd149d2e4e403a53c4cd595d3c777ba6f39098e1f8be544390f921845e	IR WGSL	lower: a Hull program is not lowered yet
 550fd785a39f027eb410b3ea0899f3b3ed4a28b680fb9b9f1e422a5e22809d4d	IR WGSL	lower: a Geometry program is not lowered yet
 55bd5b6a6a0d98d6d24e187816f97f4e487e1b421f2b2b155c35f286977a109b	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-55be2de1da5f6564340a19fd0e04ac3a04cd137c2e83943a82356ca04467e13e	A	lift: eval_centroid: opcode N is not lifted
 55be2de1da5f6564340a19fd0e04ac3a04cd137c2e83943a82356ca04467e13e	IR	lift: eval_centroid: opcode N is not lifted to the IR yet
 55be2de1da5f6564340a19fd0e04ac3a04cd137c2e83943a82356ca04467e13e	IR WGSL	not reached
 561f7eebb75d72b1662181bef00b614c359223b25eb3727dfe03113e5c37ccae	IR WGSL	lower: a Hull program is not lowered yet
-561fa4ae52b542d9d0cc839d5f5cd79759aa2786828f24678179a439b009da90	A	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 561fa4ae52b542d9d0cc839d5f5cd79759aa2786828f24678179a439b009da90	IR	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 561fa4ae52b542d9d0cc839d5f5cd79759aa2786828f24678179a439b009da90	IR WGSL	not reached
 568b9894e094301173ab5209aedfe09e43f177e2656330b062baaa52bc8b034b	IR WGSL	lower: a Geometry program is not lowered yet
-56d8961c157b72ee26fa495a6ad9de569e77311dff01391280a5043a9c895771	A	lift: reflection: DXBC at word N: boolIn: DND_SIT_UAV_CONSUME_STRUCTURED (N) is not mapped
 56d8961c157b72ee26fa495a6ad9de569e77311dff01391280a5043a9c895771	IR	lift: reflection: DXBC at word N: boolIn: DND_SIT_UAV_CONSUME_STRUCTURED (N) is not mapped
 56d8961c157b72ee26fa495a6ad9de569e77311dff01391280a5043a9c895771	IR WGSL	not reached
-57bddcf480d0f4f50ba7d4fdd3e30b0e095d731625948f6889eca0909a2a8a77	A	lift: lod: opcode N is not lifted
 57bddcf480d0f4f50ba7d4fdd3e30b0e095d731625948f6889eca0909a2a8a77	IR	lift: lod: opcode N is not lifted to the IR yet
 57bddcf480d0f4f50ba7d4fdd3e30b0e095d731625948f6889eca0909a2a8a77	IR WGSL	not reached
-586ccfded362ff26ac03584c52c68003ed8e1795d88ffa86190ebe7620a79813	A	lift: reflection: DXBC at word N: bufN: DND_SIT_UAV_APPEND_STRUCTURED (N) is not mapped
 586ccfded362ff26ac03584c52c68003ed8e1795d88ffa86190ebe7620a79813	IR	lift: reflection: DXBC at word N: bufN: DND_SIT_UAV_APPEND_STRUCTURED (N) is not mapped
 586ccfded362ff26ac03584c52c68003ed8e1795d88ffa86190ebe7620a79813	IR WGSL	not reached
 5878568a66bfc33f9b1611d157db1425f60e87927c2eec53d004bbaf6cb353c7	IR WGSL	lower: a Domain program is not lowered yet
 588f9fc3387318691de2335462fbd5d2737648b09e2e3c5d998732d3eedbebec	IR WGSL	lower: a Domain program is not lowered yet
 594aa4c1bc71a2988add1a013ac9c3d7863a0ee806bb49532257f88d686625b6	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-59c5f318fd65ba45a6dced1cdb9b708d9d5b1c0ed9257442e5ad9c6e4c6c393e	A	lift: reflection: DXBC at word N: tb: a tbuffer without its layout
 59c5f318fd65ba45a6dced1cdb9b708d9d5b1c0ed9257442e5ad9c6e4c6c393e	IR	lift: reflection: DXBC at word N: tb: a tbuffer without its layout
 59c5f318fd65ba45a6dced1cdb9b708d9d5b1c0ed9257442e5ad9c6e4c6c393e	IR WGSL	not reached
-5a25c57860552b67645be101ff885f5645302d789112a3c75ea121bf91b38555	A	lift: double precision is enabled (global flag): doubles are not lifted
-5a93f936b90c082ccf760bd649fa91689585f2017906c14a5866fc1935389a9e	A	lift: lod: opcode N is not lifted
 5a93f936b90c082ccf760bd649fa91689585f2017906c14a5866fc1935389a9e	IR	lift: lod: opcode N is not lifted to the IR yet
 5a93f936b90c082ccf760bd649fa91689585f2017906c14a5866fc1935389a9e	IR WGSL	not reached
 5a9e184bb74bfac79269e373fd21ea9ef2c3f4951c1988403f9c4ee5dd3d5f70	IR WGSL	lower: a Geometry program is not lowered yet
-5af0206c0d2068271201cb6f1dc4169ddd93c7b4d5421025aacca9635145f047	A	lift: a declared input of register type OutputControlPoint
 5af0206c0d2068271201cb6f1dc4169ddd93c7b4d5421025aacca9635145f047	IR	lift: a declared input of register type OutputControlPoint
 5af0206c0d2068271201cb6f1dc4169ddd93c7b4d5421025aacca9635145f047	IR WGSL	not reached
 5bd81b13f5518058566996795f1fc94fbf91fe099a07beef3a4f397a16075dcd	IR WGSL	lower: a Domain program is not lowered yet
-5c0577eb744c194682e183b403e74ce12958b9a02373fe6057f23002e890340d	A	WGSL read back: error: no definition in scope for identifier: `texture_multisampled_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: texture_multisampled_Nd_array<iN>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
 5c0577eb744c194682e183b403e74ce12958b9a02373fe6057f23002e890340d	IR WGSL	lower: a multisampled array texture has no WGSL form
 5ca90314e317c026c84f7556cda01e2bc170d77c79031ab43d676f75f5a9a718	IR WGSL	lower: a Domain program is not lowered yet
-5d0f1c19661a2d5637cea2f2d22fb401ae831cbc41dc46ac9217681aded1d7fd	A	lift: sample_l_feedback: opcode N is not lifted
 5d0f1c19661a2d5637cea2f2d22fb401ae831cbc41dc46ac9217681aded1d7fd	IR	lift: sample_l_feedback: opcode N is not lifted to the IR yet
 5d0f1c19661a2d5637cea2f2d22fb401ae831cbc41dc46ac9217681aded1d7fd	IR WGSL	not reached
 5d3d51ad2e7e09aad79a38992c434676a413972b22c318cb21888e4ab8d0347a	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-5dd936f2d657e560fd478015266e1c5600e27a1966055c75972f3a6a6f10bd63	A	lift: ld_uav_typed_feedback: opcode N is not lifted
 5dd936f2d657e560fd478015266e1c5600e27a1966055c75972f3a6a6f10bd63	IR	lift: ld_uav_typed_feedback: opcode N is not lifted to the IR yet
 5dd936f2d657e560fd478015266e1c5600e27a1966055c75972f3a6a6f10bd63	IR WGSL	not reached
-5de3f37104a7590b51285db6ec9e4aad7ea3b428209322e2e22bde78444541dd	A	WGSL read back: error: no definition in scope for identifier: `texture_multisampled_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: texture_multisampled_Nd_array<iN>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
 5de3f37104a7590b51285db6ec9e4aad7ea3b428209322e2e22bde78444541dd	IR WGSL	lower: a multisampled array texture has no WGSL form
-5e37f86e81bf13099cc7e6ba90f3b7a093006ba1e07016242d1a5f48f2cc5dde	A	lift: sample_pos: opcode N is not lifted
 5e37f86e81bf13099cc7e6ba90f3b7a093006ba1e07016242d1a5f48f2cc5dde	IR	lift: sample_pos: opcode N is not lifted to the IR yet
 5e37f86e81bf13099cc7e6ba90f3b7a093006ba1e07016242d1a5f48f2cc5dde	IR WGSL	not reached
-5f4376413c391d98e3f57ef3c4888dcb1ad482ea86e8ef538499fb49a40038f9	A	lift: dcl_index_range of operand register type InputControlPoint: only inputs and outputs are lifted
 5f4376413c391d98e3f57ef3c4888dcb1ad482ea86e8ef538499fb49a40038f9	IR	lift: dcl_index_range of operand register type InputControlPoint: only inputs and outputs are lifted
 5f4376413c391d98e3f57ef3c4888dcb1ad482ea86e8ef538499fb49a40038f9	IR WGSL	not reached
 5fdceb162a18a18395091aa3b788022c2e302cd384b5c81bfb19d6071407591e	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-60a4722611cad4a7b0704e03831a66bf4f53f9279ed4b7d3fe8262cd2de03866	A	lift: sample_d_clamp_feedback: opcode N is not lifted
 60a4722611cad4a7b0704e03831a66bf4f53f9279ed4b7d3fe8262cd2de03866	IR	lift: sample_d_clamp_feedback: opcode N is not lifted to the IR yet
 60a4722611cad4a7b0704e03831a66bf4f53f9279ed4b7d3fe8262cd2de03866	IR WGSL	not reached
 60d4b62e228a379140db9429f552c8048879e765180ccfea248930b39ee9fd7a	IR WGSL	lower: a Geometry program is not lowered yet
-60e54bed7664c58808b173ca2e525db8ede3120b238e4a248d8b973273e90c54	A	lift: reflection: DXBC at word N: N constant buffers named cb: their declarations do not tell which binding takes which layout
 60e54bed7664c58808b173ca2e525db8ede3120b238e4a248d8b973273e90c54	IR	lift: reflection: DXBC at word N: N constant buffers named cb: their declarations do not tell which binding takes which layout
 60e54bed7664c58808b173ca2e525db8ede3120b238e4a248d8b973273e90c54	IR WGSL	not reached
 621e0091b958ebf2a94d293ca7ffd1f5ae99c6589dc76920d3c216e9c9b00760	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 6229a4d81be21c4591503379ebfa7db5bcc3316fd1c06e1edb1f86b2eee35f5f	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 632afadc01c3ca07374ef80a91413391088b58ed887eb93716753cfe1cecdfb3	IR WGSL	lower: a Geometry program is not lowered yet
-6341d2a31017d96db76818e79d0d484af7aa7f5508c532798f226ca12e2985f6	A	lift: double precision is enabled (global flag): doubles are not lifted
-634354dfff6901c0256cee07dbd89c28a1a312023ce7bf3a1f5c8fb0b46036d8	A	lift: lod: opcode N is not lifted
 634354dfff6901c0256cee07dbd89c28a1a312023ce7bf3a1f5c8fb0b46036d8	IR	lift: lod: opcode N is not lifted to the IR yet
 634354dfff6901c0256cee07dbd89c28a1a312023ce7bf3a1f5c8fb0b46036d8	IR WGSL	not reached
 63c5239d5c09c30639fb1873a7693b1b00da71f2c8c64ad40c7ec8609f108506	IR WGSL	lower: a Domain program is not lowered yet
-646db824372007c9c0f1c81bd560db5e7e99c527ca66f6ada7bde39f502f79b3	A	lift: sample_info: the sample count of the rasterizer is the pipeline's, not the program's
 646db824372007c9c0f1c81bd560db5e7e99c527ca66f6ada7bde39f502f79b3	IR	lift: sample_info: the sample count of the rasterizer is the pipeline's, not the program's
 646db824372007c9c0f1c81bd560db5e7e99c527ca66f6ada7bde39f502f79b3	IR WGSL	not reached
 64b00484e5e9909858e1fd7db4a774de43bb8df3830e482dbccb564a2dbe91d2	IR WGSL	lower: a Domain program is not lowered yet
-64f6ca8533fb894b911778b55b65de02a0104cfc5c256831946ec9ec602fc25d	A	lift: double precision is enabled (global flag): doubles are not lifted
 6529c829b6288ba571240b6dc929c82b9b93ee8733a85fd9a3f7d8eec949824b	IR WGSL	lower: a Geometry program is not lowered yet
-66334463bc5d2ad9ce21fc9095df46d1ced87b9e2c7e73b37d0fc125ecc9d6f9	A	lift: eval_sample_index: opcode N is not lifted
 66334463bc5d2ad9ce21fc9095df46d1ced87b9e2c7e73b37d0fc125ecc9d6f9	IR	lift: eval_sample_index: opcode N is not lifted to the IR yet
 66334463bc5d2ad9ce21fc9095df46d1ced87b9e2c7e73b37d0fc125ecc9d6f9	IR WGSL	not reached
-665c601e52d377ce98105d46dfdad65d84605981cb38888e31efa509da4987cd	A	WGSL read back: error: no definition in scope for identifier: `texture_multisampled_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: texture_multisampled_Nd_array<uN>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
 665c601e52d377ce98105d46dfdad65d84605981cb38888e31efa509da4987cd	IR WGSL	lower: a multisampled array texture has no WGSL form
 670dddbfe4eed83baf66ba7adfc22b45892ab4a99d57c54f0a06f0c1312dee1b	IR WGSL	lower: a Hull program is not lowered yet
-67e133f07fad703f04e0fbc707bda9828c3abf8036e6b98dde754bf1058e9a8a	A	lift: reflection: DXBC at word N: outputUAV: DND_SIT_UAV_APPEND_STRUCTURED (N) is not mapped
 67e133f07fad703f04e0fbc707bda9828c3abf8036e6b98dde754bf1058e9a8a	IR	lift: reflection: DXBC at word N: outputUAV: DND_SIT_UAV_APPEND_STRUCTURED (N) is not mapped
 67e133f07fad703f04e0fbc707bda9828c3abf8036e6b98dde754bf1058e9a8a	IR WGSL	not reached
-693a00911f8d6eb318ffd7a8535af4a21352bb9a62f99133edfa9a9aaacc4f2c	A	lift: reflection: DXBC at word N: globalRWSBuffer: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 693a00911f8d6eb318ffd7a8535af4a21352bb9a62f99133edfa9a9aaacc4f2c	IR	lift: reflection: DXBC at word N: globalRWSBuffer: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 693a00911f8d6eb318ffd7a8535af4a21352bb9a62f99133edfa9a9aaacc4f2c	IR WGSL	not reached
-699f850f8274185d2635ac868583b359c8411e438d531816d4f281fcf79274ee	A	lift: sample_pos: opcode N is not lifted
 699f850f8274185d2635ac868583b359c8411e438d531816d4f281fcf79274ee	IR	lift: sample_pos: opcode N is not lifted to the IR yet
 699f850f8274185d2635ac868583b359c8411e438d531816d4f281fcf79274ee	IR WGSL	not reached
-6b55a7be6f2eac636006a11aa8e879c830293c0144b15122745ef70df2e77aa1	A	lift: double precision is enabled (global flag): doubles are not lifted
 6b60197f7eae96d68d978e9fd3a63e99914195916511d77c576e011937080386	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 6b6873915a6362b5e457ec550d37a44afc38db677adda6fe0c32719f3d4f82d5	IR WGSL	lower: a Hull program is not lowered yet
-6c743f78682d3e938aecca70eda2777dde11a215971b9f40fd4529080ca8c0ca	A	lift: call: opcode N is not lifted
 6c743f78682d3e938aecca70eda2777dde11a215971b9f40fd4529080ca8c0ca	IR	lift: call: opcode N is not lifted to the IR yet
 6c743f78682d3e938aecca70eda2777dde11a215971b9f40fd4529080ca8c0ca	IR WGSL	not reached
 6cc90e00f200ff11c88fe34413525e5309d520318586cb51dbfe1871ff7bf647	IR WGSL	lower: a Geometry program is not lowered yet
-6e3242713d7f08f4fcaee62e3427972e0e2a8da6825fcd8ab691f54144b73047	A	lift: lod: opcode N is not lifted
 6e3242713d7f08f4fcaee62e3427972e0e2a8da6825fcd8ab691f54144b73047	IR	lift: lod: opcode N is not lifted to the IR yet
 6e3242713d7f08f4fcaee62e3427972e0e2a8da6825fcd8ab691f54144b73047	IR WGSL	not reached
 6e8de1012a9fbcfc97cf750d30e9c5b5dc379e73b05e5d97d5cb0e5c5588044b	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-6efcea0f5f11033340f17aecd50d78ae3c4171d8f0b054b9f3b867352da6ee70	A	lift: double precision is enabled (global flag): doubles are not lifted
 6f17b1baf6bcf277adf98df2ba208df773b4fa7abb2e4b61abc5349c85b9966c	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-70f63a01346bd423d6c33c49e265d04160be22b4d7351c167b2fdacd655b4d2d	A	WGSL read back: error: no definition in scope for identifier: `texture_multisampled_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: texture_multisampled_Nd_array<fN>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
 70f63a01346bd423d6c33c49e265d04160be22b4d7351c167b2fdacd655b4d2d	IR WGSL	lower: a multisampled array texture has no WGSL form
-728c5db2588892de89ecfebc1b9a8092011433ea168fd460633ac5619cf715f3	A	lift: imm_atomic_alloc: append and consume buffer counters are not lifted
-729a0a621a9452d375f74358a9653e28e19bafcacae0891bd0a7fd76767c3398	A	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 729a0a621a9452d375f74358a9653e28e19bafcacae0891bd0a7fd76767c3398	IR	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 729a0a621a9452d375f74358a9653e28e19bafcacae0891bd0a7fd76767c3398	IR WGSL	not reached
-72b3a5142f6bc7f60cee6d84ccc18ba74ca3397e619db84731fdc4235a1ee4a1	A	lift: atomic_cmp_store: atomic operation cmp_store on a texture view
 72b3a5142f6bc7f60cee6d84ccc18ba74ca3397e619db84731fdc4235a1ee4a1	IR WGSL	lower: a texel atomic whose old value is read, or a compare-exchange of a texel, has no naga form: naga's image atomic gives no old value and takes no comparand
 73b596d90c324bae69a3b2933cd1859994936eabea8a7ccd2c24edd24143233a	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-73fec7cf7e72f1534217beaee8659b9808e9bcb65e370d9c9510494b389a89c5	A	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 73fec7cf7e72f1534217beaee8659b9808e9bcb65e370d9c9510494b389a89c5	IR	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 73fec7cf7e72f1534217beaee8659b9808e9bcb65e370d9c9510494b389a89c5	IR WGSL	not reached
 741b49a82c092566e4f637c7174367d490a82551c07ab3ae3d3e16c2f60bdfb9	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-74b087836a2274d610fb43800bbd76a1b4c9959855c26b6cde88bed23acffb73	A	lift: bufinfo: opcode N is not lifted
 74b087836a2274d610fb43800bbd76a1b4c9959855c26b6cde88bed23acffb73	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 74b087836a2274d610fb43800bbd76a1b4c9959855c26b6cde88bed23acffb73	IR WGSL	not reached
 7544e944bb7d99614e435ebd7da393cd1c8c9e093723ad8c6e90ec28cd3a7dd6	IR WGSL	lower: a Domain program is not lowered yet
-7585b65f16a0b5f38e2c7f70f99f478f42c2ec0792c3229e4328879f949c2b3c	A	lift: gatherN_feedback: opcode N is not lifted
 7585b65f16a0b5f38e2c7f70f99f478f42c2ec0792c3229e4328879f949c2b3c	IR	lift: gatherN_feedback: opcode N is not lifted to the IR yet
 7585b65f16a0b5f38e2c7f70f99f478f42c2ec0792c3229e4328879f949c2b3c	IR WGSL	not reached
 75aeae131f63af61a6fc37ff8eb2b1b186a8171bd8c252be228b2f81e38209dc	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 76189aaea6f288135672c5e18917f9e4b1eae6b51bf5f90ae8109f689ec20298	IR WGSL	lower: a Geometry program is not lowered yet
-765c2cd6e8a343230ffa1af92aec8f2d52b393bf8f0ae9edca2a6420dbb554bf	A	WGSL read back: error: no definition in scope for identifier: `texture_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: binding_array<texture_Nd_array<fN>>;   │                        ^^^^^^^^^^^^^^^^ unknown identifier  
 765c2cd6e8a343230ffa1af92aec8f2d52b393bf8f0ae9edca2a6420dbb554bf	IR WGSL	lower: a ND array texture has no WGSL form
-769ca5cd382b97c55433dc4cc2c79fa17fe5b4e269c4af4411ccec4f55eef2b0	A	lift: gatherN_po: opcode N is not lifted
 769ca5cd382b97c55433dc4cc2c79fa17fe5b4e269c4af4411ccec4f55eef2b0	IR	lift: gatherN_po: opcode N is not lifted to the IR yet
 769ca5cd382b97c55433dc4cc2c79fa17fe5b4e269c4af4411ccec4f55eef2b0	IR WGSL	not reached
-76a58694363834347dde13e78c7708a91d5c85d863b77425721ba8470ea376c8	A	lift: dcl_gs_input_primitive: N is not mapped
 76a58694363834347dde13e78c7708a91d5c85d863b77425721ba8470ea376c8	IR	lift: dcl_gs_input_primitive: N is not mapped
 76a58694363834347dde13e78c7708a91d5c85d863b77425721ba8470ea376c8	IR WGSL	not reached
 76ae72f2af907c9cece43de340c1fb61f840a15a31cbf546c6d7960c5d3a1395	IR WGSL	lower: a Hull program is not lowered yet
-76b45cde347fb6ab90da981cb9a59a97b724b517a56883dba43d4e11cce937ec	A	lift: double precision is enabled (global flag): doubles are not lifted
-76dfcec2d4ccebaf6b97e95d981f7bac357883b640f1cb42fa0afc12392fa05d	A	lift: a declared input of register type OutputControlPoint
 76dfcec2d4ccebaf6b97e95d981f7bac357883b640f1cb42fa0afc12392fa05d	IR	lift: a declared input of register type OutputControlPoint
 76dfcec2d4ccebaf6b97e95d981f7bac357883b640f1cb42fa0afc12392fa05d	IR WGSL	not reached
 773826b4b1c1de7e28d85ac3be7b921c36b88d48ecbe2b34b4162f32f6dc5f2f	IR WGSL	lower: a Geometry program is not lowered yet
-773f766c2cb2504bce2690a14ddcad18f55b10e3a3bcc83343c72c429f11e2d6	A	lift: double precision is enabled (global flag): doubles are not lifted
-776de2ea632929b7b6e75e4a9e922a57ad69f424a071e0a4bd068f06dc1d1080	A	lift: double precision is enabled (global flag): doubles are not lifted
 77770c0b7c00ea3931695b4cd4e8baf5add7d898b597ca2c925e877eae9a301b	IR WGSL	lower: a Domain program is not lowered yet
 783be0c88bd0ce79e0c921147e00dc1d190f20748a63d17b2bede598efd6e8a1	IR WGSL	lower: a Domain program is not lowered yet
-7849cb13aa5523c43fd30d8ffc391a0859eb5231ea22f1bafbf2ffa781d12e22	A	lift: SV_CULLDISTANCEN: CullDistance as a Pixel input has no built-in binding
 7849cb13aa5523c43fd30d8ffc391a0859eb5231ea22f1bafbf2ffa781d12e22	IR	lift: SV_CULLDISTANCEN: CullDistance as a Pixel input has no built-in binding
 7849cb13aa5523c43fd30d8ffc391a0859eb5231ea22f1bafbf2ffa781d12e22	IR WGSL	not reached
 789370bbb148fa1e1eac781c6fc2556806ad94374e43b25b87f152263e8ae9eb	IR WGSL	lower: a Hull program is not lowered yet
-78dfc627ba5722507ddaf0662e87b83e2a119f588cb1a5f207aaa5abd9a49acb	A	lift: msad: opcode N is not lifted
 78dfc627ba5722507ddaf0662e87b83e2a119f588cb1a5f207aaa5abd9a49acb	IR	lift: msad: opcode N is not lifted to the IR yet
 78dfc627ba5722507ddaf0662e87b83e2a119f588cb1a5f207aaa5abd9a49acb	IR WGSL	not reached
-7959739b01d22d352dbedaa9b951b927cb55b36996d9c1f060f03b258aed0ac2	A	lift: double precision is enabled (global flag): doubles are not lifted
-798452ad02cccdfe381facc1461f1069a01b35d9f5ff001140285c6c68869b3f	A	WGSL read back: error: no definition in scope for identifier: `texture_multisampled_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: texture_multisampled_Nd_array<iN>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
 798452ad02cccdfe381facc1461f1069a01b35d9f5ff001140285c6c68869b3f	IR WGSL	lower: a multisampled array texture has no WGSL form
 7990eb025c68b117d254bcfcbe23d33fd2615b06f4fe226f22b088f68c05b1f2	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-7ad2972d844d53b18eafd4dd39edb81bfe97c1ffe76d37ffca6ae35329095643	A	lift: msad: opcode N is not lifted
 7ad2972d844d53b18eafd4dd39edb81bfe97c1ffe76d37ffca6ae35329095643	IR	lift: msad: opcode N is not lifted to the IR yet
 7ad2972d844d53b18eafd4dd39edb81bfe97c1ffe76d37ffca6ae35329095643	IR WGSL	not reached
 7bd86579b76e879185882740e878793fee16afc9e38698680853b068d0b09f6d	IR WGSL	lower: a Geometry program is not lowered yet
-7d02e532e8e38968aa17eb425181efe10971bbaeace31dc99c9e4889d3a5dc30	A	lift: reflection: DXBC at word N: bufN: DND_SIT_UAV_APPEND_STRUCTURED (N) is not mapped
 7d02e532e8e38968aa17eb425181efe10971bbaeace31dc99c9e4889d3a5dc30	IR	lift: reflection: DXBC at word N: bufN: DND_SIT_UAV_APPEND_STRUCTURED (N) is not mapped
 7d02e532e8e38968aa17eb425181efe10971bbaeace31dc99c9e4889d3a5dc30	IR WGSL	not reached
 7d106ef9ed1ce55a1dd8520600281a009cbcbad0edaedcd2420698fad31a1e54	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 7d135d511759256d0c6d7b1dc3bdc07620277e050de27fc5a4fc953d398c7abe	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 7d141c06a5b87d94e6787040601dc035a845c87203831a6f48ebb0573af99c55	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-7d2ac3549b4090be4fe95c191626e67bf5fdc3f5b995b2bf3c19d04096950747	A	lift: dcl_output_control_point_count: N is not mapped
 7d2ac3549b4090be4fe95c191626e67bf5fdc3f5b995b2bf3c19d04096950747	IR	lift: dcl_output_control_point_count: N is not mapped
 7d2ac3549b4090be4fe95c191626e67bf5fdc3f5b995b2bf3c19d04096950747	IR WGSL	not reached
 7d879a5fe732b9ef06752c71474654755d54abe589a44edb4bfb9e26ebe21cb4	IR WGSL	lower: a Geometry program is not lowered yet
-7e608b04018dcd3f250c2f5ec857675fceb4d9f16941dba17b851bc141acea98	A	WGSL read back: error: no definition in scope for identifier: `texture_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: texture_Nd_array<fN>;   │          ^^^^^^^^^^^^^^^^ unknown identifier  
 7e608b04018dcd3f250c2f5ec857675fceb4d9f16941dba17b851bc141acea98	IR WGSL	lower: a ND array texture has no WGSL form
-7f263ff3f91433fe3d12f7a144cca693773105bddffc85c335de719f60f9e7b7	A	lift: atomic_cmp_store: atomic operation cmp_store on a texture view
 7f263ff3f91433fe3d12f7a144cca693773105bddffc85c335de719f60f9e7b7	IR WGSL	lower: a texel atomic whose old value is read, or a compare-exchange of a texel, has no naga form: naga's image atomic gives no old value and takes no comparand
-7f36719956078e9e7e7a91fd90d33d0381d818c0713c0d5926f7e8d3383b44f9	A	WGSL read back: error: no definition in scope for identifier: `texture_storage_Nd_array`   ┌─ wgsl:N:N   │ N │ var uN_: binding_array<texture_storage_Nd_array<rgbaNfloat,read>>;   │                        ^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
 7f36719956078e9e7e7a91fd90d33d0381d818c0713c0d5926f7e8d3383b44f9	IR WGSL	lower: a ND array storage image has no WGSL form
-8077c6b721a72c9c51c29d4e99403d5d342055d65cdb02b9d34896c95260b46e	A	lift: double precision is enabled (global flag): doubles are not lifted
 8077c6b721a72c9c51c29d4e99403d5d342055d65cdb02b9d34896c95260b46e	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 80bf0e27b0b58238afb540f618a981b5c19bc4fa9b495dd62e0ecac9b4905e95	IR WGSL	lower: a Hull program is not lowered yet
 81026455f3215f9d69bb5a622e74cc2ca3fab3999515d15cc98d2c5f21e8c7ea	IR WGSL	lower: a Hull program is not lowered yet
-8151ca7a92c732238f94ebc6a25c14d1580c5b188ab8f345bdbb39bc7109079c	A	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 8151ca7a92c732238f94ebc6a25c14d1580c5b188ab8f345bdbb39bc7109079c	IR	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 8151ca7a92c732238f94ebc6a25c14d1580c5b188ab8f345bdbb39bc7109079c	IR WGSL	not reached
-81bfe81575399a42146c95435163514aa94413dfdf1ea2d5edd84fe11a7232a4	A	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 81bfe81575399a42146c95435163514aa94413dfdf1ea2d5edd84fe11a7232a4	IR	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 81bfe81575399a42146c95435163514aa94413dfdf1ea2d5edd84fe11a7232a4	IR WGSL	not reached
-821fde99505b211c2066d45473dbae585a0d3ed178ff73586f1d83408a63c2e7	A	lift: reflection: DXBC at word N: g_rwbuffer: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 821fde99505b211c2066d45473dbae585a0d3ed178ff73586f1d83408a63c2e7	IR	lift: reflection: DXBC at word N: g_rwbuffer: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 821fde99505b211c2066d45473dbae585a0d3ed178ff73586f1d83408a63c2e7	IR WGSL	not reached
-82b17e0943707a101f75d819f7ccf2e5413b1fcd363e17ca3dc074a016394058	A	lift: msad: opcode N is not lifted
 82b17e0943707a101f75d819f7ccf2e5413b1fcd363e17ca3dc074a016394058	IR	lift: msad: opcode N is not lifted to the IR yet
 82b17e0943707a101f75d819f7ccf2e5413b1fcd363e17ca3dc074a016394058	IR WGSL	not reached
-8313a36d51641516722d85f7937d7c3a7e3364c9f85e6acae3a5fb2f13350159	A	lift: ld_ms_feedback: opcode N is not lifted
 8313a36d51641516722d85f7937d7c3a7e3364c9f85e6acae3a5fb2f13350159	IR	lift: ld_ms_feedback: opcode N is not lifted to the IR yet
 8313a36d51641516722d85f7937d7c3a7e3364c9f85e6acae3a5fb2f13350159	IR WGSL	not reached
 83ba5b4dcb4a8da3aa011a1a6b1e95004499099308f738c2e74f9e8274650fb8	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 83badbe975a968e47c514af6036ea0fef04cb39b21b90472ec849322f62ece2e	IR WGSL	lower: a Domain program is not lowered yet
-84471672d7274b5df87759d33d95a711d89b46fe0c167b635a33a646c605fbda	A	lift: reflection: DXBC at word N: g_VisibleParticles: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 84471672d7274b5df87759d33d95a711d89b46fe0c167b635a33a646c605fbda	IR	lift: reflection: DXBC at word N: g_VisibleParticles: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 84471672d7274b5df87759d33d95a711d89b46fe0c167b635a33a646c605fbda	IR WGSL	not reached
-8510220740bc7ca11ec018f212bc03b0f2d3c038edc7734045a7424ffc2aad21	A	lift: double precision is enabled (global flag): doubles are not lifted
 8510220740bc7ca11ec018f212bc03b0f2d3c038edc7734045a7424ffc2aad21	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-8595c2a9e14c04d41650bfbb820ed8f8d0dee1b63622fd2ca25bb6d5287db65d	A	WGSL read back: error: no definition in scope for identifier: `texture_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: binding_array<texture_Nd_array<fN>>;   │                        ^^^^^^^^^^^^^^^^ unknown identifier  
 8595c2a9e14c04d41650bfbb820ed8f8d0dee1b63622fd2ca25bb6d5287db65d	IR WGSL	lower: a ND array texture has no WGSL form
-859f8eb4074b62bb02f616ee47d1e5c20a0d2fa077689f868fe36ad4276b4df9	A	WGSL read back: error: no definition in scope for identifier: `texture_storage_Nd_array`   ┌─ wgsl:N:N   │ N │ var uN_: texture_storage_Nd_array<rgbaNfloat,read>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
 859f8eb4074b62bb02f616ee47d1e5c20a0d2fa077689f868fe36ad4276b4df9	IR WGSL	lower: a ND array storage image has no WGSL form
 85dcc2a05a5a0f36032ac1746718b4cf5bbf740bad32d98fa0d40bdfa9b03868	IR WGSL	lower: a Domain program is not lowered yet
 85f7198a1a3362e52554d05df07f12760e6211fa8a4a83b1f10b3b881272b9f3	IR WGSL	lower: a Geometry program is not lowered yet
-8661ca1ab1fc024ae901f4389b245557a57a46bb4b0796aa3211c169ef255e30	A	validate: module: Entry point main at Compute is invalid: Expression [N] is invalid: Expected selection argument types to match, but reject value of type Scalar(Scalar { kind: Uint, width: N }) does not match accept value of value Scalar(Scalar { kind: Sint, width: N })
-875026ef8c22a123232d8a872f85ace5dbcf3d144d7a0be7b944c750d0c94d31	A	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 875026ef8c22a123232d8a872f85ace5dbcf3d144d7a0be7b944c750d0c94d31	IR	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 875026ef8c22a123232d8a872f85ace5dbcf3d144d7a0be7b944c750d0c94d31	IR WGSL	not reached
-88094343433d15b6c9f364affc4ecc8605a760c88cd39d975f78aec921b2dd8f	A	lift: lod: opcode N is not lifted
 88094343433d15b6c9f364affc4ecc8605a760c88cd39d975f78aec921b2dd8f	IR	lift: lod: opcode N is not lifted to the IR yet
 88094343433d15b6c9f364affc4ecc8605a760c88cd39d975f78aec921b2dd8f	IR WGSL	not reached
-881b6d9f6ec6a359e1c3ff71b303ba3a1a80eb6db0713b12862d706c26fc492e	A	lift: msad: opcode N is not lifted
 881b6d9f6ec6a359e1c3ff71b303ba3a1a80eb6db0713b12862d706c26fc492e	IR	lift: msad: opcode N is not lifted to the IR yet
 881b6d9f6ec6a359e1c3ff71b303ba3a1a80eb6db0713b12862d706c26fc492e	IR WGSL	not reached
-88895f7056bcf13ec89680a93f8b79d2685269bac4806d934e0292b893f0d9f5	A	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 88895f7056bcf13ec89680a93f8b79d2685269bac4806d934e0292b893f0d9f5	IR	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 88895f7056bcf13ec89680a93f8b79d2685269bac4806d934e0292b893f0d9f5	IR WGSL	not reached
-88c67f09b2850bb1cf1bf91371d6fc40e12c016110db58d382ff3eba65937eae	A	lift: gatherN_feedback: opcode N is not lifted
 88c67f09b2850bb1cf1bf91371d6fc40e12c016110db58d382ff3eba65937eae	IR	lift: gatherN_feedback: opcode N is not lifted to the IR yet
 88c67f09b2850bb1cf1bf91371d6fc40e12c016110db58d382ff3eba65937eae	IR WGSL	not reached
 88d778ce570ba5fb2e66c0fc4fcf8c015fc43945bb358de0e0c9cf0b891f1c9d	IR WGSL	lower: a Geometry program is not lowered yet
 88eb4fe0e629167c5baf733e571a549305fe1e75499a12fb62c890e43400c847	IR WGSL	lower: a Domain program is not lowered yet
-897bdeafb1b7c93de4a3de7953e7140a39b788408057b4616ec8618b36ea91d1	A	lift: sv_stencilrefN: StencilRef as a Pixel output has no built-in binding
 897bdeafb1b7c93de4a3de7953e7140a39b788408057b4616ec8618b36ea91d1	IR	lift: sv_stencilrefN: StencilRef as a Pixel output has no built-in binding
 897bdeafb1b7c93de4a3de7953e7140a39b788408057b4616ec8618b36ea91d1	IR WGSL	not reached
-89b86209d05a7af0ba96ebed987a18c8cf67a7131c2da6c535d0656a6009c24f	A	lift: gatherN_po: opcode N is not lifted
 89b86209d05a7af0ba96ebed987a18c8cf67a7131c2da6c535d0656a6009c24f	IR	lift: gatherN_po: opcode N is not lifted to the IR yet
 89b86209d05a7af0ba96ebed987a18c8cf67a7131c2da6c535d0656a6009c24f	IR WGSL	not reached
-89ea8d8351fc81226231eceb08c32d64476a2c3bb5d742a589f537c84514ab39	A	lift: reflection: DXBC at word N: g_VisibleParticles: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 89ea8d8351fc81226231eceb08c32d64476a2c3bb5d742a589f537c84514ab39	IR	lift: reflection: DXBC at word N: g_VisibleParticles: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 89ea8d8351fc81226231eceb08c32d64476a2c3bb5d742a589f537c84514ab39	IR WGSL	not reached
-89f9887816a43b5d0a5e92712cb1ef950a7f500a35c64bf2c18161293639f274	A	lift: double precision is enabled (global flag): doubles are not lifted
 8a7c7560b62f2ec5a2a502fea96aee7ec967ac861d976baba59dd2c1bc6935d9	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-8b9231db72d2414654cd6fcc512db6d0c190d511c9e54e37aee27965d9c25627	A	lift: ld_raw_feedback: opcode N is not lifted
 8b9231db72d2414654cd6fcc512db6d0c190d511c9e54e37aee27965d9c25627	IR	lift: ld_raw_feedback: opcode N is not lifted to the IR yet
 8b9231db72d2414654cd6fcc512db6d0c190d511c9e54e37aee27965d9c25627	IR WGSL	not reached
 8bb4265503a0e31dc6e3cd0fc3a721fa34ce59697c1ee1dc6b585cb97af18f0e	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 8bd830ecc968f9a5c9770c16b316da22c3e2d87aa1fbe4224aafdf05e50ba660	IR WGSL	lower: a Geometry program is not lowered yet
-8bfa60782e367e2e7c4acf5ff39fca9e85e29d9c45351c3abb07bc11d79fb5c7	A	WGSL: wgsl cannot write this program: Unsupported texture atomic result (WGSL's texture atomics return nothing): [N]
 8bfa60782e367e2e7c4acf5ff39fca9e85e29d9c45351c3abb07bc11d79fb5c7	IR WGSL	lower: a texel atomic whose old value is read, or a compare-exchange of a texel, has no naga form: naga's image atomic gives no old value and takes no comparand
 8c64463d147473e03cfaaa8443cc8deabd7352d1cac436497807fab5baee6eb1	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-8d1ff52f85abc85977bb3d3af893adbf86f52bcd73cab0446a7f3fb253f2e860	A	lift: eval_centroid: opcode N is not lifted
 8d1ff52f85abc85977bb3d3af893adbf86f52bcd73cab0446a7f3fb253f2e860	IR	lift: eval_centroid: opcode N is not lifted to the IR yet
 8d1ff52f85abc85977bb3d3af893adbf86f52bcd73cab0446a7f3fb253f2e860	IR WGSL	not reached
 8dda050a0a7965fda30adce92957bec60c8821d8ecf6369f58d05ed1a508c1ef	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-8e6242c42c12f4689237756adf32d69736d989213eb8fcddcb4fd21ae8f91223	A	lift: lod: opcode N is not lifted
 8e6242c42c12f4689237756adf32d69736d989213eb8fcddcb4fd21ae8f91223	IR	lift: lod: opcode N is not lifted to the IR yet
 8e6242c42c12f4689237756adf32d69736d989213eb8fcddcb4fd21ae8f91223	IR WGSL	not reached
-8e79785d29e3d8905fca051320cea5d3ed6fa035b014312a880f75e6773c7526	A	lift: bufinfo: opcode N is not lifted
 8e79785d29e3d8905fca051320cea5d3ed6fa035b014312a880f75e6773c7526	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 8e79785d29e3d8905fca051320cea5d3ed6fa035b014312a880f75e6773c7526	IR WGSL	not reached
 8eb374c30628d947245108bed6dbe3f32c75fbdef73adcc99dea38407ee9ae69	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-8ef7f382b9411e1de58447e3dac2d8038ca4e425aa6aef2d0381fadf57c64251	A	lift: reflection: DXBC at word N: g_OutputBuffer: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 8ef7f382b9411e1de58447e3dac2d8038ca4e425aa6aef2d0381fadf57c64251	IR	lift: reflection: DXBC at word N: g_OutputBuffer: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 8ef7f382b9411e1de58447e3dac2d8038ca4e425aa6aef2d0381fadf57c64251	IR WGSL	not reached
-8efcc6571fc2da8f05f30e86fc15e6fb44500f12848d7c3e1c614ed89436651c	A	lift: msad: opcode N is not lifted
 8efcc6571fc2da8f05f30e86fc15e6fb44500f12848d7c3e1c614ed89436651c	IR	lift: msad: opcode N is not lifted to the IR yet
 8efcc6571fc2da8f05f30e86fc15e6fb44500f12848d7c3e1c614ed89436651c	IR WGSL	not reached
 8f4f8e71cba66af4bd28606c257d44e2ba3a7107d6cad09b46d8c2f171ae7954	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-8f7336e50e92bd2735e286dac779ad38bfaabe169abde07618acc6ab5cdbca74	A	lift: call: opcode N is not lifted
 8f7336e50e92bd2735e286dac779ad38bfaabe169abde07618acc6ab5cdbca74	IR	lift: call: opcode N is not lifted to the IR yet
 8f7336e50e92bd2735e286dac779ad38bfaabe169abde07618acc6ab5cdbca74	IR WGSL	not reached
-8fafb16d119362cfd0932b291e0a1d895f6a24e52413df0306d4e596f015a466	A	lift: reflection: DXBC at word N: constant buffer StructuredBufferArray[N][N] has no resource binding
 8fafb16d119362cfd0932b291e0a1d895f6a24e52413df0306d4e596f015a466	IR	lift: reflection: DXBC at word N: constant buffer StructuredBufferArray[N][N] has no resource binding
 8fafb16d119362cfd0932b291e0a1d895f6a24e52413df0306d4e596f015a466	IR WGSL	not reached
-8fe8fb3acf41dd2c4c9cc476b41a604a732ce9cfce1d2eae55022b2c12f9ea09	A	lift: reflection: DXBC at word N: buf: DND_SIT_UAV_CONSUME_STRUCTURED (N) is not mapped
 8fe8fb3acf41dd2c4c9cc476b41a604a732ce9cfce1d2eae55022b2c12f9ea09	IR	lift: reflection: DXBC at word N: buf: DND_SIT_UAV_CONSUME_STRUCTURED (N) is not mapped
 8fe8fb3acf41dd2c4c9cc476b41a604a732ce9cfce1d2eae55022b2c12f9ea09	IR WGSL	not reached
 9098267117f504c1d4842bbfb2f81bd293a4baa7123cf38c70ccacd120deaf90	IR WGSL	lower: a Domain program is not lowered yet
-90bb18ee73b783446631bd892436ca431ed9e51e437879e198699eeada51c1ba	A	lift: double precision is enabled (global flag): doubles are not lifted
-90dc5020ef6e5fc223ee22cc05de033d3640aaeb74ac40afbd2a8b0e6e4cd046	A	lift: gatherN_c: a gather of lane N of a depth texture
 90dc5020ef6e5fc223ee22cc05de033d3640aaeb74ac40afbd2a8b0e6e4cd046	IR WGSL	lower: a gather of lane N of a depth texture
 91060748b9691a6a4f47e9aca94972d402a585fc3b961a8f2a2aebf5b1720763	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 915670b7ff924da278f8f750a16aaee90058e5b626778baa73000df2bbd4cebc	IR WGSL	lower: a Hull program is not lowered yet
-91731ad3857fa55b7624426f53503031bb4d0dcb448e2eedaa1beb25c9070e76	A	lift: the container states a size of N, it has N bytes
 91731ad3857fa55b7624426f53503031bb4d0dcb448e2eedaa1beb25c9070e76	IR	lift: the container states a size of N, it has N bytes
 91731ad3857fa55b7624426f53503031bb4d0dcb448e2eedaa1beb25c9070e76	IR WGSL	not reached
 9200af5d8294ee6dfc298b706ca7252db0fb60af4753d2b9fd75c1064fb61bb4	IR WGSL	lower: a Hull program is not lowered yet
-920316a0bc75671b2bd6716bb1930fda86cac335d9c314cbd6a42157742ee734	A	lift: sample_clamp_feedback: opcode N is not lifted
 920316a0bc75671b2bd6716bb1930fda86cac335d9c314cbd6a42157742ee734	IR	lift: sample_clamp_feedback: opcode N is not lifted to the IR yet
 920316a0bc75671b2bd6716bb1930fda86cac335d9c314cbd6a42157742ee734	IR WGSL	not reached
 9235659667838b532e0db11c593eea2000dde4721139c596b93fe02e9247c594	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-92378b2bcb3ca927636ede14685ce332b2c55bdb19c996f5949351c0d018247e	A	WGSL read back: error: no definition in scope for identifier: `texture_storage_Nd_array`   ┌─ wgsl:N:N   │ N │ var uN_: texture_storage_Nd_array<rgbaNfloat,read>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
 92378b2bcb3ca927636ede14685ce332b2c55bdb19c996f5949351c0d018247e	IR WGSL	lower: a ND array storage image has no WGSL form
-931f3ca35f412c5694ecc509fe16838eba6d0f62a241b9da23f3baee8cdb1bc5	A	lift: ld_feedback: opcode N is not lifted
 931f3ca35f412c5694ecc509fe16838eba6d0f62a241b9da23f3baee8cdb1bc5	IR	lift: ld_feedback: opcode N is not lifted to the IR yet
 931f3ca35f412c5694ecc509fe16838eba6d0f62a241b9da23f3baee8cdb1bc5	IR WGSL	not reached
 932fe564f833a80db7c2ef4c5b584c68a272be8e418689fe5d8f97578262528d	IR WGSL	lower: a Hull program is not lowered yet
 93a1fb2ce90cb6419766b9081158514da53dca0a220f819e8b61ecae9c00e23f	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-93beaab42c0e25285be42d7585d33daaa5239d97d85d8d8f2fb1fc713b93e79e	A	validate: module: Entry point main at Compute is invalid: Expression [N] is invalid: Sample level (exact) type [N] has an invalid type
 94274ee89aeaa7bc502d0ac1fa7772b6531c7e30abcbc6ed59cb836ddead93e5	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 951e6ca62287244feba3476a5db86a9d27a6d03e4b07d151baa432d65276955f	IR WGSL	lower: a Domain program is not lowered yet
 95754202b9c75c0439c0a1f331a7a18d7b97f00d9bcd6d60748d970cb26632f2	IR WGSL	lower: a Geometry program is not lowered yet
 9593bea6375a1939dbe0706e9d27cf53da9ce7696d43ac7ae1b1202faff4672f	IR WGSL	lower: a Hull program is not lowered yet
-95b7ad9a78c7b4ce5cb20933e9fd291985862b0f48f50bf657c62be436c81959	A	lift: reflection: DXBC at word N: consume_vNbool: DND_SIT_UAV_CONSUME_STRUCTURED (N) is not mapped
 95b7ad9a78c7b4ce5cb20933e9fd291985862b0f48f50bf657c62be436c81959	IR	lift: reflection: DXBC at word N: consume_vNbool: DND_SIT_UAV_CONSUME_STRUCTURED (N) is not mapped
 95b7ad9a78c7b4ce5cb20933e9fd291985862b0f48f50bf657c62be436c81959	IR WGSL	not reached
-95efb5ff42179521c1e4acda5f643da0c1f5c07342bc14490c29aa83c25e3cba	A	lift: SV_IsFrontFaceN: DND_NAME N (IS_FRONT_FACE) is not mapped as an output of the Geometry stage
 95efb5ff42179521c1e4acda5f643da0c1f5c07342bc14490c29aa83c25e3cba	IR	lift: SV_IsFrontFaceN: DND_NAME N (IS_FRONT_FACE) is not mapped as an output of the Geometry stage
 95efb5ff42179521c1e4acda5f643da0c1f5c07342bc14490c29aa83c25e3cba	IR WGSL	not reached
-96403637eee8bb14617c0969295081c2c37a829914eb3f8a2c676ca934d923c3	A	lift: bufinfo: opcode N is not lifted
 96403637eee8bb14617c0969295081c2c37a829914eb3f8a2c676ca934d923c3	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 96403637eee8bb14617c0969295081c2c37a829914eb3f8a2c676ca934d923c3	IR WGSL	not reached
 96e455763cf892d065831b2f74d4a99db350434e6c199a5e3a70b6ceddcde5de	IR WGSL	lower: a Hull program is not lowered yet
-96ff887055f4e4e426f4aa13f5dfe73ccfe8e8bb16126e197a64007bf72f95a5	A	lift: eval_centroid: opcode N is not lifted
 96ff887055f4e4e426f4aa13f5dfe73ccfe8e8bb16126e197a64007bf72f95a5	IR	lift: eval_centroid: opcode N is not lifted to the IR yet
 96ff887055f4e4e426f4aa13f5dfe73ccfe8e8bb16126e197a64007bf72f95a5	IR WGSL	not reached
-970be08b6260f282e9a770ae50d00aa762274a730d930c194d3a512ea50d1fe5	A	lift: reflection: DXBC at word N: g_VertexBuffer: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 970be08b6260f282e9a770ae50d00aa762274a730d930c194d3a512ea50d1fe5	IR	lift: reflection: DXBC at word N: g_VertexBuffer: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 970be08b6260f282e9a770ae50d00aa762274a730d930c194d3a512ea50d1fe5	IR WGSL	not reached
-973ddaf20d2c7da56854e8f1cd45e1fdec73acb0fece75d8798d549bf59d320e	A	lift: SV_ClipDistanceN: clip distances as a Pixel input have no built-in binding
 973ddaf20d2c7da56854e8f1cd45e1fdec73acb0fece75d8798d549bf59d320e	IR	lift: SV_ClipDistanceN: clip distances as a Pixel input have no built-in binding
 973ddaf20d2c7da56854e8f1cd45e1fdec73acb0fece75d8798d549bf59d320e	IR WGSL	not reached
-97f318dff32243387d09edceee43be19b8476db964dfb779831ccf974951482e	A	lift: sample_clamp_feedback: opcode N is not lifted
 97f318dff32243387d09edceee43be19b8476db964dfb779831ccf974951482e	IR	lift: sample_clamp_feedback: opcode N is not lifted to the IR yet
 97f318dff32243387d09edceee43be19b8476db964dfb779831ccf974951482e	IR WGSL	not reached
 980483bdc0641ee4a5e8849bc4178e368f668548a7877b9130b6a22a97d9a6fd	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 98375a4fdef5604b8c5260abe4f9a4db07a9f95b1d70b3fd1006a7691be2cc4e	IR WGSL	lower: a Geometry program is not lowered yet
-9876e5f22a97d52a2e879ab4caa011c3efa02c47ffa04caec656b688214126c0	A	lift: dcl_index_range of operand register type InputControlPoint: only inputs and outputs are lifted
 9876e5f22a97d52a2e879ab4caa011c3efa02c47ffa04caec656b688214126c0	IR	lift: dcl_index_range of operand register type InputControlPoint: only inputs and outputs are lifted
 9876e5f22a97d52a2e879ab4caa011c3efa02c47ffa04caec656b688214126c0	IR WGSL	not reached
-988779324b665e612e3ecc6220805934ee1332f7462705a666c62936858bfff6	A	WGSL read back: error: no definition in scope for identifier: `texture_storage_Nd_array`    ┌─ wgsl:N:N    │ N │ var uN_: texture_storage_Nd_array<rgbaNfloat,write>;    │          ^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
 988779324b665e612e3ecc6220805934ee1332f7462705a666c62936858bfff6	IR WGSL	lower: a ND array storage image has no WGSL form
 988ccf5a17328f65b6e051b4344ba1b280c2424887abee9efa1235489ea123da	IR WGSL	lower: a Geometry program is not lowered yet
-98d8533ccf4f64636c3b5f2d2674030c1466128de9255fe17cb3661dc242ab7a	A	validate: module: Entry point main at Compute is invalid: Expression [N] is invalid: Expected selection argument types to match, but reject value of type Scalar(Scalar { kind: Uint, width: N }) does not match accept value of value Scalar(Scalar { kind: Sint, width: N })
 98dd9b1c622c2341e9044e77566e9e078c59506bba9aadb5969e9f6e81a8b284	IR WGSL	lower: a Geometry program is not lowered yet
 9923192d5cff46ba03587b2289973cf7adfd2547c2efc73f2c509c486e85d94d	IR WGSL	lower: a Hull program is not lowered yet
-9adf7d659aa54255b56f656e40588d7effbce1e663172ce459f755ece8e3b9f3	A	lift: double precision is enabled (global flag): doubles are not lifted
-9bc942e121253e6ebc83069923d918f268059570aae6f77a8b74214f949a956a	A	lift: imm_atomic_alloc: append and consume buffer counters are not lifted
-9c3164f608d2609acbbddfbf8a03d04e2094bed0ba55e6bda7bb58bb65dc2ff5	A	lift: a declared input of register type OutputControlPoint
 9c3164f608d2609acbbddfbf8a03d04e2094bed0ba55e6bda7bb58bb65dc2ff5	IR	lift: a declared input of register type OutputControlPoint
 9c3164f608d2609acbbddfbf8a03d04e2094bed0ba55e6bda7bb58bb65dc2ff5	IR WGSL	not reached
 9c619280e6cf5758558ce335e83093e3b26b46396bc0d4e44c61f5dc4d27d18c	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 9cbc26c790eca3ab6ad2ebdd1fb6d8777611caed6cca57c543ae8af5a0281d84	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-9cecb81919f42f024e9e5ca0d989072a28589b391219894dfaaedf7856260029	A	lift: gatherN_feedback: opcode N is not lifted
 9cecb81919f42f024e9e5ca0d989072a28589b391219894dfaaedf7856260029	IR	lift: gatherN_feedback: opcode N is not lifted to the IR yet
 9cecb81919f42f024e9e5ca0d989072a28589b391219894dfaaedf7856260029	IR WGSL	not reached
-9d0193e32b0caf332ed466c7a5ed8bd59fe22b91ec45289fda13e156f5ef85fb	A	lift: ld_structured_feedback: opcode N is not lifted
 9d0193e32b0caf332ed466c7a5ed8bd59fe22b91ec45289fda13e156f5ef85fb	IR	lift: ld_structured_feedback: opcode N is not lifted to the IR yet
 9d0193e32b0caf332ed466c7a5ed8bd59fe22b91ec45289fda13e156f5ef85fb	IR WGSL	not reached
-9d078568119baebfea0521e244385dd21fb66275a16c437a7692bce4f7ff4788	A	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 9d078568119baebfea0521e244385dd21fb66275a16c437a7692bce4f7ff4788	IR	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 9d078568119baebfea0521e244385dd21fb66275a16c437a7692bce4f7ff4788	IR WGSL	not reached
-9d0bd44fe66ebee853d28f7b7d1e25579af08079b00b6a4d89c2c95c02adae54	A	lift: gatherN_feedback: opcode N is not lifted
 9d0bd44fe66ebee853d28f7b7d1e25579af08079b00b6a4d89c2c95c02adae54	IR	lift: gatherN_feedback: opcode N is not lifted to the IR yet
 9d0bd44fe66ebee853d28f7b7d1e25579af08079b00b6a4d89c2c95c02adae54	IR WGSL	not reached
 9d59749e1c72424b0b83b7a2eb5fa0adeca813fc7ee270bea17e408ac5afa3af	IR WGSL	lower: a Geometry program is not lowered yet
-9dd744f19b94865785e2efcd67c040dee9ae85a9105263ce7df61f45dc179850	A	lift: dcl_index_range of operand register type InputControlPoint: only inputs and outputs are lifted
 9dd744f19b94865785e2efcd67c040dee9ae85a9105263ce7df61f45dc179850	IR	lift: dcl_index_range of operand register type InputControlPoint: only inputs and outputs are lifted
 9dd744f19b94865785e2efcd67c040dee9ae85a9105263ce7df61f45dc179850	IR WGSL	not reached
 9dda2e1a9288e2d4f449dd3b92bfa3a1cf194c2233975967bd85fbd51bce739d	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 9e0cc8e25292d46b112106e881e8c59e189afe19273215ab3c207139816a8b51	IR WGSL	lower: a Geometry program is not lowered yet
-9f7dd227298909a3938803daad0c95fbf1c9021f71f209e584492ff76aa4cb06	A	lift: ld_uav_typed_feedback: opcode N is not lifted
 9f7dd227298909a3938803daad0c95fbf1c9021f71f209e584492ff76aa4cb06	IR	lift: ld_uav_typed_feedback: opcode N is not lifted to the IR yet
 9f7dd227298909a3938803daad0c95fbf1c9021f71f209e584492ff76aa4cb06	IR WGSL	not reached
-9f8a506ba4d40af4591b92b5fcf910662fd65c294c75ff84ad8d37291ed90879	A	lift: eval_sample_index: opcode N is not lifted
 9f8a506ba4d40af4591b92b5fcf910662fd65c294c75ff84ad8d37291ed90879	IR	lift: eval_sample_index: opcode N is not lifted to the IR yet
 9f8a506ba4d40af4591b92b5fcf910662fd65c294c75ff84ad8d37291ed90879	IR WGSL	not reached
-9fb57ef98a5b86e42d8fb5e7d41c4d8f29f6ff679733e2a59196d8dedfec9369	A	lift: imm_atomic_umax on memory whose atomics are signed
-a02547e1dae4d1abe1fef243b384bb8105a6b6d09f91af24b60b8f75f94efa88	A	lift: msad: opcode N is not lifted
 a02547e1dae4d1abe1fef243b384bb8105a6b6d09f91af24b60b8f75f94efa88	IR	lift: msad: opcode N is not lifted to the IR yet
 a02547e1dae4d1abe1fef243b384bb8105a6b6d09f91af24b60b8f75f94efa88	IR WGSL	not reached
 a06ebcac2d023c0bcb366a875ae99603648f84b3137cba1794784d58bc5a9ba3	IR WGSL	lower: a Hull program is not lowered yet
 a0b9ec670f8c7beb531050a46fbfafe91c200cf4b23b52d0196ec0f5b9216cb5	IR WGSL	lower: a Geometry program is not lowered yet
-a105c31da1949938b53fe828410fbcff2d71379c455c1b1bad3b0c235c3ec9a2	A	lift: double precision is enabled (global flag): doubles are not lifted
-a1219d5263687348df4dc96d246c835f615175564c5942664fd207b168a0decc	A	lift: dcl_index_range of operand register type InputControlPoint: only inputs and outputs are lifted
 a1219d5263687348df4dc96d246c835f615175564c5942664fd207b168a0decc	IR	lift: dcl_index_range of operand register type InputControlPoint: only inputs and outputs are lifted
 a1219d5263687348df4dc96d246c835f615175564c5942664fd207b168a0decc	IR WGSL	not reached
-a1fa1f317de66b3129c7866fac2a6321e7c96c167ca89f2fe5ed0eaee102f015	A	lift: bufinfo: opcode N is not lifted
 a1fa1f317de66b3129c7866fac2a6321e7c96c167ca89f2fe5ed0eaee102f015	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 a1fa1f317de66b3129c7866fac2a6321e7c96c167ca89f2fe5ed0eaee102f015	IR WGSL	not reached
 a233f0c3685d6404fe1bb9d32b24f766b2483d4e13e77c3f0a78370c5094a6f5	IR WGSL	lower: a Domain program is not lowered yet
-a27b668eef5c94ea3695b10943282a7f870743f1e72a4311a188d928e36234d4	A	lift: ld_raw_feedback: opcode N is not lifted
 a27b668eef5c94ea3695b10943282a7f870743f1e72a4311a188d928e36234d4	IR	lift: ld_raw_feedback: opcode N is not lifted to the IR yet
 a27b668eef5c94ea3695b10943282a7f870743f1e72a4311a188d928e36234d4	IR WGSL	not reached
 a34a2cd1a028216853d1c6c98b3ebd1307287075d1982a59efdff96bb42daad1	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-a3dc92150d77e4a2907b852035ed4d56be3948a13c07cbc304df6d60e91772df	A	lift: ld_structured_feedback: opcode N is not lifted
 a3dc92150d77e4a2907b852035ed4d56be3948a13c07cbc304df6d60e91772df	IR	lift: ld_structured_feedback: opcode N is not lifted to the IR yet
 a3dc92150d77e4a2907b852035ed4d56be3948a13c07cbc304df6d60e91772df	IR WGSL	not reached
 a3dfe1428d3422d00d072e45dea4c5fcca897543083329669c235e87d59334d0	IR WGSL	lower: a Geometry program is not lowered yet
-a42f7db7e25f69d5e7bdba8ee6a9be8ad799223f25c1eb11813d253fb0159e67	A	lift: gatherN_po: opcode N is not lifted
 a42f7db7e25f69d5e7bdba8ee6a9be8ad799223f25c1eb11813d253fb0159e67	IR	lift: gatherN_po: opcode N is not lifted to the IR yet
 a42f7db7e25f69d5e7bdba8ee6a9be8ad799223f25c1eb11813d253fb0159e67	IR WGSL	not reached
 a43b4dfb7e004b9adb486effa63aac7941600015c8a18df5052de9c8a781fe5c	IR WGSL	lower: a Hull program is not lowered yet
 a4695615ae2a82884341a3b7ae3937aa5f1ff5534587098631d6b8b5b95eb89e	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-a4d13a31c27719f8a7eaedd3b2279a826b9205742ec75e5529f9c3202fcc588a	A	validate: module: Entry point main at Compute is invalid: Expression [N] is invalid: Sample level (exact) type [N] has an invalid type
 a56e04e41b4c176a674e409fd6f1b50956cd6cfda5a4b6b4184e66e21f224568	IR WGSL	lower: a Hull program is not lowered yet
 a5c936d5a20fd98dd433064ee387417e29f416e37f1c07781ce6a889912d188f	IR WGSL	lower: a Domain program is not lowered yet
 a5d5dbd176ac325225c1c8cc0eef0363da1cfae2b6c34ca6a805ce1c5ad9683e	IR WGSL	lower: a Domain program is not lowered yet
 a61d942a70b908ca2cde06a340ddab322dac4eb38af886e56e35e26d99f0d206	IR WGSL	lower: a Hull program is not lowered yet
-a63d1a50040226055fe0951a59abbed94360fad8402e51b849766d3310b50e12	A	lift: double precision is enabled (global flag): doubles are not lifted
 a6b2b6aaaeb3b3b8c7784ddd104fe8afd4623eae7798eeb35d89ee9ba5830a35	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-a7ab1feeaf1823b44fbd868aa0077689afe71d3a89ceb02750ea7ec81d539ef8	A	lift: double precision is enabled (global flag): doubles are not lifted
-a7b135dc29665c1008442ddf93823aad137e34a9e1a5295f001f5723ac785555	A	lift: double precision is enabled (global flag): doubles are not lifted
 a7cd8224b888ef99c6a35f12129ee0372f57a2dae28cf1cd99bbce5cbd220777	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-a7fa330d52f1d98b6c51ea5966710262b562711c28863ff25b64e3bf7424f7ec	A	lift: a geometry program's output to a stream other than N is not lifted
 a7fa330d52f1d98b6c51ea5966710262b562711c28863ff25b64e3bf7424f7ec	IR	lift: a geometry program's output to a stream other than N is not lifted
 a7fa330d52f1d98b6c51ea5966710262b562711c28863ff25b64e3bf7424f7ec	IR WGSL	not reached
-a8113ecfc0765b76b96c6639afc1478fcd954c982cc2cc72ee0e87c55cf98da7	A	WGSL read back: error: no definition in scope for identifier: `texture_multisampled_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: texture_multisampled_Nd_array<fN>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
 a8113ecfc0765b76b96c6639afc1478fcd954c982cc2cc72ee0e87c55cf98da7	IR WGSL	lower: a multisampled array texture has no WGSL form
 a83a029ab9b76c61e1dc9d25cef0500537b7f9d8c77b5436fcce6f50c5b8bbfd	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 a865ae75a9e9aba7c0ae1c0fdb02adc75f1543f0c8cd2115f36fc1c99774e0a3	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-a8edc00586d75ab33600922b1009044a58f8d7bd4623e56a4a13fdefa87657ca	A	lift: dcl_index_range of an operand of N indices, where it has N
 a8edc00586d75ab33600922b1009044a58f8d7bd4623e56a4a13fdefa87657ca	IR	lift: dcl_index_range of an operand of N indices, where it has N
 a8edc00586d75ab33600922b1009044a58f8d7bd4623e56a4a13fdefa87657ca	IR WGSL	not reached
-a90a381a85788c5275b5e16fa41e01b7c4ae04efbb198e79854c0e741fc79d67	A	lift: double precision is enabled (global flag): doubles are not lifted
-a92390ccf6af1d297d5b8b25edbcdd39cbd70e51eaa533a4343ca75a3a24574c	A	lift: bufinfo: opcode N is not lifted
 a92390ccf6af1d297d5b8b25edbcdd39cbd70e51eaa533a4343ca75a3a24574c	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 a92390ccf6af1d297d5b8b25edbcdd39cbd70e51eaa533a4343ca75a3a24574c	IR WGSL	not reached
-aa38d613f8612861ab73062de83ce9ea88c7f6a2a9304ed78e7c7826b3e87469	A	lift: bufinfo: opcode N is not lifted
 aa38d613f8612861ab73062de83ce9ea88c7f6a2a9304ed78e7c7826b3e87469	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 aa38d613f8612861ab73062de83ce9ea88c7f6a2a9304ed78e7c7826b3e87469	IR WGSL	not reached
-aa9631ca763af7884d296d6a48af96f26fd4d638a5407ac783058f2fb79d50cc	A	lift: double precision is enabled (global flag): doubles are not lifted
 aad145483bd84306f54c380754bd99cdd8f6006d581f43437fc52cd69692ae64	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-aada43fc1776cb84160219ff550f46122dc13d4e456b308c870538fd8b0e3c63	A	lift: a reversed register range
 aada43fc1776cb84160219ff550f46122dc13d4e456b308c870538fd8b0e3c63	IR	lift: a reversed register range
 aada43fc1776cb84160219ff550f46122dc13d4e456b308c870538fd8b0e3c63	IR WGSL	not reached
-ab463d152836251c341789ae2ec38f0ea3eb4c4c4098b5c60b9e011589cd5b8b	A	lift: sample_info: the sample count of the rasterizer is the pipeline's, not the program's
 ab463d152836251c341789ae2ec38f0ea3eb4c4c4098b5c60b9e011589cd5b8b	IR	lift: sample_info: the sample count of the rasterizer is the pipeline's, not the program's
 ab463d152836251c341789ae2ec38f0ea3eb4c4c4098b5c60b9e011589cd5b8b	IR WGSL	not reached
-ab581de4efcf45ea9088a90db8a2b907949d7a82cc48a2d0afbaa4c0c852f137	A	WGSL read back: error: no definition in scope for identifier: `texture_multisampled_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: texture_multisampled_Nd_array<fN>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
 ab581de4efcf45ea9088a90db8a2b907949d7a82cc48a2d0afbaa4c0c852f137	IR WGSL	lower: a multisampled array texture has no WGSL form
 abb53799703f051ca53755dbd4ca12ff41cc35941832b901b1c2b1a0bcdc3393	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-abc423ff68a24abdcc84b2e220fbebd8702da2606a2cb008c14c22ff17be2a07	A	WGSL read back: error: no definition in scope for identifier: `texture_multisampled_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: texture_multisampled_Nd_array<fN>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
 abc423ff68a24abdcc84b2e220fbebd8702da2606a2cb008c14c22ff17be2a07	IR WGSL	lower: a multisampled array texture has no WGSL form
-ac06066379efc25f5de0b3a31ac61a497181ec98ab128455af391986e35f9146	A	lift: bufinfo: opcode N is not lifted
 ac06066379efc25f5de0b3a31ac61a497181ec98ab128455af391986e35f9146	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 ac06066379efc25f5de0b3a31ac61a497181ec98ab128455af391986e35f9146	IR WGSL	not reached
-acb3eef2ebc7f970ff45e0ccb396bd8d52893443fbfc3e9f5f83a9a132ad4672	A	lift: sample_clamp_feedback: opcode N is not lifted
 acb3eef2ebc7f970ff45e0ccb396bd8d52893443fbfc3e9f5f83a9a132ad4672	IR	lift: sample_clamp_feedback: opcode N is not lifted to the IR yet
 acb3eef2ebc7f970ff45e0ccb396bd8d52893443fbfc3e9f5f83a9a132ad4672	IR WGSL	not reached
 acbf9f05e356bf0fd5e891936349a28013534a7ea4f9a156f84dbfe23672c6b4	IR WGSL	lower: a Domain program is not lowered yet
-ad1445408ec4c5dd6f0cccfd9306999b8242e0ebd7fb12aa91b5401c943592e6	A	lift: gatherN_po: opcode N is not lifted
 ad1445408ec4c5dd6f0cccfd9306999b8242e0ebd7fb12aa91b5401c943592e6	IR	lift: gatherN_po: opcode N is not lifted to the IR yet
 ad1445408ec4c5dd6f0cccfd9306999b8242e0ebd7fb12aa91b5401c943592e6	IR WGSL	not reached
-ad397ac9425d7526ecb6b178eb773b2e7292b7d14a2cb47ad190a5f1474b91bb	A	lift: reflected declaration (ShaderResource, N) is not declared
 ad397ac9425d7526ecb6b178eb773b2e7292b7d14a2cb47ad190a5f1474b91bb	IR	lift: reflected declaration (ShaderResource, N) is not declared
 ad397ac9425d7526ecb6b178eb773b2e7292b7d14a2cb47ad190a5f1474b91bb	IR WGSL	not reached
-ad67014127fe5f92c9e6cc42d84fbb908249721b28a1f302325d10deab4ad364	A	lift: bufinfo: opcode N is not lifted
 ad67014127fe5f92c9e6cc42d84fbb908249721b28a1f302325d10deab4ad364	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 ad67014127fe5f92c9e6cc42d84fbb908249721b28a1f302325d10deab4ad364	IR WGSL	not reached
 ae213de53ef6b813e5e5b49116a157947498fbeda9a3b808ecb25df862a72aa0	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 af2bf60837950ad0263af5bd888ea7d65e2ae6e4da0aed2444f7799e6cc002fd	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-b04f216ff62f003186a5c7dce0bf2111cf660a30fccc20087d93eb063d4a45d1	A	lift: eval_sample_index: opcode N is not lifted
 b04f216ff62f003186a5c7dce0bf2111cf660a30fccc20087d93eb063d4a45d1	IR	lift: eval_sample_index: opcode N is not lifted to the IR yet
 b04f216ff62f003186a5c7dce0bf2111cf660a30fccc20087d93eb063d4a45d1	IR WGSL	not reached
 b08c941d6342da46350b46c19609fd7d4c60539f3b66bbbf4b65e7254117b305	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-b1fec1df737ece22f5704510941607797fb29bd5afab85d68fe1a94f2c389437	A	WGSL read back: error: no definition in scope for identifier: `texture_storage_Nd_array`   ┌─ wgsl:N:N   │ N │ var uN_: texture_storage_Nd_array<rgbaNfloat,read>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
 b1fec1df737ece22f5704510941607797fb29bd5afab85d68fe1a94f2c389437	IR WGSL	lower: a ND array storage image has no WGSL form
-b263a2f7d3e0a3424e6a3e6f52ccfeb752a6bad9e81172e43128540001a6d054	A	lift: bufinfo: opcode N is not lifted
 b263a2f7d3e0a3424e6a3e6f52ccfeb752a6bad9e81172e43128540001a6d054	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 b263a2f7d3e0a3424e6a3e6f52ccfeb752a6bad9e81172e43128540001a6d054	IR WGSL	not reached
-b264d29b870e8db68d74ccf18eedf1f3350df736f35c8976db778f1878a241af	A	lift: dcl_index_range of an operand of N indices, where it has N
 b264d29b870e8db68d74ccf18eedf1f3350df736f35c8976db778f1878a241af	IR	lift: dcl_index_range of an operand of N indices, where it has N
 b264d29b870e8db68d74ccf18eedf1f3350df736f35c8976db778f1878a241af	IR WGSL	not reached
-b333c99fd4f3d44a5c34112530b3bee31ea2b6b78f0e789321b08bf5f20b44b7	A	lift: double precision is enabled (global flag): doubles are not lifted
-b4b3a9d9d3da5ff59cfb9b79c3fcc00c30ca23c44be960176ac06991888d303b	A	lift: msad: opcode N is not lifted
 b4b3a9d9d3da5ff59cfb9b79c3fcc00c30ca23c44be960176ac06991888d303b	IR	lift: msad: opcode N is not lifted to the IR yet
 b4b3a9d9d3da5ff59cfb9b79c3fcc00c30ca23c44be960176ac06991888d303b	IR WGSL	not reached
 b4f3c419f761a5f482c96be8c1a9c4a433d2d1d108aebff931dd6ce77fd04c0c	IR WGSL	lower: a Hull program is not lowered yet
 b51d354404e9fd7052204143d2956145e4c1594d0a20699dd1789a16ecdaa64c	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-b585d46f11a3937a52d405bccac3082c682b9c344fba320e94c29d7947b6df15	A	lift: eval_snapped: opcode N is not lifted
 b585d46f11a3937a52d405bccac3082c682b9c344fba320e94c29d7947b6df15	IR	lift: eval_snapped: opcode N is not lifted to the IR yet
 b585d46f11a3937a52d405bccac3082c682b9c344fba320e94c29d7947b6df15	IR WGSL	not reached
-b5c8032c1d1b6c530fbb23d284a584f153f42094120cae5865bd306b3b4cf8a5	A	lift: ld_feedback: opcode N is not lifted
 b5c8032c1d1b6c530fbb23d284a584f153f42094120cae5865bd306b3b4cf8a5	IR	lift: ld_feedback: opcode N is not lifted to the IR yet
 b5c8032c1d1b6c530fbb23d284a584f153f42094120cae5865bd306b3b4cf8a5	IR WGSL	not reached
-b5e771c3b86158aecd7f4680f87c00bb14c6e3107d480fd626de1fab21600360	A	lift: reflection: DXBC at word N: bufN: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 b5e771c3b86158aecd7f4680f87c00bb14c6e3107d480fd626de1fab21600360	IR	lift: reflection: DXBC at word N: bufN: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 b5e771c3b86158aecd7f4680f87c00bb14c6e3107d480fd626de1fab21600360	IR WGSL	not reached
 b60687ea7d80d8e5c30993af555915ded79e1d601d6c76d22cfd9725fae539ea	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-b6ab04e870897cac220a874d9607a691cb511760a10b37d49857b2da8481b723	A	lift: ld_feedback: opcode N is not lifted
 b6ab04e870897cac220a874d9607a691cb511760a10b37d49857b2da8481b723	IR	lift: ld_feedback: opcode N is not lifted to the IR yet
 b6ab04e870897cac220a874d9607a691cb511760a10b37d49857b2da8481b723	IR WGSL	not reached
-b70f2c9e3cbb4392554b0e9764e00a6272a04ab148e83b409ae856413600754f	A	lift: gatherN_c: a gather of lane N of a depth texture
 b70f2c9e3cbb4392554b0e9764e00a6272a04ab148e83b409ae856413600754f	IR WGSL	lower: a gather of lane N of a depth texture
-b845bc0eb01fb40ddbf83e82613d25daf5bcb12a71fbcd66d265713505e0c985	A	WGSL read back: error: no definition in scope for identifier: `texture_Nd_array`    ┌─ wgsl:N:N    │ N │ var tN_: texture_Nd_array<fN>;    │          ^^^^^^^^^^^^^^^^ unknown identifier  
 b845bc0eb01fb40ddbf83e82613d25daf5bcb12a71fbcd66d265713505e0c985	IR WGSL	lower: a ND array texture has no WGSL form
-b8aa24011e796622a71759420d2aececaf8155a0c9be64841a40ea0c913c9601	A	WGSL read back: error: no definition in scope for identifier: `texture_multisampled_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: texture_multisampled_Nd_array<fN>;   │          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
 b8aa24011e796622a71759420d2aececaf8155a0c9be64841a40ea0c913c9601	IR WGSL	lower: a multisampled array texture has no WGSL form
 ba2109e9101dafdee2ad4f404a7aba4b77e9d8c249ac2a8999dd38ebb6a50f7f	IR WGSL	lower: a Hull program is not lowered yet
-ba6325015834a3e5eb84553c01711b9fd42df28c2101f4e730351fc5cab8b262	A	lift: double precision is enabled (global flag): doubles are not lifted
 ba65413f9629317bb089e377f4f6b36c10e95c2aee81893b7d4de68a024776d5	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-ba6c4774f37d34def6b2aa8f91c22b32adee1a31d6bbcc620e9f4c6d86958822	A	lift: a declared input of register type InnerCoverage
 ba6c4774f37d34def6b2aa8f91c22b32adee1a31d6bbcc620e9f4c6d86958822	IR	lift: a declared input of register type InnerCoverage
 ba6c4774f37d34def6b2aa8f91c22b32adee1a31d6bbcc620e9f4c6d86958822	IR WGSL	not reached
 ba8af28edd39f40c8086a68a13ccac26c41b4f1deab46f85ea3f02a1d787a87a	IR WGSL	lower: a Geometry program is not lowered yet
-bb14dc1c00bfe4cd486c3a4a996e5a2557dc47c12b82474881e0aa7c99a08921	A	lift: double precision is enabled (global flag): doubles are not lifted
-bbdc3ec3c1b9c17a1c21c0e8f4d3c2de5fb3850e1a0ebda87181b477a063d102	A	lift: a declared input of register type OutputControlPoint
 bbdc3ec3c1b9c17a1c21c0e8f4d3c2de5fb3850e1a0ebda87181b477a063d102	IR	lift: a declared input of register type OutputControlPoint
 bbdc3ec3c1b9c17a1c21c0e8f4d3c2de5fb3850e1a0ebda87181b477a063d102	IR WGSL	not reached
 bc4c0757184223ff8f49c52b78d0bf92dae08f013a59b1ae68b89877539b7f62	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 bc9062085c0de0d20e057b49b2a157d569e7ff3d9a602b51496a68743f24efd0	IR WGSL	lower: a Domain program is not lowered yet
-bccff626ad63502d65142514ebab2b5eb9fe3314982c1e10306a5157d78bc967	A	WGSL read back: error: Float literal is NaN    ┌─ wgsl:N:N    │ N │     rN_.x = bitcast<uN>(inverseSqrt(-Nf));    │                          ^^^^^^^^^^^ see msg  
-bd750ab987c71659930e45ab10643f6b17d053205fac077622a9915a14524198	A	lift: dcl_gs_output_primitive_topology: N is not mapped
 bd750ab987c71659930e45ab10643f6b17d053205fac077622a9915a14524198	IR	lift: dcl_gs_output_primitive_topology: N is not mapped
 bd750ab987c71659930e45ab10643f6b17d053205fac077622a9915a14524198	IR WGSL	not reached
 bea12d9f6f54f3d2e594da29d6b2752e9aa117ca97d4b90a202b0d03d49586c3	IR WGSL	lower: a Domain program is not lowered yet
 bed89226820d8d09235266b06282c379945ee96f81181a80247f8ab61886d021	IR WGSL	lower: a Geometry program is not lowered yet
-bfbe15646b1613eea5eb4db8261347b20a453feec8c7af809e76f5549a10826e	A	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 bfbe15646b1613eea5eb4db8261347b20a453feec8c7af809e76f5549a10826e	IR	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 bfbe15646b1613eea5eb4db8261347b20a453feec8c7af809e76f5549a10826e	IR WGSL	not reached
-c001082cfd8055e0f6fd5a107cf17e8bc3f7e9ae1b1243918ab3404ac507df7a	A	lift: SV_StencilRefN: StencilRef as a Pixel output has no built-in binding
 c001082cfd8055e0f6fd5a107cf17e8bc3f7e9ae1b1243918ab3404ac507df7a	IR	lift: SV_StencilRefN: StencilRef as a Pixel output has no built-in binding
 c001082cfd8055e0f6fd5a107cf17e8bc3f7e9ae1b1243918ab3404ac507df7a	IR WGSL	not reached
 c1495a2db68fec0ee2aca5a7fb15a046706d08c764534ce5e0745c7de26d78eb	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-c28754174cbc052daba30e4fad778182e76f6f7c01efc96e4041ac2e2556c3c7	A	lift: ret: a return inside the control flow of a hull phase
 c28754174cbc052daba30e4fad778182e76f6f7c01efc96e4041ac2e2556c3c7	IR WGSL	lower: a Hull program is not lowered yet
-c39d91fc10215d4622170c20e832c8bbb5ed52b8e6bef72ade03ce5407410230	A	lift: ld_uav_typed_feedback: opcode N is not lifted
 c39d91fc10215d4622170c20e832c8bbb5ed52b8e6bef72ade03ce5407410230	IR	lift: ld_uav_typed_feedback: opcode N is not lifted to the IR yet
 c39d91fc10215d4622170c20e832c8bbb5ed52b8e6bef72ade03ce5407410230	IR WGSL	not reached
-c3e10625289a364f4397f06fd61b7cb1f5adff14399af6287181df3192c6b75b	A	lift: eval_snapped: opcode N is not lifted
 c3e10625289a364f4397f06fd61b7cb1f5adff14399af6287181df3192c6b75b	IR	lift: eval_snapped: opcode N is not lifted to the IR yet
 c3e10625289a364f4397f06fd61b7cb1f5adff14399af6287181df3192c6b75b	IR WGSL	not reached
 c440427a45fa186c5e9d455e69f53c410164e9c1772ea3d85da6a7d5899fd3da	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-c5a3f5eef9cd7d92307a20edeffd2b9e7e530154118d709370b47ad77b419c7b	A	lift: gatherN_c_feedback: opcode N is not lifted
 c5a3f5eef9cd7d92307a20edeffd2b9e7e530154118d709370b47ad77b419c7b	IR	lift: gatherN_c_feedback: opcode N is not lifted to the IR yet
 c5a3f5eef9cd7d92307a20edeffd2b9e7e530154118d709370b47ad77b419c7b	IR WGSL	not reached
-c69b9d4527f2142ca14602cae4812c73f7707491490cc35187d61a71f2804d70	A	lift: a declared input of register type OutputControlPoint
 c69b9d4527f2142ca14602cae4812c73f7707491490cc35187d61a71f2804d70	IR	lift: a declared input of register type OutputControlPoint
 c69b9d4527f2142ca14602cae4812c73f7707491490cc35187d61a71f2804d70	IR WGSL	not reached
-c83ebaa37f0953ef47b67961e4091e4d7c74b7ae3992c79c49b3fabfd3c9d68a	A	lift: SV_ClipDistanceN: clip distances as a Pixel input have no built-in binding
 c83ebaa37f0953ef47b67961e4091e4d7c74b7ae3992c79c49b3fabfd3c9d68a	IR	lift: SV_ClipDistanceN: clip distances as a Pixel input have no built-in binding
 c83ebaa37f0953ef47b67961e4091e4d7c74b7ae3992c79c49b3fabfd3c9d68a	IR WGSL	not reached
-c8f0d8503fb88e9fc1fa5e2aeba92e6f19521b0773cff833755f342206df9345	A	lift: gatherN_po: opcode N is not lifted
 c8f0d8503fb88e9fc1fa5e2aeba92e6f19521b0773cff833755f342206df9345	IR	lift: gatherN_po: opcode N is not lifted to the IR yet
 c8f0d8503fb88e9fc1fa5e2aeba92e6f19521b0773cff833755f342206df9345	IR WGSL	not reached
 c951971f8e54ba2ecfb76f16d631bff20004e0182132f16d4c2c390876b1bba5	IR WGSL	lower: a Domain program is not lowered yet
 c971d278a32df2768ac4408346adf32993c98487eb584b079dede0154e10af1d	IR WGSL	lower: a Domain program is not lowered yet
-c9d97500904f73f61e0d0ae613645bef865c1a0c0eeb09b5c3fe92d1e721dc48	A	lift: bufinfo: opcode N is not lifted
 c9d97500904f73f61e0d0ae613645bef865c1a0c0eeb09b5c3fe92d1e721dc48	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 c9d97500904f73f61e0d0ae613645bef865c1a0c0eeb09b5c3fe92d1e721dc48	IR WGSL	not reached
-ca2a2a1828ee3c718dd9021a5163ff017315db5a8e38952fd0314547e3d46982	A	lift: dcl_index_range of operand register type InputControlPoint: only inputs and outputs are lifted
 ca2a2a1828ee3c718dd9021a5163ff017315db5a8e38952fd0314547e3d46982	IR	lift: dcl_index_range of operand register type InputControlPoint: only inputs and outputs are lifted
 ca2a2a1828ee3c718dd9021a5163ff017315db5a8e38952fd0314547e3d46982	IR WGSL	not reached
-ca903b074289cdadc1a1633b58e7804748be57aa5e25e3fe2e8ca5e9f04518d9	A	lift: imm_atomic_alloc: append and consume buffer counters are not lifted
 cb30acd08dc312e05777e8c0d6655be7a8077aebd28b8ebb286c388a9716b03f	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 cb3abaf0668d32f636439a2425d5d550f6661e74997c1ed4d3059f3702ad3957	IR WGSL	lower: a Domain program is not lowered yet
-cc3db893b41e8644a1c725e864293bd3cc32b4d335154c3f21011f086a3d6fad	A	lift: bufinfo: opcode N is not lifted
 cc3db893b41e8644a1c725e864293bd3cc32b4d335154c3f21011f086a3d6fad	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 cc3db893b41e8644a1c725e864293bd3cc32b4d335154c3f21011f086a3d6fad	IR WGSL	not reached
 cc64d8dd3282e8d8e70a8565869c45ae05a0563c0fe17338c2c575356626efa9	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-cd0787962ee7523d6b00f233db51ae430801bc63bddebb65fd3038b992eeac86	A	WGSL: wgsl cannot write this program: Unsupported texture atomic result (WGSL's texture atomics return nothing): [N]
 cd0787962ee7523d6b00f233db51ae430801bc63bddebb65fd3038b992eeac86	IR WGSL	lower: a texel atomic whose old value is read, or a compare-exchange of a texel, has no naga form: naga's image atomic gives no old value and takes no comparand
-cd7de107fd2f93e6315bff6bb3572cdf8c1961fe0015aca5ce336921a0a24e2a	A	lift: sample_b_clamp_feedback: opcode N is not lifted
 cd7de107fd2f93e6315bff6bb3572cdf8c1961fe0015aca5ce336921a0a24e2a	IR	lift: sample_b_clamp_feedback: opcode N is not lifted to the IR yet
 cd7de107fd2f93e6315bff6bb3572cdf8c1961fe0015aca5ce336921a0a24e2a	IR WGSL	not reached
 cd980e30e663067c10e720947b7c098f9817bfa6b6e575dcaccc629676bef7d8	IR WGSL	lower: a Domain program is not lowered yet
 ce0142013af6521fb0f5717f6fcba3dc6bf1a21b5cfe94f3c2ecbe2f3c542d99	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-ce0191721622bce665aed020b83d1b02481c30c15549d231f6062c53054bf8c4	A	lift: reflection: DXBC at word N: WorkQueue: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 ce0191721622bce665aed020b83d1b02481c30c15549d231f6062c53054bf8c4	IR	lift: reflection: DXBC at word N: WorkQueue: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 ce0191721622bce665aed020b83d1b02481c30c15549d231f6062c53054bf8c4	IR WGSL	not reached
-ce6b3392ce705e466f316f55918f2bacaa03bd32b0d3c59fea8fe77b9f26844c	A	lift: gatherN_c: a gather of lane N of a depth texture
 ce6b3392ce705e466f316f55918f2bacaa03bd32b0d3c59fea8fe77b9f26844c	IR WGSL	lower: a gather of lane N of a depth texture
 ce6def489d491d8ddacfe09d753a00553499ac2b4d43da3bd8ab87d61747a3ef	IR WGSL	lower: a Geometry program is not lowered yet
 cebe9fc4877f9b795738c81106d607b492036e20162ebc1168612f44973f8970	IR WGSL	lower: a Domain program is not lowered yet
 cf659d02f145550a4d3b416a8f82a099fe14bd228b7e34e57663c4de2bd7878e	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 cf6d090afa07135e3fdbf1631bfe7e3d9bc7be85471787abfa2b102ac38cd4fb	IR WGSL	lower: a Domain program is not lowered yet
-cf8f8887de7bd1b93c64642e18138c95653f1345fea906eb611e25564eceb2a5	A	lift: lod: opcode N is not lifted
 cf8f8887de7bd1b93c64642e18138c95653f1345fea906eb611e25564eceb2a5	IR	lift: lod: opcode N is not lifted to the IR yet
 cf8f8887de7bd1b93c64642e18138c95653f1345fea906eb611e25564eceb2a5	IR WGSL	not reached
 d0b44f331b564a97c12c8ffb8b51569494ae82cf345b22a80b069947e46feee9	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-d0fa1594a569f3403bcacd8fe9119df777826860fefba22012e6a72372d507b1	A	WGSL: wgsl cannot write this program: Unsupported texture atomic result (WGSL's texture atomics return nothing): [N]
 d0fa1594a569f3403bcacd8fe9119df777826860fefba22012e6a72372d507b1	IR WGSL	lower: a texel atomic whose old value is read, or a compare-exchange of a texel, has no naga form: naga's image atomic gives no old value and takes no comparand
 d12dcc1a3e9f03d7f35fa9153a880a78aebc6a38e4222c5f4d381e70f5ec7a34	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-d1ba669673d202fafe40f532343466d11e41e0b67bda8511dc2dddb96acf1436	A	lift: gatherN_c: a gather of lane N of a depth texture
 d1ba669673d202fafe40f532343466d11e41e0b67bda8511dc2dddb96acf1436	IR WGSL	lower: a gather of lane N of a depth texture
-d245d9cef1700c2951c00e1fed393e61ef2edd04faf7f087bcb121f4f39e81ee	A	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 d245d9cef1700c2951c00e1fed393e61ef2edd04faf7f087bcb121f4f39e81ee	IR	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 d245d9cef1700c2951c00e1fed393e61ef2edd04faf7f087bcb121f4f39e81ee	IR WGSL	not reached
 d26b1cc75447e98197aa7f2fb2c2e46f7c93ca725ffda82aa03d14ab6a80c079	IR WGSL	lower: a Geometry program is not lowered yet
 d2854dc19b254c57949e96081b0c9cff7aa6bd67c8eed6da05e751b01ff5a106	IR WGSL	lower: a Geometry program is not lowered yet
-d2d4198ca478b32453461cddda99f9b50487adbf8585bf90478fed374389884d	A	WGSL: wgsl cannot write this program: Unsupported texture atomic result (WGSL's texture atomics return nothing): [N]
 d2d4198ca478b32453461cddda99f9b50487adbf8585bf90478fed374389884d	IR WGSL	lower: a texel atomic whose old value is read, or a compare-exchange of a texel, has no naga form: naga's image atomic gives no old value and takes no comparand
 d2fb5e21dd942c7c56bb7f718de33d6b120402bbfd0261b97dd4d592ff7b8a7e	IR WGSL	lower: a Hull program is not lowered yet
-d37b1ec3503a441a0017e07891d291aee3de8b10b354874e256b5e4e9d42c2b5	A	lift: gatherN_po: opcode N is not lifted
 d37b1ec3503a441a0017e07891d291aee3de8b10b354874e256b5e4e9d42c2b5	IR	lift: gatherN_po: opcode N is not lifted to the IR yet
 d37b1ec3503a441a0017e07891d291aee3de8b10b354874e256b5e4e9d42c2b5	IR WGSL	not reached
-d4052cc922c5a4994960386c735480d9a14c06b035f371b2b6e5f9c609b4d062	A	lift: dcl_index_range of operand register type InputControlPoint: only inputs and outputs are lifted
 d4052cc922c5a4994960386c735480d9a14c06b035f371b2b6e5f9c609b4d062	IR	lift: dcl_index_range of operand register type InputControlPoint: only inputs and outputs are lifted
 d4052cc922c5a4994960386c735480d9a14c06b035f371b2b6e5f9c609b4d062	IR WGSL	not reached
 d4e77ac8c0b758533f6ea08bbe0428ac3c96a2e688776e602dc4a7b78ea2005b	IR WGSL	lower: a Hull program is not lowered yet
 d4ec161ae66158017ab59f9b99681b9afda465a4e8caa148692390a9a276dd1f	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-d53a5b25be19be6b18bbd9a5c550b810067b5ee7075874acbf46d02f98a85055	A	lift: sample_clamp_feedback: opcode N is not lifted
 d53a5b25be19be6b18bbd9a5c550b810067b5ee7075874acbf46d02f98a85055	IR	lift: sample_clamp_feedback: opcode N is not lifted to the IR yet
 d53a5b25be19be6b18bbd9a5c550b810067b5ee7075874acbf46d02f98a85055	IR WGSL	not reached
-d55fe63ef32d3eb73ed0be15c3067c96c5a815a9c9ecf69b10448f21400b779b	A	lift: reflection: DXBC at word N: tbufN: a tbuffer without its layout
 d55fe63ef32d3eb73ed0be15c3067c96c5a815a9c9ecf69b10448f21400b779b	IR	lift: reflection: DXBC at word N: tbufN: a tbuffer without its layout
 d55fe63ef32d3eb73ed0be15c3067c96c5a815a9c9ecf69b10448f21400b779b	IR WGSL	not reached
-d5640a36183c7b8e373d0c4919b5bb58517bdf2a312d519649911021e8b0f64a	A	validate: module: Entry point main at Compute is invalid: Expression [N] is invalid: Sample level (exact) type [N] has an invalid type
-d659f138d6f46339785307484a6a3ea9980ae7571f78ed3b61e7bade592d1ca6	A	lift: sample_b_clamp_feedback: opcode N is not lifted
 d659f138d6f46339785307484a6a3ea9980ae7571f78ed3b61e7bade592d1ca6	IR	lift: sample_b_clamp_feedback: opcode N is not lifted to the IR yet
 d659f138d6f46339785307484a6a3ea9980ae7571f78ed3b61e7bade592d1ca6	IR WGSL	not reached
-d711c1839a6ccc5365388871ffdd231b7fcf7dd61d4838f859ce15f2e9e2026c	A	lift: bufinfo: opcode N is not lifted
 d711c1839a6ccc5365388871ffdd231b7fcf7dd61d4838f859ce15f2e9e2026c	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 d711c1839a6ccc5365388871ffdd231b7fcf7dd61d4838f859ce15f2e9e2026c	IR WGSL	not reached
-d74d0b59b47c658358e799d62c2691f97572516e1879d4650082e925c0ca724c	A	lift: double precision is enabled (global flag): doubles are not lifted
 d787cd0ba6d09ee6971e704daef3ef148b72d150ad0a8da45de8a43f62f2f6e3	IR WGSL	lower: a Domain program is not lowered yet
-d7daa6fff378fb61f21aec08936f68329857454cf83e7b2de27804b4c3775b20	A	lift: eval_centroid: opcode N is not lifted
 d7daa6fff378fb61f21aec08936f68329857454cf83e7b2de27804b4c3775b20	IR	lift: eval_centroid: opcode N is not lifted to the IR yet
 d7daa6fff378fb61f21aec08936f68329857454cf83e7b2de27804b4c3775b20	IR WGSL	not reached
-d865643437b8636fc09c6871d9bbe777d2e4a7a20642547f43e2cf589a0fd906	A	lift: eval_centroid: opcode N is not lifted
 d865643437b8636fc09c6871d9bbe777d2e4a7a20642547f43e2cf589a0fd906	IR	lift: eval_centroid: opcode N is not lifted to the IR yet
 d865643437b8636fc09c6871d9bbe777d2e4a7a20642547f43e2cf589a0fd906	IR WGSL	not reached
 d9f16a2f782c0f8a55e489162490f28f94ad5ad01f9f31c02ac641d93976ea31	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-dab2e1688778f6291558788d7b588db96deb2f5a22b1876c729dd724f327a86b	A	lift: double precision is enabled (global flag): doubles are not lifted
-db23bf425ed27f3f649f48eeda38f0db9c61e01de20ebf3c638f0d6af8b259a2	A	WGSL: wgsl cannot write this program: Unsupported texture atomic result (WGSL's texture atomics return nothing): [N]
 db23bf425ed27f3f649f48eeda38f0db9c61e01de20ebf3c638f0d6af8b259a2	IR WGSL	lower: a texel atomic whose old value is read, or a compare-exchange of a texel, has no naga form: naga's image atomic gives no old value and takes no comparand
-db2befb07fb3e0495278d9c8ab34ab991396ab6b6c01e595ed209f8aadd70f2f	A	WGSL: wgsl cannot write this program: Unsupported texture atomic result (WGSL's texture atomics return nothing): [N]
 db2befb07fb3e0495278d9c8ab34ab991396ab6b6c01e595ed209f8aadd70f2f	IR WGSL	lower: a texel atomic whose old value is read, or a compare-exchange of a texel, has no naga form: naga's image atomic gives no old value and takes no comparand
 db44bf8abde3c14c320dddd809e61ce18d6dc93bfbc43fd3340fccb6111b92b8	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-db821c5b5d686861da0b484c635b53d87eefca778c00574633a119b8d057f049	A	lift: sample_clamp_feedback: opcode N is not lifted
 db821c5b5d686861da0b484c635b53d87eefca778c00574633a119b8d057f049	IR	lift: sample_clamp_feedback: opcode N is not lifted to the IR yet
 db821c5b5d686861da0b484c635b53d87eefca778c00574633a119b8d057f049	IR WGSL	not reached
 db8fb17255b11777448fac9e7334ac96f20a87ed09591acc8f38b073160adfc0	IR WGSL	lower: a Geometry program is not lowered yet
 db942e4f95e2e67292f4f115c5b1c741731c40b26d02691c6364f20cc7194d3c	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 dbe59d23fee0924cad8559b271de0bb8381be0e412f397a623bf346c9173798e	IR WGSL	lower: a Hull program is not lowered yet
 dc280fa1549f473901a2befa898efd680c3aa658efdd57087996e9e9c441c84e	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-dc9292f8836b846491dcad94598ab8fd5dd3ed0f0b1a24dc1649fbf086cea221	A	WGSL read back: error: no definition in scope for identifier: `texture_storage_Nd_array`   ┌─ wgsl:N:N   │ N │ var uN_: binding_array<texture_storage_Nd_array<rgbaNfloat,read>>;   │                        ^^^^^^^^^^^^^^^^^^^^^^^^ unknown identifier  
 dc9292f8836b846491dcad94598ab8fd5dd3ed0f0b1a24dc1649fbf086cea221	IR WGSL	lower: a ND array storage image has no WGSL form
-dd1104a786437edcb0a4b0c9d1bab78f9a802f6caf8f893108af28a186069660	A	lift: ld_structured_feedback: opcode N is not lifted
 dd1104a786437edcb0a4b0c9d1bab78f9a802f6caf8f893108af28a186069660	IR	lift: ld_structured_feedback: opcode N is not lifted to the IR yet
 dd1104a786437edcb0a4b0c9d1bab78f9a802f6caf8f893108af28a186069660	IR WGSL	not reached
 dd2220067456ab1694b207fb36e48fcd35c1dcfd2c8e2576152a6ceb275f4d78	IR WGSL	lower: a Hull program is not lowered yet
-dd4bbf090610237b02ed5b0cdb7128a18af094222cca71f74c9164110e77337f	A	lift: ld_uav_typed_feedback: opcode N is not lifted
 dd4bbf090610237b02ed5b0cdb7128a18af094222cca71f74c9164110e77337f	IR	lift: ld_uav_typed_feedback: opcode N is not lifted to the IR yet
 dd4bbf090610237b02ed5b0cdb7128a18af094222cca71f74c9164110e77337f	IR WGSL	not reached
-dd628f6cebd6b459c32e957dfce2f2240c477e9a608e82d251a6c26aeb9b1af8	A	lift: bufinfo: opcode N is not lifted
 dd628f6cebd6b459c32e957dfce2f2240c477e9a608e82d251a6c26aeb9b1af8	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 dd628f6cebd6b459c32e957dfce2f2240c477e9a608e82d251a6c26aeb9b1af8	IR WGSL	not reached
 de407cf21d365a58376c34097512a9fe9863ed52e6637a4f1d8531270357bd22	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-df100bf2fd18c7b9ef06c53ad26089a75b09097676dab978d174a3c7571269c8	A	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 df100bf2fd18c7b9ef06c53ad26089a75b09097676dab978d174a3c7571269c8	IR	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 df100bf2fd18c7b9ef06c53ad26089a75b09097676dab978d174a3c7571269c8	IR WGSL	not reached
-df39446f9a84dac1b71d435e72c88cf1eec707a078081c498d50bfe05ac670cb	A	lift: reflection: DXBC at word N: g_VisibleParticles: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 df39446f9a84dac1b71d435e72c88cf1eec707a078081c498d50bfe05ac670cb	IR	lift: reflection: DXBC at word N: g_VisibleParticles: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 df39446f9a84dac1b71d435e72c88cf1eec707a078081c498d50bfe05ac670cb	IR WGSL	not reached
-dfa1e7e1c34d5894d7ec41db3b10141a96e6079cbe5caddabb9aaeb18c83f1f4	A	lift: a declared input of register type OutputControlPoint
 dfa1e7e1c34d5894d7ec41db3b10141a96e6079cbe5caddabb9aaeb18c83f1f4	IR	lift: a declared input of register type OutputControlPoint
 dfa1e7e1c34d5894d7ec41db3b10141a96e6079cbe5caddabb9aaeb18c83f1f4	IR WGSL	not reached
 dfda106a3f116bf01864716b224b7e96c291066cfbd6438b8ed635b85930d812	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-e06f168da663ef174c806941e3e1f999767e3bdfcda44dc8aa0b1bd653511f48	A	lift: reflection: DXBC at word N: myASBuffer: DND_SIT_UAV_APPEND_STRUCTURED (N) is not mapped
 e06f168da663ef174c806941e3e1f999767e3bdfcda44dc8aa0b1bd653511f48	IR	lift: reflection: DXBC at word N: myASBuffer: DND_SIT_UAV_APPEND_STRUCTURED (N) is not mapped
 e06f168da663ef174c806941e3e1f999767e3bdfcda44dc8aa0b1bd653511f48	IR WGSL	not reached
 e06fa53a04d983584fc505ea3060eb227108e0f92fd08b9ff86723ea7772e988	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-e07348ac8367278e7c495094425394a9492e1100185864e7c003607e7e19c723	A	lift: reflection: DXBC at word N: myASBuffer: DND_SIT_UAV_APPEND_STRUCTURED (N) is not mapped
 e07348ac8367278e7c495094425394a9492e1100185864e7c003607e7e19c723	IR	lift: reflection: DXBC at word N: myASBuffer: DND_SIT_UAV_APPEND_STRUCTURED (N) is not mapped
 e07348ac8367278e7c495094425394a9492e1100185864e7c003607e7e19c723	IR WGSL	not reached
 e13c454d1c6f8776394df998813c029df29b6f32257293fefc09e8cd9edb0257	IR WGSL	lower: a Geometry program is not lowered yet
 e1caf4ad9391a67c8bde4dc5bf455806f813e2bcf372cf4728e2835c31b06cfb	IR WGSL	lower: a Hull program is not lowered yet
 e28515a7efe0e8cf9ff85fd5049e58966bc56079e743ede4a6167de7727e446a	IR WGSL	lower: a Hull program is not lowered yet
-e3268b03a98bb03327cc9ae73cebdb5391b91888b56425d894f24f33010202d5	A	lift: call: opcode N is not lifted
 e3268b03a98bb03327cc9ae73cebdb5391b91888b56425d894f24f33010202d5	IR	lift: call: opcode N is not lifted to the IR yet
 e3268b03a98bb03327cc9ae73cebdb5391b91888b56425d894f24f33010202d5	IR WGSL	not reached
 e401d4cad4da423a0b0dbdd933e358c7837d21a8b2894e741d095a3cd9766ef0	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-e406a6b7cc86f04d223c5c8991ce18d58c1fabb5cd4cc1b77371b3bf6f0c165c	A	WGSL read back: error: no definition in scope for identifier: `texture_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: texture_Nd_array<fN>;   │          ^^^^^^^^^^^^^^^^ unknown identifier  
 e406a6b7cc86f04d223c5c8991ce18d58c1fabb5cd4cc1b77371b3bf6f0c165c	IR WGSL	lower: a ND array texture has no WGSL form
-e4d47a92daadc96ee4312ccc664f1db6ed475f41ceaf92371bec3285250915c3	A	WGSL: wgsl cannot write this program: Unsupported texture atomic result (WGSL's texture atomics return nothing): [N]
 e4d47a92daadc96ee4312ccc664f1db6ed475f41ceaf92371bec3285250915c3	IR WGSL	lower: a texel atomic whose old value is read, or a compare-exchange of a texel, has no naga form: naga's image atomic gives no old value and takes no comparand
 e5096a707e74a3cceac001d8f4f095bbcfa2622740ce70c0e040c422db6a5d8f	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 e50d100802f9e76a65bfde9cc9f4174b77ace11a8e21b9cab72e62fbd7d632fe	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 e50e1fe3a285e60d7d0f67df7e5f5847c76c9d6f4ff93195fe443f4c45ad46ef	IR WGSL	lower: a Domain program is not lowered yet
-e64e36a8f8f5b3e0972355639c4471b27708d93b5d313cd5460bdc3703c06e61	A	lift: ld_uav_typed_feedback: opcode N is not lifted
 e64e36a8f8f5b3e0972355639c4471b27708d93b5d313cd5460bdc3703c06e61	IR	lift: ld_uav_typed_feedback: opcode N is not lifted to the IR yet
 e64e36a8f8f5b3e0972355639c4471b27708d93b5d313cd5460bdc3703c06e61	IR WGSL	not reached
-e65f4d37861358202cbf19ba3cab17d7d4cdc30c4ce1b62f3e2cad83c67bc9d9	A	lift: add: a patch constant is read where the function has none
 e65f4d37861358202cbf19ba3cab17d7d4cdc30c4ce1b62f3e2cad83c67bc9d9	IR WGSL	lower: a Hull program is not lowered yet
-e715a03f27f2b4de08bcae4b5990d48d617909909fdadac184b4493b4967be77	A	WGSL: wgsl cannot write this program: Unsupported texture atomic result (WGSL's texture atomics return nothing): [N]
 e715a03f27f2b4de08bcae4b5990d48d617909909fdadac184b4493b4967be77	IR WGSL	lower: a texel atomic whose old value is read, or a compare-exchange of a texel, has no naga form: naga's image atomic gives no old value and takes no comparand
 e77bd842c7126e9f1c683f29be1c6ce21eac5474d63e0ca2561a1b3a4bf43ead	IR WGSL	lower: a Geometry program is not lowered yet
-e77c8af3e8c9863661ec7ad611c7ed73c7f1ad45945841ead73df82f90f8d539	A	lift: ld_uav_typed_feedback: opcode N is not lifted
 e77c8af3e8c9863661ec7ad611c7ed73c7f1ad45945841ead73df82f90f8d539	IR	lift: ld_uav_typed_feedback: opcode N is not lifted to the IR yet
 e77c8af3e8c9863661ec7ad611c7ed73c7f1ad45945841ead73df82f90f8d539	IR WGSL	not reached
-e7827487cb3661bcccde9f9001d9bfe28c78a015913acf61b19f004665c43124	A	lift: lod: opcode N is not lifted
 e7827487cb3661bcccde9f9001d9bfe28c78a015913acf61b19f004665c43124	IR	lift: lod: opcode N is not lifted to the IR yet
 e7827487cb3661bcccde9f9001d9bfe28c78a015913acf61b19f004665c43124	IR WGSL	not reached
-e7b3ce4c30e3c983ff04b380af4748fb83bef059cc2ef782ca8f6e58a36cfc2b	A	lift: a geometry program's output to a stream other than N is not lifted
 e7b3ce4c30e3c983ff04b380af4748fb83bef059cc2ef782ca8f6e58a36cfc2b	IR	lift: a geometry program's output to a stream other than N is not lifted
 e7b3ce4c30e3c983ff04b380af4748fb83bef059cc2ef782ca8f6e58a36cfc2b	IR WGSL	not reached
 e82eb3539e221ef106af228f79577dc845e5c359e9e7e6a78205f0b77f75723e	IR WGSL	lower: a Domain program is not lowered yet
 e856ad146425301a00f31f5b0c35d9c0a1b6bcb11b12b4089a0385d3da81ae83	IR WGSL	lower: a Domain program is not lowered yet
-e89b78c7975fee0d0dedda257cc412a411311129003beb185fd0e30a52b5633f	A	lift: imm_atomic_alloc: append and consume buffer counters are not lifted
-e917c3341caaa7e69e93fbe71cab68de8ea4d71ca824df11ff9cf58c60209ac6	A	lift: eval_snapped: opcode N is not lifted
 e917c3341caaa7e69e93fbe71cab68de8ea4d71ca824df11ff9cf58c60209ac6	IR	lift: eval_snapped: opcode N is not lifted to the IR yet
 e917c3341caaa7e69e93fbe71cab68de8ea4d71ca824df11ff9cf58c60209ac6	IR WGSL	not reached
 e9bf4adf53c5986d3461eba6d52c607c579a176154240eb500f172ae0a38f0c8	IR WGSL	lower: a Domain program is not lowered yet
-e9cf8fa2037e1ffd5bdc83367bfc4747c2608ac05c21586b5e4d9e8c3310db00	A	lift: imm_atomic_consume: append and consume buffer counters are not lifted
 eb5ba7aa2c0816aa9956d78b2f181dceebac4ba045229ba281c5ae2518f4ac3c	IR WGSL	lower: a Geometry program is not lowered yet
 eb6af2add4bd41788be67a3ddcb921bce3ffc0a81fc48e6248e6dd8bc83e8a08	IR WGSL	lower: a Hull program is not lowered yet
-ece4629f837d63cce0f1af5d373463e9e8df4a187f7faad5d2655e139a8d9b32	A	lift: gatherN_po: opcode N is not lifted
 ece4629f837d63cce0f1af5d373463e9e8df4a187f7faad5d2655e139a8d9b32	IR	lift: gatherN_po: opcode N is not lifted to the IR yet
 ece4629f837d63cce0f1af5d373463e9e8df4a187f7faad5d2655e139a8d9b32	IR WGSL	not reached
-ed10ad4c7f5cca67d19cdaad6dc612b4490b8d5e20da28d83acf0e0f2e397f22	A	lift: atomic_umax on memory whose atomics are signed
-ee9ce33f0cc91fee9ee6ac9d61f12c2389262e23b6e887fccdf3bb9f9490b061	A	WGSL: wgsl cannot write this program: Unsupported texture atomic result (WGSL's texture atomics return nothing): [N]
 f037dae92338bb30fd3ea5d8698fb0f2837fe9caa49aa4405c5cc226416dc34f	IR WGSL	lower: a Hull program is not lowered yet
-f0866004fb803a6e54c43b1a0e624deca913dbffe49bf68667aa4efc1251c533	A	validate: module: Entry point main at Fragment is invalid: Expression [N] is invalid: Unable to operate on image class Depth { multi: false }
 f0866004fb803a6e54c43b1a0e624deca913dbffe49bf68667aa4efc1251c533	IR WGSL	lower: a biased sample of a depth texture has no WGSL form
-f0b9e1a25f5221111717ab79664c59c0b4f3b962916eaeb832ecf78a3a6d49c4	A	validate: module: Entry point main at Fragment is invalid: Expression [N] is invalid: Expected selection argument types to match, but reject value of type Scalar(Scalar { kind: Uint, width: N }) does not match accept value of value Scalar(Scalar { kind: Sint, width: N })
-f117737024d6ea09ebb746948e2efc578f16f2b12cace587d7dad027e829f20f	A	lift: gatherN_feedback: opcode N is not lifted
 f117737024d6ea09ebb746948e2efc578f16f2b12cace587d7dad027e829f20f	IR	lift: gatherN_feedback: opcode N is not lifted to the IR yet
 f117737024d6ea09ebb746948e2efc578f16f2b12cace587d7dad027e829f20f	IR WGSL	not reached
-f176af135386df76099e67759c86bb8f00ecd5fddf448d3b005561bc8706facc	A	validate: module: Entry point main at Fragment is invalid: Expression [N] is invalid: Bias can't be done for image dimension DN
 f176af135386df76099e67759c86bb8f00ecd5fddf448d3b005561bc8706facc	IR WGSL	lower: a ND array texture has no WGSL form
-f1e752938d01b5366635e8a40a81e08633eed7be96d127319e57c49778115651	A	lift: gatherN_feedback: opcode N is not lifted
 f1e752938d01b5366635e8a40a81e08633eed7be96d127319e57c49778115651	IR	lift: gatherN_feedback: opcode N is not lifted to the IR yet
 f1e752938d01b5366635e8a40a81e08633eed7be96d127319e57c49778115651	IR WGSL	not reached
-f2a5be130c73cab6fca1fda677ae82a033047e7ccb3e5e55ff7c6ad8a5a6f195	A	lift: eval_sample_index: opcode N is not lifted
 f2a5be130c73cab6fca1fda677ae82a033047e7ccb3e5e55ff7c6ad8a5a6f195	IR	lift: eval_sample_index: opcode N is not lifted to the IR yet
 f2a5be130c73cab6fca1fda677ae82a033047e7ccb3e5e55ff7c6ad8a5a6f195	IR WGSL	not reached
 f2f23dbb840fcdfe6082cfc83e9f82c138faf7d1f27721323accdcbac4df8d59	IR WGSL	lower: a Hull program is not lowered yet
-f321ad4f4afbe7171e088a84f04b7338af7434caf82a1874c3b921ca8d9873a9	A	lift: ld_ms_feedback: opcode N is not lifted
 f321ad4f4afbe7171e088a84f04b7338af7434caf82a1874c3b921ca8d9873a9	IR	lift: ld_ms_feedback: opcode N is not lifted to the IR yet
 f321ad4f4afbe7171e088a84f04b7338af7434caf82a1874c3b921ca8d9873a9	IR WGSL	not reached
-f4508bb881851e94328b9ced0aff7ac6d2dcfe33e00bfbea1850732ca6d58636	A	lift: reflection: DXBC at word N: variable dNxN is N bytes, its type packs to Some(N)
 f4508bb881851e94328b9ced0aff7ac6d2dcfe33e00bfbea1850732ca6d58636	IR	lift: reflection: DXBC at word N: variable dNxN is N bytes, its type packs to Some(N)
 f4508bb881851e94328b9ced0aff7ac6d2dcfe33e00bfbea1850732ca6d58636	IR WGSL	not reached
-f4b9d1862bcbfa37cfa9b53e77a9cd3e3748522824b475825862c5227aae9313	A	lift: reflection: DXBC at word N: variable ba is N bytes, its type packs to Some(N)
 f4b9d1862bcbfa37cfa9b53e77a9cd3e3748522824b475825862c5227aae9313	IR	lift: reflection: DXBC at word N: variable ba is N bytes, its type packs to Some(N)
 f4b9d1862bcbfa37cfa9b53e77a9cd3e3748522824b475825862c5227aae9313	IR WGSL	not reached
-f5799fd6038ea84a395b26af646ca608506bd4781b82f9dcf61ddf5b8d0ed5c7	A	lift: a declared input of register type OutputControlPoint
 f5799fd6038ea84a395b26af646ca608506bd4781b82f9dcf61ddf5b8d0ed5c7	IR	lift: a declared input of register type OutputControlPoint
 f5799fd6038ea84a395b26af646ca608506bd4781b82f9dcf61ddf5b8d0ed5c7	IR WGSL	not reached
-f5d3456f57d6c28bd4feae12c29eb82434cfeb77b45b113e6b6d29c701a16fcd	A	lift: imm_atomic_alloc: append and consume buffer counters are not lifted
-f6206e261124447e98647b4764cb950d790eef855112548bf58d6b3ee3a454cf	A	lift: class linkage (function bodies, tables and interfaces) is not lifted
 f6206e261124447e98647b4764cb950d790eef855112548bf58d6b3ee3a454cf	IR	lift: class linkage (function bodies, tables and interfaces) is not lifted
 f6206e261124447e98647b4764cb950d790eef855112548bf58d6b3ee3a454cf	IR WGSL	not reached
 f67f47f8e3ab5d6ee8443e143cd80a9cf3d90250dd10a3ad7a4b0c779c1098db	IR WGSL	lower: a Hull program is not lowered yet
-f6a7f00365423b62ac1edbca1c57ddc2d65e86f5178abf389fe568fed2325e97	A	lift: bufinfo: opcode N is not lifted
 f6a7f00365423b62ac1edbca1c57ddc2d65e86f5178abf389fe568fed2325e97	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 f6a7f00365423b62ac1edbca1c57ddc2d65e86f5178abf389fe568fed2325e97	IR WGSL	not reached
-f6f3036a16c76355bc8ed1be512db79ce80193fc2293ccf9f143c13191249170	A	lift: double precision is enabled (global flag): doubles are not lifted
 f6f3036a16c76355bc8ed1be512db79ce80193fc2293ccf9f143c13191249170	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-f741b5718a75c8a39b301707821d738e37e78135fe432f403c93dcda64fcd915	A	lift: gatherN_c_feedback: opcode N is not lifted
 f741b5718a75c8a39b301707821d738e37e78135fe432f403c93dcda64fcd915	IR	lift: gatherN_c_feedback: opcode N is not lifted to the IR yet
 f741b5718a75c8a39b301707821d738e37e78135fe432f403c93dcda64fcd915	IR WGSL	not reached
-f7a8007c187586691e9bd82ff4c78ac9fd834553a746982d17482703eb0dee34	A	lift: atomic_umax on memory whose atomics are signed
-f7c80eab78d147ae43d39e8b36b9d785cc2e11d318977fcf8c5047bb7b8d2f13	A	lift: ld_ms_feedback: opcode N is not lifted
 f7c80eab78d147ae43d39e8b36b9d785cc2e11d318977fcf8c5047bb7b8d2f13	IR	lift: ld_ms_feedback: opcode N is not lifted to the IR yet
 f7c80eab78d147ae43d39e8b36b9d785cc2e11d318977fcf8c5047bb7b8d2f13	IR WGSL	not reached
-f841707c5d693f17f2bdb3391074e3cdeac3cf898fb75c53902f374865135859	A	WGSL read back: error: no definition in scope for identifier: `texture_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: texture_Nd_array<fN>;   │          ^^^^^^^^^^^^^^^^ unknown identifier  
 f841707c5d693f17f2bdb3391074e3cdeac3cf898fb75c53902f374865135859	IR WGSL	lower: a ND array texture has no WGSL form
-f8485c26e296c1bf19a41a4581640f6c97f9301d59ef6d6d5001eda847bdad3f	A	lift: bufinfo: opcode N is not lifted
 f8485c26e296c1bf19a41a4581640f6c97f9301d59ef6d6d5001eda847bdad3f	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 f8485c26e296c1bf19a41a4581640f6c97f9301d59ef6d6d5001eda847bdad3f	IR WGSL	not reached
 f8f888232705dab4a575d3b5164fc9a61c3949ae1bedb3e60c8f3044035bb1e0	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-f922423370362878529aad0e4259c11f3928a3a8220e3122ec30e3ba04d4788e	A	lift: sample_pos: opcode N is not lifted
 f922423370362878529aad0e4259c11f3928a3a8220e3122ec30e3ba04d4788e	IR	lift: sample_pos: opcode N is not lifted to the IR yet
 f922423370362878529aad0e4259c11f3928a3a8220e3122ec30e3ba04d4788e	IR WGSL	not reached
-fa21b4a17c1ff9caf294e4b9f5bd33228793319f3dde54cf7da1c8861fbe4bb7	A	lift: gatherN_c: a gather of lane N of a depth texture
 fa21b4a17c1ff9caf294e4b9f5bd33228793319f3dde54cf7da1c8861fbe4bb7	IR WGSL	lower: a gather of lane N of a depth texture
 faa6c252830549a5eb50a805957752d1fd6c1b2c981a3d5acbc7aab5c48bc955	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-fb7f7b170c5a4f665b4db3a5cef7c19dc13b8b918cee99ae426ac319edef14bc	A	lift: a declared input of register type OutputControlPoint
 fb7f7b170c5a4f665b4db3a5cef7c19dc13b8b918cee99ae426ac319edef14bc	IR	lift: a declared input of register type OutputControlPoint
 fb7f7b170c5a4f665b4db3a5cef7c19dc13b8b918cee99ae426ac319edef14bc	IR WGSL	not reached
 fb826d18ba170a31eda0f3ee83d259350f908c1498fcd0d7a01591d912e2828e	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 fba1430155fa903ad12793b7832b8669d8c1f1762cef2235b3fd8c14abc4ab5a	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-fc4a2488de83893fed3ee32193ad76ef80a236216eccdd8446a4a3ba1edd6546	A	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 fc4a2488de83893fed3ee32193ad76ef80a236216eccdd8446a4a3ba1edd6546	IR	lift: SV_InstanceIDN: DND_NAME N (INSTANCE_ID) is not mapped as an output of the Vertex stage
 fc4a2488de83893fed3ee32193ad76ef80a236216eccdd8446a4a3ba1edd6546	IR WGSL	not reached
-fc583fc6a469b3a0c4df7016195b4229c6b9a25dd549515e0e26ff5583b90961	A	validate: module: Entry point main at Compute is invalid: Expression [N] is invalid: Sample level (exact) type [N] has an invalid type
 fcd5062822c665ccee4341b2268cde9ea626497a321fe6fbba6eaaf3004e8a95	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-fcfeb6a12455a3abc06ae4e8c88e1cc181a749d9d6431ecfc714713dd5f2ad96	A	lift: double precision is enabled (global flag): doubles are not lifted
-fd441391a3dfc8c78477e6a4171403deee2dd86148dca7a46d89d7dc59a3da55	A	lift: a declared input of register type GsInstanceId
 fd441391a3dfc8c78477e6a4171403deee2dd86148dca7a46d89d7dc59a3da55	IR	lift: a declared input of register type GsInstanceId
 fd441391a3dfc8c78477e6a4171403deee2dd86148dca7a46d89d7dc59a3da55	IR WGSL	not reached
-fdf282323c0a8b47402d976795d886b170b795f9b9cf71f23337c53fad7b0c5a	A	WGSL read back: error: no definition in scope for identifier: `texture_Nd_array`   ┌─ wgsl:N:N   │ N │ var tN_: texture_Nd_array<fN>;   │          ^^^^^^^^^^^^^^^^ unknown identifier  
 fdf282323c0a8b47402d976795d886b170b795f9b9cf71f23337c53fad7b0c5a	IR WGSL	lower: a ND array texture has no WGSL form
 fe0c17e5789cb02125a6f326734f152658ca88baae88200305654c7c01d561c3	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
-fe2a941f013b523d6cd4c0fe266ce7d2b983ca5e6f497ee624a62ea4de3cf1f9	A	lift: double precision is enabled (global flag): doubles are not lifted
-fe8d527b3a4e0bc0013f1df43f6b2297044659b6119f9f0a4587e2e1f359a081	A	lift: ret: a return inside the control flow of a hull phase
 fe8d527b3a4e0bc0013f1df43f6b2297044659b6119f9f0a4587e2e1f359a081	IR WGSL	lower: a Hull program is not lowered yet
-ff626ef9c3dc21fd63f491e19980c683222b3b9b63d5854c603ccfb6bb60f2ca	A	lift: reflection: DXBC at word N: outputCommands: DND_SIT_UAV_APPEND_STRUCTURED (N) is not mapped
 ff626ef9c3dc21fd63f491e19980c683222b3b9b63d5854c603ccfb6bb60f2ca	IR	lift: reflection: DXBC at word N: outputCommands: DND_SIT_UAV_APPEND_STRUCTURED (N) is not mapped
 ff626ef9c3dc21fd63f491e19980c683222b3b9b63d5854c603ccfb6bb60f2ca	IR WGSL	not reached

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `iridia` tests: the slim gate has no column for the older lifts (`iridia_dxbc::lift`, `iridia_dxil::lift`, `iridia_d3d9::lift`);
+  each program of the set goes through the IR lift and the IR's WGSL, and `tests/slim/<family>.tsv` lists those two columns.
 - `iridia-d3d9-ir` tests: the gate no longer runs the older lift (`iridia-d3d9`) and the WGSL read back into the naga
   interpreter (`iridia-exec`) beside the IR; it holds the IR's run to the IR compiled into `iridia-exec` and to the WGSL
   of both writers on WARP, and its assembled and vkd3d tests run the IR, its graph and the graph structured again. The

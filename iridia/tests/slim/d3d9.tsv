@@ -1,548 +1,264 @@
 # What the slim set's d3d9 programs give that is not ok (tests/slim.rs): program, column, where it stopped.
-003089fea619f095199fe5f38146602855a2129163aca8813dc8ce756e90c5c2	A	lift: register type N, index N outside the supported Vertex SMN banks
 003089fea619f095199fe5f38146602855a2129163aca8813dc8ce756e90c5c2	IR	lift: register type N, index N outside the vs_N_N banks
 003089fea619f095199fe5f38146602855a2129163aca8813dc8ce756e90c5c2	IR WGSL	not reached
-0050bd0ce3c6d793b129684594987ed6bf064de0490ccc46a078f14775f7e2d8	A	lift: opcode N REP outside the supported SMN subset
-009dd0c6ef3d646c71a205fd989943b6cc227fa42b9dc05ea22dba7742e5b7cf	A	lift: opcode N DEFI outside the supported SMN subset
-035755bae2ce244edc510c541071e60d1d02594266b4b94c17294a72fdb73b0f	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 035755bae2ce244edc510c541071e60d1d02594266b4b94c17294a72fdb73b0f	IR	lift: undeclared input vN
 035755bae2ce244edc510c541071e60d1d02594266b4b94c17294a72fdb73b0f	IR WGSL	not reached
-03a2884a51ec8591dca805807390a2391c0b2e47316fe87de1855098033cc3fd	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
-03dad89fe3ce20e66c3202dc9d326fda9874357a51638abefa67d17e686f6a42	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
-03fecbbff7a9e3cddb029c30a378f6ded9d936b3b032b8d48162d464d8fb5d00	A	lift: CTAB fN: an allocation of N registers is not a whole number of the type's elements (N registers each, at most N)
 03fecbbff7a9e3cddb029c30a378f6ded9d936b3b032b8d48162d464d8fb5d00	IR	lift: CTAB fN: an allocation of N registers ends inside an element of Array { element: Matrix { scalar: Float, rows: N, columns: N, major: Column, stride: N }, count: N, stride: N }
 03fecbbff7a9e3cddb029c30a378f6ded9d936b3b032b8d48162d464d8fb5d00	IR WGSL	not reached
-0428cae9e1510d266bdb268d1142153d6a1882ead6f56604958ac2c4f97b0cc5	A	lift: CTAB v: non-float/structured/empty type Type { class: N, kind: N, rows: N, columns: N, elements: N, members: [] }
-04a21edab320f97b944a54f3e0081b35c9e1acd0c2a393a87d039bba657d6f52	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-04d70b63aac7eef0b27007d7619899b4e7c3df800630c9f7c201490e7c355d6b	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
-056204e6926d59f8c0642db1e42aa4e3565202a0b4809a0e45350d4590d1636b	A	lift: uninitialized Temporary(N)
 056204e6926d59f8c0642db1e42aa4e3565202a0b4809a0e45350d4590d1636b	IR	lift: uninitialized rN
 056204e6926d59f8c0642db1e42aa4e3565202a0b4809a0e45350d4590d1636b	IR WGSL	not reached
-05cb42c045d763697b8baaf5ee369dd8ccdcd3bf02b5d3ac08d3eb6988d9b5d2	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-05e06e57793c1eca75fd28c908bac5d9556d9dd6b4ed508250d2cdef4bb01c74	A	lift: version ps_N_x: only ps_N_N and vs_N_N are lifted
 05e06e57793c1eca75fd28c908bac5d9556d9dd6b4ed508250d2cdef4bb01c74	IR	lift: pN is read before setp writes it
 05e06e57793c1eca75fd28c908bac5d9556d9dd6b4ed508250d2cdef4bb01c74	IR WGSL	not reached
-06546bda2516311aa9aba40aa63e57f1d2d06f8035f538bf9454ca3ca113f600	A	lift: CTAB a: non-float/structured/empty type Type { class: N, kind: N, rows: N, columns: N, elements: N, members: [] }
-06741d311b389ac5ba81b45c42540ca266bca8a6ef1fe712665d11535ce45bb3	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-06d363fc722a7b11ef16e07fe7096fccfdb74c27966e63890858e2dad49b7691	A	lift: opcode N DEFB outside the supported SMN subset
 06d363fc722a7b11ef16e07fe7096fccfdb74c27966e63890858e2dad49b7691	IR	lift: register type N, index N outside the vs_N_N banks
 06d363fc722a7b11ef16e07fe7096fccfdb74c27966e63890858e2dad49b7691	IR WGSL	not reached
-078427c694ac5169c3c78a45cd214a0b0dc4a736578ceded03e948cfb2d24d4e	A	lift: opcode N REP outside the supported SMN subset
 078427c694ac5169c3c78a45cd214a0b0dc4a736578ceded03e948cfb2d24d4e	IR	lift: CTAB ran: an allocation of N registers ends inside an element of Array { element: Array { element: Scalar(Sint), count: N, stride: N }, count: N, stride: N }
 078427c694ac5169c3c78a45cd214a0b0dc4a736578ceded03e948cfb2d24d4e	IR WGSL	not reached
-07e8c817f4a7d8ff20a1c33c25127ce6224297d481afd7e7011f73106db5c0da	A	lift: opcode N TEXLDD outside the supported SMN subset
-0803f7d7169e93790517c5feb93cf0c98a3d4af91c5d4abddec752a5201c2a32	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
-0832613147876a56b0971ad801f911e08b408bd3244e516c94cabf5201c883b8	A	lift: version token NxffffNfe is not a DirectND N vertex (Nxfffe) or pixel (Nxffff) program of version N.N to N.N
 0832613147876a56b0971ad801f911e08b408bd3244e516c94cabf5201c883b8	IR	lift: version token NxffffNfe is not a DirectND N vertex (Nxfffe) or pixel (Nxffff) program of version N.N to N.N
 0832613147876a56b0971ad801f911e08b408bd3244e516c94cabf5201c883b8	IR WGSL	not reached
-086279825a7da414c53b78adf2f73d55c0461068162623af6c65b8e8387e5d96	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 086279825a7da414c53b78adf2f73d55c0461068162623af6c65b8e8387e5d96	IR	lift: a relative constant before any mova wrote aN
 086279825a7da414c53b78adf2f73d55c0461068162623af6c65b8e8387e5d96	IR WGSL	not reached
-089c3c3e1ebce2d73b248530e3526cdb6d54c08a274ad5cf31764c843c1dc783	A	lift: opcode N REP outside the supported SMN subset
-08f65b47bf381cdd3ab75a6d5e70a5c4119a2ed20d4c8dff21ec53cfef2f9706	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 08f65b47bf381cdd3ab75a6d5e70a5c4119a2ed20d4c8dff21ec53cfef2f9706	IR WGSL	lower: pipeline state rN is read: specialise it first (a state block is not lowered yet)
-0a501f65b9d57cffdca54c3bd354dcfc354386445a22c49507af7b890f4e96d5	A	lift: version vs_N_x: only ps_N_N and vs_N_N are lifted
 0a501f65b9d57cffdca54c3bd354dcfc354386445a22c49507af7b890f4e96d5	IR	lift: pN is read before setp writes it
 0a501f65b9d57cffdca54c3bd354dcfc354386445a22c49507af7b890f4e96d5	IR WGSL	not reached
-0b07487a8439ec40e39e97ded7cde8fc4c24ce96f70b8ae1ec9659a60127cce3	A	lift: opcode N REP outside the supported SMN subset
-0b7af3b617bbd9061ea9709938bf229f3d0aee440b7ba826bb2c07bdd76da725	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-0c00fda7c4c5b93ccabedbcedc30391b7f61695b38cabaaf6352c30bfe92c98a	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 0c00fda7c4c5b93ccabedbcedc30391b7f61695b38cabaaf6352c30bfe92c98a	IR	lift: register type N, index N outside the ps_N_N banks
 0c00fda7c4c5b93ccabedbcedc30391b7f61695b38cabaaf6352c30bfe92c98a	IR WGSL	not reached
-0c930cb4bfa3ee317a11f80f0766b75320d49706eda5f13ad48f1d1c4250c86b	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 0c930cb4bfa3ee317a11f80f0766b75320d49706eda5f13ad48f1d1c4250c86b	IR	lift: undeclared input tN
 0c930cb4bfa3ee317a11f80f0766b75320d49706eda5f13ad48f1d1c4250c86b	IR WGSL	not reached
-0cfd40f9649303092d768648dbeecf62ae14793d9eeae18ce6da9a973e5b2c36	A	lift: register type N, index N outside the supported Pixel SMN banks
-0db07244fdb4408c2ddac64df8a54ef31b93c933850f92b247e705add4480929	A	lift: opcode N TEXLDL outside the supported SMN subset
-0e7223fb16bff77af21b9c4f3384b4e4dbd05c4ca07098c7ea9163d1790e98fc	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
-0e890eb87f8caf5699a3bd69f31c0db3f36248f9bc57d844b3b4ddd145b99bf0	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
-0ecd6c725d6905eae8c3cb0470907c68df342e4c88e44f42e454da013ea2f451	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 0ecd6c725d6905eae8c3cb0470907c68df342e4c88e44f42e454da013ea2f451	IR	lift: uninitialized rN
 0ecd6c725d6905eae8c3cb0470907c68df342e4c88e44f42e454da013ea2f451	IR WGSL	not reached
-0f51331935a95bcf092cc29c6f9a397e43b6ef9d46bd08c153b487f74692dc08	A	lift: version vs_N_x: only ps_N_N and vs_N_N are lifted
 0f51331935a95bcf092cc29c6f9a397e43b6ef9d46bd08c153b487f74692dc08	IR	lift: uninitialized rN
 0f51331935a95bcf092cc29c6f9a397e43b6ef9d46bd08c153b487f74692dc08	IR WGSL	not reached
-0f5deeb8605e60b10700942aaa6d6d257b5a05134518342f00f2bf62540528fe	A	lift: CTAB a: non-float/structured/empty type Type { class: N, kind: N, rows: N, columns: N, elements: N, members: [] }
-1072a93265283133378cd55c9797c068194462491f6cca012c1e98ba8e1c2cf8	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-12815037b9035912fd2eb5bab724768a9b194eb235743204d9e798f4fe294fef	A	lift: opcode N DEFI outside the supported SMN subset
-14ba792489429690ad1d2b05507d564bf7dda12b7ced68e945095e34920ca82d	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 14ba792489429690ad1d2b05507d564bf7dda12b7ced68e945095e34920ca82d	IR	lift: missing END
 14ba792489429690ad1d2b05507d564bf7dda12b7ced68e945095e34920ca82d	IR WGSL	not reached
-16cd4332a0cd4b7f6901f862c79d4051598c294ce0e037f3c90ce767e37e7da8	A	lift: CTAB sam: sampler array or type Type { class: N, kind: N, rows: N, columns: N, elements: N, members: [] }
-16dd741a97a56a0c4ba4e5ca03a3fd3be7b1470ee209f61578c0295ee53fa645	A	lift: vertex program has no declared POSITIONN clip output
 16dd741a97a56a0c4ba4e5ca03a3fd3be7b1470ee209f61578c0295ee53fa645	IR	lift: vertex program has no declared POSITIONN clip output
 16dd741a97a56a0c4ba4e5ca03a3fd3be7b1470ee209f61578c0295ee53fa645	IR WGSL	not reached
-177795811b8565d676e975cb67b40caef6040e123c76fb206930d758714aaafe	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 177795811b8565d676e975cb67b40caef6040e123c76fb206930d758714aaafe	IR	lift: uninitialized rN
 177795811b8565d676e975cb67b40caef6040e123c76fb206930d758714aaafe	IR WGSL	not reached
-17b9fcec856c52cc86f8fd3e173971aa10d524f6c64962f6e53e2b95fef5d4ea	A	lift: uninitialized Temporary(N)
 17b9fcec856c52cc86f8fd3e173971aa10d524f6c64962f6e53e2b95fef5d4ea	IR	lift: uninitialized rN
 17b9fcec856c52cc86f8fd3e173971aa10d524f6c64962f6e53e2b95fef5d4ea	IR WGSL	not reached
-17d903fe71408145ecc2afc35466443bf2f6c6721f34062f85efc986e1f235ae	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 17d903fe71408145ecc2afc35466443bf2f6c6721f34062f85efc986e1f235ae	IR	lift: uninitialized rN
 17d903fe71408145ecc2afc35466443bf2f6c6721f34062f85efc986e1f235ae	IR WGSL	not reached
-19757631dde784566b3df120e90b3abcc09db4edb060d4727254db149540d63f	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 19757631dde784566b3df120e90b3abcc09db4edb060d4727254db149540d63f	IR	lift: vertex program never writes oPos
 19757631dde784566b3df120e90b3abcc09db4edb060d4727254db149540d63f	IR WGSL	not reached
-1bad643673acf051939aefef84fcab2cda37f28222d2a9441f0d2fd291af3078	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-1e6deb90892dd42d92490995c16c93de3079d1b9eb22be84c8bc4f0a23401f7a	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
-1eff74a8b3e208c34ba4169656586b56e931d2568b99336d1d8c449a2ce56b9d	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 1eff74a8b3e208c34ba4169656586b56e931d2568b99336d1d8c449a2ce56b9d	IR	lift: undeclared input tN
 1eff74a8b3e208c34ba4169656586b56e931d2568b99336d1d8c449a2ce56b9d	IR WGSL	not reached
-1f036e0e19ab684d7a38884397445a6d45b06d35590df1f33b13221de7ea6244	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-226cf2568f00cf212c1adbdf0ab6266702859ad4b5880548f94e8f075d6e46ef	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-25f0c129cdda36b0f004b0618c894e61f29f1963ba3ac035fc41318243fa9a2b	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 25f0c129cdda36b0f004b0618c894e61f29f1963ba3ac035fc41318243fa9a2b	IR WGSL	lower: pipeline state rN is read: specialise it first (a state block is not lowered yet)
-25f6ea0dc36c0db6ae6bf566530ecd3be73c8831bd6ebae4c3c8a379d49d208d	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 25f6ea0dc36c0db6ae6bf566530ecd3be73c8831bd6ebae4c3c8a379d49d208d	IR	lift: uninitialized rN
 25f6ea0dc36c0db6ae6bf566530ecd3be73c8831bd6ebae4c3c8a379d49d208d	IR WGSL	not reached
-26f8a7cd79b16ccd77210f23bde7cec97a9836ba9bde2925001bf9db1d2de9c0	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 26f8a7cd79b16ccd77210f23bde7cec97a9836ba9bde2925001bf9db1d2de9c0	IR	lift: undeclared input vN
 26f8a7cd79b16ccd77210f23bde7cec97a9836ba9bde2925001bf9db1d2de9c0	IR WGSL	not reached
-26f8c9232f42c643f08b12edda0937e67830036f4bbf73c9b0fcb4f3597b4319	A	lift: register type N, index N outside the supported Pixel SMN banks
 26f8c9232f42c643f08b12edda0937e67830036f4bbf73c9b0fcb4f3597b4319	IR	lift: undeclared input vFace
 26f8c9232f42c643f08b12edda0937e67830036f4bbf73c9b0fcb4f3597b4319	IR WGSL	not reached
-279d67d9620611f7831408faa4465878c9ecf01b711a5cc26fe1fa4bb7197c33	A	lift: opcode N TEXLDL outside the supported SMN subset
-281a760f642f7733938f90bffd61a46ad14ec0e6172f393fd929c9cfa1eba7bd	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 281a760f642f7733938f90bffd61a46ad14ec0e6172f393fd929c9cfa1eba7bd	IR	lift: uninitialized output rN
 281a760f642f7733938f90bffd61a46ad14ec0e6172f393fd929c9cfa1eba7bd	IR WGSL	not reached
-2857f2d33789ab50628adcd95f5b432a45588230dd410c8082080efa3e6a5208	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 2857f2d33789ab50628adcd95f5b432a45588230dd410c8082080efa3e6a5208	IR	lift: sincos requires replicate scalar swizzles
 2857f2d33789ab50628adcd95f5b432a45588230dd410c8082080efa3e6a5208	IR WGSL	not reached
-290b8658da1880b30bfccd6587a8e108754d81f9b0c6a1c1254c8f8486089c2e	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-2960bd07b2a41a33024933dedee729e46dc4978ba3b7a0419b2ef3001f6feaaf	A	lift: undeclared input vN
 2960bd07b2a41a33024933dedee729e46dc4978ba3b7a0419b2ef3001f6feaaf	IR	lift: undeclared input vN
 2960bd07b2a41a33024933dedee729e46dc4978ba3b7a0419b2ef3001f6feaaf	IR WGSL	not reached
-299691c1edb5c092d3b60eb5ab0f86c12a0d88e7e3b01d949eb98702112771bb	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-2b3c6e919825c690d95fd08c745749bca040ac29fe776c08f4aac38e74229467	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 2b3c6e919825c690d95fd08c745749bca040ac29fe776c08f4aac38e74229467	IR	lift: uninitialized rN
 2b3c6e919825c690d95fd08c745749bca040ac29fe776c08f4aac38e74229467	IR WGSL	not reached
-2b9f8ec4d0d544b5dfdf7e7f3203a6015016bec80914bce65fbade2026be8c57	A	lift: uninitialized output Output(N)
 2b9f8ec4d0d544b5dfdf7e7f3203a6015016bec80914bce65fbade2026be8c57	IR	lift: uninitialized output oN
 2b9f8ec4d0d544b5dfdf7e7f3203a6015016bec80914bce65fbade2026be8c57	IR WGSL	not reached
-2c4ae70c794b67286d92bd997186f4202dd9c6a1b463dd4e874507a06b07eae0	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 2c4ae70c794b67286d92bd997186f4202dd9c6a1b463dd4e874507a06b07eae0	IR	lift: uninitialized rN
 2c4ae70c794b67286d92bd997186f4202dd9c6a1b463dd4e874507a06b07eae0	IR WGSL	not reached
-2d11b75ccd6b5b340b4ed7bd7579a10f099f408f2b947205960ef2b1155d893d	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-2e1750d84b61740fe143efb748595c61f03bee5dab4027aa115ee9b85a225bc9	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-2e584a9886ab7966aabec2c80ab6b61575518a530f0c628f8ab005ca8838051d	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
-2e99720f5bce544c15481be91e792ddf973c8599655b084db355a8ff1909dd4a	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
-2ebce4d73bbcd6d58ff704bffa6f086889106722332e76a87c464a569cfe10f6	A	lift: opcode N TEXLDD outside the supported SMN subset
-2f262920f785a0bd71a5689d2af0b43220c6bf2402bbe3567a99a16ea94bff6d	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 2f262920f785a0bd71a5689d2af0b43220c6bf2402bbe3567a99a16ea94bff6d	IR	lift: uninitialized rN
 2f262920f785a0bd71a5689d2af0b43220c6bf2402bbe3567a99a16ea94bff6d	IR WGSL	not reached
-2f625b743d778b29bfd2d173e5b3724b188c18823c5628afcb6cab17412d3b5b	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 2f625b743d778b29bfd2d173e5b3724b188c18823c5628afcb6cab17412d3b5b	IR	lift: uninitialized rN
 2f625b743d778b29bfd2d173e5b3724b188c18823c5628afcb6cab17412d3b5b	IR WGSL	not reached
-2f9f37b860553bf7fbc4ac1ba31fa74301cbc3d079fbdfa1f95ae73a2a32cfea	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
-305419a1e76f254f246320aa8a20eb26c5c3048344400096526f579137d541a7	A	lift: instruction controls/predication/coissue NxN
-308c9ba8e6f1fed5332c2a7d6cd3d346df4f35e0ee21a6f0ba8896bdc5b0f25e	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
-31ef721c0017992530f633c0f474978f0414d22815961e03a0d3af915eaf740b	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 31ef721c0017992530f633c0f474978f0414d22815961e03a0d3af915eaf740b	IR	lift: undeclared input vN
 31ef721c0017992530f633c0f474978f0414d22815961e03a0d3af915eaf740b	IR WGSL	not reached
-31f8d5a86368f61c06ab18322cddfa439999cb8f46f8c62f9d92c19e69161388	A	lift: CTAB a: non-float/structured/empty type Type { class: N, kind: N, rows: N, columns: N, elements: N, members: [] }
-335c5acfe2a27d31cfd2ccd1765c3c8714f2de46a791b61367e5baa9eb2a4a40	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 335c5acfe2a27d31cfd2ccd1765c3c8714f2de46a791b61367e5baa9eb2a4a40	IR	lift: uninitialized rN
 335c5acfe2a27d31cfd2ccd1765c3c8714f2de46a791b61367e5baa9eb2a4a40	IR WGSL	not reached
-337e0377e4d7e06391b96bb7cd7ccd8dedadc221007e20fb6af20b095b0bc530	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 337e0377e4d7e06391b96bb7cd7ccd8dedadc221007e20fb6af20b095b0bc530	IR	lift: uninitialized output rN
 337e0377e4d7e06391b96bb7cd7ccd8dedadc221007e20fb6af20b095b0bc530	IR WGSL	not reached
-3718002c6f820fc9118aba3da551f8a086f18f39b65479323114ae90c86feb0e	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-373964d7efaf339963fd08691d4a700e9372be6697fc6abfc562db0f8c397140	A	lift: register type N, index N outside the supported Pixel SMN banks
-381529dfd5377d69eefee39e2eea5db80be3984863b0ef76eea4d16e83d46f3e	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 381529dfd5377d69eefee39e2eea5db80be3984863b0ef76eea4d16e83d46f3e	IR	lift: uninitialized rN
 381529dfd5377d69eefee39e2eea5db80be3984863b0ef76eea4d16e83d46f3e	IR WGSL	not reached
-38c0064005eb7325c88e650c877db3633003690d3a51aad8217a1371b45336ad	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 38c0064005eb7325c88e650c877db3633003690d3a51aad8217a1371b45336ad	IR	lift: uninitialized output rN
 38c0064005eb7325c88e650c877db3633003690d3a51aad8217a1371b45336ad	IR WGSL	not reached
-3b8ec99a17ea15601ba54ac084eb683085104690636d495eab6836ea80b6d547	A	lift: missing END
 3b8ec99a17ea15601ba54ac084eb683085104690636d495eab6836ea80b6d547	IR	lift: missing END
 3b8ec99a17ea15601ba54ac084eb683085104690636d495eab6836ea80b6d547	IR WGSL	not reached
-3bbb5424f072e6b7076b104ca7dc5e3c86781bc5c60b4c763bb27d67feeeb840	A	lift: register type N, index N outside the supported Pixel SMN banks
-3e608d8d005525255523972f6ed2f307053ece6c1dab009a0d9c047a1b7c32f9	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 3e608d8d005525255523972f6ed2f307053ece6c1dab009a0d9c047a1b7c32f9	IR	lift: vertex program never writes oPos
 3e608d8d005525255523972f6ed2f307053ece6c1dab009a0d9c047a1b7c32f9	IR WGSL	not reached
-3e7557fb0dcfe1369a8bc7bbba9b374643147446f6b3946e9047b715f63aa994	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
-3ef2008188cae2f0a871c24931a773db67f2e8d9351864c6e483b35d3eccae9a	A	lift: uninitialized Temporary(N)
 3ef2008188cae2f0a871c24931a773db67f2e8d9351864c6e483b35d3eccae9a	IR	lift: uninitialized rN
 3ef2008188cae2f0a871c24931a773db67f2e8d9351864c6e483b35d3eccae9a	IR WGSL	not reached
-3f931a528fbd3502520bbed2d1759535d78cdcc63d140ea77e6dbc47a02cf940	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 3f931a528fbd3502520bbed2d1759535d78cdcc63d140ea77e6dbc47a02cf940	IR	lift: uninitialized output rN
 3f931a528fbd3502520bbed2d1759535d78cdcc63d140ea77e6dbc47a02cf940	IR WGSL	not reached
-3fd7a78f6dd1783120558389341ddd62e80f4b290d3178405e8b3db2d6da6d3c	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 3fd7a78f6dd1783120558389341ddd62e80f4b290d3178405e8b3db2d6da6d3c	IR	lift: uninitialized tN
 3fd7a78f6dd1783120558389341ddd62e80f4b290d3178405e8b3db2d6da6d3c	IR WGSL	not reached
-3fe2d3e80db1452072def07148993c5125cb23549721c1f5d475436904fcaaea	A	lift: CTAB v: non-float/structured/empty type Type { class: N, kind: N, rows: N, columns: N, elements: N, members: [] }
-3feeae6de522ae682daedbca4ce1b1a8c603a6b32fa50f6edb7fe730a5363802	A	lift: version ps_N_x: only ps_N_N and vs_N_N are lifted
 3feeae6de522ae682daedbca4ce1b1a8c603a6b32fa50f6edb7fe730a5363802	IR	lift: uninitialized rN
 3feeae6de522ae682daedbca4ce1b1a8c603a6b32fa50f6edb7fe730a5363802	IR WGSL	not reached
-416d91477048dc0e23b71a8f7964faba68ffd040b97168b9ef675ef50d119d42	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-42884e73bf1b78ed6a8f9550a866d3f0f1f0901fd6c9f311a48a60b01c40be81	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
-42abd567e020c60134737d5b991dba0390cff06180d3460907687226f239f98d	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 42abd567e020c60134737d5b991dba0390cff06180d3460907687226f239f98d	IR	lift: uninitialized rN
 42abd567e020c60134737d5b991dba0390cff06180d3460907687226f239f98d	IR WGSL	not reached
-438f9d99e996e930897cbad94691d5c868d791d2761942c014661135de95ec73	A	lift: parameter marker/reserved bits or relative addressing (not supported)
 438f9d99e996e930897cbad94691d5c868d791d2761942c014661135de95ec73	IR	lift: aL read outside a loop
 438f9d99e996e930897cbad94691d5c868d791d2761942c014661135de95ec73	IR WGSL	not reached
-43d93bf84a157c9d3c99e1ddddc09cceabb09e145a1508f64d460e21536de913	A	lift: uninitialized Temporary(N)
 43d93bf84a157c9d3c99e1ddddc09cceabb09e145a1508f64d460e21536de913	IR	lift: uninitialized rN
 43d93bf84a157c9d3c99e1ddddc09cceabb09e145a1508f64d460e21536de913	IR WGSL	not reached
-44353f4315b0b278d0b2ea5369d6be7469d10179da58a80a0306dbd6a17335ba	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-45be28094c81f50131824aaa248a0f26276b56fdff4f8e0635041ab2355b13ca	A	lift: version vs_N_x: only ps_N_N and vs_N_N are lifted
 45be28094c81f50131824aaa248a0f26276b56fdff4f8e0635041ab2355b13ca	IR	lift: uninitialized rN
 45be28094c81f50131824aaa248a0f26276b56fdff4f8e0635041ab2355b13ca	IR WGSL	not reached
-460f66564ae752e9141368df71d376dab37f1fbc0f9cb61be066c14ced6ab37b	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
-476ebd4d7422ced11d1234ed1d1d028f0d20fceaf3ddb71739d2065618773329	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 476ebd4d7422ced11d1234ed1d1d028f0d20fceaf3ddb71739d2065618773329	IR	lift: uninitialized output rN
 476ebd4d7422ced11d1234ed1d1d028f0d20fceaf3ddb71739d2065618773329	IR WGSL	not reached
-48b28b303ca6f5ee8076747146aea474185921a5aeddfd5f8419673860d26eaa	A	lift: opcode N REP outside the supported SMN subset
-4a2931a8cb88c67f1714b158efa4eb0fbd8947ca8810c9f2ff322e3988734cd1	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-4b490254d5754086915bba2dddd93592f6bb98a8f58729bf0830623e04328611	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 4b490254d5754086915bba2dddd93592f6bb98a8f58729bf0830623e04328611	IR	lift: uninitialized output rN
 4b490254d5754086915bba2dddd93592f6bb98a8f58729bf0830623e04328611	IR WGSL	not reached
-4bcbbdaf087c39b6278326eaa4c6b7d7726ffd662557e11c84e9c0ef520cae95	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 4bcbbdaf087c39b6278326eaa4c6b7d7726ffd662557e11c84e9c0ef520cae95	IR	lift: vertex program never writes oPos
 4bcbbdaf087c39b6278326eaa4c6b7d7726ffd662557e11c84e9c0ef520cae95	IR WGSL	not reached
-4c70aa03d2aa1bde308906d0758547c4c1b509eadf168e3940c7a0c972bea4c5	A	lift: register type N, index N outside the supported Pixel SMN banks
 4c70aa03d2aa1bde308906d0758547c4c1b509eadf168e3940c7a0c972bea4c5	IR	lift: register type N, index N outside the ps_N_N banks
 4c70aa03d2aa1bde308906d0758547c4c1b509eadf168e3940c7a0c972bea4c5	IR WGSL	not reached
-4ca277db1f4eb274efba2c56b9330789093f7190c194af59816c6b219b7dd6ec	A	lift: opcode N TEXLDL outside the supported SMN subset
 4ca277db1f4eb274efba2c56b9330789093f7190c194af59816c6b219b7dd6ec	IR	lift: undeclared sampler sN
 4ca277db1f4eb274efba2c56b9330789093f7190c194af59816c6b219b7dd6ec	IR WGSL	not reached
-4cddd38d9ebe7053b889d3a5542b5461b19279ccf9d4c31bdadc18128d1139f9	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
-4e2ba1b8999ecc88427d3e707a01e97afb714a483805ea705d91953f844918bd	A	lift: uninitialized Temporary(N)
 4e2ba1b8999ecc88427d3e707a01e97afb714a483805ea705d91953f844918bd	IR	lift: uninitialized rN
 4e2ba1b8999ecc88427d3e707a01e97afb714a483805ea705d91953f844918bd	IR WGSL	not reached
-4eec5a5c525676c1f657c1469ed1af49dc1a7193f8beb466eadf17a462fad7cf	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
-4fc6a24cd9fb7b86c835e0ebb3e6908275b76396d20b586b1944f03ce58bd244	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 4fc6a24cd9fb7b86c835e0ebb3e6908275b76396d20b586b1944f03ce58bd244	IR WGSL	lower: pipeline state rN is read: specialise it first (a state block is not lowered yet)
-501c3bd1532bd753be0f2548b95d37da1674faf45b02f3c207afb20d66d7114f	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
-5056a9c0889de60da4ff1490d62be49ce196ace5316312995b0ec91b1a136e78	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-511a508294ac4975abbc207aa23b4e4506150f17f8825bc9e9442244ef89f7b6	A	lift: version ps_N_x: only ps_N_N and vs_N_N are lifted
-5142b18bb7d4f0cf7e1a4874a0e4b89cf7ffd238257dab41a62389865b1f2a03	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
-51e763ce9c71e818cdedda3dc9cc79bfd515687844b5a4b352fa7d015a1485d8	A	lift: opcode N DEFI outside the supported SMN subset
-5221fbdc6ee0eb949cf4f0e1b206f5629fba8611c8dafb109c3e7b89186dbbbb	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 5221fbdc6ee0eb949cf4f0e1b206f5629fba8611c8dafb109c3e7b89186dbbbb	IR	lift: uninitialized output rN
 5221fbdc6ee0eb949cf4f0e1b206f5629fba8611c8dafb109c3e7b89186dbbbb	IR WGSL	not reached
-523a6b230308f732df1cc8ecdc1549fc8ae5880463c3307fb4bdd124137384fd	A	lift: CTAB i: non-float/structured/empty type Type { class: N, kind: N, rows: N, columns: N, elements: N, members: [] }
-5241df34f3d10be28935b22e47f2bfc9e6972c126f7a4a41f2065eb64eeb1979	A	lift: instruction controls/predication/coissue NxN
-524cd00423ccec3b66d90d57a1945835040443827b10475fa0a7ade92a19dca7	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-5355ef61a41a71cdfca49c10fee4971c4cb6136c570ed38eab34e23ba920ac7c	A	lift: version ps_N_x: only ps_N_N and vs_N_N are lifted
-551df292c996bf0ea7737ff0f317b7d7c485e18f53431854abd73ae95cd02205	A	lift: CTAB v: non-float/structured/empty type Type { class: N, kind: N, rows: N, columns: N, elements: N, members: [] }
-5613341ed17635537547981930ee0fa2866fc2612197b26de576164be3ccb6f8	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-586e33a230372a46aea6cf64beb7048919f19b279fcc85fac20c06eba45a7c99	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
-58f0495abadc7eb2df968c36e65c84a0b4cbe74e44b983bf91b2af1a452c7106	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-5a08c3f13f12f46eeba5cdec552819e3bf0b7c51d179f70bdb032d4d3ca27bf3	A	lift: register type N, index N outside the supported Pixel SMN banks
 5a08c3f13f12f46eeba5cdec552819e3bf0b7c51d179f70bdb032d4d3ca27bf3	IR	lift: undeclared input vPos
 5a08c3f13f12f46eeba5cdec552819e3bf0b7c51d179f70bdb032d4d3ca27bf3	IR WGSL	not reached
-5c4a0d01328b98b31409986d9de964cd749800b3b0d9cba7e55b0b79eede0d5d	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 5c4a0d01328b98b31409986d9de964cd749800b3b0d9cba7e55b0b79eede0d5d	IR	lift: vertex program never writes oPos
 5c4a0d01328b98b31409986d9de964cd749800b3b0d9cba7e55b0b79eede0d5d	IR WGSL	not reached
-5dca37b4e53fc3280804cef1e6af70545a91edf0fb5ad8601e09cd7530999696	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-5e112dfdd741d4ffa6eed099fd2b1aae164850badbfb45135be39cb9cbb6c4d7	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-5f57499f59574827af419052d9524ab4becf6b0c05ef4b7ab066704378fe21b7	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-6047d2f69cae1d58dbfd56d50338603493c6b8b728a67b33d21e1834205c2284	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-60ae4a0a7786be31818ccb51e1ebf18e756c0d21ea11c1cf7012fbaef65dfe7f	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
-613e0853715de2f693f62df4d16b4ebca996142f5c9599e1fc85a1b92c592696	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 613e0853715de2f693f62df4d16b4ebca996142f5c9599e1fc85a1b92c592696	IR	lift: uninitialized output rN
 613e0853715de2f693f62df4d16b4ebca996142f5c9599e1fc85a1b92c592696	IR WGSL	not reached
-61af7ac9c83657f479ff1b1e94d0c777fb4d84d9d417f33e90e8abb55cdb5a7a	A	lift: register type N, index N outside the supported Vertex SMN banks
 61af7ac9c83657f479ff1b1e94d0c777fb4d84d9d417f33e90e8abb55cdb5a7a	IR	lift: register type N, index N outside the vs_N_N banks
 61af7ac9c83657f479ff1b1e94d0c777fb4d84d9d417f33e90e8abb55cdb5a7a	IR WGSL	not reached
-6330be87935af474235176d514e911d785c6cd7fee0ecbe35fdc65f7992baecb	A	lift: opcode N TEXLDD outside the supported SMN subset
 6330be87935af474235176d514e911d785c6cd7fee0ecbe35fdc65f7992baecb	IR	lift: TEX source N is not a sampler
 6330be87935af474235176d514e911d785c6cd7fee0ecbe35fdc65f7992baecb	IR WGSL	not reached
-635fa26d9ed6aad825963bae8604876cded622d37baf717d9932e3dc83acc166	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-63c0c898ed74d76138a0967caa66e7121c46a84ed33421ae4d1ac2da41997bac	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-65c8af49890e0d2b851fe9dd9e5341defefe41618a1e691a3b0569da3d269711	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-67d9b52ac83527093af2168eb81a980d137c261c273a7c1f523355b571b780cf	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 67d9b52ac83527093af2168eb81a980d137c261c273a7c1f523355b571b780cf	IR	lift: a relative constant before any mova wrote aN
 67d9b52ac83527093af2168eb81a980d137c261c273a7c1f523355b571b780cf	IR WGSL	not reached
-68982bb6788d3d60077b81cf1f4aa310a6af5171e77a996a92ef30f8508e8f6c	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 68982bb6788d3d60077b81cf1f4aa310a6af5171e77a996a92ef30f8508e8f6c	IR	lift: uninitialized output rN
 68982bb6788d3d60077b81cf1f4aa310a6af5171e77a996a92ef30f8508e8f6c	IR WGSL	not reached
-69b2b55ea4416fedbf7364699e5bfb8325fc1a7d0d1665aafdadbfdfb68e08b6	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-6b127cf8f363472b499eb4a933d98e97c84b333d439bc27b16b768651805ef32	A	lift: version ps_N_x: only ps_N_N and vs_N_N are lifted
 6b127cf8f363472b499eb4a933d98e97c84b333d439bc27b16b768651805ef32	IR	lift: uninitialized rN
 6b127cf8f363472b499eb4a933d98e97c84b333d439bc27b16b768651805ef32	IR WGSL	not reached
-6b7a521c96fb3da4fbe4d0a132f8055b393aba5a770c5da317729fdcc6087452	A	lift: opcode N is not a DirectND N instruction
 6b7a521c96fb3da4fbe4d0a132f8055b393aba5a770c5da317729fdcc6087452	IR	lift: opcode N is not a DirectND N instruction
 6b7a521c96fb3da4fbe4d0a132f8055b393aba5a770c5da317729fdcc6087452	IR WGSL	not reached
-6d3b32597f74081c1a20f8cefc37360994a1843a2321ed3f15168ee7d608d95a	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-6df33ecfeab5f9ff478f836c83baf6db97bf10c79da8be966dde95fd8fa91a2d	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-701dcb5f0849ab3aab161766393847c4690c887123f05d3bd47bb18fa646825e	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-72e7ec6baf0fd5fc1c3795bdbc7f0a64f5301473d9eb8f8c39c93b8acd54b5c4	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 72e7ec6baf0fd5fc1c3795bdbc7f0a64f5301473d9eb8f8c39c93b8acd54b5c4	IR	lift: relative address token with a modifier or a swizzle that does not replicate one lane
 72e7ec6baf0fd5fc1c3795bdbc7f0a64f5301473d9eb8f8c39c93b8acd54b5c4	IR WGSL	not reached
-73c89a75ac3cd684fd5cd528896fabad4d94e439547af0990f34de5c3ca213fb	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
-74e0417142bce871d5b68f4e1490b10f411af9b1a72196936d0ae915022950c1	A	lift: duplicate or modified sampler declaration
 74e0417142bce871d5b68f4e1490b10f411af9b1a72196936d0ae915022950c1	IR	lift: duplicate or modified sampler declaration
 74e0417142bce871d5b68f4e1490b10f411af9b1a72196936d0ae915022950c1	IR WGSL	not reached
-7545235a9b42e02aa8e2699476b237a381192396f579b0265dd4557c0c83e6d9	A	lift: register type N, index N outside the supported Pixel SMN banks
-759554e58d11a71126ceebc9dc8b49105e54fe41749552b2fcc8fd6d807de9d9	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 759554e58d11a71126ceebc9dc8b49105e54fe41749552b2fcc8fd6d807de9d9	IR	lift: uninitialized output rN
 759554e58d11a71126ceebc9dc8b49105e54fe41749552b2fcc8fd6d807de9d9	IR WGSL	not reached
-770795e4c55cc0bb0478a8a0fa210950286606d6ad4490509da6d2d6d6802c6b	A	lift: CTAB s+t: sampler array or type Type { class: N, kind: N, rows: N, columns: N, elements: N, members: [] }
-77c573d453e4e97276e335fab4259be109e4bf0f600ddbaf2e24003a46d5e23b	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-79e07a339bc55de9e6042db5ed03b77ad94b3863073a3a1ac6081f3f614f42bb	A	lift: opcode N IF outside the supported SMN subset
-7a1109156997c9d87ded67ad4d3f3ebef7a39a2b7f552407c62840bdc991ccbb	A	lift: vertex output usage outside the subset (N to N, PSIZE not supported)
-7af6358c0d3d9d9c3993e199332099bf7cdc1e36c61e8b3a15e76ed33660c991	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 7af6358c0d3d9d9c3993e199332099bf7cdc1e36c61e8b3a15e76ed33660c991	IR	lift: uninitialized rN
 7af6358c0d3d9d9c3993e199332099bf7cdc1e36c61e8b3a15e76ed33660c991	IR WGSL	not reached
-7b672f837bbb1c961084363324d42e7731ef009284c9eb3b72d55c2fc5a8306d	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 7b672f837bbb1c961084363324d42e7731ef009284c9eb3b72d55c2fc5a8306d	IR	lift: undeclared input vN
 7b672f837bbb1c961084363324d42e7731ef009284c9eb3b72d55c2fc5a8306d	IR WGSL	not reached
-7c4a15e6acdab1e790b2a92bff12ccc9e29c99b4d99486b229cde3bb0111ec45	A	lift: version ps_N_x: only ps_N_N and vs_N_N are lifted
-7dc912092f3ff3b48410c0a195b8b9aa0653d897d1c6149c6047fd44e01bc183	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-7fa70f9e38c53073fb6816a744acf517a0d40e85522f321036386647b89e8a55	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 7fa70f9e38c53073fb6816a744acf517a0d40e85522f321036386647b89e8a55	IR	lift: a relative constant before any mova wrote aN
 7fa70f9e38c53073fb6816a744acf517a0d40e85522f321036386647b89e8a55	IR WGSL	not reached
-801c80babcfe54f49e70bd9f79e863a354e411d8c3f057ce7f66f1f2faa556be	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
-80f9482aee371a1f6f1e00d25ade566965ed882e76a0b015c970798cedc379ee	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
-81d3e22bf167c150cd7cd6f9c2d139964e7020c74a44c97995ab0e7c9cca561f	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-82aa732c080afea52ca07337a0d5409c9971c22a3fa569b2417cac7a024755f8	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 82aa732c080afea52ca07337a0d5409c9971c22a3fa569b2417cac7a024755f8	IR	lift: undeclared input vN
 82aa732c080afea52ca07337a0d5409c9971c22a3fa569b2417cac7a024755f8	IR WGSL	not reached
-86b8d5ef25cd9dbbac0c92e6a868fcf405801b44411bde7560e3df7177788285	A	lift: version ps_N_x: only ps_N_N and vs_N_N are lifted
 86b8d5ef25cd9dbbac0c92e6a868fcf405801b44411bde7560e3df7177788285	IR	lift: pN is read before setp writes it
 86b8d5ef25cd9dbbac0c92e6a868fcf405801b44411bde7560e3df7177788285	IR WGSL	not reached
-88a547558c078ae7cf4c48e1db1b6827bbb352e3e148db78624b1cef79fb83ce	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 88a547558c078ae7cf4c48e1db1b6827bbb352e3e148db78624b1cef79fb83ce	IR	lift: undeclared input vN
 88a547558c078ae7cf4c48e1db1b6827bbb352e3e148db78624b1cef79fb83ce	IR WGSL	not reached
-895c82e74d7c7ffe04b62ba5eca8c25b041e90c31bf2338c799810e6f5238b20	A	lift: opcode N RET outside the supported SMN subset
 895c82e74d7c7ffe04b62ba5eca8c25b041e90c31bf2338c799810e6f5238b20	IR	lift: instruction's operand span extends past its stated length (it ends at word N)
 895c82e74d7c7ffe04b62ba5eca8c25b041e90c31bf2338c799810e6f5238b20	IR WGSL	not reached
-89b4ccd02d11df0d258d345882689e6282b377b0a912f0d9a93ede85533df5a2	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-89bf0de45466db1b51bcf792f019dd9ef4cac192898b86986440e0a7a387d94c	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-8a5100e5e1f27156ccc0b48a863c6606d9d54920b48a3d5c5bee3aa9d4ea8f97	A	lift: vertex output usage outside the subset (N to N, PSIZE not supported)
-8a92ca83909d0527abf2b929179b2045d6518f5e253b6bda7b4a9f26eec2f57c	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-8abcd10a46945e818b18f15b0a0de5bbcfa3be9b9e8580716aeafb6d83209ab4	A	lift: opcode N TEXLDL outside the supported SMN subset
-8b5761f0341dcfdf10c07d39dfcd9acb78f523ed3f72a231dcd68d0548a4c9de	A	lift: write to undeclared vertex output lanes Nxf of oN, which declares NxN
 8b5761f0341dcfdf10c07d39dfcd9acb78f523ed3f72a231dcd68d0548a4c9de	IR	lift: write to undeclared vertex output lanes Nxf of oN, which declares NxN
 8b5761f0341dcfdf10c07d39dfcd9acb78f523ed3f72a231dcd68d0548a4c9de	IR WGSL	not reached
-8c207a607db6ae8ae8e55a0d39c5090d759cf2391194928172aef584e5a17bea	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 8c207a607db6ae8ae8e55a0d39c5090d759cf2391194928172aef584e5a17bea	IR	lift: source modifier N (XNNegate), which ps_N_N does not have
 8c207a607db6ae8ae8e55a0d39c5090d759cf2391194928172aef584e5a17bea	IR WGSL	not reached
-8c6fa80586b1066c19fcdda5392c8b0342daba6295d08166a7af82e971af0d0a	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-8c990d09692f44b9b17e1016a6863a8a2f3c02ab5fd9c4282b88c841ecb391ff	A	lift: version vs_N_x: only ps_N_N and vs_N_N are lifted
 8c990d09692f44b9b17e1016a6863a8a2f3c02ab5fd9c4282b88c841ecb391ff	IR	lift: pN is read before setp writes it
 8c990d09692f44b9b17e1016a6863a8a2f3c02ab5fd9c4282b88c841ecb391ff	IR WGSL	not reached
-8cb94b91127febf72b2ddd699620a7a0df2607d1bb65ba3bea95e3e13e961b9e	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-8f4d130c33da13cdabbc82841bd1440e94c655aed53b8f8e9d88575222a527e6	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 8f4d130c33da13cdabbc82841bd1440e94c655aed53b8f8e9d88575222a527e6	IR	lift: undeclared input vN
 8f4d130c33da13cdabbc82841bd1440e94c655aed53b8f8e9d88575222a527e6	IR WGSL	not reached
-8f59e1592e9775c2708a601a79e24cb14c37bf081f85e4a9ca47787f8fac927c	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-903e2ba46cd380d4098f5f9f984bcce7f813a844acf32b3424011d1ea48d821e	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
-94b6936e96fb9dbf02f693e25326d884d3b1d46f91a5fbe9a8004bd5738077e8	A	lift: version vs_N_x: only ps_N_N and vs_N_N are lifted
 94b6936e96fb9dbf02f693e25326d884d3b1d46f91a5fbe9a8004bd5738077e8	IR	lift: vertex program never writes oPos
 94b6936e96fb9dbf02f693e25326d884d3b1d46f91a5fbe9a8004bd5738077e8	IR WGSL	not reached
-952420f60ad3e118a8fa95b18587d6b85382038ebdab63d72d439b79fe1a9cfa	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 952420f60ad3e118a8fa95b18587d6b85382038ebdab63d72d439b79fe1a9cfa	IR	lift: undeclared input vN
 952420f60ad3e118a8fa95b18587d6b85382038ebdab63d72d439b79fe1a9cfa	IR WGSL	not reached
-976aba4684beeb0ec71b70634f5c599f302f9c1c81becb76f2e60d31f09ee238	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 976aba4684beeb0ec71b70634f5c599f302f9c1c81becb76f2e60d31f09ee238	IR	lift: uninitialized output rN
 976aba4684beeb0ec71b70634f5c599f302f9c1c81becb76f2e60d31f09ee238	IR WGSL	not reached
-976e4e14aa5e793b00152ba0a202d3aaf29384273a3231b5bd2a39a108eed41c	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
-9770134a806631c1640dc884a0a5e957ec8d046fb1b786c707010ab59722e2cc	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 9770134a806631c1640dc884a0a5e957ec8d046fb1b786c707010ab59722e2cc	IR	lift: defb (opcode N) is a vertex instruction, not one of ps_N_N
 9770134a806631c1640dc884a0a5e957ec8d046fb1b786c707010ab59722e2cc	IR WGSL	not reached
-9900424bc20d514ba35dfd8f8b529e07a66539e8267896869980014419e716cb	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 9900424bc20d514ba35dfd8f8b529e07a66539e8267896869980014419e716cb	IR	lift: uninitialized output rN
 9900424bc20d514ba35dfd8f8b529e07a66539e8267896869980014419e716cb	IR WGSL	not reached
-99306220b22b2a19989e972c9dd68a7eaf99a59ae96de855c94d8734a84b6ebd	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 99306220b22b2a19989e972c9dd68a7eaf99a59ae96de855c94d8734a84b6ebd	IR	lift: uninitialized output rN
 99306220b22b2a19989e972c9dd68a7eaf99a59ae96de855c94d8734a84b6ebd	IR WGSL	not reached
-99a9c9dd7325fcb4f75af447a0868735014e42d839cf9434eab387f2d77aeccc	A	lift: opcode N REP outside the supported SMN subset
-99b4242c91cc34c1f12a4ebb57edb9a7408258efd519b286aeced6c0c55ded04	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-9a456d4361ca6eacd75e8a3259b720f81ef8993e9b27d354c2d5accaf590af96	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-9b014dcbaa51faf110f6822117cd20fff19f135cf471fe58c3fd17c46ac48f5a	A	lift: version ps_N_x: only ps_N_N and vs_N_N are lifted
 9b014dcbaa51faf110f6822117cd20fff19f135cf471fe58c3fd17c46ac48f5a	IR	lift: uninitialized rN
 9b014dcbaa51faf110f6822117cd20fff19f135cf471fe58c3fd17c46ac48f5a	IR WGSL	not reached
-9b14d1bc766bdb392541adb2ccc364cab71f903c8a478b04f6225868142bdc73	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 9b14d1bc766bdb392541adb2ccc364cab71f903c8a478b04f6225868142bdc73	IR	lift: vs_N_N: no DirectND N runtime takes it
 9b14d1bc766bdb392541adb2ccc364cab71f903c8a478b04f6225868142bdc73	IR WGSL	not reached
-9b2cd469b26d38f1c8419d8a4abae6abf2b547fc1f886cb3877d51c5aca01850	A	lift: opcode N DSY outside the supported SMN subset
-9b2dc4596894dd878b450277ce13ee83ad0093e775f01b3649363102ceab8457	A	lift: SinCos requires replicate scalar swizzles
 9b2dc4596894dd878b450277ce13ee83ad0093e775f01b3649363102ceab8457	IR	lift: sincos requires replicate scalar swizzles
 9b2dc4596894dd878b450277ce13ee83ad0093e775f01b3649363102ceab8457	IR WGSL	not reached
-9bf9a9a57eff31b54bcd02ec0a9f8e7fca562ef42b83b9184226215edb206be3	A	lift: opcode N DEFI outside the supported SMN subset
 9bf9a9a57eff31b54bcd02ec0a9f8e7fca562ef42b83b9184226215edb206be3	IR	lift: register type N, index N outside the vs_N_N banks
 9bf9a9a57eff31b54bcd02ec0a9f8e7fca562ef42b83b9184226215edb206be3	IR WGSL	not reached
-9f6261d7372973b88694cedc754a6c5ece35ab9bb5ca057445b19e43e73765f0	A	lift: version ps_N_x: only ps_N_N and vs_N_N are lifted
 9f6261d7372973b88694cedc754a6c5ece35ab9bb5ca057445b19e43e73765f0	IR	lift: uninitialized rN
 9f6261d7372973b88694cedc754a6c5ece35ab9bb5ca057445b19e43e73765f0	IR WGSL	not reached
-a23481230c67a7fb254fe396a5d618b7bfbe555fa1b148e34869ea6e5fb8ee85	A	lift: CTAB i: non-float/structured/empty type Type { class: N, kind: N, rows: N, columns: N, elements: N, members: [] }
-a2e41783507134be3f998a6e697f2dc950e9b824ffda64a32dfdc2e6ca6312fd	A	lift: instruction token NxN sets reserved bit N or N
 a2e41783507134be3f998a6e697f2dc950e9b824ffda64a32dfdc2e6ca6312fd	IR	lift: instruction token NxN sets reserved bit N or N
 a2e41783507134be3f998a6e697f2dc950e9b824ffda64a32dfdc2e6ca6312fd	IR WGSL	not reached
-a3e251f5368002235bd4a9be4e1e8bc7f0a364bcfd8cd346e3191175fb283e52	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-a671c333b5688691db04817b2f6270864420a5479a8606da961513960999ffe5	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-a764002730bebfab25fe516294046fb4e29e16650a4bb888e607d0dd730f191c	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-a7dd759941c50514f5b28c1862085b8deec9f8097acf5f78b2c0b0c176581f6f	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 a7dd759941c50514f5b28c1862085b8deec9f8097acf5f78b2c0b0c176581f6f	IR	lift: uninitialized rN
 a7dd759941c50514f5b28c1862085b8deec9f8097acf5f78b2c0b0c176581f6f	IR WGSL	not reached
-a99129c4936e52c16e33ed1e61e19fdc4c667faa6c4a67fa7b40b3bc52337e49	A	lift: duplicate or modified sampler declaration
 a99129c4936e52c16e33ed1e61e19fdc4c667faa6c4a67fa7b40b3bc52337e49	IR	lift: duplicate or modified sampler declaration
 a99129c4936e52c16e33ed1e61e19fdc4c667faa6c4a67fa7b40b3bc52337e49	IR WGSL	not reached
-a9f23d35303c2bc3dbf266270e7f675ea34dc02678c96f09df1f6815cfa3cc70	A	lift: version ps_N_x: only ps_N_N and vs_N_N are lifted
-ab61b3ea3cd7d76392754fbe43dcb441091e34f55ae5ae6b4be498a542e92fc2	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 ab61b3ea3cd7d76392754fbe43dcb441091e34f55ae5ae6b4be498a542e92fc2	IR WGSL	lower: pipeline state rN is read: specialise it first (a state block is not lowered yet)
-abd1d36464166268f40c9a8473a764abcbf1ab9c068ce82ae1e8a2a8574b6bca	A	lift: register type N, index N outside the supported Pixel SMN banks
-abf62b9ad69affb824b0696d08f218fa52d86fe9bbe4a2f999dd56a395ddd1cb	A	lift: version ps_N_x: only ps_N_N and vs_N_N are lifted
 abf62b9ad69affb824b0696d08f218fa52d86fe9bbe4a2f999dd56a395ddd1cb	IR	lift: pN is read before setp writes it
 abf62b9ad69affb824b0696d08f218fa52d86fe9bbe4a2f999dd56a395ddd1cb	IR WGSL	not reached
-ada5af0ca01ed25ae7b8310542cd52586f701d3c95e07cd8e93b2b6cb68dd16b	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
-ade98b606e90e5e19680a2138ae384884f577b694c52923fa02bd8dac7cb3761	A	lift: version ps_N_sw: only ps_N_N and vs_N_N are lifted
 ade98b606e90e5e19680a2138ae384884f577b694c52923fa02bd8dac7cb3761	IR	lift: ps_N_sw: the software versions are not lifted
 ade98b606e90e5e19680a2138ae384884f577b694c52923fa02bd8dac7cb3761	IR WGSL	not reached
-aeecd0184aa839cca16d95074df1ea8d7cf530fcb90e7545c4796913cf417422	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 aeecd0184aa839cca16d95074df1ea8d7cf530fcb90e7545c4796913cf417422	IR	lift: vertex program never writes oPos
 aeecd0184aa839cca16d95074df1ea8d7cf530fcb90e7545c4796913cf417422	IR WGSL	not reached
-afe07a76b658729e0fc2804fca6aa6b4b486dad828952ed27fa12e147306c149	A	lift: opcode N REP outside the supported SMN subset
-b09f358243dcfc1845849f62fe408fac340b9c51fcbf8f73998ae0841060e0af	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 b09f358243dcfc1845849f62fe408fac340b9c51fcbf8f73998ae0841060e0af	IR	lift: uninitialized output rN
 b09f358243dcfc1845849f62fe408fac340b9c51fcbf8f73998ae0841060e0af	IR WGSL	not reached
-b1f8713c54f8b16827a90245d922af1baf86f80ca5ad7b613e003b435d0811fc	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-b5efa1e69cf79517f360160f3d07299ffe2b18fc713b59748f0e57f66c16b2df	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-b870eff76211398c89295d4e22c70e61bf2f82d357306099b62b914e691df77a	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 b870eff76211398c89295d4e22c70e61bf2f82d357306099b62b914e691df77a	IR	lift: uninitialized output rN
 b870eff76211398c89295d4e22c70e61bf2f82d357306099b62b914e691df77a	IR WGSL	not reached
-b884bef48586ea501437235ae4666256735db5fb497de9d189af17fee37a429d	A	lift: CTAB a: non-float/structured/empty type Type { class: N, kind: N, rows: N, columns: N, elements: N, members: [] }
-b8ce7b775d88cf3e5fe07ebadb2d71d3302e5c7c51161a07e2884fdcad5d282c	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 b8ce7b775d88cf3e5fe07ebadb2d71d3302e5c7c51161a07e2884fdcad5d282c	IR	lift: instruction/comment span of N words extends past the stream's N words
 b8ce7b775d88cf3e5fe07ebadb2d71d3302e5c7c51161a07e2884fdcad5d282c	IR WGSL	not reached
-bc0f43883096af3fa6478f791e9bcb5249961d725615a23b45e0c2f422b00967	A	lift: opcode N TEXLDL outside the supported SMN subset
 bc0f43883096af3fa6478f791e9bcb5249961d725615a23b45e0c2f422b00967	IR	lift: undeclared sampler sN
 bc0f43883096af3fa6478f791e9bcb5249961d725615a23b45e0c2f422b00967	IR WGSL	not reached
-bd26eb460ff47eb0cce5d28c46410a5a9668c766f9b6f15239671637d55f7197	A	lift: opcode N TEXLDL outside the supported SMN subset
-bdc3aa80a0d7faf39eda45fc474304cf952b3fd984a3aa81d655c449556ae1d1	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 bdc3aa80a0d7faf39eda45fc474304cf952b3fd984a3aa81d655c449556ae1d1	IR	lift: call of lN, which is not defined
 bdc3aa80a0d7faf39eda45fc474304cf952b3fd984a3aa81d655c449556ae1d1	IR WGSL	not reached
-bfa9edb742b9e8a54b7d03f4ec7905a9d717d79a048247f1164a1091b277283e	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 bfa9edb742b9e8a54b7d03f4ec7905a9d717d79a048247f1164a1091b277283e	IR	lift: instruction/comment span of N words extends past the stream's N words
 bfa9edb742b9e8a54b7d03f4ec7905a9d717d79a048247f1164a1091b277283e	IR WGSL	not reached
-c056fba78e5db46914cdb32c73b40195dbdfc6fe5aea2b9628310b7ed150fbf2	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 c056fba78e5db46914cdb32c73b40195dbdfc6fe5aea2b9628310b7ed150fbf2	IR	lift: uninitialized output rN
 c056fba78e5db46914cdb32c73b40195dbdfc6fe5aea2b9628310b7ed150fbf2	IR WGSL	not reached
-c126984308da3c0933c46d8aed1143383e3ecf6ab1caf27fdeb8ceddd9140f1b	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
-c44de59cd791bc970ff64adf52045feeb91b8ad340064b47cdca91326d813276	A	lift: version ps_N_x: only ps_N_N and vs_N_N are lifted
-c4eeff56ea8f2eba67d32b2862dfe46a684afa10c3277f8a924e51c43bed19c5	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 c4eeff56ea8f2eba67d32b2862dfe46a684afa10c3277f8a924e51c43bed19c5	IR	lift: uninitialized tN
 c4eeff56ea8f2eba67d32b2862dfe46a684afa10c3277f8a924e51c43bed19c5	IR WGSL	not reached
-c5de637d8b479ec5848bda17d1a5bfa48a3dfe0634400e7d56a04ca56aa0c06e	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
-c5df81b5e09e5b84045fcf1dcaed6600375f129125566a3768a7887bcfde2cd7	A	lift: relative address token other than the vertex address register aN (a loop counter aL is not supported)
 c5df81b5e09e5b84045fcf1dcaed6600375f129125566a3768a7887bcfde2cd7	IR	lift: aL read outside a loop
 c5df81b5e09e5b84045fcf1dcaed6600375f129125566a3768a7887bcfde2cd7	IR WGSL	not reached
-c70158b92fae545953db28fb4465697683727234423c8cdbc920c49502f59e50	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 c70158b92fae545953db28fb4465697683727234423c8cdbc920c49502f59e50	IR WGSL	lower: pipeline state rN is read: specialise it first (a state block is not lowered yet)
-c85a8ae15d72f430c9e6ef2024d32292e25cc23ecb183be7454281ab7c19317e	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 c85a8ae15d72f430c9e6ef2024d32292e25cc23ecb183be7454281ab7c19317e	IR	lift: a relative constant before any mova wrote aN
 c85a8ae15d72f430c9e6ef2024d32292e25cc23ecb183be7454281ab7c19317e	IR WGSL	not reached
-c9113bcf953d764eabe06d1869812993908fb6e5a2f82db388dead011d4537d1	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 c9113bcf953d764eabe06d1869812993908fb6e5a2f82db388dead011d4537d1	IR	lift: a relative constant before any mova wrote aN
 c9113bcf953d764eabe06d1869812993908fb6e5a2f82db388dead011d4537d1	IR WGSL	not reached
-c9e6c893daba028b2411634489f90e44c23951f29c8ec43df23f1e5f211dab17	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 c9e6c893daba028b2411634489f90e44c23951f29c8ec43df23f1e5f211dab17	IR	lift: uninitialized rN
 c9e6c893daba028b2411634489f90e44c23951f29c8ec43df23f1e5f211dab17	IR WGSL	not reached
-ca8b8647d824643c64a4b10a00014400de041ad22b4a8c2d15b7f1f38cf97858	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 ca8b8647d824643c64a4b10a00014400de041ad22b4a8c2d15b7f1f38cf97858	IR	lift: uninitialized rN
 ca8b8647d824643c64a4b10a00014400de041ad22b4a8c2d15b7f1f38cf97858	IR WGSL	not reached
-ca937178aeb1abe9882aa41d28f6f043dda5addd27d4cead4cbbaf53174a4713	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-caf6ce2dfb04b5fa4707dcfcc097c15bbb10c163f95eac2389f981054f333b2f	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-cb53f88745c76673ca2e6b3f3218db93ebd309afdeed734a10c4453c332ee705	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-cb58a94dbf874081e18ca40ef0fe92405c3aef9cb5e7f393c5ee6353e84d522e	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 cb58a94dbf874081e18ca40ef0fe92405c3aef9cb5e7f393c5ee6353e84d522e	IR	lift: uninitialized output rN
 cb58a94dbf874081e18ca40ef0fe92405c3aef9cb5e7f393c5ee6353e84d522e	IR WGSL	not reached
-cbb5c8c92672e78252accc246c2cc4c8b9ce976aa8aab4d9a6ab693605fa0ab9	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-cbcf58c31fb9ce0e301b1f3beab2aade9564506ea22e0a45616b7080f29af4ab	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-cc4596b55823329b415b1eb83387db61a5e0abb832a053df00f78073b69a4249	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 cc4596b55823329b415b1eb83387db61a5e0abb832a053df00f78073b69a4249	IR	lift: uninitialized output rN
 cc4596b55823329b415b1eb83387db61a5e0abb832a053df00f78073b69a4249	IR WGSL	not reached
-cc57e25be9d000f5212483f2fa0b4f6a97cdbeb4ea21ab3bd9b004cb82063774	A	lift: relative addressing of a destination (not supported)
 cc57e25be9d000f5212483f2fa0b4f6a97cdbeb4ea21ab3bd9b004cb82063774	IR	lift: register type N, index N outside the vs_N_N banks
 cc57e25be9d000f5212483f2fa0b4f6a97cdbeb4ea21ab3bd9b004cb82063774	IR WGSL	not reached
-ceefc8f37062d402248233606b879cff0686676b31e0517063126943f372203e	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-cfb12133abb4ba038bc6ff07ad131a70cd2c7ef9c2964017a1e7c1c67c1ee3c8	A	lift: vertex output usage outside the subset (N to N, PSIZE not supported)
 cfb12133abb4ba038bc6ff07ad131a70cd2c7ef9c2964017a1e7c1c67c1ee3c8	IR	lift: oN: uninitialized output lanes NxN
 cfb12133abb4ba038bc6ff07ad131a70cd2c7ef9c2964017a1e7c1c67c1ee3c8	IR WGSL	not reached
-cfddb1622d8905ae8b6e3c4199b9017e32eae0e55a7dbcd109bc9aac6f30c506	A	lift: instruction controls/predication/coissue NxN
-d00c56f6e922a0c339c1a0ec08c0f12817f3e5806d112e3dcef93b849ca3f68c	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-d1906bf504797b1a17d42d19d3da8a7fa8b4a4c6ee6e18b42dbb708303dbbe7c	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-d27a5dc95e1834ba19975c20ab76e82fb7339b5624ca0a1fb55eb01a5c4d4070	A	lift: version vs_N_x: only ps_N_N and vs_N_N are lifted
 d27a5dc95e1834ba19975c20ab76e82fb7339b5624ca0a1fb55eb01a5c4d4070	IR	lift: uninitialized rN
 d27a5dc95e1834ba19975c20ab76e82fb7339b5624ca0a1fb55eb01a5c4d4070	IR WGSL	not reached
-d2c3bb09a1cee97c1da5b384a59a41f4c50c0cce074bfc1e2c4f0ddf90e82123	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 d2c3bb09a1cee97c1da5b384a59a41f4c50c0cce074bfc1e2c4f0ddf90e82123	IR	lift: uninitialized rN
 d2c3bb09a1cee97c1da5b384a59a41f4c50c0cce074bfc1e2c4f0ddf90e82123	IR WGSL	not reached
-d33888bfd0d0849fb1ed32029e0db7e7af667797c78aa057cc8c7d56ad5354b6	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-d38efeb4128dfa62b1a9c735024deddba3800004f342bbb14de2a4438c04d93d	A	lift: opcode N LOOP outside the supported SMN subset
-d4929fcb01d57361f802b937aa9208063de77493f6f87d996291372ec113d95a	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 d4929fcb01d57361f802b937aa9208063de77493f6f87d996291372ec113d95a	IR	lift: undeclared input vN
 d4929fcb01d57361f802b937aa9208063de77493f6f87d996291372ec113d95a	IR WGSL	not reached
-d495675d0ac00fc1c55766f4611987f38eb121e2dbc362f8b6cf7ecb451a962c	A	lift: opcode N REP outside the supported SMN subset
-d496fb27de1f4c5d4bc4daa340ef0158d0d1ef93e6a7511398c5557e9d56e693	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-d9971be55749e27463067e5ed6792e2337deb08b7cae2d7e0b5d31bfd0f4e654	A	lift: register type N, index N outside the supported Pixel SMN banks
-da6a45905c251eaaf41008690d10eb9824002fc4a38c65b211f330fde97326c4	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 da6a45905c251eaaf41008690d10eb9824002fc4a38c65b211f330fde97326c4	IR	lift: a relative constant before any mova wrote aN
 da6a45905c251eaaf41008690d10eb9824002fc4a38c65b211f330fde97326c4	IR WGSL	not reached
-ddc4e31ca27a3c39b7a9ef764ff78b492a5df35fbbd64ae7383d70d81b491c4a	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-de53cd93cb34efe112eed8be3df5435a058061d0aed9079536bdffeebd1b2335	A	lift: opcode N DEFI outside the supported SMN subset
-dee3472a02e42f9f1b9049de1080fe0b8d07e08d663ed34e2534c945dc70c479	A	lift: version vs_N_x: only ps_N_N and vs_N_N are lifted
 dee3472a02e42f9f1b9049de1080fe0b8d07e08d663ed34e2534c945dc70c479	IR	lift: pN is read before setp writes it
 dee3472a02e42f9f1b9049de1080fe0b8d07e08d663ed34e2534c945dc70c479	IR WGSL	not reached
-def135febc7e06cf5da63af593ffc797ae53fe4027ef9daf232c5ed8d4aa2225	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 def135febc7e06cf5da63af593ffc797ae53fe4027ef9daf232c5ed8d4aa2225	IR	lift: pow requires replicate scalar swizzles
 def135febc7e06cf5da63af593ffc797ae53fe4027ef9daf232c5ed8d4aa2225	IR WGSL	not reached
-e0dcfb652e3baead6e28c23fda54059372676b3e7b1a1e7a0f723ce45cc62bc4	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 e0dcfb652e3baead6e28c23fda54059372676b3e7b1a1e7a0f723ce45cc62bc4	IR	lift: uninitialized rN
 e0dcfb652e3baead6e28c23fda54059372676b3e7b1a1e7a0f723ce45cc62bc4	IR WGSL	not reached
-e1ce24a97452044531db5963e45fd46af6aa6a258e45edbd594bf27d5915c109	A	lift: instruction controls/predication/coissue NxN
-e27d352f450600945009054ca5093f17b76720b007f03e5e7543f425fa34ae40	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-e28aea4e81edd98903ac222fd0c5556d88da312501dc943c295f8590204bce81	A	lift: version ps_N_x: only ps_N_N and vs_N_N are lifted
 e28aea4e81edd98903ac222fd0c5556d88da312501dc943c295f8590204bce81	IR	lift: uninitialized rN
 e28aea4e81edd98903ac222fd0c5556d88da312501dc943c295f8590204bce81	IR WGSL	not reached
-e2df2953fb66de48f3c06f07a946fee413628ed641031ae15a34cc6f86a9cbf3	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 e2df2953fb66de48f3c06f07a946fee413628ed641031ae15a34cc6f86a9cbf3	IR	lift: uninitialized rN
 e2df2953fb66de48f3c06f07a946fee413628ed641031ae15a34cc6f86a9cbf3	IR WGSL	not reached
-e2fdd5006caca9c70985afa6ebc71607a61cb278eb2874fc7b8bf7e4c7b6dbe7	A	lift: instruction controls/predication/coissue NxN
-e53205c4c1fec602b7ccbabaefa4504193a75dce5b24199265d28da0be0fed30	A	lift: Output(N): uninitialized output lanes Nxe
 e53205c4c1fec602b7ccbabaefa4504193a75dce5b24199265d28da0be0fed30	IR	lift: oN: uninitialized output lanes Nxe
 e53205c4c1fec602b7ccbabaefa4504193a75dce5b24199265d28da0be0fed30	IR WGSL	not reached
-e814364e063efb0565d7e9ffc98aa84aae20695daada26e3a71da467fe4cf3c5	A	lift: register type N, index N outside the supported Pixel SMN banks
-e9bdde262e531a917c70afaa7f2a7089c9db6b431cbd35afaa3c7bcfb36ea80b	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 e9bdde262e531a917c70afaa7f2a7089c9db6b431cbd35afaa3c7bcfb36ea80b	IR	lift: uninitialized rN
 e9bdde262e531a917c70afaa7f2a7089c9db6b431cbd35afaa3c7bcfb36ea80b	IR WGSL	not reached
-e9d679a3ffefe793d74dd861fed565bdeb56234817f8578d5d25cbbd45e1e9dc	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
-ea368981af784c049acff77ccff23f4581de78262e10ec3b8ad7f210982dd5df	A	lift: opcode N REP outside the supported SMN subset
-ecb680b296f5f1a7cc4d95c93be9dbd7ec699579cbd89394d72968e52cde9552	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 ecb680b296f5f1a7cc4d95c93be9dbd7ec699579cbd89394d72968e52cde9552	IR	lift: vertex program never writes oPos
 ecb680b296f5f1a7cc4d95c93be9dbd7ec699579cbd89394d72968e52cde9552	IR WGSL	not reached
-ed58ac3389b7adee2d4258a2f17e8e6038ee940836e890634b4731417869e626	A	lift: CTAB s+t: sampler array or type Type { class: N, kind: N, rows: N, columns: N, elements: N, members: [] }
-ed58aebd26992bd7ab90a11c1ec9943cf5ab7d234412bb390cd74ce0743716f9	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-ee9c4cccd76ae555d143051eff672e0634b1c4062184613102274a8014705ed3	A	lift: register type N, index N outside the supported Pixel SMN banks
-ef76c280160083a1da3eec1f7c9d9afe8e3719e9c995ecf99b757f52134117dc	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-f2d2c5b736badfa767561ec932ac390261e894f50f6c08672ae902baa734a7f9	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 f2d2c5b736badfa767561ec932ac390261e894f50f6c08672ae902baa734a7f9	IR	lift: vertex program never writes oPos
 f2d2c5b736badfa767561ec932ac390261e894f50f6c08672ae902baa734a7f9	IR WGSL	not reached
-f2e5b346b8576d2973c31e1762953946f7a33841e7c9b016eebd6205d4ce7cae	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-f51c2567ae848287b0f938bac089b5533ce55a24af751dbcd1227cb44051768c	A	lift: register type N, index N outside the supported Pixel SMN banks
-f5e74e51a641a20131ac4ca50959e99b1e076909dee78885452cd9ae83ca51c8	A	lift: opcode N REP outside the supported SMN subset
-f61cab9635e1320392ebc2bea80d041441192c796715c7f22b7aabccb4145047	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 f61cab9635e1320392ebc2bea80d041441192c796715c7f22b7aabccb4145047	IR	lift: vertex program never writes oPos
 f61cab9635e1320392ebc2bea80d041441192c796715c7f22b7aabccb4145047	IR WGSL	not reached
-f6f79d4f379d0bed139503151c578578ce2ff2131c518227541485e7257eed4f	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
-f7ac7415615182f37f6c55bf9d05d35d025a211e57d8389db9b2301d44fb61f3	A	lift: opcode N DEFI outside the supported SMN subset
-fa5c1ee46a315426a7d5ca7bb4cd6c8d6bc15d338410f6f81bcefd6ce220f7e9	A	lift: CTAB apple: non-float/structured/empty type Type { class: N, kind: N, rows: N, columns: N, elements: N, members: [TypeMember { name: "a", ty: Type { class: N, kind: N, rows: N, columns: N, elements: N, members: [] } }, TypeMember { name: "b", ty: Type { class: N, kind: N, rows: N, columns: N, elements: N, members: [] } }] }
-fa86ff4afeb924e6f1d7cf1b7eb1ea3efa0a50e9d0562f5564bc695d0b8a6c44	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 fa86ff4afeb924e6f1d7cf1b7eb1ea3efa0a50e9d0562f5564bc695d0b8a6c44	IR	lift: a relative constant before any mova wrote aN
 fa86ff4afeb924e6f1d7cf1b7eb1ea3efa0a50e9d0562f5564bc695d0b8a6c44	IR WGSL	not reached
-fae84a4977eb82b3bb6977ca46ad6c02d2bd723c9e3958b867a6043a5214fbad	A	lift: version vs_N_N: only ps_N_N and vs_N_N are lifted
 fae84a4977eb82b3bb6977ca46ad6c02d2bd723c9e3958b867a6043a5214fbad	IR	lift: undeclared input vN
 fae84a4977eb82b3bb6977ca46ad6c02d2bd723c9e3958b867a6043a5214fbad	IR WGSL	not reached
-fb9d5c4af60d976f01f416a412c64fad49007b38b23b5abb2e907a17fa332a1e	A	lift: version ps_N_N: only ps_N_N and vs_N_N are lifted
 fb9d5c4af60d976f01f416a412c64fad49007b38b23b5abb2e907a17fa332a1e	IR	lift: uninitialized rN
 fb9d5c4af60d976f01f416a412c64fad49007b38b23b5abb2e907a17fa332a1e	IR WGSL	not reached
-fca5119b4e2377fafeea24fae1e4cd3a9e50b03b089f9de6c3d9a9866739920e	A	lift: instruction controls/predication/coissue NxN
-fe4b5b1c2a61e66ca3cab2f4b573eb3131499f1065c4c4a434e91f38c9be8608	A	lift: opcode N DSX outside the supported SMN subset
 fe4b5b1c2a61e66ca3cab2f4b573eb3131499f1065c4c4a434e91f38c9be8608	IR	lift: uninitialized rN
 fe4b5b1c2a61e66ca3cab2f4b573eb3131499f1065c4c4a434e91f38c9be8608	IR WGSL	not reached

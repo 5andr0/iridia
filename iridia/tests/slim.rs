@@ -1,10 +1,8 @@
 #![allow(clippy::unwrap_used)]
 //! The pre-push gate over the slim shader set (`oracles.corpus.general/slim`): 8,287 DXBC, DXIL and Direct3D 9
 //! programs that together reach every region and branch side of the lifters the full pool of 108,394 reaches. Each
-//! program goes through every lift of its family:
+//! program goes through the IR lift of its family:
 //!
-//! - `A`, the older lift (`iridia_dxbc::lift`, `iridia_dxil::lift`, `iridia_d3d9::lift`): validated, written as WGSL
-//!   (a program of a stage WGSL has no entry point for, as its functions) and read back and validated by naga;
 //! - `IR`, the IR lift (`iridia_dxbc::ir::lift`, `iridia_dxil::ir::lift`, `iridia_d3d9_ir::lift`): after
 //!   `iridia_passes::prepare` (`structurize`, `promote`, `simplify` and `break_flags`), validated, each
 //!   function's text printed, parsed back and printed again the same;
@@ -34,7 +32,7 @@ type Outcome = String;
 
 const OK: &str = "ok";
 
-/// A reason with each run of digits as `N`, as [`iridia::Refusal::group`] counts refusals.
+/// A reason with each run of digits as `N`, as the lifters' refusals count them (`group`).
 fn grouped(reason: &str) -> String {
     let mut out = String::with_capacity(reason.len());
     let mut digits = false;
@@ -69,27 +67,6 @@ fn read_back(text: &str) -> Result<(), Outcome> {
     .validate(&module)
     .map_err(|e| stop("WGSL read back, validation", e.emit_to_string(text)))?;
     Ok(())
-}
-
-/// Column `A`: an older lift's program validated, written as WGSL and read back.
-fn older(lifted: Result<iridia::Program, iridia::Refusal>) -> Outcome {
-    let program = match lifted {
-        Ok(p) => p,
-        Err(e) => return stop("lift", e.group()),
-    };
-    if let Err(problems) = program.validate() {
-        let first = problems.first().map(ToString::to_string).unwrap_or_default();
-        return stop("validate", first);
-    }
-    let written = if iridia::stage_functions(&program.interface).is_ok_and(|f| f.is_some()) {
-        iridia::emit::wgsl_functions(&program)
-    } else {
-        iridia::emit::wgsl(&program)
-    };
-    match written {
-        Ok(text) => read_back(&text).err().unwrap_or_else(|| OK.into()),
-        Err(e) => stop("WGSL", e),
-    }
 }
 
 /// Columns `IR` and `IR WGSL`: an IR lift's program after the cut-over's passes, its text round trip, and its WGSL.
@@ -294,24 +271,24 @@ fn differences(committed: &str, current: &str) -> Vec<String> {
 
 #[test]
 fn dxbc() {
-    gate("dxbc", &["A", "IR", "IR WGSL"], |bytes| {
+    gate("dxbc", &["IR", "IR WGSL"], |bytes| {
         let [b, c] = ir(iridia_dxbc::ir::lift(bytes));
-        vec![older(iridia_dxbc::lift(bytes)), b, c]
+        vec![b, c]
     });
 }
 
 #[test]
 fn dxil() {
-    gate("dxil", &["A", "IR", "IR WGSL"], |bytes| {
+    gate("dxil", &["IR", "IR WGSL"], |bytes| {
         let [b, c] = ir(iridia_dxil::ir::lift(bytes));
-        vec![older(iridia_dxil::lift(bytes)), b, c]
+        vec![b, c]
     });
 }
 
 #[test]
 fn d3d9() {
-    gate("d3d9", &["A", "IR", "IR WGSL"], |bytes| {
+    gate("d3d9", &["IR", "IR WGSL"], |bytes| {
         let [b, c] = ir(iridia_d3d9_ir::lift(bytes));
-        vec![older(iridia_d3d9::lift(bytes)), b, c]
+        vec![b, c]
     });
 }
