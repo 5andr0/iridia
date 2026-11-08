@@ -990,6 +990,46 @@ mod half_ops {
     }
 }
 
+mod half_class {
+    use super::*;
+
+    /// `half_class.hlsl` with v = (2^-14, 2^-15, 1, 0): the smallest normal half is normal, a subnormal one (a normal
+    /// float, once widened) and zero are not.
+    const V: [f32; 4] = [
+        f32::from_bits(0x3880_0000), // 2^-14
+        f32::from_bits(0x3800_0000), // 2^-15
+        1.0,
+        0.0,
+    ];
+
+    /// `half_class.hlsl`: isnormal of the halves of v (dxc writes the exponent's bit tests, and from shader model 6.9
+    /// `dx.op.isSpecialFloat.f16`), and the 16-bit integers w = (-3.7, 100.9, -32768, 32767) converts to (truncated
+    /// towards zero; what is out of range is undefined in LLVM and not stated by DXIL, so the 16-bit range's ends are the
+    /// extremes tried).
+    #[test]
+    fn a_half_is_normal_by_its_own_exponent_and_a_float_converts_to_a_sixteen_bit_integer() {
+        for v in ["", ".od", ".69", ".69.od"] {
+            let o = run(
+                &fixture("half_class", v),
+                &[[0; 4]],
+                &[(
+                    0,
+                    vec![
+                        V.map(f32::to_bits),
+                        [-3.7f32, 100.9, -32768.0, 32767.0].map(f32::to_bits),
+                    ],
+                )],
+            );
+            assert_eq!(o.values[0], [f(1.0), f(0.0), f(1.0), f(0.0)], "{v}");
+            assert_eq!(
+                o.values[1],
+                [-3.0f32, 100.0, -32768.0, 32767.0].map(f32::to_bits),
+                "{v}"
+            );
+        }
+    }
+}
+
 mod image_atomics {
     use super::*;
     use iridia_exec::{ImageAtomic, ImageAtomicOp};

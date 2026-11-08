@@ -10,7 +10,7 @@ use iridia_ir::{
 use super::{Lift, Lv};
 use crate::Result;
 use crate::setup::const_int;
-use dxil_reader::module::{Instruction, ValueId};
+use dxil_reader::module::{Instruction, Type as LlvmType, ValueId};
 
 impl Lift<'_> {
     /// Argument `n` of a call.
@@ -119,7 +119,12 @@ impl Lift<'_> {
                     9 => self.binary(Type::BOOL, Binary::UCmp(Cmp::Eq), m, infinity),
                     10 => self.binary(Type::BOOL, Binary::UCmp(Cmp::Lt), m, infinity),
                     _ => {
-                        let smallest = self.u32_lit(0x0080_0000);
+                        // the smallest normal number of the operand's own type: a half is carried widened, and its
+                        // subnormals are normal floats
+                        let half = self
+                            .type_of(self.arg(args, 1)?)
+                            .is_some_and(|t| matches!(self.type_at(t), Ok(LlvmType::Half)));
+                        let smallest = self.u32_lit(if half { 0x3880_0000 } else { 0x0080_0000 });
                         let big = self.binary(Type::BOOL, Binary::UCmp(Cmp::Ge), m, smallest);
                         let finite = self.binary(Type::BOOL, Binary::UCmp(Cmp::Lt), m, infinity);
                         self.binary(Type::BOOL, Binary::And, big, finite)

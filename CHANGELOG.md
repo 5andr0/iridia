@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `iridia-dxil` (IR lift, `LIFTER_VERSION` 8): `dx.op.isSpecialFloat.f16` `IsNormal` (dxc writes it for `isnormal` of a half
+  from shader model 6.9; before, it writes the exponent's bit tests, which were already right) took the smallest normal
+  float, 2^-126, as the bound, so a subnormal half (a normal float once widened) was normal; the bound is the half's, 2^-14.
+  The float-to-16-bit-integer conversion (`fptosi float to i16`) is unchanged: it saturates at the 32-bit range and keeps
+  the low 16 bits, which is right in range (tested at -3.7, 100.9, -32768 and 32767); LLVM leaves an out-of-range
+  `fptosi` poison and DXIL.rst states nothing for it, so no value outside the 16-bit range has a defined result to hold it to.
 - `iridia-dxil` (IR lift, `LIFTER_VERSION` 7): a 16-bit integer is carried in the low bits of a 32-bit word, and the lift
   had ordered and counted it as that word: a signed `icmp` on an `i16` compared the zero extension (so `sign(int16_t)` of a
   negative gave 0), `dx.op` `IMax` and `IMin` did the same (`abs` of a negative `int16_t` stayed negative, `max`, `min` and `clamp`

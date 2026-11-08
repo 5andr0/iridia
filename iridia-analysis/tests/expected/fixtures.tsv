@@ -141,6 +141,10 @@ iridia-dxil/gather_cmp_green.dxil	51739ec3d1002667	execution not compared: a gat
 iridia-dxil/geometry.66.dxil	refused: a geometry program's emitted vertices are not followed	both refuse	steps completed=0, max=0, exhausted=0
 iridia-dxil/geometry.dxil	refused: a geometry program's emitted vertices are not followed	both refuse	steps completed=0, max=0, exhausted=0
 iridia-dxil/geometry.od.dxil	refused: a geometry program's emitted vertices are not followed	both refuse	steps completed=0, max=0, exhausted=0
+iridia-dxil/half_class.69.dxil	6d4475885f3db414	agree	steps completed=1, max=1, exhausted=0
+iridia-dxil/half_class.69.od.dxil	6d4475885f3db414	agree	steps completed=1, max=1, exhausted=0
+iridia-dxil/half_class.dxil	6d4475885f3db414	agree	steps completed=1, max=1, exhausted=0
+iridia-dxil/half_class.od.dxil	6d4475885f3db414	agree	steps completed=1, max=1, exhausted=0
 iridia-dxil/half_ops.dxil	669f90d70ae3e6d2	agree	steps completed=1, max=1, exhausted=0
 iridia-dxil/half_ops.od.dxil	669f90d70ae3e6d2	agree	steps completed=1, max=1, exhausted=0
 iridia-dxil/heap.dxil	2fcf47963ce863c0	execution not compared: a sample of an element of an array of resources is not run here	differ: words read: IR adds some; nothing dropped	steps completed=0, max=0, exhausted=0

@@ -1,5 +1,5 @@
 # lifted fixtures of iridia-dxil-ir
-# versions lifter=7 ir=3
+# versions lifter=8 ir=3
 constants.60.dxil	lifted	c5345ec8cf5f79a09abc298d26531fcbfb6f16b298940b375850dd2debbf249f
 images.60.dxil	lifted	5f78c0666fbfdc41a8cbd552320057342665b407e5052ecaaa72e1fb149ffcc0
 nonuniform.60.dxil	lifted	b33a4673e584a985c4455ad5404207c31b8c6c92d959bf0028336a99172a6901
