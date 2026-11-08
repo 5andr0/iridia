@@ -2379,8 +2379,8 @@
         "failed": 139
       },
       "executed": {
-        "pass": 2744,
-        "fail": 61
+        "pass": 2748,
+        "fail": 57
       },
       "proved_by": [
         "vkd3d"
@@ -2601,8 +2601,8 @@
         "failed": 68
       },
       "executed": {
-        "pass": 293,
-        "fail": 5
+        "pass": 295,
+        "fail": 3
       },
       "proved_by": [
         "vkd3d"
@@ -2857,8 +2857,8 @@
         "failed": 67
       },
       "executed": {
-        "pass": 3464,
-        "fail": 58
+        "pass": 3466,
+        "fail": 56
       },
       "proved_by": [
         "vkd3d"
@@ -2953,8 +2953,8 @@
         "failed": 111
       },
       "executed": {
-        "pass": 284,
-        "fail": 4
+        "pass": 286,
+        "fail": 2
       },
       "proved_by": [
         "vkd3d"
@@ -3433,8 +3433,8 @@
         "failed": 12
       },
       "executed": {
-        "pass": 81,
-        "fail": 12
+        "pass": 85,
+        "fail": 8
       },
       "proved_by": [
         "vkd3d"
@@ -5945,8 +5945,8 @@
         "failed": 140
       },
       "executed": {
-        "pass": 2573,
-        "fail": 45
+        "pass": 2577,
+        "fail": 41
       },
       "proved_by": [
         "vkd3d"
@@ -6201,8 +6201,8 @@
         "failed": 165
       },
       "executed": {
-        "pass": 3602,
-        "fail": 62
+        "pass": 3606,
+        "fail": 58
       },
       "proved_by": [
         "vkd3d"
@@ -6837,8 +6837,8 @@
         "failed": 6
       },
       "executed": {
-        "pass": 60,
-        "fail": 11
+        "pass": 64,
+        "fail": 7
       },
       "proved_by": [
         "vkd3d"
@@ -7669,8 +7669,8 @@
         "failed": 22
       },
       "executed": {
-        "pass": 876,
-        "fail": 18
+        "pass": 877,
+        "fail": 17
       },
       "proved_by": [
         "vkd3d"
@@ -7701,8 +7701,8 @@
         "failed": 25
       },
       "executed": {
-        "pass": 738,
-        "fail": 37
+        "pass": 739,
+        "fail": 36
       },
       "proved_by": [
         "vkd3d"
@@ -7797,8 +7797,8 @@
         "failed": 11
       },
       "executed": {
-        "pass": 66,
-        "fail": 2
+        "pass": 67,
+        "fail": 1
       },
       "proved_by": [
         "vkd3d"
@@ -7829,8 +7829,8 @@
         "failed": 11
       },
       "executed": {
-        "pass": 54,
-        "fail": 2
+        "pass": 55,
+        "fail": 1
       },
       "proved_by": [
         "vkd3d"
@@ -7891,8 +7891,8 @@
         "failed": 128
       },
       "executed": {
-        "pass": 459,
-        "fail": 61
+        "pass": 461,
+        "fail": 59
       },
       "proved_by": [
         "offload",
@@ -9015,8 +9015,8 @@
         "failed": 139
       },
       "executed": {
-        "pass": 134,
-        "fail": 61
+        "pass": 144,
+        "fail": 51
       },
       "proved_by": [
         "offload",
@@ -9424,8 +9424,8 @@
         "failed": 586
       },
       "executed": {
-        "pass": 2311,
-        "fail": 230
+        "pass": 2319,
+        "fail": 222
       },
       "proved_by": [
         "offload",
@@ -9547,8 +9547,8 @@
         "failed": 126
       },
       "executed": {
-        "pass": 459,
-        "fail": 61
+        "pass": 461,
+        "fail": 59
       },
       "proved_by": [
         "offload",
@@ -10928,8 +10928,8 @@
         "failed": 251
       },
       "executed": {
-        "pass": 586,
-        "fail": 52
+        "pass": 591,
+        "fail": 47
       },
       "proved_by": [
         "offload",
@@ -13376,8 +13376,8 @@
         "failed": 399
       },
       "executed": {
-        "pass": 3532,
-        "fail": 131
+        "pass": 3542,
+        "fail": 121
       },
       "proved_by": [
         "offload",
@@ -19063,8 +19063,8 @@
         "failed": 250
       },
       "executed": {
-        "pass": 3269,
-        "fail": 120
+        "pass": 3274,
+        "fail": 115
       },
       "proved_by": [
         "offload",
@@ -19096,8 +19096,8 @@
         "failed": 63
       },
       "executed": {
-        "pass": 282,
-        "fail": 11
+        "pass": 287,
+        "fail": 6
       },
       "proved_by": [
         "offload",
@@ -19115,33 +19115,33 @@
       "description": "Each test file run at each shader model on each of vkd3d's Windows runners (d3d9, d3d11, d3d12 with fxc, d3d12 with dxc), every step in order, every probe compared as vkd3d compares it. A row is one run: pass when every probe holds that vkd3d's runner runs at that model (selected); a run it runs none of is extended (selected false), its status that of all its probes, and the probes vkd3d leaves out of the others are their extended_status: the same expectations at a model vkd3d's own runs leave out, which need not hold on any device. A probe vkd3d's test marks winbug where Windows itself reads otherwise is counted as winbug and decides no run (winbug_outcomes: what those found); one marked winbug for a driver's bug (driver_bug_probes) is a probe like any other. reference_status is the run's status on the reference path, reference_totals those of the selected runs.",
       "totals": {
         "error": 4,
-        "fail": 21,
+        "fail": 16,
         "not-modelled": 9,
-        "pass": 850,
+        "pass": 855,
         "refused": 53
       },
       "probe_totals": {
         "error": 670,
-        "fail": 143,
+        "fail": 136,
         "not-modelled": 13,
-        "pass": 8259,
+        "pass": 8266,
         "refused": 409,
         "winbug": 29
       },
       "extended_totals": {
         "compiler-refused": 8,
         "error": 14,
-        "fail": 46,
+        "fail": 36,
         "not-modelled": 22,
-        "pass": 1811,
+        "pass": 1821,
         "refused": 94
       },
       "extended_probe_totals": {
         "compiler-refused": 43,
         "error": 2602,
-        "fail": 281,
+        "fail": 266,
         "not-modelled": 35,
-        "pass": 18740,
+        "pass": 18755,
         "refused": 966,
         "winbug": 100
       },
@@ -19197,13 +19197,6 @@
         {
           "status": "fail",
           "group": "gap",
-          "reason": "a probe in early-depth-stencil.shader_test differs",
-          "count": 3,
-          "example": "early-depth-stencil.shader_test:31: (0, 0): got [1.0], expected [0.0]"
-        },
-        {
-          "status": "fail",
-          "group": "gap",
           "reason": "a probe in eval-attrib.shader_test differs",
           "count": 3,
           "example": "eval-attrib.shader_test:105: (0, 0): got [219.0, 656.5, 0.25, 0.25], expected [0.25, 0.25, 0.25, 0.25]"
@@ -19228,13 +19221,6 @@
           "reason": "the state stencil {\"func\":\"always\",\"fail\":\"replace\",\"depth_fail\":\"replace\",\"pass\":\"replace\"}",
           "count": 3,
           "example": "stencil.shader_test:96: the state stencil {\"func\":\"always\",\"fail\":\"replace\",\"depth_fail\":\"replace\",\"pass\":\"replace\"}"
-        },
-        {
-          "status": "fail",
-          "group": "gap",
-          "reason": "a probe in depth-bounds.shader_test differs",
-          "count": 2,
-          "example": "depth-bounds.shader_test:41: (0, 0): got [1.0], expected [0.0]"
         },
         {
           "status": "fail",
@@ -29145,9 +29131,9 @@
           "runner": "d3d12",
           "format": "dxbc",
           "model": "5.0",
-          "status": "fail",
-          "group": "gap",
-          "detail": "line 41: (0, 0): got [1.0], expected [0.0]",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "probes": 10,
           "selected": true,
           "selected_probes": 10,
@@ -29160,9 +29146,9 @@
           "runner": "d3d12",
           "format": "dxbc",
           "model": "5.1",
-          "status": "fail",
-          "group": "gap",
-          "detail": "line 41: (0, 0): got [1.0], expected [0.0]",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "probes": 10,
           "selected": false,
           "selected_probes": 0,
@@ -29910,9 +29896,9 @@
           "runner": "d3d11",
           "format": "dxbc",
           "model": "5.0",
-          "status": "fail",
-          "group": "gap",
-          "detail": "line 31: (0, 0): got [1.0], expected [0.0]",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "probes": 2,
           "selected": true,
           "selected_probes": 2,
@@ -29925,9 +29911,9 @@
           "runner": "d3d12",
           "format": "dxbc",
           "model": "5.0",
-          "status": "fail",
-          "group": "gap",
-          "detail": "line 31: (0, 0): got [1.0], expected [0.0]",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "probes": 2,
           "selected": true,
           "selected_probes": 2,
@@ -29940,9 +29926,9 @@
           "runner": "d3d12",
           "format": "dxbc",
           "model": "5.1",
-          "status": "fail",
-          "group": "gap",
-          "detail": "line 31: (0, 0): got [1.0], expected [0.0]",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "probes": 2,
           "selected": false,
           "selected_probes": 0,
@@ -50115,9 +50101,9 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.0",
-          "status": "fail",
-          "group": "gap",
-          "detail": "line 41: (0, 0): got [1.0], expected [0.0]",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "probes": 10,
           "selected": true,
           "selected_probes": 10,
@@ -50130,9 +50116,9 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.1",
-          "status": "fail",
-          "group": "gap",
-          "detail": "line 41: (0, 0): got [1.0], expected [0.0]",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "probes": 10,
           "selected": false,
           "selected_probes": 0,
@@ -50145,9 +50131,9 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.2",
-          "status": "fail",
-          "group": "gap",
-          "detail": "line 41: (0, 0): got [1.0], expected [0.0]",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "probes": 10,
           "selected": false,
           "selected_probes": 0,
@@ -50160,9 +50146,9 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.5",
-          "status": "fail",
-          "group": "gap",
-          "detail": "line 41: (0, 0): got [1.0], expected [0.0]",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "probes": 10,
           "selected": false,
           "selected_probes": 0,
@@ -50175,9 +50161,9 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.6",
-          "status": "fail",
-          "group": "gap",
-          "detail": "line 41: (0, 0): got [1.0], expected [0.0]",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "probes": 10,
           "selected": false,
           "selected_probes": 0,
@@ -50715,9 +50701,9 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.0",
-          "status": "fail",
-          "group": "gap",
-          "detail": "line 31: (0, 0): got [1.0], expected [0.0]",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "probes": 2,
           "selected": true,
           "selected_probes": 2,
@@ -50730,9 +50716,9 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.1",
-          "status": "fail",
-          "group": "gap",
-          "detail": "line 31: (0, 0): got [1.0], expected [0.0]",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "probes": 2,
           "selected": false,
           "selected_probes": 0,
@@ -50745,9 +50731,9 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.2",
-          "status": "fail",
-          "group": "gap",
-          "detail": "line 31: (0, 0): got [1.0], expected [0.0]",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "probes": 2,
           "selected": false,
           "selected_probes": 0,
@@ -50760,9 +50746,9 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.5",
-          "status": "fail",
-          "group": "gap",
-          "detail": "line 31: (0, 0): got [1.0], expected [0.0]",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "probes": 2,
           "selected": false,
           "selected_probes": 0,
@@ -50775,9 +50761,9 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.6",
-          "status": "fail",
-          "group": "gap",
-          "detail": "line 31: (0, 0): got [1.0], expected [0.0]",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "probes": 2,
           "selected": false,
           "selected_probes": 0,

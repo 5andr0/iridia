@@ -21,8 +21,8 @@ Runs vkd3d's runner runs, by their selected probes; and apart, the extended ones
 
 | Status | Group | Runs | Probes | Extended runs | Extended probes | Reference runs |
 |---|---|---:|---:|---:|---:|---:|
-| pass | pass | 850 | 8259 | 1811 | 18740 | 840 |
-| fail | gap | 21 | 143 | 46 | 281 | 16 |
+| pass | pass | 855 | 8266 | 1821 | 18755 | 840 |
+| fail | gap | 16 | 136 | 36 | 266 | 16 |
 | error | gap | 4 | 670 | 14 | 2602 | 7 |
 | refused | gap | 53 | 409 | 94 | 966 | 65 |
 | not-modelled | runner-limit | 9 | 13 | 22 | 35 | 9 |
@@ -33,16 +33,14 @@ The winbug probes are those vkd3d's tests mark `winbug` where Windows itself rea
 
 What is left of the runs vkd3d's runner runs, by reason:
 
-gap, 78 runs:
+gap, 73 runs:
 
 - 12 refused: DXIL at bit NNNNN: a constant load of other than four NN-bit lanes (NN-bit and NN-bit rows are not lifted)
 - 6 fail: a probe in depth-out.shader_test differs
 - 4 refused: DXBC at word NN: bufinfo: opcode NNN is not lifted to the IR yet
 - 3 error: program at N: input SV_LaneIndexN has no DND register
 - 3 fail: a probe in coverage.shader_test differs
-- 3 fail: a probe in early-depth-stencil.shader_test differs
 - 3 fail: a probe in eval-attrib.shader_test differs
-- 2 fail: a probe in depth-bounds.shader_test differs
 - 2 fail: a probe in gather-cmp.shader_test differs
 - 2 refused: DXBC at word N: SV_CLIPDISTANCEN: clip distances as a Pixel input have no built-in binding
 - 2 refused: DXBC at word N: SV_CULLDISTANCEN: CullDistance as a Pixel input has no built-in binding
@@ -239,14 +237,14 @@ Programs using each construct: decoded by dx, listed exactly as Microsoft's tool
 | dxbc | opcode | `cut_stream` | 12 | 12 | 12 of 12 | 12 | 0 | 0 / 0 |  |
 | dxbc | opcode | `dadd` | 2 | 2 | 2 of 2 | 2 | 0 | 1 / 0 | vkd3d |
 | dxbc | opcode | `dcl_constant_buffer` | 1994 | 1994 | 1991 of 1991 | 1980 | 1941 | 1896 / 10 | vkd3d |
-| dxbc | opcode | `dcl_global_flags` | 3118 | 3118 | 3114 of 3114 | 3045 | 2906 | 2744 / 61 | vkd3d |
+| dxbc | opcode | `dcl_global_flags` | 3118 | 3118 | 3114 of 3114 | 3045 | 2906 | 2748 / 57 | vkd3d |
 | dxbc | opcode | `dcl_gs_input_primitive` | 54 | 54 | 54 of 54 | 52 | 0 | 18 / 0 | vkd3d |
 | dxbc | opcode | `dcl_gs_instance_count` | 2 | 2 | 2 of 2 | 0 | 0 | 0 / 0 |  |
 | dxbc | opcode | `dcl_gs_output_primitive_topology` | 54 | 54 | 54 of 54 | 52 | 0 | 18 / 0 | vkd3d |
 | dxbc | opcode | `dcl_hs_fork_phase_instance_count` | 6 | 6 | 5 of 5 | 4 | 0 | 4 / 0 | vkd3d |
 | dxbc | opcode | `dcl_index_range` | 23 | 23 | 21 of 21 | 21 | 17 | 19 / 0 | vkd3d |
 | dxbc | opcode | `dcl_indexable_temp` | 85 | 85 | 85 of 85 | 85 | 85 | 84 / 0 | vkd3d |
-| dxbc | opcode | `dcl_input` | 363 | 363 | 361 of 361 | 359 | 291 | 293 / 5 | vkd3d |
+| dxbc | opcode | `dcl_input` | 363 | 363 | 361 of 361 | 359 | 291 | 295 / 3 | vkd3d |
 | dxbc | opcode | `dcl_input_control_point_count` | 16 | 16 | 15 of 15 | 14 | 0 | 12 / 0 | vkd3d |
 | dxbc | opcode | `dcl_input_ps` | 236 | 236 | 233 of 233 | 230 | 226 | 207 / 12 | vkd3d |
 | dxbc | opcode | `dcl_input_ps_sgv` | 43 | 43 | 42 of 42 | 39 | 29 | 17 / 16 | vkd3d |
@@ -254,10 +252,10 @@ Programs using each construct: decoded by dx, listed exactly as Microsoft's tool
 | dxbc | opcode | `dcl_input_sgv` | 56 | 56 | 56 of 56 | 56 | 36 | 26 / 0 | vkd3d |
 | dxbc | opcode | `dcl_input_siv` | 56 | 56 | 56 of 56 | 54 | 0 | 20 / 0 | vkd3d |
 | dxbc | opcode | `dcl_max_output_vertex_count` | 54 | 54 | 54 of 54 | 52 | 0 | 18 / 0 | vkd3d |
-| dxbc | opcode | `dcl_output` | 3755 | 3755 | 3748 of 3748 | 3688 | 3621 | 3464 / 58 | vkd3d |
+| dxbc | opcode | `dcl_output` | 3755 | 3755 | 3748 of 3748 | 3688 | 3621 | 3466 / 56 | vkd3d |
 | dxbc | opcode | `dcl_output_control_point_count` | 9 | 9 | 8 of 8 | 7 | 0 | 7 / 0 | vkd3d |
 | dxbc | opcode | `dcl_output_sgv` | 4 | 4 | 4 of 4 | 4 | 0 | 4 / 0 | vkd3d |
-| dxbc | opcode | `dcl_output_siv` | 392 | 392 | 390 of 390 | 388 | 277 | 284 / 4 | vkd3d |
+| dxbc | opcode | `dcl_output_siv` | 392 | 392 | 390 of 390 | 388 | 277 | 286 / 2 | vkd3d |
 | dxbc | opcode | `dcl_resource` | 454 | 454 | 454 of 454 | 422 | 405 | 349 / 17 | vkd3d |
 | dxbc | opcode | `dcl_resource_raw` | 5 | 5 | 5 of 5 | 5 | 5 | 5 / 0 | vkd3d |
 | dxbc | opcode | `dcl_resource_structured` | 36 | 36 | 36 of 36 | 34 | 34 | 34 / 0 | vkd3d |
@@ -272,7 +270,7 @@ Programs using each construct: decoded by dx, listed exactly as Microsoft's tool
 | dxbc | opcode | `dcl_thread_group_shared_memory_structured` | 14 | 14 | 14 of 14 | 14 | 14 | 14 / 0 | vkd3d |
 | dxbc | opcode | `dcl_unordered_access_view_raw` | 38 | 38 | 38 of 38 | 38 | 36 | 34 / 0 | vkd3d |
 | dxbc | opcode | `dcl_unordered_access_view_structured` | 49 | 49 | 49 of 49 | 41 | 41 | 23 / 0 | vkd3d |
-| dxbc | opcode | `dcl_unordered_access_view_typed` | 107 | 107 | 107 of 107 | 101 | 89 | 81 / 12 | vkd3d |
+| dxbc | opcode | `dcl_unordered_access_view_typed` | 107 | 107 | 107 of 107 | 101 | 89 | 85 / 8 | vkd3d |
 | dxbc | opcode | `ddiv` | 8 | 8 | 8 of 8 | 8 | 0 | 5 / 0 | vkd3d |
 | dxbc | opcode | `default` | 44 | 44 | 44 of 44 | 44 | 44 | 44 / 0 | vkd3d |
 | dxbc | opcode | `deriv_rtx` | 8 | 8 | 8 of 8 | 8 | 8 | 8 / 0 | vkd3d |
@@ -351,7 +349,7 @@ Programs using each construct: decoded by dx, listed exactly as Microsoft's tool
 | dxbc | opcode | `mad` | 344 | 344 | 343 of 343 | 341 | 292 | 286 / 1 | vkd3d |
 | dxbc | opcode | `max` | 32 | 32 | 32 of 32 | 32 | 32 | 32 / 0 | vkd3d |
 | dxbc | opcode | `min` | 24 | 24 | 24 of 24 | 24 | 24 | 24 / 0 | vkd3d |
-| dxbc | opcode | `mov` | 2851 | 2851 | 2845 of 2845 | 2815 | 2675 | 2573 / 45 | vkd3d |
+| dxbc | opcode | `mov` | 2851 | 2851 | 2845 of 2845 | 2815 | 2675 | 2577 / 41 | vkd3d |
 | dxbc | opcode | `movc` | 305 | 305 | 304 of 304 | 297 | 294 | 283 / 4 | vkd3d |
 | dxbc | opcode | `mul` | 504 | 504 | 503 of 503 | 477 | 437 | 424 / 14 | vkd3d |
 | dxbc | opcode | `ne` | 87 | 87 | 87 of 87 | 87 | 87 | 87 / 0 | vkd3d |
@@ -359,7 +357,7 @@ Programs using each construct: decoded by dx, listed exactly as Microsoft's tool
 | dxbc | opcode | `or` | 56 | 56 | 56 of 56 | 56 | 46 | 48 / 0 | vkd3d |
 | dxbc | opcode | `rcp` | 2 | 2 | 2 of 2 | 2 | 2 | 2 / 0 | vkd3d |
 | dxbc | opcode | `resinfo` | 26 | 26 | 26 of 26 | 26 | 26 | 22 / 0 | vkd3d |
-| dxbc | opcode | `ret` | 3999 | 3999 | 3991 of 3991 | 3924 | 3759 | 3602 / 62 | vkd3d |
+| dxbc | opcode | `ret` | 3999 | 3999 | 3991 of 3991 | 3924 | 3759 | 3606 / 58 | vkd3d |
 | dxbc | opcode | `retc` | 12 | 12 | 12 of 12 | 12 | 12 | 12 / 0 | vkd3d |
 | dxbc | opcode | `round_ne` | 52 | 52 | 52 of 52 | 42 | 42 | 40 / 0 | vkd3d |
 | dxbc | opcode | `round_ni` | 84 | 84 | 84 of 84 | 71 | 71 | 56 / 14 | vkd3d |
@@ -379,7 +377,7 @@ Programs using each construct: decoded by dx, listed exactly as Microsoft's tool
 | dxbc | opcode | `sqrt` | 51 | 51 | 51 of 51 | 51 | 51 | 51 / 0 | vkd3d |
 | dxbc | opcode | `store_raw` | 40 | 40 | 40 of 40 | 40 | 38 | 35 / 0 | vkd3d |
 | dxbc | opcode | `store_structured` | 53 | 53 | 53 of 53 | 53 | 53 | 35 / 0 | vkd3d |
-| dxbc | opcode | `store_uav_typed` | 81 | 81 | 81 of 81 | 77 | 71 | 60 / 11 | vkd3d |
+| dxbc | opcode | `store_uav_typed` | 81 | 81 | 81 of 81 | 77 | 71 | 64 / 7 | vkd3d |
 | dxbc | opcode | `switch` | 46 | 46 | 46 of 46 | 44 | 44 | 44 / 0 | vkd3d |
 | dxbc | opcode | `sync` | 34 | 34 | 34 of 34 | 34 | 34 | 33 / 0 | vkd3d |
 | dxbc | opcode | `udiv` | 66 | 66 | 66 of 66 | 66 | 66 | 61 / 0 | vkd3d |
@@ -405,14 +403,14 @@ Programs using each construct: decoded by dx, listed exactly as Microsoft's tool
 | dxbc | stage | `hs_5_1` | 4 | 4 | 4 of 4 | 3 | 0 | 3 / 0 | vkd3d |
 | dxbc | stage | `ps_4_0` | 813 | 813 | 810 of 810 | 811 | 810 | 808 / 1 | vkd3d |
 | dxbc | stage | `ps_4_1` | 828 | 828 | 827 of 827 | 817 | 816 | 813 / 2 | vkd3d |
-| dxbc | stage | `ps_5_0` | 955 | 955 | 953 of 953 | 932 | 910 | 876 / 18 | vkd3d |
-| dxbc | stage | `ps_5_1` | 907 | 907 | 907 of 907 | 880 | 855 | 738 / 37 | vkd3d |
+| dxbc | stage | `ps_5_0` | 955 | 955 | 953 of 953 | 932 | 910 | 877 / 17 | vkd3d |
+| dxbc | stage | `ps_5_1` | 907 | 907 | 907 of 907 | 880 | 855 | 739 / 36 | vkd3d |
 | dxbc | stage | `vs_4_0` | 80 | 80 | 79 of 79 | 80 | 68 | 67 / 0 | vkd3d |
 | dxbc | stage | `vs_4_1` | 79 | 79 | 79 of 79 | 79 | 68 | 67 / 0 | vkd3d |
-| dxbc | stage | `vs_5_0` | 85 | 85 | 85 of 85 | 85 | 74 | 66 / 2 | vkd3d |
-| dxbc | stage | `vs_5_1` | 78 | 78 | 78 of 78 | 78 | 67 | 54 / 2 | vkd3d |
+| dxbc | stage | `vs_5_0` | 85 | 85 | 85 of 85 | 85 | 74 | 67 / 1 | vkd3d |
+| dxbc | stage | `vs_5_1` | 78 | 78 | 78 of 78 | 78 | 67 | 55 / 1 | vkd3d |
 | dxil | opcode | `dx.op.allocateRayQuery (op 178)` | 15 | 15 | - | 0 | 0 | 0 / 0 |  |
-| dxil | opcode | `dx.op.annotateHandle (op 216)` | 919 | 919 | 796 of 796 | 730 | 602 | 459 / 61 | offload, vkd3d |
+| dxil | opcode | `dx.op.annotateHandle (op 216)` | 919 | 919 | 796 of 796 | 730 | 602 | 461 / 59 | offload, vkd3d |
 | dxil | opcode | `dx.op.atomicBinOp.i32 (op 78)` | 52 | 52 | 45 of 45 | 52 | 30 | 47 / 5 | offload, vkd3d |
 | dxil | opcode | `dx.op.atomicBinOp.i64 (op 78)` | 14 | 14 | - | 0 | 0 | 0 / 0 |  |
 | dxil | opcode | `dx.op.atomicCompareExchange.i32 (op 79)` | 19 | 19 | 15 of 15 | 17 | 10 | 17 / 0 | offload, vkd3d |
@@ -448,7 +446,7 @@ Programs using each construct: decoded by dx, listed exactly as Microsoft's tool
 | dxil | opcode | `dx.op.bufferLoad.i16 (op 68)` | 12 | 12 | 12 of 12 | 12 | 12 | 6 / 0 | vkd3d |
 | dxil | opcode | `dx.op.bufferLoad.i32 (op 68)` | 341 | 341 | 247 of 247 | 332 | 74 | 95 / 80 | offload, vkd3d |
 | dxil | opcode | `dx.op.bufferStore.f16 (op 69)` | 6 | 6 | 6 of 6 | 0 | 0 | 0 / 0 |  |
-| dxil | opcode | `dx.op.bufferStore.f32 (op 69)` | 330 | 330 | 227 of 227 | 311 | 172 | 134 / 61 | offload, vkd3d |
+| dxil | opcode | `dx.op.bufferStore.f32 (op 69)` | 330 | 330 | 227 of 227 | 311 | 172 | 144 / 51 | offload, vkd3d |
 | dxil | opcode | `dx.op.bufferStore.i16 (op 69)` | 9 | 9 | 9 of 9 | 3 | 3 | 0 / 3 |  |
 | dxil | opcode | `dx.op.bufferStore.i32 (op 69)` | 556 | 556 | 420 of 420 | 534 | 152 | 173 / 121 | offload, vkd3d |
 | dxil | opcode | `dx.op.bufferUpdateCounter (op 70)` | 26 | 26 | 20 of 20 | 25 | 22 | 24 / 0 | offload, vkd3d |
@@ -461,11 +459,11 @@ Programs using each construct: decoded by dx, listed exactly as Microsoft's tool
 | dxil | opcode | `dx.op.cbufferLoadLegacy.i64 (op 59)` | 94 | 94 | 90 of 90 | 0 | 0 | 0 / 0 |  |
 | dxil | opcode | `dx.op.checkAccessFullyMapped.i32 (op 71)` | 16 | 16 | 15 of 15 | 0 | 0 | 0 / 0 |  |
 | dxil | opcode | `dx.op.coverage.i32 (op 91)` | 5 | 5 | 5 of 5 | 5 | 0 | 0 / 5 |  |
-| dxil | opcode | `dx.op.createHandle (op 57)` | 3641 | 3641 | 3043 of 3043 | 3293 | 2707 | 2311 / 230 | offload, vkd3d |
+| dxil | opcode | `dx.op.createHandle (op 57)` | 3641 | 3641 | 3043 of 3043 | 3293 | 2707 | 2319 / 222 | offload, vkd3d |
 | dxil | opcode | `dx.op.createHandleForLib.class.RWStructuredBuffer<float> (op 160)` | 2 | 2 | - | 0 | 0 | 0 / 0 |  |
 | dxil | opcode | `dx.op.createHandleForLib.class.RWStructuredBuffer<unsigned int> (op 160)` | 6 | 6 | - | 0 | 0 | 0 / 0 |  |
 | dxil | opcode | `dx.op.createHandleForLib.struct.RaytracingAccelerationStructure (op 160)` | 6 | 6 | - | 0 | 0 | 0 / 0 |  |
-| dxil | opcode | `dx.op.createHandleFromBinding (op 217)` | 917 | 917 | 794 of 794 | 728 | 602 | 459 / 61 | offload, vkd3d |
+| dxil | opcode | `dx.op.createHandleFromBinding (op 217)` | 917 | 917 | 794 of 794 | 728 | 602 | 461 / 59 | offload, vkd3d |
 | dxil | opcode | `dx.op.createHandleFromHeap (op 218)` | 7 | 7 | 4 of 4 | 7 | 0 | 0 / 0 |  |
 | dxil | opcode | `dx.op.cutStream (op 98)` | 31 | 31 | 30 of 30 | 31 | 0 | 16 / 0 | offload, vkd3d |
 | dxil | opcode | `dx.op.discard (op 82)` | 169 | 169 | 167 of 167 | 167 | 42 | 42 / 0 | offload, vkd3d |
@@ -509,7 +507,7 @@ Programs using each construct: decoded by dx, listed exactly as Microsoft's tool
 | dxil | opcode | `dx.op.legacyF16ToF32 (op 131)` | 9 | 9 | 7 of 7 | 8 | 6 | 6 / 0 | offload, vkd3d |
 | dxil | opcode | `dx.op.legacyF32ToF16 (op 130)` | 7 | 7 | 5 of 5 | 6 | 6 | 6 / 0 | offload, vkd3d |
 | dxil | opcode | `dx.op.loadInput.f16 (op 4)` | 16 | 16 | 16 of 16 | 0 | 0 | 0 / 0 |  |
-| dxil | opcode | `dx.op.loadInput.f32 (op 4)` | 1078 | 1078 | 984 of 984 | 934 | 683 | 586 / 52 | offload, vkd3d |
+| dxil | opcode | `dx.op.loadInput.f32 (op 4)` | 1078 | 1078 | 984 of 984 | 934 | 683 | 591 / 47 | offload, vkd3d |
 | dxil | opcode | `dx.op.loadInput.i16 (op 4)` | 40 | 40 | 40 of 40 | 0 | 0 | 0 / 0 |  |
 | dxil | opcode | `dx.op.loadInput.i32 (op 4)` | 155 | 155 | 140 of 140 | 152 | 104 | 83 / 0 | offload, vkd3d |
 | dxil | opcode | `dx.op.loadPatchConstant.f32 (op 104)` | 6 | 6 | 5 of 5 | 6 | 0 | 5 / 0 | vkd3d |
@@ -588,7 +586,7 @@ Programs using each construct: decoded by dx, listed exactly as Microsoft's tool
 | dxil | opcode | `dx.op.setMeshOutputCounts (op 168)` | 34 | 34 | 30 of 30 | 30 | 0 | 3 / 0 | offload |
 | dxil | opcode | `dx.op.splitDouble.f64 (op 102)` | 90 | 90 | 84 of 84 | 65 | 0 | 9 / 0 | offload, vkd3d |
 | dxil | opcode | `dx.op.storeOutput.f16 (op 5)` | 11 | 11 | 11 of 11 | 0 | 0 | 0 / 0 |  |
-| dxil | opcode | `dx.op.storeOutput.f32 (op 5)` | 4881 | 4881 | 4777 of 4777 | 4581 | 4182 | 3532 / 131 | offload, vkd3d |
+| dxil | opcode | `dx.op.storeOutput.f32 (op 5)` | 4881 | 4881 | 4777 of 4777 | 4581 | 4182 | 3542 / 121 | offload, vkd3d |
 | dxil | opcode | `dx.op.storeOutput.i16 (op 5)` | 16 | 16 | 16 of 16 | 0 | 0 | 0 / 0 |  |
 | dxil | opcode | `dx.op.storeOutput.i32 (op 5)` | 368 | 368 | 353 of 353 | 253 | 219 | 123 / 5 | offload, vkd3d |
 | dxil | opcode | `dx.op.storePatchConstant.f32 (op 106)` | 20 | 20 | 15 of 15 | 20 | 0 | 15 / 0 | vkd3d |
@@ -769,5 +767,5 @@ Programs using each construct: decoded by dx, listed exactly as Microsoft's tool
 | dxil | stage | `hs_6` | 20 | 20 | 15 of 15 | 20 | 0 | 15 / 0 | vkd3d |
 | dxil | stage | `lib_6` | 8 | 8 | - | 0 | 0 | 0 / 0 |  |
 | dxil | stage | `ms_6` | 34 | 34 | 30 of 30 | 30 | 0 | 3 / 0 | offload |
-| dxil | stage | `ps_6` | 4661 | 4661 | 4598 of 4598 | 4280 | 4030 | 3269 / 120 | offload, vkd3d |
-| dxil | stage | `vs_6` | 425 | 425 | 400 of 400 | 394 | 331 | 282 / 11 | offload, vkd3d |
+| dxil | stage | `ps_6` | 4661 | 4661 | 4598 of 4598 | 4280 | 4030 | 3274 / 115 | offload, vkd3d |
+| dxil | stage | `vs_6` | 425 | 425 | 400 of 400 | 394 | 331 | 287 / 6 | offload, vkd3d |
