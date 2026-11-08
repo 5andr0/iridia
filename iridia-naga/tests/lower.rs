@@ -604,6 +604,92 @@ fn main {
     assert!(!wgsl.contains("enable"), "{wgsl}");
 }
 
+/// A texture of `sample` and a sampler, for the programs that read an integer texture.
+fn image_and_sampler(sample: SampleType) -> Vec<Resource> {
+    let bound = |id: u32, kind: ResourceKind, name: &str, class: D3dClass| Resource {
+        id: ResourceId(id),
+        kind,
+        count: 1,
+        provenance: ResourceProvenance {
+            name: name.into(),
+            d3d: Some(D3dBinding {
+                class,
+                register: 0,
+                space: 0,
+            }),
+            ..ResourceProvenance::default()
+        },
+    };
+    vec![
+        bound(
+            0,
+            ResourceKind::Texture {
+                dim: TextureDim::D2,
+                arrayed: false,
+                multisampled: false,
+                sample,
+            },
+            "image",
+            D3dClass::ShaderResource,
+        ),
+        bound(
+            1,
+            ResourceKind::Sampler { comparison: false },
+            "smp",
+            D3dClass::Sampler,
+        ),
+    ]
+}
+
+#[test]
+fn a_sample_of_an_integer_texture_is_refused_by_name_and_a_load_or_gather_is_written() {
+    let refusal = "a filtered sample of an integer texture has no WGSL form";
+    for (sample, scalar, ty) in [
+        (SampleType::Uint, ScalarType::Uint, "u32"),
+        (SampleType::Sint, ScalarType::Sint, "i32"),
+    ] {
+        let reading = |op: &str| {
+            program(
+                &format!(
+                    "iridia-ir 1
+fn main {{
+  %0: vec4<f32> = input 0.xyzw
+  %1: vec2<f32> = %0.xy
+  %2: f32 = %0.z
+  %3: vec2<f32> = %0.zw
+  %4: vec4<{ty}> = {op}
+  output 0.xyzw = %4
+  return
+}}
+"
+                ),
+                &[F4],
+                &[(scalar, 4)],
+                image_and_sampler(sample),
+            )
+        };
+        // every kind of filtered sample: the implicit level, the level zero, a level, a bias, gradients
+        for op in [
+            "sample r0, r1, %1",
+            "sample r0, r1, %1 level 0",
+            "sample r0, r1, %1 level %2",
+            "sample r0, r1, %1 bias %2",
+            "sample r0, r1, %1 grad %1, %3",
+        ] {
+            for profile in [iridia_naga::Profile::NAGA, iridia_naga::Profile::BROWSER] {
+                let e = iridia_naga::wgsl(&reading(op), &profile).unwrap_err();
+                assert!(e.0.contains(refusal), "{op} of {ty}: {e}");
+            }
+        }
+        // a gather of one component has a form, and the text is valid
+        let p = reading("gather.x r0, r1, %1");
+        for profile in [iridia_naga::Profile::NAGA, iridia_naga::Profile::BROWSER] {
+            let wgsl = iridia_naga::wgsl(&p, &profile).unwrap_or_else(|e| panic!("{ty}: {e}"));
+            assert!(wgsl.contains("textureGather("), "{wgsl}");
+        }
+    }
+}
+
 /// A pixel program that traces a ray query of the acceleration structure at `t0` and writes `reads`, the text's
 /// lines that read the query's state into `%7` and `%8`.
 fn ray_query_program(reads: &str) -> Program {

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `iridia-naga`: a filtered sample of an integer texture (a sample, a biased or a level one, or one at gradients, of a texture
+  of unsigned or signed integers) is refused by name, "a filtered sample of an integer texture has no WGSL form", as
+  `iridia-wgsl` already did; naga's writer made text its own validator refused ("Unable to operate on image class
+  Sampled { kind: Uint }"). A load or a gather of an integer texture is written as before.
 - `iridia-d3d9-ir`: `project`, `reencode` and `project_vertex_output` (each with a `_with` taking the lift's `Options`) and
   `Projection`, the derived programs `iridia-d3d9` makes, on the IR: a ps_3_0 program cut after an instruction (the cut's
   lanes as RGB, alpha one), the whole program with the cut's lanes replaced by a new input `DERIVED_RGB0`, and the

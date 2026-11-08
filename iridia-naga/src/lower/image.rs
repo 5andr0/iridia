@@ -203,7 +203,7 @@ impl Lower<'_> {
     }
 
     /// `Op::Sample`: filtered through the sampler, compared with a depth reference where it has one; a fixed texel
-    /// offset as naga takes it. A level clamp has no WGSL form.
+    /// offset as naga takes it. A level clamp, and a sample of an integer texture, have no WGSL form.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn sample(
         &mut self,
@@ -219,6 +219,10 @@ impl Lower<'_> {
             return Err(err("a sample with a level clamp has no WGSL form"));
         }
         let shape = self.shape(texture)?;
+        // textureSample takes a float (or depth) texture: an integer one is read by a load or a gather
+        if matches!(shape.sample, SampleType::Sint | SampleType::Uint) {
+            return Err(err("a filtered sample of an integer texture has no WGSL form"));
+        }
         let (coordinate, array_index) = self.sample_address(shape, coord)?;
         let offset = if offset == [0; 3] {
             None

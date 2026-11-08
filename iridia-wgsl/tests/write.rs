@@ -774,3 +774,70 @@ fn main {
     assert!(wgsl.contains("vec2<f32>((-4.375e-1f), (-5e-1f)));"), "{wgsl}");
     assert!(wgsl.contains("textureNumSamples(t0)"), "{wgsl}");
 }
+
+#[test]
+fn a_sample_of_an_integer_texture_is_refused_by_name_and_a_gather_is_written() {
+    let refusal = "a filtered sample of an integer texture has no WGSL form";
+    for (sample, scalar, ty) in [
+        (SampleType::Uint, ScalarType::Uint, "u32"),
+        (SampleType::Sint, ScalarType::Sint, "i32"),
+    ] {
+        let reading = |op: &str| {
+            program(
+                &format!(
+                    "iridia-ir 1
+fn main {{
+  %0: vec4<f32> = input 0.xyzw
+  %1: vec2<f32> = %0.xy
+  %2: f32 = %0.z
+  %3: vec2<f32> = %0.zw
+  %4: vec4<{ty}> = {op}
+  output 0.xyzw = %4
+  return
+}}
+"
+                ),
+                &[F4],
+                &[(scalar, 4)],
+                vec![
+                    bound(
+                        0,
+                        ResourceKind::Texture {
+                            dim: TextureDim::D2,
+                            arrayed: false,
+                            multisampled: false,
+                            sample,
+                        },
+                        1,
+                        "image",
+                        D3dClass::ShaderResource,
+                    ),
+                    bound(
+                        1,
+                        ResourceKind::Sampler { comparison: false },
+                        1,
+                        "smp",
+                        D3dClass::Sampler,
+                    ),
+                ],
+            )
+        };
+        for op in [
+            "sample r0, r1, %1",
+            "sample r0, r1, %1 level 0",
+            "sample r0, r1, %1 level %2",
+            "sample r0, r1, %1 bias %2",
+            "sample r0, r1, %1 grad %1, %3",
+        ] {
+            for profile in [Profile::NAGA, Profile::BROWSER] {
+                let e = iridia_wgsl::wgsl(&reading(op), &profile).unwrap_err();
+                assert!(e.0.contains(refusal), "{op} of {ty}: {e}");
+            }
+        }
+        // a gather of one component has a form, which naga reads back and validates
+        let p = reading("gather.x r0, r1, %1");
+        for profile in [Profile::NAGA, Profile::BROWSER] {
+            assert!(written(&p, &profile).contains("textureGather("), "{ty}");
+        }
+    }
+}

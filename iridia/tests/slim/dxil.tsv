@@ -1297,7 +1297,7 @@
 4164587218d3e9093c53ee07472e969385702d10000b625053bc5d1fac25bee3	IR WGSL	not reached
 41665465d67ff1e7f268f5150a55e6324c7ba1271219b3bcc3f144a0bbf5e2f8	A	lift: N-bit lanes of a raw or structured buffer are not lifted
 419c228485f35188bacda0d62da6fddc7e91de1264aa604be26c56c61cd0c80f	A	validate: module: Entry point main at Fragment is invalid: Expression [N] is invalid: Unable to operate on image class Sampled { kind: Uint, multi: false }
-419c228485f35188bacda0d62da6fddc7e91de1264aa604be26c56c61cd0c80f	IR WGSL	lower: lowering bug: naga validation: Entry point main at Fragment is invalid: Expression [N] is invalid: Unable to operate on image class Sampled { kind: Uint, multi: false }; [N] is ImageSample { image: [N], sampler: [N], gather: None, coordinate: [N], array_index: None, offset: None, level: Auto, depth_ref: None, clamp_to_edge: false }, [N] GlobalVariable([N]), [N] GlobalVariable([N]), [N] Compose { ty: [N], components: [[N], [N]] }
+419c228485f35188bacda0d62da6fddc7e91de1264aa604be26c56c61cd0c80f	IR WGSL	lower: a filtered sample of an integer texture has no WGSL form
 41aedf709678bc995eb063a3d6222d82f436f81d0a054721232e319a3856d305	A	lift: N-bit lanes of a raw or structured buffer are not lifted
 41d00540a0612640624228ed82eb20a2d644260175b98aa82633c1f99f854eb9	A	lift: dx.entryPoints: expected exactly one entry point with a function, found N
 41d00540a0612640624228ed82eb20a2d644260175b98aa82633c1f99f854eb9	IR	lift: dx.entryPoints: expected exactly one entry point with a function, found N
@@ -2665,7 +2665,7 @@
 8b6a547f69fabdf8e7d0ceb3265fd597e3710361f4a28d048b2a20b3f83cf3d9	IR WGSL	not reached
 8b92ccafef2052bc3c2a91743466a55b416cdd9e6e5c53211e036957c96445b0	A	lift: N-bit lanes of a raw or structured buffer are not lifted
 8ba27db5923d50b752ee65b31bc094a33bbb4eb6f83fb6a2940d35400a06dfc3	A	validate: module: Entry point main at Compute is invalid: Expression [N] is invalid: Unable to operate on image class Sampled { kind: Uint, multi: false }
-8ba27db5923d50b752ee65b31bc094a33bbb4eb6f83fb6a2940d35400a06dfc3	IR WGSL	lower: lowering bug: naga validation: Entry point main at Compute is invalid: Expression [N] is invalid: Unable to operate on image class Sampled { kind: Uint, multi: false }; [N] is ImageSample { image: [N], sampler: [N], gather: None, coordinate: [N], array_index: None, offset: None, level: Zero, depth_ref: None, clamp_to_edge: false }, [N] Access { base: [N], index: [N] }, [N] Access { base: [N], index: [N] }, [N] Compose { ty: [N], components: [[N], [N]] }
+8ba27db5923d50b752ee65b31bc094a33bbb4eb6f83fb6a2940d35400a06dfc3	IR WGSL	lower: a filtered sample of an integer texture has no WGSL form
 8bcdd43fd03110c04cd7bf10d0bafa348527eba0b2dd602d2b28c3defe4ee795	IR WGSL	lower: a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point
 8bd4ad3b26ae55c8c37e2fab676580d99a1f6f306144be10b42b4cb1cbbd4bab	A	lift: a scalar was expected, found Agg([Scalar(Val { expr: [N], kind: U, width: One }), Scalar(Val { expr: [N], kind: U, width: One })])
 8bd86b0dc2377837f05c16e355a119b9b86d50210f1762d07afbf2e97ec00d9f	A	lift: N-bit lanes of a raw or structured buffer are not lifted
@@ -2748,7 +2748,7 @@
 8f8a3243e5a156246bf488d61b3367fe11fd0380d5ffd57a50d29b4d105d4286	IR	lift: structured element has no complete member annotations
 8f8a3243e5a156246bf488d61b3367fe11fd0380d5ffd57a50d29b4d105d4286	IR WGSL	not reached
 8fa983e503d9c7d06947c54edffc8c9c711221ddca36b5c02c1fac703d608a63	A	validate: module: Entry point main at Fragment is invalid: Expression [N] is invalid: Unable to operate on image class Sampled { kind: Sint, multi: false }
-8fa983e503d9c7d06947c54edffc8c9c711221ddca36b5c02c1fac703d608a63	IR WGSL	lower: lowering bug: naga validation: Entry point main at Fragment is invalid: Expression [N] is invalid: Unable to operate on image class Sampled { kind: Sint, multi: false }; [N] is ImageSample { image: [N], sampler: [N], gather: None, coordinate: [N], array_index: None, offset: None, level: Auto, depth_ref: None, clamp_to_edge: false }, [N] GlobalVariable([N]), [N] GlobalVariable([N]), [N] Compose { ty: [N], components: [[N], [N]] }
+8fa983e503d9c7d06947c54edffc8c9c711221ddca36b5c02c1fac703d608a63	IR WGSL	lower: a filtered sample of an integer texture has no WGSL form
 8fb79526e99fd398bf171accd93867707216ea199f7d4d5a78a7a61dc1fd7269	A	lift: a scalar was expected, found Agg([Scalar(Val { expr: [N], kind: U, width: One }), Scalar(Val { expr: [N], kind: U, width: One })])
 8fbd31b386c8f48b80f9d33594931fa2088f2db2281b3eef1f380f93b658702b	A	lift: N-bit lanes of a raw or structured buffer are not lifted
 8fc972e874147c5142f6f2cf864e123674fb37d410488d6914c6fa9124f00795	A	lift: a scalar was expected, found Agg([Scalar(Val { expr: [N], kind: U, width: One }), Scalar(Val { expr: [N], kind: U, width: One })])
@@ -3817,7 +3817,7 @@ c5d339e4de9384c8b6d6336ceb1243b40f9968ae6db75f50bb19a0f927abbe55	A	lift: a const
 c5d339e4de9384c8b6d6336ceb1243b40f9968ae6db75f50bb19a0f927abbe55	IR	lift: a constant load of other than four N-bit lanes (N-bit and N-bit rows are not lifted)
 c5d339e4de9384c8b6d6336ceb1243b40f9968ae6db75f50bb19a0f927abbe55	IR WGSL	not reached
 c5d823e0f77d4e564db46c710b61b38a023cec7f1b94bc643a95b8e561a3387c	A	validate: module: Entry point main at Fragment is invalid: Expression [N] is invalid: Unable to operate on image class Sampled { kind: Sint, multi: false }
-c5d823e0f77d4e564db46c710b61b38a023cec7f1b94bc643a95b8e561a3387c	IR WGSL	lower: lowering bug: naga validation: Entry point main at Fragment is invalid: Expression [N] is invalid: Unable to operate on image class Sampled { kind: Sint, multi: false }; [N] is ImageSample { image: [N], sampler: [N], gather: None, coordinate: [N], array_index: None, offset: None, level: Auto, depth_ref: None, clamp_to_edge: false }, [N] GlobalVariable([N]), [N] GlobalVariable([N]), [N] Compose { ty: [N], components: [[N], [N]] }
+c5d823e0f77d4e564db46c710b61b38a023cec7f1b94bc643a95b8e561a3387c	IR WGSL	lower: a filtered sample of an integer texture has no WGSL form
 c5d9decc78396f056ef0077961eeae3e7b29b09142e4e86e95bbe58fe0bb8e2e	A	lift: memory of type Integer(N)
 c5eecbfb58df588d5656d1fa36172e64cb63a44f2070e88a961cdd0ba36936fb	A	lift: N-bit lanes of a raw or structured buffer are not lifted
 c609ed50f993780c6989f8309b8a7a4802a402f251c13862ce943513b786dc07	A	lift: double-precision floats are not lifted (dx.op.makeDouble.fN)
