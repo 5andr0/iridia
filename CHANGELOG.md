@@ -25,7 +25,8 @@
   divergent operations when creating a browser shader module.
 - Breaking: `iridia_naga::Profile` now carries a separate `WgslLanguageFeatures` set; built-in profiles default
   to no optional language features. Consumers can set it with `with_language_features` or `with_subgroup_uniformity`.
-
+- The single-container IR gate diagnostic is `cargo run --release -p iridia-dxbc --example ir_gate`, with
+  `IR_GATE_ONE` naming its input. It uses the gate's existing comparisons and is no longer an ignored test.
 - `iridia-naga`: a filtered sample of an integer texture (a sample, a biased or a level one, or one at gradients, of a texture
   of unsigned or signed integers) is refused by name, "a filtered sample of an integer texture has no WGSL form", as
   `iridia-wgsl` already did; naga's writer made text its own validator refused ("Unable to operate on image class

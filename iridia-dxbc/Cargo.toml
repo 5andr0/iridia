@@ -33,3 +33,7 @@ iridia-wgsl = { path = "../iridia-wgsl" }
 naga = { workspace = true, features = ["wgsl-in"] }
 [lints]
 workspace = true
+
+[[example]]
+name = "ir_gate"
+test = false

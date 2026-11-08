@@ -63,6 +63,7 @@ Refused by name: double precision (the global flag), mono samplers, append and c
 - `tests/disassembly.rs` and `tests/reflection.rs` against Microsoft's disassembly of real programs (`GAME_DATA`, `oracles.corpus.general/dxbc`, made by `tests/oracles/dxbc_corpus.py`, and `oracles.d3d-disassembler.riders/shader-pack`): the decoder's opcode sequence and count, and the reflection read from the binary, against the text.
 - `tests/lift_corpus.rs` lifts folders of real containers (`oracles.corpus.<game>/shaders`), validates and writes each, and prints the refusals by reason; a program that lifts but fails validation fails.
 - `tests/operand_format.rs` reads the Shader Model 4 and 5 programs of the corpora (`oracles.corpus.{sekiro,riders,sledding}/shaders`): every instruction has the operand count its opcode's format gives it (`dxbc_reader::decode` refuses any other), a slot of the format that holds a register with no data of its own (a resource, sampler, view or stream) holds one and no other slot does, a resource slot carries no negate or absolute value, and a destination is selected by a write mask, never a swizzle.
+
 - `tests/container_digest.rs` (here and in `iridia-dxil`) checks the container digest of every container of the corpora and writes each container back with `dxcontainer::serialize`, byte for byte.
 - `tests/vkd3d_oracle.rs` runs vkd3d's `vkd3d-dxbc -t` and `vkd3d-compiler` (programs, never linked; `tools.vkd3d_dxbc` and `tools.vkd3d_compiler`) over a spread sample of each corpus (`vkd3d.limit`, all with `all`) and compares part kinds, sizes and offsets, the digest verdict (including a copy with one digest byte changed, refused by both), the signature elements and the instruction mnemonics with `dxcontainer`, the signature readers and `dxbc_reader::decode`.
 - `tests/exec_warp.rs` and `tests/exec_warp_tess.rs` render lifted programs on Microsoft's WARP rasterizer and run them on the executor, comparing every lane written; they need `tools.warp` (a host program this repository does not contain) and `tools.fxc`.
@@ -71,6 +72,11 @@ Refused by name: double precision (the global flag), mono samplers, append and c
 
 From the repository root, `cargo test -p iridia-dxbc --doc` checks the crate documentation, and
 `cargo build -p iridia-dxbc --examples` builds its example programs. Examples that read paths need the caller's files; the repository ships no game assets.
+
+For a single-container IR gate diagnostic, set `IR_GATE_ONE` to its path and run
+`cargo run --release -p iridia-dxbc --example ir_gate`. It prints the lifts and five seeded comparisons using the
+same helpers as the corpus gate. `IR_GATE_QUIET=1` omits the lifted text, and `IR_GATE_P=1` also prints the passed IR
+and lowered WGSL. This tool is an example executable rather than an ignored test.
 
 ## Licence
 
