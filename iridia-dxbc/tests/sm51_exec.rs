@@ -1,11 +1,11 @@
 //! The same HLSL compiled to SM5.1, SM6.0, and SM5.0 where expressible, evaluated on identical CPU inputs: each build
 //! runs as lifted onto the IR, prepared, and lowered to WGSL (`iridia_naga`).
 #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
-use iridia::{Interface, ResourceId, ResourceKind, Stage, StorageTarget};
 use iridia_exec::{
     Backend, Element, Executable, ImageLoad, ImageQuery, ImageSample, ImageStore, QueryKind, Resources,
 };
 use iridia_ir::Program;
+use iridia_ir::interface::{Interface, ResourceId, ResourceKind, Stage, StorageTarget};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -321,26 +321,29 @@ fn unbounded_constant_bindings_are_sparse_and_missing_descriptors_error() {
     }
 }
 
+/// The version gate (`iridia_ir::gate`): what the IR lift makes of the comparison fixtures' DXIL is hashed under
+/// `LIFTER_VERSION` in `tests/fixtures/sm51/dxil-ir.hashes`. A change to the output without a bump of the version fails
+/// here, and so does a bump without the table of that version.
 #[test]
-fn dxil_comparison_fixtures_match_the_lifter_version() {
+fn dxil_comparison_fixtures_match_the_ir_lifter_version() {
     let mut outcomes = Vec::new();
     for name in NAMES {
         let file = format!("{name}.60.dxil");
         let bytes = std::fs::read(root().join(&file)).unwrap();
-        let output = iridia_dxil::lift(&bytes)
-            .map_err(|e| e.to_string())
-            .and_then(|p| p.text().map_err(|e| e.to_string()));
+        let output = iridia_dxil::ir::lift(&bytes)
+            .map(|p| iridia_ir::gate::lifted(&p))
+            .map_err(|e| e.to_string());
         outcomes.push((file, output));
     }
     outcomes.sort_by(|a, b| a.0.cmp(&b.0));
-    let current = iridia::gate::table(
-        "iridia-dxil-sm51-comparison",
-        iridia_dxil::LIFTER_VERSION,
+    let current = iridia_ir::gate::table(
+        iridia_dxil::ir::LIFTER,
+        iridia_dxil::ir::LIFTER_VERSION,
         &outcomes,
     );
-    let committed = std::fs::read_to_string(root().join("dxil.hashes")).unwrap_or_default();
-    if let Err(why) = iridia::gate::check(&committed, &current) {
-        let path = std::env::temp_dir().join("sm51-dxil.hashes");
+    let committed = std::fs::read_to_string(root().join("dxil-ir.hashes")).unwrap_or_default();
+    if let Err(why) = iridia_ir::gate::check(&committed, &current) {
+        let path = std::env::temp_dir().join("sm51-dxil-ir.hashes");
         std::fs::write(&path, current).unwrap();
         panic!("{why}; current table: {}", path.display());
     }
