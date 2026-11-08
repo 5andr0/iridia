@@ -2379,8 +2379,8 @@
         "failed": 139
       },
       "executed": {
-        "pass": 2748,
-        "fail": 57
+        "pass": 2758,
+        "fail": 47
       },
       "proved_by": [
         "vkd3d"
@@ -2857,8 +2857,8 @@
         "failed": 67
       },
       "executed": {
-        "pass": 3466,
-        "fail": 56
+        "pass": 3476,
+        "fail": 46
       },
       "proved_by": [
         "vkd3d"
@@ -2985,8 +2985,8 @@
         "failed": 17
       },
       "executed": {
-        "pass": 349,
-        "fail": 17
+        "pass": 359,
+        "fail": 7
       },
       "proved_by": [
         "vkd3d"
@@ -3081,8 +3081,8 @@
         "failed": 8
       },
       "executed": {
-        "pass": 197,
-        "fail": 10
+        "pass": 207,
+        "fail": 0
       },
       "proved_by": [
         "vkd3d"
@@ -4709,8 +4709,8 @@
         "failed": 8
       },
       "executed": {
-        "pass": 2,
-        "fail": 10
+        "pass": 12,
+        "fail": 0
       },
       "proved_by": [
         "vkd3d"
@@ -6201,8 +6201,8 @@
         "failed": 165
       },
       "executed": {
-        "pass": 3606,
-        "fail": 58
+        "pass": 3616,
+        "fail": 48
       },
       "proved_by": [
         "vkd3d"
@@ -7669,8 +7669,8 @@
         "failed": 22
       },
       "executed": {
-        "pass": 877,
-        "fail": 17
+        "pass": 881,
+        "fail": 13
       },
       "proved_by": [
         "vkd3d"
@@ -7701,8 +7701,8 @@
         "failed": 25
       },
       "executed": {
-        "pass": 739,
-        "fail": 36
+        "pass": 745,
+        "fail": 30
       },
       "proved_by": [
         "vkd3d"
@@ -7891,8 +7891,8 @@
         "failed": 128
       },
       "executed": {
-        "pass": 461,
-        "fail": 59
+        "pass": 467,
+        "fail": 53
       },
       "proved_by": [
         "offload",
@@ -8333,10 +8333,12 @@
         "failed": 0
       },
       "executed": {
-        "pass": 0,
-        "fail": 3
+        "pass": 3,
+        "fail": 0
       },
-      "proved_by": []
+      "proved_by": [
+        "offload"
+      ]
     },
     {
       "format": "dxil",
@@ -8363,10 +8365,12 @@
         "failed": 0
       },
       "executed": {
-        "pass": 0,
-        "fail": 2
+        "pass": 2,
+        "fail": 0
       },
-      "proved_by": []
+      "proved_by": [
+        "offload"
+      ]
     },
     {
       "format": "dxil",
@@ -8393,10 +8397,12 @@
         "failed": 0
       },
       "executed": {
-        "pass": 0,
-        "fail": 2
+        "pass": 2,
+        "fail": 0
       },
-      "proved_by": []
+      "proved_by": [
+        "offload"
+      ]
     },
     {
       "format": "dxil",
@@ -8423,10 +8429,12 @@
         "failed": 0
       },
       "executed": {
-        "pass": 0,
-        "fail": 2
+        "pass": 2,
+        "fail": 0
       },
-      "proved_by": []
+      "proved_by": [
+        "offload"
+      ]
     },
     {
       "format": "dxil",
@@ -9424,8 +9432,8 @@
         "failed": 583
       },
       "executed": {
-        "pass": 2319,
-        "fail": 222
+        "pass": 2361,
+        "fail": 180
       },
       "proved_by": [
         "offload",
@@ -9547,8 +9555,8 @@
         "failed": 126
       },
       "executed": {
-        "pass": 461,
-        "fail": 59
+        "pass": 467,
+        "fail": 53
       },
       "proved_by": [
         "offload",
@@ -10170,8 +10178,8 @@
         "failed": 0
       },
       "executed": {
-        "pass": 4,
-        "fail": 1
+        "pass": 5,
+        "fail": 0
       },
       "proved_by": [
         "offload"
@@ -11551,8 +11559,8 @@
         "failed": 11
       },
       "executed": {
-        "pass": 63,
-        "fail": 7
+        "pass": 70,
+        "fail": 0
       },
       "proved_by": [
         "offload"
@@ -11648,8 +11656,8 @@
         "failed": 11
       },
       "executed": {
-        "pass": 23,
-        "fail": 11
+        "pass": 34,
+        "fail": 0
       },
       "proved_by": [
         "offload"
@@ -11745,8 +11753,8 @@
         "failed": 13
       },
       "executed": {
-        "pass": 78,
-        "fail": 8
+        "pass": 80,
+        "fail": 6
       },
       "proved_by": [
         "offload",
@@ -11844,8 +11852,8 @@
         "failed": 13
       },
       "executed": {
-        "pass": 38,
-        "fail": 19
+        "pass": 48,
+        "fail": 9
       },
       "proved_by": [
         "offload",
@@ -11877,8 +11885,8 @@
         "failed": 58
       },
       "executed": {
-        "pass": 186,
-        "fail": 12
+        "pass": 192,
+        "fail": 6
       },
       "proved_by": [
         "offload",
@@ -13376,8 +13384,8 @@
         "failed": 397
       },
       "executed": {
-        "pass": 3542,
-        "fail": 121
+        "pass": 3572,
+        "fail": 91
       },
       "proved_by": [
         "offload",
@@ -13596,8 +13604,8 @@
         "failed": 0
       },
       "executed": {
-        "pass": 1,
-        "fail": 1
+        "pass": 2,
+        "fail": 0
       },
       "proved_by": [
         "offload"
@@ -13721,8 +13729,8 @@
         "failed": 0
       },
       "executed": {
-        "pass": 2,
-        "fail": 1
+        "pass": 3,
+        "fail": 0
       },
       "proved_by": [
         "offload"
@@ -14034,11 +14042,12 @@
         "failed": 20
       },
       "executed": {
-        "pass": 2,
-        "fail": 30
+        "pass": 32,
+        "fail": 0
       },
       "proved_by": [
-        "offload"
+        "offload",
+        "vkd3d"
       ]
     },
     {
@@ -15917,10 +15926,12 @@
         "failed": 0
       },
       "executed": {
-        "pass": 0,
-        "fail": 1
+        "pass": 1,
+        "fail": 0
       },
-      "proved_by": []
+      "proved_by": [
+        "offload"
+      ]
     },
     {
       "format": "dxil",
@@ -16969,10 +16980,12 @@
         "failed": 0
       },
       "executed": {
-        "pass": 0,
-        "fail": 1
+        "pass": 1,
+        "fail": 0
       },
-      "proved_by": []
+      "proved_by": [
+        "offload"
+      ]
     },
     {
       "format": "dxil",
@@ -17031,10 +17044,12 @@
         "failed": 0
       },
       "executed": {
-        "pass": 0,
-        "fail": 1
+        "pass": 1,
+        "fail": 0
       },
-      "proved_by": []
+      "proved_by": [
+        "offload"
+      ]
     },
     {
       "format": "dxil",
@@ -17061,10 +17076,12 @@
         "failed": 0
       },
       "executed": {
-        "pass": 0,
-        "fail": 1
+        "pass": 1,
+        "fail": 0
       },
-      "proved_by": []
+      "proved_by": [
+        "offload"
+      ]
     },
     {
       "format": "dxil",
@@ -18871,8 +18888,8 @@
         "failed": 452
       },
       "executed": {
-        "pass": 705,
-        "fail": 202
+        "pass": 723,
+        "fail": 184
       },
       "proved_by": [
         "offload",
@@ -19063,8 +19080,8 @@
         "failed": 248
       },
       "executed": {
-        "pass": 3274,
-        "fail": 115
+        "pass": 3304,
+        "fail": 85
       },
       "proved_by": [
         "offload",
@@ -19115,33 +19132,33 @@
       "description": "Each test file run at each shader model on each of vkd3d's Windows runners (d3d9, d3d11, d3d12 with fxc, d3d12 with dxc), every step in order, every probe compared as vkd3d compares it. A row is one run: pass when every probe holds that vkd3d's runner runs at that model (selected); a run it runs none of is extended (selected false), its status that of all its probes, and the probes vkd3d leaves out of the others are their extended_status: the same expectations at a model vkd3d's own runs leave out, which need not hold on any device. A probe vkd3d's test marks winbug where Windows itself reads otherwise is counted as winbug and decides no run (winbug_outcomes: what those found); one marked winbug for a driver's bug (driver_bug_probes) is a probe like any other. reference_status is the run's status on the reference path, reference_totals those of the selected runs.",
       "totals": {
         "error": 4,
-        "fail": 16,
+        "fail": 14,
         "not-modelled": 9,
-        "pass": 855,
+        "pass": 857,
         "refused": 53
       },
       "probe_totals": {
         "error": 670,
-        "fail": 136,
+        "fail": 126,
         "not-modelled": 13,
-        "pass": 8266,
+        "pass": 8276,
         "refused": 409,
         "winbug": 29
       },
       "extended_totals": {
         "compiler-refused": 8,
         "error": 14,
-        "fail": 36,
+        "fail": 31,
         "not-modelled": 22,
-        "pass": 1821,
+        "pass": 1826,
         "refused": 94
       },
       "extended_probe_totals": {
         "compiler-refused": 43,
         "error": 2602,
-        "fail": 266,
+        "fail": 241,
         "not-modelled": 35,
-        "pass": 18755,
+        "pass": 18780,
         "refused": 966,
         "winbug": 100
       },
@@ -19221,13 +19238,6 @@
           "reason": "the state stencil {\"func\":\"always\",\"fail\":\"replace\",\"depth_fail\":\"replace\",\"pass\":\"replace\"}",
           "count": 3,
           "example": "stencil.shader_test:96: the state stencil {\"func\":\"always\",\"fail\":\"replace\",\"depth_fail\":\"replace\",\"pass\":\"replace\"}"
-        },
-        {
-          "status": "fail",
-          "group": "gap",
-          "reason": "a probe in gather-cmp.shader_test differs",
-          "count": 2,
-          "example": "gather-cmp.shader_test:74: (0, 0): got [0.0, 0.0, 0.0, 0.0], expected [0.0, 1.0, 0.0, 0.0]"
         },
         {
           "status": "refused",
@@ -32041,9 +32051,9 @@
           "runner": "d3d12",
           "format": "dxbc",
           "model": "5.0",
-          "status": "fail",
-          "group": "gap",
-          "detail": "line 74: (0, 0): got [0.0, 0.0, 0.0, 0.0], expected [0.0, 1.0, 0.0, 0.0]",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "probes": 7,
           "selected": true,
           "selected_probes": 7,
@@ -32056,9 +32066,9 @@
           "runner": "d3d12",
           "format": "dxbc",
           "model": "5.1",
-          "status": "fail",
-          "group": "gap",
-          "detail": "line 74: (0, 0): got [0.0, 0.0, 0.0, 0.0], expected [0.0, 1.0, 0.0, 0.0]",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "probes": 7,
           "selected": false,
           "selected_probes": 0,
@@ -52276,9 +52286,9 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.0",
-          "status": "fail",
-          "group": "gap",
-          "detail": "line 74: (0, 0): got [0.0, 0.0, 0.0, 0.0], expected [0.0, 1.0, 0.0, 0.0]",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "probes": 7,
           "selected": true,
           "selected_probes": 7,
@@ -52291,9 +52301,9 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.1",
-          "status": "fail",
-          "group": "gap",
-          "detail": "line 74: (0, 0): got [0.0, 0.0, 0.0, 0.0], expected [0.0, 1.0, 0.0, 0.0]",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "probes": 7,
           "selected": false,
           "selected_probes": 0,
@@ -52306,9 +52316,9 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.2",
-          "status": "fail",
-          "group": "gap",
-          "detail": "line 74: (0, 0): got [0.0, 0.0, 0.0, 0.0], expected [0.0, 1.0, 0.0, 0.0]",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "probes": 7,
           "selected": false,
           "selected_probes": 0,
@@ -52321,9 +52331,9 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.5",
-          "status": "fail",
-          "group": "gap",
-          "detail": "line 74: (0, 0): got [0.0, 0.0, 0.0, 0.0], expected [0.0, 1.0, 0.0, 0.0]",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "probes": 7,
           "selected": false,
           "selected_probes": 0,
@@ -52336,9 +52346,9 @@
           "runner": "d3d12-dxc",
           "format": "dxil",
           "model": "6.6",
-          "status": "fail",
-          "group": "gap",
-          "detail": "line 74: (0, 0): got [0.0, 0.0, 0.0, 0.0], expected [0.0, 1.0, 0.0, 0.0]",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "probes": 7,
           "selected": false,
           "selected_probes": 0,
@@ -63410,10 +63420,10 @@
       "licence": "Apache-2.0 WITH LLVM-exception",
       "description": "Each test run as lit runs it for DirectX with DXC: its RUN lines in order, the offloader's pipeline on iridia's executor, its Results rules, FileCheck lines and golden images checked as the suite's own tools check them. A test lit runs on no Direct3D 12 device in that configuration (a REQUIRES no device's features meet, an UNSUPPORTED the configuration meets) is not-applicable; one a Direct3D 12 device can run and iridia's device lacks a feature for is not-modelled; XFAIL against iridia's device's features. reference_status is the test's status on the reference path.",
       "totals": {
-        "fail": 23,
+        "fail": 5,
         "not-applicable": 47,
         "not-modelled": 68,
-        "pass": 487,
+        "pass": 505,
         "refused": 178,
         "xfail": 4
       },
@@ -63467,13 +63477,6 @@
           "reason": "<program>: DXIL at bit NNNNN: dx.op.rawBufferVectorLoad.vNNfNN: dx.op NNN is not lifted onto the IR yet",
           "count": 16,
           "example": "Feature/HLSLLib/long-vector/asint16.long-vector.16.test: 222462e187f2f7ab: DXIL at bit 11106: dx.op.rawBufferVectorLoad.v16f16: dx.op 303 is not lifted onto the IR yet"
-        },
-        {
-          "status": "fail",
-          "group": "gap",
-          "reason": "Test failed: TestN",
-          "count": 13,
-          "example": "Feature/HLSLLib/abs.int16.test: Test failed: Test1"
         },
         {
           "status": "not-applicable",
@@ -63602,13 +63605,6 @@
           "example": "Feature/HLSLLib/long-vector/dot.longvec.fp32.test: 720dd9e0c3183bfe: DXIL at bit 14492: a vector of 5 lanes"
         },
         {
-          "status": "fail",
-          "group": "gap",
-          "reason": "Test failed: Result",
-          "count": 2,
-          "example": "Feature/HLSLLib/mul.int16.test: Test failed: Result"
-        },
-        {
           "status": "not-modelled",
           "group": "runner-limit",
           "reason": "REQUIRES: Barycentrics: a feature iridia's device does not have",
@@ -63681,20 +63677,6 @@
         {
           "status": "fail",
           "group": "gap",
-          "reason": "  Mismatch at element NN: expected=NxNNNN, actual=NxNbcN",
-          "count": 1,
-          "example": "Feature/HLSLLib/mul.fp16.test:   Mismatch at element 24: expected=0x5068, actual=0x4bc7"
-        },
-        {
-          "status": "fail",
-          "group": "gap",
-          "reason": "  Mismatch at element NN: expected=NxNNfN, actual=NxN",
-          "count": 1,
-          "example": "Feature/HLSLLib/transpose.fp16.test:   Mismatch at element 24: expected=0x48f3, actual=0x0"
-        },
-        {
-          "status": "fail",
-          "group": "gap",
           "reason": "FileCheck: CHECK: expected string not found in input: Resource 'Tex' is not a texture array, so ArraySlices must be N (got N).",
           "count": 1,
           "example": "Tools/Offloader/ArraySliceValidation.test: FileCheck: CHECK: expected string not found in input: Resource 'Tex' is not a texture array, so ArraySlices must be 1 (got 2)."
@@ -63705,13 +63687,6 @@
           "reason": "Test failed: ShaderDepth",
           "count": 1,
           "example": "Feature/Semantics/DepthOutputs.test: Test failed: ShaderDepth"
-        },
-        {
-          "status": "fail",
-          "group": "gap",
-          "reason": "Test failed: Test",
-          "count": 1,
-          "example": "Tools/Offloader/ByteAddress-16bit.test: Test failed: Test"
         },
         {
           "status": "not-applicable",
@@ -65416,9 +65391,9 @@
           "case": "Feature/HLSLLib/abs.int16.test",
           "format": "dxil",
           "model": "cs_6",
-          "status": "fail",
-          "group": "gap",
-          "detail": "Test failed: Test1",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "reference_status": "refused"
         },
         {
@@ -65706,9 +65681,9 @@
           "case": "Feature/HLSLLib/asint16.fp16.test",
           "format": "dxil",
           "model": "cs_6",
-          "status": "fail",
-          "group": "gap",
-          "detail": "Test failed: Test0",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "reference_status": "refused"
         },
         {
@@ -65756,9 +65731,9 @@
           "case": "Feature/HLSLLib/asuint16.fp16.test",
           "format": "dxil",
           "model": "cs_6",
-          "status": "fail",
-          "group": "gap",
-          "detail": "Test failed: Test0",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "reference_status": "refused"
         },
         {
@@ -65926,9 +65901,9 @@
           "case": "Feature/HLSLLib/clamp.int16.test",
           "format": "dxil",
           "model": "cs_6",
-          "status": "fail",
-          "group": "gap",
-          "detail": "Test failed: Test0",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "reference_status": "refused"
         },
         {
@@ -66016,9 +65991,9 @@
           "case": "Feature/HLSLLib/countbits.16.test",
           "format": "dxil",
           "model": "cs_6",
-          "status": "fail",
-          "group": "gap",
-          "detail": "Test failed: Test1",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "reference_status": "refused"
         },
         {
@@ -66346,9 +66321,9 @@
           "case": "Feature/HLSLLib/firstbithigh.16.test",
           "format": "dxil",
           "model": "cs_6",
-          "status": "fail",
-          "group": "gap",
-          "detail": "Test failed: Test1",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "reference_status": "refused"
         },
         {
@@ -66506,9 +66481,9 @@
           "case": "Feature/HLSLLib/isfinite.16.test",
           "format": "dxil",
           "model": "cs_6",
-          "status": "fail",
-          "group": "gap",
-          "detail": "Test failed: Test1",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "reference_status": "refused"
         },
         {
@@ -66536,9 +66511,9 @@
           "case": "Feature/HLSLLib/isinf.16.test",
           "format": "dxil",
           "model": "cs_6",
-          "status": "fail",
-          "group": "gap",
-          "detail": "Test failed: Test1",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "reference_status": "refused"
         },
         {
@@ -66566,9 +66541,9 @@
           "case": "Feature/HLSLLib/isnan.16.test",
           "format": "dxil",
           "model": "cs_6",
-          "status": "fail",
-          "group": "gap",
-          "detail": "Test failed: Test1",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "reference_status": "refused"
         },
         {
@@ -67466,9 +67441,9 @@
           "case": "Feature/HLSLLib/max.int16.test",
           "format": "dxil",
           "model": "cs_6",
-          "status": "fail",
-          "group": "gap",
-          "detail": "Test failed: Test0",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "reference_status": "refused"
         },
         {
@@ -67546,9 +67521,9 @@
           "case": "Feature/HLSLLib/min.int16.test",
           "format": "dxil",
           "model": "cs_6",
-          "status": "fail",
-          "group": "gap",
-          "detail": "Test failed: Test0",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "reference_status": "refused"
         },
         {
@@ -67596,9 +67571,9 @@
           "case": "Feature/HLSLLib/mul.fp16.test",
           "format": "dxil",
           "model": "cs_6",
-          "status": "fail",
-          "group": "gap",
-          "detail": "  Mismatch at element 24: expected=0x5068, actual=0x4bc7",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "reference_status": "refused"
         },
         {
@@ -67626,9 +67601,9 @@
           "case": "Feature/HLSLLib/mul.int16.test",
           "format": "dxil",
           "model": "cs_6",
-          "status": "fail",
-          "group": "gap",
-          "detail": "Test failed: Result",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "reference_status": "refused"
         },
         {
@@ -67916,9 +67891,9 @@
           "case": "Feature/HLSLLib/reversebits.16.test",
           "format": "dxil",
           "model": "cs_6",
-          "status": "fail",
-          "group": "gap",
-          "detail": "Test failed: Test1",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "reference_status": "refused"
         },
         {
@@ -68136,9 +68111,9 @@
           "case": "Feature/HLSLLib/sign.int16.test",
           "format": "dxil",
           "model": "cs_6",
-          "status": "fail",
-          "group": "gap",
-          "detail": "Test failed: Test1",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "reference_status": "refused"
         },
         {
@@ -68416,9 +68391,9 @@
           "case": "Feature/HLSLLib/transpose.fp16.test",
           "format": "dxil",
           "model": "cs_6",
-          "status": "fail",
-          "group": "gap",
-          "detail": "  Mismatch at element 24: expected=0x48f3, actual=0x0",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "reference_status": "refused"
         },
         {
@@ -68446,9 +68421,9 @@
           "case": "Feature/HLSLLib/transpose.int16.test",
           "format": "dxil",
           "model": "cs_6",
-          "status": "fail",
-          "group": "gap",
-          "detail": "Test failed: Result",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "reference_status": "refused"
         },
         {
@@ -70826,9 +70801,9 @@
           "case": "Tools/Offloader/ByteAddress-16bit.test",
           "format": "dxil",
           "model": "cs_6",
-          "status": "fail",
-          "group": "gap",
-          "detail": "Test failed: Test",
+          "status": "pass",
+          "group": "pass",
+          "detail": "",
           "reference_status": "refused"
         },
         {
