@@ -434,6 +434,7 @@ impl iridia_exec::Sampler for SlotRequests<'_> {
 
     fn atomic_add(&mut self, request: AtomicAdd) -> Result<u32, String> {
         self.atomic(Atomic {
+            invocation: request.invocation,
             view: request.view,
             address: request.address,
             op: ImageAtomicOp::Add,
@@ -863,6 +864,7 @@ impl iridia_exec::Backend for IdRequests<'_> {
 
     fn store_buffer(
         &mut self,
+        _invocation: Option<iridia_exec::ComputeInvocation>,
         view: iridia::ResourceId,
         word: u32,
         value: [u32; 4],
@@ -903,8 +905,15 @@ impl iridia_exec::Backend for IdRequests<'_> {
         Ok(self.resource(view)?.map_or(0, |r| r.width.saturating_mul(4)))
     }
 
-    fn atomic_add(&mut self, view: iridia::ResourceId, word: u32, value: u32) -> Result<u32, String> {
+    fn atomic_add(
+        &mut self,
+        invocation: Option<iridia_exec::ComputeInvocation>,
+        view: iridia::ResourceId,
+        word: u32,
+        value: u32,
+    ) -> Result<u32, String> {
         self.atomic_buffer(BufferAtomic {
+            invocation,
             view: Element { id: view, index: 0 },
             word,
             op: ImageAtomicOp::Add,

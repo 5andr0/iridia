@@ -769,8 +769,16 @@ impl Backend for Host<'_, '_> {
     fn atomic_image(&mut self, r: ImageAtomic<ResourceId>) -> Result<u32, String> {
         self.slot_backend()?.atomic_image(r)
     }
-    fn store_buffer(&mut self, view: ResourceId, word: u32, value: [u32; 4], mask: u8) -> Result<(), String> {
-        self.slot_backend()?.store_buffer(view, word, value, mask)
+    fn store_buffer(
+        &mut self,
+        invocation: Option<crate::ComputeInvocation>,
+        view: ResourceId,
+        word: u32,
+        value: [u32; 4],
+        mask: u8,
+    ) -> Result<(), String> {
+        self.slot_backend()?
+            .store_buffer(invocation, view, word, value, mask)
     }
     fn read_buffer(&mut self, view: ResourceId, word: u32, count: u8) -> Result<[u32; 4], String> {
         self.slot_backend()?.read_buffer(view, word, count)
@@ -778,8 +786,14 @@ impl Backend for Host<'_, '_> {
     fn buffer_words(&mut self, view: ResourceId) -> Result<u32, String> {
         self.slot_backend()?.buffer_words(view)
     }
-    fn atomic_add(&mut self, view: ResourceId, word: u32, value: u32) -> Result<u32, String> {
-        self.slot_backend()?.atomic_add(view, word, value)
+    fn atomic_add(
+        &mut self,
+        invocation: Option<crate::ComputeInvocation>,
+        view: ResourceId,
+        word: u32,
+        value: u32,
+    ) -> Result<u32, String> {
+        self.slot_backend()?.atomic_add(invocation, view, word, value)
     }
     fn atomic_buffer(&mut self, r: BufferAtomic) -> Result<u32, String> {
         self.slot_backend()?.atomic_buffer(r)

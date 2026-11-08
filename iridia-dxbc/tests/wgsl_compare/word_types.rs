@@ -1032,7 +1032,7 @@ fn main {{
             ..Memory::default()
         };
         memory
-            .store_buffer(ResourceId(1), 0, [0x3f80_0000; 4], 3)
+            .store_buffer(None, ResourceId(1), 0, [0x3f80_0000; 4], 3)
             .unwrap();
         // The executor queries an aliased store's bounds before writing. Reads must see the same buffer too.
         assert_eq!(memory.buffer_words(ResourceId(1)).unwrap(), 2);
@@ -1049,7 +1049,7 @@ fn main {{
         );
         // An actually executed write of another origin makes only that word unknown and exact.
         memory
-            .store_buffer(ResourceId(2), 0, [0x3f80_0000; 4], 1)
+            .store_buffer(None, ResourceId(2), 0, [0x3f80_0000; 4], 1)
             .unwrap();
         assert_eq!(memory.origins[&(buffer, 0)], WordType::Unknown);
         assert_eq!(

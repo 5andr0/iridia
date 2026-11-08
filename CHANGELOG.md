@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `iridia-exec` (breaking): the executor names the compute invocation of every write and atomic it hands a backend.
+  `ComputeInvocation` (a thread group and the linear index in it, scoped to one dispatch) is new; `Backend::store_buffer`
+  and `Backend::atomic_add` take it as their first argument, and `Store`, `AtomicAdd`, `Atomic`, `ImageStore`, `ImageAtomic`
+  and `BufferAtomic` carry it as `invocation` (`None` outside a compute dispatch). The pipeline, pixel and slot adapters pass
+  it through. A `Sampler` implementation only receives the new field.
 - `iridia-dxil` (IR lift, `LIFTER_VERSION` 8): `dx.op.isSpecialFloat.f16` `IsNormal` (dxc writes it for `isnormal` of a half
   from shader model 6.9; before, it writes the exponent's bit tests, which were already right) took the smallest normal
   float, 2^-126, as the bound, so a subnormal half (a normal float once widened) was normal; the bound is the half's, 2^-14.
@@ -53,8 +58,9 @@
 - `iridia-dxbc` tests: the compute comparison of the WGSL writers against the IR executor runs programs with typed views,
   storage images, samplers and arrays of them; a word's float or integer origin (what decides whether it is compared within
   tolerance or exactly) now follows variables, array elements and control-flow joins and takes a typed view or image's declared
-  lane type; a word the executor's own stores gave two or more different values is compared by whether WARP's value in every
-  repeat is one of those values, with no table row. `WARP_UNSTABLE` lists the rest by name and source hash with a cause the
+  lane type; a word two or more of the executor's invocations left different final values is compared by whether WARP's
+  value in every repeat is one of those finals, with no table row (a word one invocation wrote, however many times, is
+  compared as any word is). `WARP_UNSTABLE` lists the rest by name and source hash with a cause the
   test re-checks on every run. Test-side only; no library source changes.
 - `iridia-d3d9-ir`: `log` and `logp` of a zero source give -FLT_MAX and `texdepth` with `r5.g` zero gives 1.0, as Microsoft's
   instruction reference states (`LIFTER_VERSION` 5, twelve fixtures change); the crate documentation tables what the lift

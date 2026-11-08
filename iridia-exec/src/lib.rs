@@ -99,8 +99,8 @@ pub use pipeline::{DispatchStats, Pipeline, PipelineResources, ShaderTable};
 pub use pixel::ProgramShader;
 pub use rayquery::{Built, Geometry, Instance, InstanceFlags, Scene, flags as ray_flags};
 pub use request::{
-    Backend, BufferAtomic, CallShader, Dim, Element, ImageAtomic, ImageAtomicOp, ImageLoad, ImageLod,
-    ImageQuery, ImageSample, ImageStore, QueryKind, ReportHit, TraceRay,
+    Backend, BufferAtomic, CallShader, ComputeInvocation, Dim, Element, ImageAtomic, ImageAtomicOp,
+    ImageLoad, ImageLod, ImageQuery, ImageSample, ImageStore, QueryKind, ReportHit, TraceRay,
 };
 pub use run::{Bound, Decision, Dispatched, GroupHook, Output, Resources, Runner, STEP_LIMIT, Scratch};
 pub use stage::Constants;
@@ -378,6 +378,8 @@ pub struct Load {
 /// A store request (`store_uav_typed`, `store_structured`).
 #[derive(Clone, Copy, Debug)]
 pub struct Store {
+    /// The compute invocation that makes it (`None` outside a compute dispatch), kept through slot adaptation.
+    pub invocation: Option<ComputeInvocation>,
     /// Unordered-access view bind slot (`u<n>`).
     pub view: u32,
     /// A typed texture's x, y, and z or a 2D array's layer (0 where the view has fewer); a typed buffer's element (then
@@ -394,6 +396,8 @@ pub struct Store {
 /// element and byte offset in its first two lanes, a typed view's x, y (and z) otherwise (0 where the view has fewer).
 #[derive(Clone, Copy, Debug)]
 pub struct AtomicAdd {
+    /// The compute invocation that makes it (`None` outside a compute dispatch), kept through slot adaptation.
+    pub invocation: Option<ComputeInvocation>,
     /// Unordered-access view bind slot (`u<n>`).
     pub view: u32,
     /// Where the add lands: a structured view's element and byte offset, or a typed view's x, y and z.
@@ -406,6 +410,8 @@ pub struct AtomicAdd {
 /// it); its result the word as it was before.
 #[derive(Clone, Copy, Debug)]
 pub struct Atomic {
+    /// The compute invocation that makes it (`None` outside a compute dispatch), kept through slot adaptation.
+    pub invocation: Option<ComputeInvocation>,
     /// Unordered-access view bind slot (`u<n>`).
     pub view: u32,
     /// Where the operation lands: a structured view's element and byte offset, or a typed view's x, y and z.
@@ -445,6 +451,7 @@ pub trait Sampler {
     fn atomic(&mut self, request: Atomic) -> std::result::Result<u32, String> {
         match request.op {
             ImageAtomicOp::Add => self.atomic_add(AtomicAdd {
+                invocation: request.invocation,
                 view: request.view,
                 address: request.address,
                 value: request.value,
@@ -518,6 +525,7 @@ pub trait Sampler {
     /// A write to an unordered-access texture; the plain form is [`Sampler::store`].
     fn store_image(&mut self, request: ImageStore<u32>) -> std::result::Result<(), String> {
         self.store(Store {
+            invocation: request.invocation,
             view: request.view,
             address: [
                 request.texel[0],

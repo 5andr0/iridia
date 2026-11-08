@@ -21,7 +21,14 @@ impl Backend for Effects {
     fn buffer_words(&mut self, _: ResourceId) -> Result<u32, String> {
         Ok(16)
     }
-    fn store_buffer(&mut self, id: ResourceId, _: u32, value: Reg, _: u8) -> Result<(), String> {
+    fn store_buffer(
+        &mut self,
+        _invocation: Option<crate::ComputeInvocation>,
+        id: ResourceId,
+        _: u32,
+        value: Reg,
+        _: u8,
+    ) -> Result<(), String> {
         assert_eq!(value[0], 1, "helper-private local stores still evaluate");
         self.stores[id.0 as usize] += 1;
         Ok(())
@@ -48,6 +55,145 @@ impl Backend for Effects {
             self.increments += 1;
         }
         Ok(42)
+    }
+}
+
+#[test]
+fn compute_effects_identify_group_and_local_invocation_across_ordered_writes() {
+    #[derive(Default)]
+    struct Writers(BTreeMap<crate::ComputeInvocation, Vec<&'static str>>);
+    impl Backend for Writers {
+        fn sample(&mut self, _: ImageSample<Element>) -> Result<[f32; 4], String> {
+            unreachable!()
+        }
+        fn buffer_words(&mut self, _: ResourceId) -> Result<u32, String> {
+            Ok(16)
+        }
+        fn store_buffer(
+            &mut self,
+            invocation: Option<crate::ComputeInvocation>,
+            _: ResourceId,
+            _: u32,
+            _: Reg,
+            _: u8,
+        ) -> Result<(), String> {
+            self.0
+                .entry(invocation.expect("compute buffer store identity"))
+                .or_default()
+                .push("buffer");
+            Ok(())
+        }
+        fn store_image(&mut self, r: ImageStore<ResourceId>) -> Result<(), String> {
+            self.0
+                .entry(r.invocation.expect("compute image store identity"))
+                .or_default()
+                .push("image");
+            Ok(())
+        }
+        fn atomic_buffer(&mut self, r: BufferAtomic) -> Result<u32, String> {
+            self.0
+                .entry(r.invocation.expect("compute buffer atomic identity"))
+                .or_default()
+                .push("buffer-atomic");
+            Ok(0)
+        }
+        fn atomic_image(&mut self, r: ImageAtomic<ResourceId>) -> Result<u32, String> {
+            self.0
+                .entry(r.invocation.expect("compute image atomic identity"))
+                .or_default()
+                .push("image-atomic");
+            Ok(0)
+        }
+    }
+    let entry = iridia_ir::text::parse(
+        "iridia-ir 1
+fn main {
+  %0: u32 = u32(5)
+  %1: u32 = u32(7)
+  %2: vec2<i32> = vec2<i32>(0, 0)
+  %3: vec4<u32> = compose %0, %0, %0, %0
+  %4: vec4<u32> = compose %1, %1, %1, %1
+  store buffer r0 + 0 = %0
+  store buffer r0 + 0 = %1
+  store texel r1, %2 = %3
+  store texel r1, %2 = %4
+  %5: u32 = atomic.add buffer r0 + 0 value %0
+  %6: u32 = atomic.add image r1, %2 value %0
+  return
+}
+",
+    )
+    .unwrap();
+    let targets = [
+        StorageTarget::Buffer(BufferKind::Raw),
+        StorageTarget::Image {
+            dim: TextureDim::D2,
+            arrayed: false,
+            sample: SampleType::Uint,
+        },
+    ];
+    let program = iridia_ir::Program {
+        stage: Stage::Compute,
+        entry,
+        patch: None,
+        workgroup: Some([2, 2, 1]),
+        interface: Interface {
+            stage: Stage::Compute,
+            inputs: vec![],
+            outputs: vec![],
+            resources: targets
+                .into_iter()
+                .enumerate()
+                .map(|(i, target)| Resource {
+                    id: ResourceId(i as u32),
+                    kind: ResourceKind::Storage {
+                        target,
+                        access: Access::ReadWrite,
+                    },
+                    count: 1,
+                    provenance: ResourceProvenance::default(),
+                })
+                .collect(),
+            facts: StageFacts::None,
+        },
+        conventions: iridia_ir::Conventions::D3D,
+        float: iridia_ir::FloatEnv::default(),
+        provenance: iridia_ir::Provenance {
+            format: ShaderFormat::Dxbc,
+            target: "cs_5_0".into(),
+            lifter: "test".into(),
+            lifter_version: 0,
+            source_hash: None,
+            instruction_count: None,
+            policies: vec![],
+        },
+        notes: vec![],
+    };
+    iridia_ir::validate(&program).unwrap();
+    let executable = Executable::from_ir(&program).unwrap();
+    let bound = executable.bind(|_| None, |_| None).unwrap();
+    let mut writers = Writers::default();
+    executable
+        .dispatch(&bound, &mut writers, &mut BTreeMap::new(), [2, 1, 1], 32)
+        .unwrap();
+    assert_eq!(writers.0.len(), 8);
+    for group in 0..2 {
+        for index in 0..4 {
+            assert_eq!(
+                writers.0[&crate::ComputeInvocation {
+                    group: [group, 0, 0],
+                    index
+                }],
+                [
+                    "buffer",
+                    "buffer",
+                    "image",
+                    "image",
+                    "buffer-atomic",
+                    "image-atomic"
+                ]
+            );
+        }
     }
 }
 

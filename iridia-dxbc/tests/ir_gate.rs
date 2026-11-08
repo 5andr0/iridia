@@ -1296,6 +1296,7 @@ fn image_atomics_outside_the_view_return_zero_and_change_nothing() {
             let mut pixel = Hashed::for_case(ZEROED);
             let mut group = Group::for_case(ZEROED);
             let request = ImageAtomic {
+                invocation: None,
                 view: word,
                 index: 0,
                 dim,
@@ -1307,6 +1308,7 @@ fn image_atomics_outside_the_view_return_zero_and_change_nothing() {
                 compare: 0,
             };
             let compute = |r: ImageAtomic<u32>| ImageAtomic {
+                invocation: None,
                 view: view.id,
                 index: view.index,
                 dim: r.dim,

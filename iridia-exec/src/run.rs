@@ -265,6 +265,8 @@ pub struct Runner<'a, const N: usize, M: Mask = u8> {
     sampler: &'a mut dyn Backend,
     ftz: bool,
     grouping: Grouping,
+    /// The thread group a compute dispatch is running, which with a lane names the invocation of a write.
+    current_group: Option<[u32; 3]>,
     /// The steps of a quad or a thread group, counted once for all its lanes.
     steps: u64,
     /// The steps of each lane of independent invocations.
@@ -501,6 +503,7 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
             mem: scratch.mem,
             sampler,
             ftz,
+            current_group: None,
             grouping: if N == 4 {
                 Grouping::Quad
             } else {
@@ -717,6 +720,14 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
             }
         }
     }
+    /// The compute invocation lane `lane` runs: in a compute dispatch, its group and its linear index in the group.
+    fn invocation(&self, lane: usize) -> Option<crate::ComputeInvocation> {
+        Some(crate::ComputeInvocation {
+            group: self.current_group?,
+            index: u32::try_from(lane).ok()?,
+        })
+    }
+
     /// A helper still writes its private locals; external writes do not even resolve an address.
     fn can_store(&self, loc: Loc, lane: usize) -> bool {
         matches!(loc, Loc::Local(_)) || !self.killed.has(lane)
@@ -752,7 +763,8 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                     return Err("store to a read-only global".into());
                 };
                 let first = o.checked_add(extra).ok_or("memory index out of range")?;
-                self.sampler.store_buffer(view, first, v, crate::lane_mask(n))
+                self.sampler
+                    .store_buffer(self.invocation(lane), view, first, v, crate::lane_mask(n))
             }
         }
     }
@@ -806,6 +818,7 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
             AtomOp::CompareExchange => ImageAtomicOp::CompareExchange,
         };
         self.sampler.atomic_buffer(BufferAtomic {
+            invocation: self.invocation(lane),
             view: Element { id: view, index },
             word: w,
             op,
@@ -1630,6 +1643,7 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                             let cd = self.rd(slot_at::<N>(*coord), l)?;
                             let element = self.element(tex, l)?;
                             self.sampler.store_image(ImageStore {
+                                invocation: self.invocation(l),
                                 view: element.id,
                                 index: element.index,
                                 dim: *dim,
@@ -1667,6 +1681,7 @@ impl<'a, const N: usize, M: Mask> Runner<'a, N, M> {
                             let cd = self.rd(slot_at::<N>(*coord), l)?;
                             let element = self.element(tex, l)?;
                             let old = self.sampler.atomic_image(ImageAtomic {
+                                invocation: self.invocation(l),
                                 view: element.id,
                                 index: element.index,
                                 dim: *dim,
@@ -2920,6 +2935,7 @@ impl Executable {
             sampler: backend,
             ftz: self.flush_denormals,
             grouping: Grouping::Group,
+            current_group: None,
             steps: 0,
             lane_steps: [0; N],
             samples: [0; N],
@@ -2981,6 +2997,7 @@ impl<'a, const N: usize> Runner<'a, N, Wide> {
     /// Run one thread group: `id` its position in the dispatch, `size` its `numthreads`. Returns the steps taken.
     fn run_group(&mut self, id: [u32; 3], size: [u32; 3], wave: u32) -> Result<u64, String> {
         let c: &'a Executable = self.c;
+        self.current_group = Some(id);
         let lanes = group_lanes(size)? as usize;
         self.steps = 0;
         self.killed = Wide::none();

@@ -231,15 +231,18 @@ struct Tally {
     /// Per compute program that [`warp_unstable::TABLE`] lists: how many words it lists and its evidence. The class is
     /// decided by the table and the source, never by what this run's repeats show, and the listed words are not compared.
     warp_unstable: BTreeMap<String, (usize, String)>,
-    /// Per compute program, the words the executor's own stores gave two or more different values (so which store lands last,
-    /// which D3D leaves undefined, decides the word) that differ from WARP or between WARP's repeats, and that were compared
-    /// as members: each of WARP's repeats gave a value among those the stores gave. The words so compared, and how many of
-    /// them WARP gave differently between its repeats.
+    /// Per compute program, the words two or more of the executor's invocations left different final values (so which
+    /// invocation's write lands last, which D3D leaves undefined, decides the word) that differ from WARP or between WARP's
+    /// repeats, and that were compared as members: each of WARP's repeats gave one of those final values. The words so
+    /// compared, and how many of them WARP gave differently between its repeats.
     overlap_members: BTreeMap<String, [usize; 2]>,
-    /// Per compute program, the words that differ from WARP that the program's own writes leave unordered, by what shows
-    /// them so: more stores than store instructions (no loop) gave it different values, so two invocations stored to
-    /// it; two stores gave it different values, which one invocation's loop could do (not shown to come from two).
-    unordered: BTreeMap<String, [usize; 2]>,
+    /// Per compute program, the words of a buffer that differ from WARP where two or more invocations left different final
+    /// values and WARP's is none of them: the program's own writes leave the word unordered.
+    unordered: BTreeMap<String, usize>,
+    /// Per compute program, the words whose verdict differs from the retired membership rule's (any word two stores gave
+    /// different values, with no invocation identity), by `retired -> current` verdict. Observation only: it names the
+    /// words the invocation-final rule moved and decides nothing.
+    membership_census: BTreeMap<String, BTreeMap<String, usize>>,
     /// Per compute program that differs from WARP (beyond 1e-3, or in words its writes leave unordered): its source hash and
     /// why [`COMPUTE_EXPECTED`] lets it, where it does.
     differs: BTreeMap<String, (String, Option<&'static str>)>,
@@ -248,8 +251,8 @@ struct Tally {
     /// Per vertex or pixel program with a lane beyond 1e-3 (or a discard or a missing lane): its source hash and why
     /// [`GRAPHICS_EXPECTED`] lets it, where it does.
     graphics_differs: BTreeMap<String, (String, Option<&'static str>)>,
-    /// Per such program, why its best shown word is unordered, with the grade.
-    unordered_why: BTreeMap<String, (usize, String)>,
+    /// Per such program, the first word shown unordered and why.
+    unordered_why: BTreeMap<String, String>,
     /// Per source of an amplified lane: the lanes and the programs.
     amplified: BTreeMap<Source, (usize, BTreeSet<String>)>,
     by_program: BTreeMap<String, Class>,
@@ -1122,16 +1125,6 @@ const COMPUTE_EXPECTED: &[(&str, &str, &str)] = &[
         SHARED_SCAN_RACE,
     ),
     (
-        "1021.dxbc",
-        "sha256:1e5fef301327669be749764f0463efea892e79ae3ec98255869a4ae67d62fcf1",
-        UNORDERED_UNPROVEN,
-    ),
-    (
-        "1026.dxbc",
-        "sha256:62d4aca061e9dbfc9aec3a706eb8822c8b5e83c125ae89cc7bed903c1d093a75",
-        UNORDERED_UNPROVEN,
-    ),
-    (
         "1029.dxbc",
         "sha256:0a84f8bb618611e84a54b3e15c20fdb34f1d992b84e1754a81d4a6d08595d336",
         WARP_SIN_INFERRED,
@@ -1576,10 +1569,50 @@ const CELL_NOISE: &str = "cell noise, WARP's sin past D3D's bound: no lane beyon
 const WARP_SIN: &str =
     "WARP's sin is within D3D's absolute bound or outside its range, scaled x1e5 by fract(abs(sin(x) * 1e5))";
 
-/// Whether every one of `values` is one of `stored` (the values the executor's stores gave a word): no value of a word that has
-/// none is.
-fn all_among(mut values: impl Iterator<Item = u32>, stored: Option<&Vec<u32>>) -> bool {
-    values.all(|x| stored.is_some_and(|stored| stored.contains(&x)))
+/// Whether every one of `values` is a final value an invocation left at a word (`finals`): no value of a word that has none
+/// is.
+fn all_among(mut values: impl Iterator<Item = u32>, finals: Option<&FinalStores>) -> bool {
+    values.all(|x| finals.is_some_and(|finals| finals.values.values().any(|&v| v == x)))
+}
+
+/// Whether WARP's values of a word are compared as members of its invocations' final values: two or more invocations left
+/// it different values, it differs from WARP or between WARP's repeats, and every repeat gave one of those values. A word
+/// one invocation wrote, however many times, is compared as any word is.
+fn among_finals(class: Class, shows: bool, values: &[u32], finals: Option<&FinalStores>) -> bool {
+    finals.is_some_and(FinalStores::overlap)
+        && (class != Class::Exact || shows)
+        && all_among(values.iter().copied(), finals)
+}
+
+/// What the comparison of a compute program does with one of its words.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Verdict {
+    /// Compared as a member of its invocations' final values.
+    Member,
+    /// Listed in [`warp_unstable::TABLE`], so not compared.
+    Listed,
+    /// WARP's repeats differ on it and the table does not list it: a failure with the row to add.
+    Unlisted,
+    /// It differs from WARP where the program's writes leave it unordered.
+    Unordered,
+    /// The retired rule's weaker unordered: two stores gave it different values, not shown to come from two invocations.
+    UnorderedUnshown,
+    /// Compared by its class.
+    Compared,
+}
+
+/// The membership rule f258dc7 landed, kept only for [`Tally::membership_census`]: a word two stores gave different values,
+/// held to any value a store gave it. With no invocation identity it lets one invocation's earlier, overwritten store pass
+/// (stores 5 then 7 admit 5). It decides nothing.
+fn retired_member(class: Class, shows: bool, values: &[u32], memory: &Memory, cell: Cell) -> bool {
+    memory
+        .stored
+        .get(&cell)
+        .is_some_and(|&(_, differs, n)| differs && n > 1)
+        && (class != Class::Exact || shows)
+        && values
+            .iter()
+            .all(|x| memory.distinct.get(&cell).is_some_and(|d| d.contains(x)))
 }
 
 /// Two invocations store different words to one word, so the result depends on an order the executor and WARP do not share.
@@ -1621,11 +1654,6 @@ const SHARED_NO_SYNC: &str = "group-shared words read across threads with no syn
 /// uniform texel 3 in 121 of 128 threads (job dump of case 3 run through wgsl-run with `g0_` stored out), and WARP gave the
 /// same words on 16 runs of the job, so it is a fixed schedule other than the executor's, not WARP's variation.
 const SHARED_SCAN_RACE: &str = "in-place scan over group-shared memory: a thread reads a word another writes in the same barrier phase (DXBC: ld, add, store, then one sync); WARP's sums differ from the race-free ones in 121 of 128 threads";
-
-/// A word two stores gave different values, and the program differs from WARP there; WARP's own variation between runs was
-/// not seen in the run that listed it.
-const UNORDERED_UNPROVEN: &str =
-    "two stores give one word different values and it differs from WARP there; WARP's own variation not seen";
 
 /// Differences of a few thousandths in an FFT's cancelled lanes, in a program with sin and cos; cause inferred, not probed.
 const WARP_SIN_INFERRED: &str =
@@ -1761,9 +1789,62 @@ enum Cell {
     Texel(ResourceId, u32, usize, u32),
 }
 
+/// The writes of one dispatch to one word, by the invocation the executor says made them. A plain store, an exchange and a
+/// compare-exchange that writes leave a value that depends on which invocation's write lands last, so each invocation's last
+/// such value is a final the word may hold on a GPU. A commutative atomic (add or sub, and, or, xor, min, max) leaves the
+/// combined result in any order, so its intermediate values are never a final: a word only atomics of one such operation
+/// wrote is compared exactly.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct FinalStores {
+    /// Per invocation, the last order-dependent value it wrote.
+    values: BTreeMap<iridia_exec::ComputeInvocation, u32>,
+    /// A write came with no invocation (outside a compute dispatch): which invocations wrote is unknown.
+    unidentified: bool,
+    /// The commutative atomic operations that wrote the word ([`FinalStores::family`]), each once.
+    commutative: Vec<(iridia_exec::ImageAtomicOp, bool)>,
+}
+impl FinalStores {
+    /// The operations that commute with each other: sub with add, and min and max by their signedness; `None` for an
+    /// exchange or a compare-exchange, whose result depends on the order.
+    fn family(op: iridia_exec::ImageAtomicOp, signed: bool) -> Option<(iridia_exec::ImageAtomicOp, bool)> {
+        use iridia_exec::ImageAtomicOp::{Add, And, CompareExchange, Exchange, Max, Min, Or, Sub, Xor};
+        match op {
+            Exchange | CompareExchange => None,
+            Add | Sub => Some((Add, false)),
+            And | Or | Xor => Some((op, false)),
+            Min | Max => Some((op, signed)),
+        }
+    }
+    /// Whether the word's final value depends on the order of two or more invocations' writes: they left it different values,
+    /// every writer is known, and no commutative atomic mixes in.
+    fn overlap(&self) -> bool {
+        let mut values = self.values.values();
+        !self.unidentified
+            && self.commutative.is_empty()
+            && values.next().is_some_and(|first| values.any(|v| v != first))
+    }
+    /// Why the word's final value depends on the order of its writes in a way no list of finals gives: commutative atomics
+    /// beside an order-dependent write, or atomics of operations that do not commute with each other. Such a word is
+    /// compared as any word is, under this name.
+    fn unenumerated(&self) -> Option<&'static str> {
+        if !self.commutative.is_empty() && !self.values.is_empty() {
+            Some(
+                "plain stores or exchanges and commutative atomics write one word; its final outcomes are not enumerated",
+            )
+        } else if self.commutative.len() > 1 {
+            Some(
+                "atomics of operations that do not commute write one word; its final outcomes are not enumerated",
+            )
+        } else {
+            None
+        }
+    }
+}
+
 /// An executor backend that owns the written buffers (a compute program that asks for a sample or a load is not run), and
-/// notes the words that stores gave two different values: the invocations run in an order the executor chooses and WARP
-/// does not, so a word they disagree on is not the program's to say.
+/// notes each invocation's final value of every word it writes: the invocations run in an order the executor chooses and
+/// WARP does not, so a word two invocations left different values is not the program's to say. It is made afresh for each
+/// dispatch, which scopes the executor's invocation identities.
 #[derive(Default)]
 struct Memory {
     aliases: BTreeMap<ResourceId, word_types::StoreOrigin>,
@@ -1774,10 +1855,13 @@ struct Memory {
     /// Per word of a storage image stored to (its id and element, the texel and the lane): the type the value stored had, as
     /// `origins` has for a buffer's.
     image_origins: BTreeMap<(ResourceId, u32, usize, u32), word_types::WordType>,
-    /// Per word stored to: the first value, whether a later store gave another, and how many stores it had.
+    /// Per word stored to: the first value, whether a later store gave another, and how many stores it had. With `distinct`,
+    /// the raw history of plain stores, for job dumps and the retired rule's census: it does not say which invocation stored.
     stored: BTreeMap<Cell, (u32, bool, u32)>,
     /// Per word stored to more than once: every distinct value a store gave it, in the order they came.
     distinct: BTreeMap<Cell, Vec<u32>>,
+    /// Per word written: each invocation's final value, which decides membership.
+    finals: BTreeMap<Cell, FinalStores>,
     /// How many stores to a buffer or an image, and atomics on an image, the executor ran.
     executed: usize,
 }
@@ -1793,9 +1877,30 @@ impl Memory {
             })
     }
 
-    /// A store of `v` to `cell`: the first value it was given, whether a later store gave another, how many stores it had, and
-    /// every distinct value once it had two.
-    fn note_store(&mut self, cell: Cell, v: u32) {
+    /// A write by `invocation` that leaves `v` at `cell`: a final unless a later write of the same invocation replaces it
+    /// (a plain store, an exchange, a compare-exchange that writes), or for the atomic of commutative `family`, no final.
+    fn note_write(
+        &mut self,
+        invocation: Option<iridia_exec::ComputeInvocation>,
+        cell: Cell,
+        v: u32,
+        family: Option<(iridia_exec::ImageAtomicOp, bool)>,
+    ) {
+        let finals = self.finals.entry(cell).or_default();
+        finals.unidentified |= invocation.is_none();
+        match (family, invocation) {
+            (Some(family), _) if !finals.commutative.contains(&family) => finals.commutative.push(family),
+            (Some(_), _) | (None, None) => {}
+            (None, Some(invocation)) => {
+                finals.values.insert(invocation, v);
+            }
+        }
+    }
+
+    /// A plain store of `v` to `cell` by `invocation`: its final, and in the raw history the first value the word was given,
+    /// whether a later store gave another, how many stores it had, and every distinct value once it had two.
+    fn note_store(&mut self, invocation: Option<iridia_exec::ComputeInvocation>, cell: Cell, v: u32) {
+        self.note_write(invocation, cell, v, None);
         let e = self.stored.entry(cell).or_insert((v, false, 0));
         e.1 |= e.0 != v;
         e.2 += 1;
@@ -1831,7 +1936,11 @@ impl Backend for Memory {
                     .entry((r.view, r.index, texel, lane))
                     .and_modify(|old| *old = old.merge(types[lane as usize]))
                     .or_insert(types[lane as usize]);
-                self.note_store(Cell::Texel(r.view, r.index, texel, lane), r.value[lane as usize]);
+                self.note_store(
+                    r.invocation,
+                    Cell::Texel(r.view, r.index, texel, lane),
+                    r.value[lane as usize],
+                );
             }
         }
         Ok(())
@@ -1841,6 +1950,15 @@ impl Backend for Memory {
         self.executed += 1;
         let (old, texel) = self.images.atomic(r)?;
         if let Some(texel) = texel {
+            // a compare-exchange that fails writes nothing
+            if r.op != iridia_exec::ImageAtomicOp::CompareExchange || old == r.compare {
+                self.note_write(
+                    r.invocation,
+                    Cell::Texel(r.view, r.index, texel, 0),
+                    r.op.apply(old, r.value, r.compare, r.signed),
+                    FinalStores::family(r.op, r.signed),
+                );
+            }
             // an atomic's word is an integer
             self.image_origins
                 .entry((r.view, r.index, texel, 0))
@@ -1849,7 +1967,14 @@ impl Backend for Memory {
         }
         Ok(old)
     }
-    fn store_buffer(&mut self, view: ResourceId, word: u32, value: [u32; 4], mask: u8) -> Result<(), String> {
+    fn store_buffer(
+        &mut self,
+        invocation: Option<iridia_exec::ComputeInvocation>,
+        view: ResourceId,
+        word: u32,
+        value: [u32; 4],
+        mask: u8,
+    ) -> Result<(), String> {
         let (view, types) = self.resolve(view);
         if !self.words.contains_key(&view) {
             return Err("a store to a buffer not given".into());
@@ -1868,7 +1993,7 @@ impl Backend for Memory {
                 .entry((view, at))
                 .and_modify(|old| *old = old.merge(origin))
                 .or_insert(origin);
-            self.note_store(Cell::Buffer(view, at), v);
+            self.note_store(invocation, Cell::Buffer(view, at), v);
         }
         Ok(())
     }
@@ -2223,8 +2348,8 @@ fn run_compute(harness: &Harness, name: &str, hash: &str, p: iridia_ir::Program,
             "store-origin observation changed B's output: {name} vector {c}"
         );
         assert_eq!(
-            (&memory.stored, &memory.distinct),
-            (&observed.stored, &observed.distinct),
+            (&memory.stored, &memory.distinct, &memory.finals),
+            (&observed.stored, &observed.distinct, &observed.finals),
             "store-origin observation changed B's writes: {name} vector {c}"
         );
         assert!(
@@ -2395,81 +2520,94 @@ fn run_compute(harness: &Harness, name: &str, hash: &str, p: iridia_ir::Program,
                     .iter()
                     .filter_map(|r| r.get(&(group, binding, element)).and_then(|a| a.get(k)).copied())
                     .any(|x| x != w);
-                // a word stores gave different values (`stored`): two invocations stored to it (one invocation's stores come in
-                // its program order), and the order of their stores decides it, which the executor's and WARP's can differ on
-                let stores_differ = memory
-                    .stored
-                    .get(&cell)
-                    .is_some_and(|&(_, differs, n)| differs && n > 1);
-                // The winner of those stores is undefined (D3D leaves the order of unsynchronised stores to one word open),
-                // the value is not: WARP's value of the word in every repeat must be one of the values a store gave it. That
-                // is the whole comparison of such a word that differs, from the executor or between repeats, however many
-                // repeats show it, so it needs no table row and no survey: a word WARP gives a value no store gave is
-                // compared as any other word is, and when it also differs between repeats it is a word no cause explains
-                if stores_differ && (class != Class::Exact || shows) {
-                    let every_repeat =
-                        std::iter::once(w).chain(runs[1..].iter().filter_map(|r| {
+                let repeats: Vec<u32> =
+                    std::iter::once(w)
+                        .chain(runs[1..].iter().filter_map(|r| {
                             r.get(&(group, binding, element)).and_then(|a| a.get(k)).copied()
-                        }));
-                    if all_among(every_repeat, memory.distinct.get(&cell)) {
+                        }))
+                        .collect();
+                let finals = memory.finals.get(&cell);
+                // Which invocation's write to a word lands last is undefined (D3D leaves the order of unsynchronised writes to
+                // one word open); the values each could leave are not. Where two or more invocations left the word different
+                // final values, WARP's value in every repeat must be one of those finals: that is the whole comparison of such
+                // a word that differs, from the executor or between repeats, so it needs no table row and no survey. A word one
+                // invocation wrote is compared as any word is, however many stores it had: its stores come in its program
+                // order, and its earlier values are not finals.
+                let member = among_finals(class, shows, &repeats, finals);
+                let listed = matches!(&listing, warp_unstable::Listing::Listed(words, ..) if words.contains(&label, k as u32));
+                // a word of a buffer whose invocations left it different finals, none of which WARP gave: the program's
+                // writes leave it unordered (a read and a write of it by different invocations can give values no final of
+                // the executor's order is)
+                let unordered = matches!(cell, Cell::Buffer(..)) && finals.is_some_and(FinalStores::overlap);
+                let verdict = |member: bool, unordered: Option<Verdict>| {
+                    if member {
+                        Verdict::Member
+                    } else if listed {
+                        Verdict::Listed
+                    } else if shows {
+                        Verdict::Unlisted
+                    } else if class != Class::Exact
+                        && let Some(unordered) = unordered
+                    {
+                        unordered
+                    } else {
+                        Verdict::Compared
+                    }
+                };
+                let current = verdict(member, unordered.then_some(Verdict::Unordered));
+                // The retired rule's verdict, only to name the words this rule moves: it took more stores than store
+                // instructions (no loop) as two invocations, and any two stores' different values as unordered.
+                let retired = verdict(
+                    retired_member(class, shows, &repeats, &memory, cell),
+                    match (cell, memory.stored.get(&cell)) {
+                        (Cell::Buffer(..), Some(&(_, true, n)))
+                            if !loops && n > static_stores.get(id).copied().unwrap_or(0) =>
+                        {
+                            Some(Verdict::Unordered)
+                        }
+                        (Cell::Buffer(..), Some(&(_, true, _))) => Some(Verdict::UnorderedUnshown),
+                        _ => None,
+                    },
+                );
+                if current != retired {
+                    println!(
+                        "membership-census\t{name}\tvector {c}\t{label} word {k}\t{retired:?} -> {current:?}\t{class:?}\tB {o:#010x} WARP {w:#010x}"
+                    );
+                    *t.membership_census
+                        .entry(name.to_owned())
+                        .or_default()
+                        .entry(format!("{retired:?} -> {current:?}"))
+                        .or_default() += 1;
+                }
+                if (class != Class::Exact || shows)
+                    && let Some(cause) = finals.and_then(FinalStores::unenumerated)
+                {
+                    println!("compute cause {name} vector {c} {label} word {k}: {cause}");
+                }
+                match current {
+                    Verdict::Member => {
                         members[0] += 1;
                         members[1] += usize::from(shows);
                         continue;
                     }
-                }
-                // a word the table lists is not compared, whatever the repeats show; a word it does not list that two
-                // repeats give differently fails the test with the row to add
-                if let warp_unstable::Listing::Listed(words, ..) = &listing
-                    && words.contains(&label, k as u32)
-                {
-                    continue;
-                }
-                if shows {
-                    unlisted.entry(label.clone()).or_default().insert(k as u32);
-                    continue;
-                }
-                // a word two stores gave different values
-                let stores = match cell {
-                    Cell::Buffer(..) => memory.stored.get(&cell),
-                    Cell::Texel(..) => None,
-                };
-                let why = match stores {
-                    // each store instruction runs once per invocation outside a loop, so more stores than instructions
-                    // to the buffer came from more than one invocation
-                    Some(&(first, true, n)) if !loops && n > static_stores.get(id).copied().unwrap_or(0) => {
-                        Some((
-                            0,
+                    // a word the table lists is not compared, whatever the repeats show; a word it does not list that two
+                    // repeats give differently fails the test with the row to add
+                    Verdict::Listed => continue,
+                    Verdict::Unlisted => {
+                        unlisted.entry(label.clone()).or_default().insert(k as u32);
+                        continue;
+                    }
+                    Verdict::Unordered | Verdict::UnorderedUnshown => {
+                        *t.unordered.entry(name.to_owned()).or_default() += 1;
+                        t.unordered_why.entry(name.to_owned()).or_insert_with(|| {
                             format!(
-                                "buffer {} word {k}: {n} stores from at least two invocations ({} store instructions to the buffer, no loop), the first {first:#x}, the last {o:#x}",
-                                label,
-                                static_stores.get(id).copied().unwrap_or(0)
-                            ),
-                        ))
+                                "buffer {label} word {k}: {} invocations left different final values, the executor's last {o:#x}; WARP's {w:#x} is none of them",
+                                finals.map_or(0, |f| f.values.len())
+                            )
+                        });
+                        continue;
                     }
-                    Some(&(first, true, n)) => Some((
-                        1,
-                        format!(
-                            "buffer {} word {k}: {n} stores of different words, the first {first:#x}, the last {o:#x} (not shown to come from two invocations: {} store instructions to the buffer{})",
-                            label,
-                            static_stores.get(id).copied().unwrap_or(0),
-                            if loops { ", the program has a loop" } else { "" }
-                        ),
-                    )),
-                    _ => None,
-                };
-                if class != Class::Exact
-                    && let Some((kind, why)) = why
-                {
-                    t.unordered.entry(name.to_owned()).or_default()[kind] += 1;
-                    // the strongest reason a program has is the one it shows
-                    let shown = t
-                        .unordered_why
-                        .entry(name.to_owned())
-                        .or_insert((kind, why.clone()));
-                    if kind < shown.0 {
-                        *shown = (kind, why);
-                    }
-                    continue;
+                    Verdict::Compared => {}
                 }
                 if previous != class {
                     *t.compute_class_changes
@@ -2779,7 +2917,7 @@ fn report(title: &str, t: &Tally) {
     if !t.overlap_members.is_empty() {
         let sum = |k: usize| t.overlap_members.values().map(|w| w[k]).sum::<usize>();
         println!(
-            "  words the stores gave two or more values, compared as members of what the stores gave (every WARP repeat's value among them): {} words in {} programs, {} of them differing between WARP's repeats",
+            "  words two or more invocations left different final values, compared as members of those finals (every WARP repeat's value among them): {} words in {} programs, {} of them differing between WARP's repeats",
             sum(0),
             t.overlap_members.len(),
             sum(1)
@@ -2792,16 +2930,23 @@ fn report(title: &str, t: &Tally) {
         }
     }
     if !t.unordered.is_empty() {
-        let sum = |k: usize| t.unordered.values().map(|w| w[k]).sum::<usize>();
         println!(
-            "  words of {} compute programs differ from WARP where the program's own writes are unordered: {} that stores of more than one invocation gave different values, {} that two stores gave different values (not shown to be two invocations)",
+            "  words of {} compute programs differ from WARP where the program's own writes are unordered (two or more invocations left different final values, WARP's none of them): {}",
             t.unordered.len(),
-            sum(0),
-            sum(1)
+            t.unordered.values().sum::<usize>()
         );
-        for (n, (_, why)) in &t.unordered_why {
-            let w = t.unordered[n];
-            println!("    {} ({}/{}): {why}", short(n), w[0], w[1]);
+        for (n, why) in &t.unordered_why {
+            println!("    {} ({}): {why}", short(n), t.unordered[n]);
+        }
+    }
+    if !t.membership_census.is_empty() {
+        println!(
+            "  words whose verdict differs from the retired membership rule's (no invocation identity), retired -> current, in {} programs:",
+            t.membership_census.len()
+        );
+        for (n, moves) in &t.membership_census {
+            let moves: Vec<String> = moves.iter().map(|(m, words)| format!("{m} {words}")).collect();
+            println!("    {}: {}", short(n), moves.join(", "));
         }
     }
     for (n, (hash, why)) in &t.graphics_differs {
@@ -2923,6 +3068,7 @@ pub(crate) fn corpus_over(corpus: &common::Corpus) {
         t.compute_word_origins.extend(one.compute_word_origins);
         t.origin_controlled_vectors += one.origin_controlled_vectors;
         t.unordered_why.extend(one.unordered_why);
+        t.membership_census.extend(one.membership_census);
         for (source, (lanes, programs)) in one.amplified {
             let (n, all) = t.amplified.entry(source).or_default();
             *n += lanes;
@@ -2980,8 +3126,331 @@ pub(crate) fn corpus(game: inputs::Game) {
 #[cfg(test)]
 mod memory_tests {
     use super::*;
-    use iridia_exec::{Dim, ImageStore};
+    use iridia_exec::{ComputeInvocation, Dim, ImageAtomic, ImageAtomicOp, ImageStore};
     use iridia_ir::interface::TextureDim;
+
+    fn by(group: u32, index: u32) -> Option<ComputeInvocation> {
+        Some(ComputeInvocation {
+            group: [group, 0, 0],
+            index,
+        })
+    }
+
+    fn one_word() -> (ResourceId, Memory) {
+        let id = ResourceId(0);
+        let memory = Memory {
+            words: BTreeMap::from([(id, vec![0])]),
+            ..Memory::default()
+        };
+        (id, memory)
+    }
+
+    /// A 2D storage image whose every texel holds `initial` in each lane.
+    fn one_image(initial: u32) -> (ResourceId, Memory) {
+        let id = ResourceId(0);
+        let mut memory = Memory::default();
+        memory.images.add_storage(
+            id,
+            0,
+            [initial; 4],
+            images::Shape {
+                dim: TextureDim::D2,
+                arrayed: false,
+            },
+        );
+        (id, memory)
+    }
+    fn texel_store(
+        invocation: Option<ComputeInvocation>,
+        id: ResourceId,
+        value: u32,
+    ) -> ImageStore<ResourceId> {
+        ImageStore {
+            invocation,
+            view: id,
+            index: 0,
+            dim: Dim::D2,
+            texel: [0; 3],
+            layer: None,
+            value: [value, 0, 0, 0],
+            lanes: 1,
+        }
+    }
+    fn texel_atomic(
+        invocation: Option<ComputeInvocation>,
+        id: ResourceId,
+        op: ImageAtomicOp,
+        value: u32,
+    ) -> ImageAtomic<ResourceId> {
+        ImageAtomic {
+            invocation,
+            view: id,
+            index: 0,
+            dim: Dim::D2,
+            texel: [0; 3],
+            layer: None,
+            op,
+            signed: false,
+            value,
+            compare: 0,
+        }
+    }
+
+    /// The hole f258dc7 left: one invocation stores 5 then 7, and WARP's 5 is not the word's final, so it is compared exactly
+    /// and fails; the retired rule (any value a store gave a word two stores gave different values) admitted it.
+    #[test]
+    fn one_invocations_ordered_stores_never_admit_its_earlier_value() {
+        let (id, mut memory) = one_word();
+        for value in [5, 7] {
+            memory.store_buffer(by(0, 0), id, 0, [value, 0, 0, 0], 1).unwrap();
+        }
+        let cell = Cell::Buffer(id, 0);
+        let class = compute_class(word_types::WordType::Integer, memory.words[&id][0], 5);
+        assert_eq!(class, Class::Beyond);
+        assert!(!among_finals(class, false, &[5, 5], memory.finals.get(&cell)));
+        assert!(retired_member(class, false, &[5, 5], &memory, cell));
+    }
+
+    /// Two invocations' different finals make the word's value order-dependent: WARP's 5 or 7 is a member, its 9 is not.
+    #[test]
+    fn two_invocations_finals_admit_either_and_reject_another_value() {
+        let (id, mut memory) = one_word();
+        memory.store_buffer(by(0, 0), id, 0, [5, 0, 0, 0], 1).unwrap();
+        memory.store_buffer(by(1, 0), id, 0, [7, 0, 0, 0], 1).unwrap();
+        let finals = memory.finals.get(&Cell::Buffer(id, 0));
+        assert!(among_finals(Class::Beyond, false, &[5, 5], finals));
+        assert!(among_finals(Class::Exact, true, &[7, 5], finals));
+        assert!(!among_finals(Class::Beyond, false, &[9, 9], finals));
+        assert!(!among_finals(Class::Beyond, true, &[5, 9], finals));
+        // a word that agrees with WARP in every repeat is compared, not counted a member
+        assert!(!among_finals(Class::Exact, false, &[7, 7], finals));
+    }
+
+    /// An invocation's overwritten value stays out of the finals when another invocation's write makes the word overlap.
+    #[test]
+    fn an_overwritten_value_is_excluded_beside_a_second_writer() {
+        let (id, mut memory) = one_word();
+        for (invocation, value) in [(by(0, 0), 5), (by(0, 0), 7), (by(0, 1), 9)] {
+            memory
+                .store_buffer(invocation, id, 0, [value, 0, 0, 0], 1)
+                .unwrap();
+        }
+        let finals = memory.finals.get(&Cell::Buffer(id, 0));
+        assert!(among_finals(Class::Beyond, true, &[7, 9], finals));
+        assert!(!among_finals(Class::Beyond, false, &[5, 5], finals));
+    }
+
+    /// The texel lane twin of the buffer word's rule.
+    #[test]
+    fn a_texel_lane_has_invocation_finals_too() {
+        let (id, mut memory) = one_image(0);
+        memory.store_image(texel_store(by(0, 0), id, 5)).unwrap();
+        memory.store_image(texel_store(by(0, 0), id, 7)).unwrap();
+        let cell = Cell::Texel(id, 0, 0, 0);
+        assert!(!among_finals(
+            Class::Beyond,
+            false,
+            &[5, 5],
+            memory.finals.get(&cell)
+        ));
+        assert!(retired_member(Class::Beyond, false, &[5, 5], &memory, cell));
+        memory.store_image(texel_store(by(1, 0), id, 5)).unwrap();
+        let finals = memory.finals.get(&cell);
+        assert!(among_finals(Class::Beyond, true, &[5, 7], finals));
+        assert!(!among_finals(Class::Beyond, false, &[9, 9], finals));
+    }
+
+    /// Two groups' atomic adds to one word: the sum is the same in any order, so a sum one add left on the way is never a
+    /// final, and WARP's intermediate 5 is compared exactly against 12 and fails.
+    #[test]
+    fn atomic_adds_never_admit_an_intermediate_sum() {
+        let (id, mut memory) = one_image(0);
+        let add = |group, value| texel_atomic(by(group, 0), id, ImageAtomicOp::Add, value);
+        assert_eq!(memory.atomic_image(add(0, 5)).unwrap(), 0);
+        assert_eq!(memory.atomic_image(add(1, 7)).unwrap(), 5);
+        assert_eq!(memory.images.words(id, 0, 1).unwrap()[0], 12);
+        let finals = memory.finals.get(&Cell::Texel(id, 0, 0, 0));
+        assert!(finals.is_some_and(|f| f.values.is_empty() && f.unenumerated().is_none()));
+        assert!(!among_finals(Class::Beyond, false, &[5, 5], finals));
+    }
+
+    /// Two invocations' exchanges leave whichever lands last: either value is a member, another is not.
+    #[test]
+    fn exchanges_leave_either_invocations_value() {
+        let (id, mut memory) = one_image(0);
+        for (group, value) in [(0, 5), (1, 7)] {
+            memory
+                .atomic_image(texel_atomic(by(group, 0), id, ImageAtomicOp::Exchange, value))
+                .unwrap();
+        }
+        let finals = memory.finals.get(&Cell::Texel(id, 0, 0, 0));
+        assert!(among_finals(Class::Beyond, false, &[5, 5], finals));
+        assert!(among_finals(Class::Beyond, false, &[7, 7], finals));
+        assert!(!among_finals(Class::Beyond, false, &[9, 9], finals));
+    }
+
+    /// A compare-exchange that fails writes nothing; one that succeeds leaves its value as the invocation's final.
+    #[test]
+    fn only_a_compare_exchange_that_writes_leaves_a_final() {
+        let (id, mut memory) = one_image(1);
+        let cas = |invocation, compare, value| ImageAtomic {
+            compare,
+            ..texel_atomic(invocation, id, ImageAtomicOp::CompareExchange, value)
+        };
+        memory.atomic_image(cas(by(0, 0), 3, 5)).unwrap();
+        assert!(memory.finals.is_empty());
+        memory.atomic_image(cas(by(0, 0), 1, 5)).unwrap();
+        memory.atomic_image(cas(by(1, 0), 5, 7)).unwrap();
+        let finals = &memory.finals[&Cell::Texel(id, 0, 0, 0)];
+        assert_eq!(finals.values.values().copied().collect::<Vec<_>>(), [5, 7]);
+        assert!(finals.overlap());
+    }
+
+    /// Plain stores beside commutative atomics, and atomics of operations that do not commute with each other, leave
+    /// outcomes no list of finals gives: never members, and named.
+    #[test]
+    fn unenumerated_orders_are_never_members() {
+        let (id, mut memory) = one_image(0);
+        memory.store_image(texel_store(by(0, 0), id, 5)).unwrap();
+        memory.store_image(texel_store(by(0, 1), id, 6)).unwrap();
+        memory
+            .atomic_image(texel_atomic(by(1, 0), id, ImageAtomicOp::Add, 7))
+            .unwrap();
+        let finals = memory.finals.get(&Cell::Texel(id, 0, 0, 0));
+        assert!(finals.and_then(FinalStores::unenumerated).is_some());
+        assert!(!among_finals(Class::Beyond, false, &[5, 5], finals));
+        let (id, mut memory) = one_image(0);
+        memory
+            .atomic_image(texel_atomic(by(0, 0), id, ImageAtomicOp::Add, 5))
+            .unwrap();
+        memory
+            .atomic_image(texel_atomic(by(1, 0), id, ImageAtomicOp::Sub, 2))
+            .unwrap();
+        let cell = Cell::Texel(id, 0, 0, 0);
+        assert!(
+            memory.finals[&cell].unenumerated().is_none(),
+            "sub commutes with add"
+        );
+        memory
+            .atomic_image(texel_atomic(by(1, 1), id, ImageAtomicOp::Max, 9))
+            .unwrap();
+        assert!(memory.finals[&cell].unenumerated().is_some());
+    }
+
+    /// A write with no invocation (outside a compute dispatch) leaves which invocations wrote unknown: never an overlap.
+    #[test]
+    fn an_unidentified_writer_never_proves_an_overlap() {
+        let (id, mut memory) = one_word();
+        for (invocation, value) in [(by(0, 0), 5), (by(1, 0), 7), (None, 7)] {
+            memory
+                .store_buffer(invocation, id, 0, [value, 0, 0, 0], 1)
+                .unwrap();
+        }
+        let finals = memory.finals.get(&Cell::Buffer(id, 0));
+        assert!(!among_finals(Class::Beyond, false, &[5, 5], finals));
+    }
+
+    /// The executor's own dispatch: two groups of four invocations each store 5 then 7 to one word and add 5 to a texel.
+    /// Every invocation's final is 7, so WARP's 5 is compared exactly (the retired rule admitted it), and the added texel has
+    /// no final.
+    #[test]
+    fn executor_dispatch_identifies_each_invocations_final() {
+        use iridia_ir::interface::{
+            Access, Interface, Resource, ResourceProvenance, ShaderFormat, StageFacts,
+        };
+        let entry = iridia_ir::text::parse(
+            "iridia-ir 1
+fn main {
+  %0: u32 = u32(5)
+  %1: u32 = u32(7)
+  store buffer r0 + 0 = %0
+  store buffer r0 + 0 = %1
+  %2: vec2<i32> = vec2<i32>(0, 0)
+  %3: u32 = atomic.add image r1, %2 value %0
+  return
+}
+",
+        )
+        .unwrap();
+        let program = iridia_ir::Program {
+            stage: Stage::Compute,
+            entry,
+            patch: None,
+            workgroup: Some([2, 2, 1]),
+            interface: Interface {
+                stage: Stage::Compute,
+                inputs: vec![],
+                outputs: vec![],
+                resources: [
+                    StorageTarget::Buffer(BufferKind::Raw),
+                    StorageTarget::Image {
+                        dim: TextureDim::D2,
+                        arrayed: false,
+                        sample: SampleType::Uint,
+                    },
+                ]
+                .into_iter()
+                .enumerate()
+                .map(|(i, target)| Resource {
+                    id: ResourceId(i as u32),
+                    kind: ResourceKind::Storage {
+                        target,
+                        access: Access::ReadWrite,
+                    },
+                    count: 1,
+                    provenance: ResourceProvenance::default(),
+                })
+                .collect(),
+                facts: StageFacts::None,
+            },
+            conventions: iridia_ir::Conventions::D3D,
+            float: iridia_ir::FloatEnv::default(),
+            provenance: iridia_ir::Provenance {
+                format: ShaderFormat::Dxbc,
+                target: "cs_5_0".into(),
+                lifter: "test".into(),
+                lifter_version: 0,
+                source_hash: None,
+                instruction_count: None,
+                policies: vec![],
+            },
+            notes: vec![],
+        };
+        iridia_ir::validate(&program).unwrap();
+        let exe = Executable::from_ir(&program).unwrap();
+        let bound = exe.bind(|_| None, |_| None).unwrap();
+        let (id, image) = (ResourceId(0), ResourceId(1));
+        let mut memory = Memory {
+            words: BTreeMap::from([(id, vec![0])]),
+            ..Memory::default()
+        };
+        memory.images.add_storage(
+            image,
+            0,
+            [0; 4],
+            images::Shape {
+                dim: TextureDim::D2,
+                arrayed: false,
+            },
+        );
+        exe.dispatch(&bound, &mut memory, &mut BTreeMap::new(), [2, 1, 1], 32)
+            .unwrap();
+        assert_eq!(memory.words[&id], [7]);
+        assert_eq!(memory.images.words(image, 0, 1).unwrap()[0], 40);
+        let stored = &memory.finals[&Cell::Buffer(id, 0)];
+        assert_eq!(stored.values.len(), 8, "two groups of four invocations");
+        assert!(stored.values.values().all(|&v| v == 7));
+        assert!(!among_finals(Class::Beyond, false, &[5, 5], Some(stored)));
+        assert!(retired_member(
+            Class::Beyond,
+            false,
+            &[5, 5],
+            &memory,
+            Cell::Buffer(id, 0)
+        ));
+        let added = &memory.finals[&Cell::Texel(image, 0, 0, 0)];
+        assert!(added.values.is_empty() && !added.overlap() && added.unenumerated().is_none());
+    }
 
     /// The store observer renames the resource of every store; its aliases of a storage image and of a buffer are the resources
     /// themselves, for stores, reads and counts alike.
@@ -3014,6 +3483,7 @@ mod memory_tests {
         };
         memory
             .store_image(ImageStore {
+                invocation: None,
                 view: image_alias,
                 index: 0,
                 dim: Dim::D2,
@@ -3024,7 +3494,7 @@ mod memory_tests {
             })
             .expect("a store through an alias of a storage image");
         memory
-            .store_buffer(buffer_alias, 1, [9, 0, 0, 0], 1)
+            .store_buffer(None, buffer_alias, 1, [9, 0, 0, 0], 1)
             .expect("a store through an alias of a buffer");
         // texel (1, 2) of a 4 x 4 image is texel 9; the host reads two lanes of each
         let words = memory.images.words(image, 0, 2).expect("the image");
@@ -3046,12 +3516,18 @@ mod memory_tests {
         };
         for value in [5, 7, 5, 9, 7] {
             memory
-                .store_buffer(buffer, 1, [value, 0, 0, 0], 1)
+                .store_buffer(None, buffer, 1, [value, 0, 0, 0], 1)
                 .expect("a store");
         }
-        memory.store_buffer(buffer, 2, [3, 0, 0, 0], 1).expect("a store");
-        memory.store_buffer(buffer, 3, [4, 0, 0, 0], 1).expect("a store");
-        memory.store_buffer(buffer, 3, [4, 0, 0, 0], 1).expect("a store");
+        memory
+            .store_buffer(None, buffer, 2, [3, 0, 0, 0], 1)
+            .expect("a store");
+        memory
+            .store_buffer(None, buffer, 3, [4, 0, 0, 0], 1)
+            .expect("a store");
+        memory
+            .store_buffer(None, buffer, 3, [4, 0, 0, 0], 1)
+            .expect("a store");
         assert_eq!(memory.stored[&Cell::Buffer(buffer, 1)], (5, true, 5));
         assert_eq!(memory.distinct[&Cell::Buffer(buffer, 1)], vec![5, 7, 9]);
         assert!(!memory.distinct.contains_key(&Cell::Buffer(buffer, 2)));
@@ -3060,18 +3536,20 @@ mod memory_tests {
         assert_eq!(memory.distinct[&Cell::Buffer(buffer, 3)], vec![4]);
     }
 
-    /// WARP's value of a word the stores gave two values is held to those values in every repeat: one repeat's value that no store
-    /// gave fails it, as does any value of a word nothing is recorded for.
+    /// WARP's value of an overlapping word is held to its invocations' finals in every repeat: one repeat's value that no
+    /// invocation left fails it, as does any value of a word nothing is recorded for.
     #[test]
-    fn a_value_no_store_gave_is_not_among_the_stores_values() {
-        let stored = vec![4, 9];
-        assert!(all_among([4, 9, 4].into_iter(), Some(&stored)));
-        assert!(!all_among([4, 9, 5].into_iter(), Some(&stored)));
+    fn a_value_no_invocation_left_is_not_among_the_finals() {
+        let finals = FinalStores {
+            values: BTreeMap::from([(by(0, 0).unwrap(), 4), (by(0, 1).unwrap(), 9)]),
+            ..FinalStores::default()
+        };
+        assert!(all_among([4, 9, 4].into_iter(), Some(&finals)));
+        assert!(!all_among([4, 9, 5].into_iter(), Some(&finals)));
         assert!(!all_among([4].into_iter(), None));
     }
 
-    /// Two invocations storing different values to one texel (an image store is the same kind of overlap a buffer word's is)
-    /// leave each lane's values noted, and a store outside the image notes nothing.
+    /// The raw history of a texel's stores notes each lane's values, and a store outside the image notes nothing.
     #[test]
     fn a_texel_stored_twice_keeps_the_values_it_was_given() {
         let image = ResourceId(4);
@@ -3086,6 +3564,7 @@ mod memory_tests {
             },
         );
         let store = |texel: [u32; 3], value: [u32; 4]| ImageStore {
+            invocation: None,
             view: image,
             index: 0,
             dim: Dim::D2,

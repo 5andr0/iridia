@@ -179,6 +179,7 @@ fn a_missing_word_keeps_its_reason_and_writes_remain_refused() {
     assert!(
         answers
             .store(Store {
+                invocation: None,
                 view: 3,
                 address: [0; 3],
                 value: [0; 4],
@@ -189,6 +190,7 @@ fn a_missing_word_keeps_its_reason_and_writes_remain_refused() {
     assert!(
         answers
             .atomic_add(AtomicAdd {
+                invocation: None,
                 view: 3,
                 address: [0; 3],
                 value: 1

@@ -5,6 +5,17 @@
 
 use iridia::ResourceId;
 
+/// The compute invocation that makes a write or an atomic, within one dispatch: its thread group and its linear index in
+/// the group, whatever wave runs it and in whatever order. Two dispatches reuse the same identities, so a backend that
+/// collects writes by invocation starts afresh for each. Writes outside a compute dispatch carry none.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ComputeInvocation {
+    /// The thread group's position in the dispatch (`SV_GroupID`).
+    pub group: [u32; 3],
+    /// The invocation's linear index in its group (`SV_GroupIndex`).
+    pub index: u32,
+}
+
 /// A resource of the program's interface and, for an array of them (`binding_array`), the element the program's index
 /// picked (0 for a resource that is not an array). An index past a bounded array's length is an error that stops the
 /// evaluation (D3D12 leaves it undefined, so there is no answer to compare); the length of an unbounded array is the
@@ -119,6 +130,8 @@ pub struct ImageQuery<R> {
 /// A write to an unordered-access texture.
 #[derive(Clone, Copy, Debug)]
 pub struct ImageStore<R> {
+    /// The compute invocation that makes it (`None` outside a compute dispatch).
+    pub invocation: Option<ComputeInvocation>,
     /// The unordered-access view written.
     pub view: R,
     /// Which view of an array of views (0 for a view that is not in an array).
@@ -162,6 +175,8 @@ pub enum ImageAtomicOp {
 /// before; the program reads it when its `Statement::ImageAtomic` has a result.
 #[derive(Clone, Copy, Debug)]
 pub struct ImageAtomic<R> {
+    /// The compute invocation that makes it (`None` outside a compute dispatch).
+    pub invocation: Option<ComputeInvocation>,
     /// The unordered-access view operated on.
     pub view: R,
     /// Which view of an array of views (0 for a view that is not in an array).
@@ -186,6 +201,8 @@ pub struct ImageAtomic<R> {
 /// word as it was before.
 #[derive(Clone, Copy, Debug)]
 pub struct BufferAtomic {
+    /// The compute invocation that makes it (`None` outside a compute dispatch).
+    pub invocation: Option<ComputeInvocation>,
     /// The buffer.
     pub view: Element,
     /// The word's index.
@@ -308,9 +325,17 @@ pub trait Backend {
     fn atomic_image(&mut self, request: ImageAtomic<ResourceId>) -> Result<u32, String> {
         Err(format!("resource {}: no image atomics given", request.view.0))
     }
-    /// Words written to a buffer: the lanes `mask` marks of `value`, to the consecutive 32-bit words from word `word`
-    /// of the buffer. The effect is the caller's: it reaches none of this evaluation's reads.
-    fn store_buffer(&mut self, view: ResourceId, word: u32, value: [u32; 4], mask: u8) -> Result<(), String> {
+    /// Words written to a buffer by `invocation` (`None` outside a compute dispatch): the lanes `mask` marks of `value`,
+    /// to the consecutive 32-bit words from word `word` of the buffer. The effect is the caller's: it reaches none of
+    /// this evaluation's reads.
+    fn store_buffer(
+        &mut self,
+        _invocation: Option<crate::ComputeInvocation>,
+        view: ResourceId,
+        word: u32,
+        value: [u32; 4],
+        mask: u8,
+    ) -> Result<(), String> {
         let _ = (word, value, mask);
         Err(format!("resource {}: no stores given", view.0))
     }
@@ -324,8 +349,14 @@ pub trait Backend {
     fn buffer_words(&mut self, view: ResourceId) -> Result<u32, String> {
         Err(format!("resource {}: no buffer given", view.0))
     }
-    /// An atomic add to word `word` of a buffer; its result the word as it was before.
-    fn atomic_add(&mut self, view: ResourceId, word: u32, value: u32) -> Result<u32, String> {
+    /// An atomic add by `invocation` to word `word` of a buffer; its result the word as it was before.
+    fn atomic_add(
+        &mut self,
+        _invocation: Option<crate::ComputeInvocation>,
+        view: ResourceId,
+        word: u32,
+        value: u32,
+    ) -> Result<u32, String> {
         let _ = (word, value);
         Err(format!("resource {}: no atomics given", view.0))
     }
@@ -334,7 +365,7 @@ pub trait Backend {
     fn atomic_buffer(&mut self, request: BufferAtomic) -> Result<u32, String> {
         match request.op {
             ImageAtomicOp::Add if request.view.index == 0 => {
-                self.atomic_add(request.view.id, request.word, request.value)
+                self.atomic_add(request.invocation, request.view.id, request.word, request.value)
             }
             op => Err(format!("resource {}: no atomic {op:?} given", request.view.id.0)),
         }

@@ -632,6 +632,7 @@ impl Backend for SlotBackend<'_> {
             index: r.index,
         })?;
         self.sampler.store_image(ImageStore {
+            invocation: r.invocation,
             view,
             index: 0,
             dim: r.dim,
@@ -647,6 +648,7 @@ impl Backend for SlotBackend<'_> {
             index: r.index,
         })?;
         self.sampler.atomic_image(ImageAtomic {
+            invocation: r.invocation,
             view,
             index: 0,
             dim: r.dim,
@@ -658,10 +660,18 @@ impl Backend for SlotBackend<'_> {
             compare: r.compare,
         })
     }
-    fn store_buffer(&mut self, view: ResourceId, word: u32, value: [u32; 4], mask: u8) -> Result<(), String> {
+    fn store_buffer(
+        &mut self,
+        invocation: Option<crate::ComputeInvocation>,
+        view: ResourceId,
+        word: u32,
+        value: [u32; 4],
+        mask: u8,
+    ) -> Result<(), String> {
         let slot = self.slot(view)?;
         if !matches!(self.buffers.get(&view), Some(BufferKind::Typed(_))) {
             return self.sampler.store(Store {
+                invocation,
                 view: slot,
                 address: self.address(view, word),
                 value,
@@ -678,6 +688,7 @@ impl Backend for SlotBackend<'_> {
                 && current != e
             {
                 self.sampler.store(Store {
+                    invocation,
                     view: slot,
                     address: [current, 0, 0],
                     value: lanes,
@@ -693,6 +704,7 @@ impl Backend for SlotBackend<'_> {
         }
         match element {
             Some((e, lanes, m)) => self.sampler.store(Store {
+                invocation,
                 view: slot,
                 address: [e, 0, 0],
                 value: lanes,
@@ -701,8 +713,15 @@ impl Backend for SlotBackend<'_> {
             None => Ok(()),
         }
     }
-    fn atomic_add(&mut self, view: ResourceId, word: u32, value: u32) -> Result<u32, String> {
+    fn atomic_add(
+        &mut self,
+        invocation: Option<crate::ComputeInvocation>,
+        view: ResourceId,
+        word: u32,
+        value: u32,
+    ) -> Result<u32, String> {
         self.atomic_buffer(BufferAtomic {
+            invocation,
             view: Element { id: view, index: 0 },
             word,
             op: ImageAtomicOp::Add,
@@ -715,6 +734,7 @@ impl Backend for SlotBackend<'_> {
         let address = self.address(r.view.id, r.word);
         let view = self.slot_of(r.view)?;
         self.sampler.atomic(Atomic {
+            invocation: r.invocation,
             view,
             address,
             op: r.op,
