@@ -426,6 +426,7 @@ dependencies = [
 name = "iridia-ir"
 version = "0.6.0"
 dependencies = [
+ "libm",
  "proptest",
  "serde",
  "serde_json",

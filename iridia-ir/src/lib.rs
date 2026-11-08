@@ -31,6 +31,7 @@
 extern crate alloc;
 
 mod builder;
+pub mod eval;
 mod func;
 pub mod gate;
 pub mod interface;

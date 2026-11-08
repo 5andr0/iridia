@@ -3,10 +3,9 @@
 //! register's `.xy` and `.zw`), so a 64-bit value has at most two lanes. A bitcast keeps the words. Each operation
 //! is its 32-bit rule at 64 bits; a double is never flushed (Direct3D keeps double denormals).
 
-use crate::{Lanes, Operands, compare, flushed};
-use iridia_ir::{
-    Binary, MinMaxNan, MulZero, OnZero, Op, Rounding, SaturateNan, Scalar, Ternary, Type, Unary,
-};
+use super::{Lanes, Operands, compare, flushed};
+use crate::{Binary, MinMaxNan, MulZero, OnZero, Op, Rounding, SaturateNan, Scalar, Ternary, Type, Unary};
+use alloc::{format, string::String};
 
 /// Whether a value of `t` is a 64-bit one.
 pub(crate) fn wide(t: Type) -> bool {
@@ -117,19 +116,19 @@ pub(crate) fn eval(op: &Op, t: Type, ops: &dyn Operands, flush: bool) -> Result<
             match u {
                 Unary::FNeg if float => each(m, &x, |w| w ^ 1 << 63),
                 Unary::FAbs if float => each(m, &x, |w| w & !(1 << 63)),
-                Unary::FFract if float => double(m, &x, |f| f - f.floor()),
+                Unary::FFract if float => double(m, &x, |f| f - libm::floor(f)),
                 Unary::FRound(r) if float => double(
                     m,
                     &x,
                     match r {
-                        Rounding::Floor => f64::floor,
-                        Rounding::Ceil => f64::ceil,
-                        Rounding::Trunc => f64::trunc,
-                        Rounding::NearestEven => f64::round_ties_even,
-                        Rounding::NearestAway => f64::round,
+                        Rounding::Floor => libm::floor,
+                        Rounding::Ceil => libm::ceil,
+                        Rounding::Trunc => libm::trunc,
+                        Rounding::NearestEven => libm::roundeven,
+                        Rounding::NearestAway => libm::round,
                     },
                 ),
-                Unary::FSqrt if float => double(m, &x, f64::sqrt),
+                Unary::FSqrt if float => double(m, &x, libm::sqrt),
                 Unary::FSign if float => double(m, &x, |f| {
                     if is_nan(f) {
                         0.0
@@ -204,7 +203,7 @@ pub(crate) fn eval(op: &Op, t: Type, ops: &dyn Operands, flush: bool) -> Result<
                 Binary::FMin(nan) if float => double2(m, &x, &y, |p, q| min_max(p, q, *nan, false)),
                 Binary::FMax(nan) if float => double2(m, &x, &y, |p, q| min_max(p, q, *nan, true)),
                 Binary::FCmp(c) | Binary::SCmp(c) | Binary::UCmp(c) => {
-                    let ne = *c == iridia_ir::Cmp::Ne;
+                    let ne = *c == crate::Cmp::Ne;
                     let c = compare(*c);
                     each2(m, &x, &y, |p, q| u64::from(ordered(p, q).map_or(ne, &c)))
                 }
@@ -277,7 +276,7 @@ pub(crate) fn eval(op: &Op, t: Type, ops: &dyn Operands, flush: bool) -> Result<
             let mut out = [0u64; 4];
             for (k, o) in out.iter_mut().enumerate().take(usize::from(at.lanes)) {
                 let lane = |l: &[u64; 4]| f64::from_bits(l.get(k).copied().unwrap_or(0));
-                *o = lane(&x).mul_add(lane(&y), lane(&z)).to_bits();
+                *o = libm::fma(lane(&x), lane(&y), lane(&z)).to_bits();
             }
             out
         }
@@ -381,7 +380,8 @@ fn converted(w: u64, from: Scalar, to: Scalar) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use iridia_ir::{Cmp, FloatToInt, ValueId};
+    use crate::{Cmp, FloatToInt, ValueId};
+    use alloc::{vec, vec::Vec};
 
     /// Operands given by their lanes and types, value `k` the `k`-th.
     struct Given(Vec<(Lanes, Type)>);

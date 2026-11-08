@@ -12,6 +12,8 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+# One portable numeric backend for reference execution and material folding.
+libm = "=0.2.16"
 serde = { version = "1", default-features = false, features = ["alloc", "derive"] }
 # the version gate's JSON of a program; alloc only, so the crate stays no_std
 serde_json = { version = "=1.0.154", default-features = false, features = ["alloc"] }

@@ -62,6 +62,9 @@
 - `iridia_dxil::ir::LIFTER_VERSION` is 3 (was 2), invalidating cached lifts for the new ray-query representation.
   The fixture table includes seven newly lifted ray-query fixtures and the new object-space query fixture; existing
   successful fixture hashes are unchanged.
+- The reference evaluator's pure operations live in `iridia_ir::eval`, shared by execution and material folding.
+  `iridia-exec-ir` re-exports its existing evaluation API. Reference transcendentals now come from `libm` on every
+  target, instead of the platform math library; there is one backend for folding and execution.
 - `iridia-exec`: raster helper invocations evaluate for derivatives and private variables but perform no external
   writes, image or buffer atomics, or append/consume counter operations. A fullscreen triangle writes each covered
   pixel once; helper lanes previously wrote UAVs too.
