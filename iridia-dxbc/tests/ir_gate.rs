@@ -22,7 +22,9 @@ use iridia_exec::{
     ImageQuery, ImageSample, ImageStore, Load, PixelShader, ProgramShader, QueryKind, ReportHit, Resources,
     Runner, Sample, Sampler, Store, TraceRay,
 };
-use iridia_ir::interface::{BufferKind, ResourceId, ResourceKind, Stage, StageFacts, StorageTarget};
+use iridia_ir::interface::{
+    BufferKind, Interface, ResourceId, ResourceKind, Stage, StageFacts, StorageTarget,
+};
 
 mod common;
 mod lowered;
@@ -1660,18 +1662,17 @@ struct Seeded {
     elements: BTreeMap<(ResourceId, u32), Vec<u32>>,
 }
 
-fn seeded(program: &iridia::Program, c: u32) -> Seeded {
+fn seeded(interface: &Interface, c: u32) -> Seeded {
     let mut s = Seeded {
         resources: Resources::default(),
         buffers: BTreeMap::new(),
         elements: BTreeMap::new(),
     };
-    let rays = program
-        .interface
+    let rays = interface
         .resources
         .iter()
         .any(|r| r.kind == ResourceKind::AccelerationStructure);
-    for r in &program.interface.resources {
+    for r in &interface.resources {
         let array = r.count != 1;
         let (kind, storage) = match &r.kind {
             ResourceKind::AccelerationStructure => {
@@ -1752,13 +1753,13 @@ fn seeded(program: &iridia::Program, c: u32) -> Seeded {
     s
 }
 
-/// One dispatch of `exe` (of `program`'s interface) on case `c`'s memory, and the memory it leaves.
-fn dispatch(exe: &Executable, program: &iridia::Program, c: u32) -> Result<Memory, String> {
-    let mut s = seeded(program, c);
+/// One dispatch of `exe` (of the program with `interface`) on case `c`'s memory, and the memory it leaves.
+fn dispatch(exe: &Executable, interface: &Interface, c: u32) -> Result<Memory, String> {
+    let mut s = seeded(interface, c);
     let bound = exe.bind_resources(&s.resources)?;
     let mut backend = Group::for_case(c);
     let mut meshlets = Vec::new();
-    if program.interface.stage == Stage::Mesh {
+    if interface.stage == Stage::Mesh {
         exe.dispatch_mesh_elements(
             &bound,
             &mut backend,
@@ -1778,7 +1779,7 @@ fn dispatch(exe: &Executable, program: &iridia::Program, c: u32) -> Result<Memor
     // a counter kept in a buffer of its own (the older DXIL lift's, a word per element) is that view's counter, as the
     // backend keeps an IR program's; a counter left where it started is not told from one the run never touched
     let mut counters = backend.counters;
-    for r in &program.interface.resources {
+    for r in &interface.resources {
         if let Some(view) = r.provenance.counter_of
             && let Some(words) = s.buffers.remove(&r.id)
         {
@@ -1820,8 +1821,11 @@ fn compute(g: &mut Gate, old: &iridia::Program, p: iridia_ir::Program, at: &str,
         &mut g.compute
     } += 1;
     took.lift += lap(&mut mark);
+    // the vectors are seeded from A's interface: the older DXIL lift's counters are buffers of their own in it, which the
+    // IR's interface (where a counter belongs to its view) has no resource for
+    let interface = old.interface.clone();
     // A's memory after each vector, which B and P are both held to
-    let older: Vec<_> = (0..CASES).map(|c| dispatch(&a, old, c)).collect();
+    let older: Vec<_> = (0..CASES).map(|c| dispatch(&a, &interface, c)).collect();
     took.a = lap(&mut mark);
     let passed = passed(p.clone());
     for column in ["B", "P"] {
@@ -1840,7 +1844,7 @@ fn compute(g: &mut Gate, old: &iridia::Program, p: iridia_ir::Program, at: &str,
                 skipped.push(e.clone());
                 continue;
             }
-            let y = dispatch(&b, old, c);
+            let y = dispatch(&b, &interface, c);
             if past_budget(&y) {
                 g.past_budget(column, at);
                 continue;
@@ -1864,7 +1868,7 @@ fn compute(g: &mut Gate, old: &iridia::Program, p: iridia_ir::Program, at: &str,
         Some(Err(e)) => tally(&mut g.c_unbuilt, &format!("not compiled: {e}"), at),
         Some(Ok(c)) => {
             let differs = (0..).zip(&older).find_map(|(n, x)| {
-                let y = dispatch(&c, old, n);
+                let y = dispatch(&c, &interface, n);
                 if x.is_ok() && past_budget(&y) {
                     g.past_budget("C", at);
                     return None;
@@ -1894,11 +1898,11 @@ fn seeded_lane(scalar: iridia_ir::interface::ScalarType, h: u32) -> u32 {
     }
 }
 
-/// The registers stage function `sig` of `program` takes on case `c`: each point of an array argument and each
-/// varying seeded by its scalar type, and the values the pipeline gives within what the stage's facts allow (an
-/// output point the hull program has, a domain location inside the patch, an instance the geometry program runs).
-fn arguments(program: &iridia::Program, sig: &FunctionSig, c: u32, pointers: &[Vec<u32>]) -> Vec<[u32; 4]> {
-    let interface = &program.interface;
+/// The registers stage function `sig` of the program with `interface` takes on case `c`: each point of an array
+/// argument and each varying seeded by its scalar type, and the values the pipeline gives within what the stage's facts
+/// allow (an output point the hull program has, a domain location inside the patch, an instance the geometry program
+/// runs).
+fn arguments(interface: &Interface, sig: &FunctionSig, c: u32, pointers: &[Vec<u32>]) -> Vec<[u32; 4]> {
     let patch: &[iridia_ir::interface::Varying] = match &interface.facts {
         StageFacts::Hull(h) => &h.patch_constants,
         StageFacts::Domain(d) => &d.patch_constants,
@@ -2040,12 +2044,12 @@ type Call = (Vec<[u32; 4]>, Vec<Vec<u32>>, Memory);
 
 fn call(
     exe: &Executable,
-    program: &iridia::Program,
+    interface: &Interface,
     sig: &FunctionSig,
     c: u32,
     leaves: &[Vec<iridia_ir::interface::ScalarType>],
 ) -> Result<Call, String> {
-    let s = seeded(program, c);
+    let s = seeded(interface, c);
     let bound = exe.bind_resources(&s.resources)?;
     let mut backend = Group::for_case(c);
     // each leaf of each pointer argument seeded by its scalar type, a word each
@@ -2066,7 +2070,7 @@ fn call(
             .collect();
         pointers.push(words);
     }
-    let registers = arguments(program, sig, c, &pointers);
+    let registers = arguments(interface, sig, c, &pointers);
     let (values, pointees) = {
         let mut runner = Runner::<1>::new(exe, &bound, &mut backend, None);
         let [out] = runner.run([&registers])?;
@@ -2112,6 +2116,7 @@ fn functions(
             at,
         );
     }
+    let interface = old.interface.clone();
     let mut a = Vec::with_capacity(sigs.len());
     let mut leaves = Vec::with_capacity(sigs.len());
     for sig in sigs {
@@ -2132,7 +2137,7 @@ fn functions(
         .iter()
         .zip(&a)
         .zip(&leaves)
-        .map(|((sig, a), leaves)| (0..CASES).map(|c| call(a, old, sig, c, leaves)).collect())
+        .map(|((sig, a), leaves)| (0..CASES).map(|c| call(a, &interface, sig, c, leaves)).collect())
         .collect();
     took.a = lap(&mut mark);
     for column in ["B", "P"] {
@@ -2158,7 +2163,7 @@ fn functions(
                     skipped.push(format!("{}: {e}", sig.name));
                     continue;
                 }
-                let y = call(&b, old, sig, c, leaves);
+                let y = call(&b, &interface, sig, c, leaves);
                 if *x != y {
                     let d = format!("{} case {c}: A {x:x?}\n  but {y:x?}", sig.name);
                     let d: String = d.chars().take(4000).collect();

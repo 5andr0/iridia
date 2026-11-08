@@ -113,9 +113,11 @@ fn one_compute(old: &iridia::Program, p: &iridia_ir::Program, c: Option<&iridia:
     let b = Executable::from_ir(p).unwrap();
     let c = c.map(|c| (Executable::new(c).unwrap(), c));
     for case in 0..CASES {
-        let x = dispatch(&a, old, case);
-        let y = dispatch(&b, old, case);
-        let z = c.as_ref().map(|(c, program)| dispatch(c, program, case));
+        let x = dispatch(&a, &old.interface, case);
+        let y = dispatch(&b, &old.interface, case);
+        let z = c
+            .as_ref()
+            .map(|(c, program)| dispatch(c, &program.interface, case));
         println!("case {case}:");
         let Ok(x) = x else {
             println!("  A {x:?}");
