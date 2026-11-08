@@ -249,6 +249,9 @@ struct Tally {
     /// Per compute program that differs from WARP (beyond 1e-3, or in words its writes leave unordered): its source hash and
     /// why [`COMPUTE_EXPECTED`] lets it, where it does.
     differs: BTreeMap<String, (String, Option<&'static str>)>,
+    /// Per vertex or pixel program with a lane beyond 1e-3 (or a discard or a missing lane): its source hash and why
+    /// [`GRAPHICS_EXPECTED`] lets it, where it does.
+    graphics_differs: BTreeMap<String, (String, Option<&'static str>)>,
     /// Per such program, why its best shown word is unordered, with the grade.
     unordered_why: BTreeMap<String, (usize, String)>,
     /// Per source of an amplified lane: the lanes and the programs.
@@ -345,6 +348,42 @@ fn quad(b: &ProgramShader, c: u32) -> Vec<common::Case> {
         l.buffers = first.clone();
     }
     lanes
+}
+
+/// An accurate `sin` and `sin4` (wgsl_run/reference_sin.wgsl), what `shader.sin=reference` swaps for the builtin.
+const REFERENCE_SIN: &str = include_str!("wgsl_run/reference_sin.wgsl");
+
+/// `wgsl` with each `sin` of an `f32` or `vec4<f32>` (as the writers emit it: `sin(bitcast<..>(..))`) made `iridia_sin` or
+/// `iridia_sin4` and their definitions added; a `sin` of another form, or a `cos`, is an error, so a run that says it swapped
+/// `sin` did.
+fn substitute_sin(wgsl: &str) -> Result<String, String> {
+    let mut out = String::with_capacity(wgsl.len() + REFERENCE_SIN.len());
+    let mut rest = wgsl;
+    while let Some(at) = rest.find("sin(") {
+        let (before, after) = rest.split_at(at);
+        out.push_str(before);
+        let named = before
+            .chars()
+            .next_back()
+            .is_some_and(|c| c.is_alphanumeric() || c == '_');
+        let args = &after["sin(".len()..];
+        if named {
+            out.push_str("sin(");
+        } else if args.starts_with("bitcast<vec4<f32>>(") {
+            out.push_str("iridia_sin4(");
+        } else if args.starts_with("bitcast<f32>(") {
+            out.push_str("iridia_sin(");
+        } else {
+            return Err("a sin of a form shader.sin=reference does not swap".to_owned());
+        }
+        rest = args;
+    }
+    out.push_str(rest);
+    if out.contains(" cos(") || out.contains("(cos(") {
+        return Err("a cos, which shader.sin=reference does not swap".to_owned());
+    }
+    out.push_str(REFERENCE_SIN);
+    Ok(out)
 }
 
 /// The WGSL of a program in naga's dialect by the writer `shader.writer` names: `naga` (the default, `iridia_naga`) or `wgsl`
@@ -452,6 +491,17 @@ fn run_program(harness: &Harness, name: &str, bytes: &[u8], t: &mut Tally) {
             return;
         }
     };
+    let wgsl = match inputs::debug("shader.sin").as_deref() {
+        None => wgsl,
+        Some("reference") => match substitute_sin(&wgsl) {
+            Ok(w) => w,
+            Err(e) => {
+                tally(&mut t.gaps, &e, name);
+                return;
+            }
+        },
+        Some(other) => panic!("shader.sin is reference, not {other}"),
+    };
     let layout = match Layout::naga(&p.interface) {
         Ok(l) => l,
         Err(e) => {
@@ -476,6 +526,8 @@ fn run_program(harness: &Harness, name: &str, bytes: &[u8], t: &mut Tally) {
     let interface = p.interface.clone();
     let amplified = wgsl_run::amplified::outputs(&p);
     let downstream = wgsl_run::amplified::downstream(&p);
+    let hash = p.provenance.source_hash.clone().unwrap_or_else(|| "-".to_owned());
+    let excused = graphics_expected(name, &hash);
     let b = match ProgramShader::from_ir(p) {
         Ok(b) => b,
         Err(e) => {
@@ -655,7 +707,7 @@ fn run_program(harness: &Harness, name: &str, bytes: &[u8], t: &mut Tally) {
                             lanes[k].inputs
                         );
                     }
-                    if class == Class::Beyond && t.worst.len() < SHOWN {
+                    if class == Class::Beyond && t.worst.len() < SHOWN && excused.is_none() {
                         let below = downstream.get(&(register, lane)).map_or(String::new(), |s| {
                             format!(", downstream of an amplified {} (no bound to check)", s.name())
                         });
@@ -674,6 +726,15 @@ fn run_program(harness: &Harness, name: &str, bytes: &[u8], t: &mut Tally) {
         tally(
             &mut t.all_discarded,
             "every run discarded on both sides: nothing to compare",
+            name,
+        );
+    }
+    if worst == Class::Beyond {
+        t.graphics_differs.insert(name.to_owned(), (hash, excused));
+    } else if excused.is_some() && inputs::debug("shader.sin").is_none() {
+        tally(
+            &mut t.errors,
+            "a program GRAPHICS_EXPECTED excuses agrees with WARP in every lane: remove it from the table",
             name,
         );
     }
@@ -976,6 +1037,235 @@ fn compute_expected(name: &str, hash: &str) -> Option<&'static str> {
         .find(|(n, h, _)| *n == short(name) && *h == hash)
         .map(|(_, _, why)| *why)
 }
+
+/// Vertex and pixel programs whose lanes are known to be further than 1e-3 from WARP's with the executor and the writers
+/// right: each by program name and source hash, with why. Its beyond lanes are counted and the program printed, and the
+/// test does not fail on them; a program listed here that agrees in every lane fails the test so the table is pruned.
+const GRAPHICS_EXPECTED: &[(&str, &str, &str)] = &[
+    (
+        "03688.dxbc",
+        "sha256:41e1293f60bffa879a90426022d755da06ff4dd2fe8321afd5418d5d37ecb28b",
+        CELL_NOISE_NATIVE,
+    ),
+    (
+        "03689.dxbc",
+        "sha256:e1b2b7878ccdea68c222b258aa14a8bb0d1984f40ddb5f576876e6a37f14c198",
+        CELL_NOISE_NATIVE,
+    ),
+    (
+        "04137.dxbc",
+        "sha256:d7347a69c616f1d6ea5f7f7901a3d47d1596a72d169f688d1f98a6e0544b55bc",
+        CELL_NOISE,
+    ),
+    (
+        "04138.dxbc",
+        "sha256:0878266da43fa7b43bb0b3d884b6dc39b9b2bdb5aac05b07300ad7d833d8bf5a",
+        CELL_NOISE,
+    ),
+    (
+        "04139.dxbc",
+        "sha256:c8c9372b026306c99e604ddf64908875bf83e9a5b2b6100e0b9b7dd951364609",
+        CELL_NOISE,
+    ),
+    (
+        "04140.dxbc",
+        "sha256:3f3a7418ac50d1a209a7bd18b515ea6148ffbc0979ff78bac6e792da0ed8107c",
+        CELL_NOISE,
+    ),
+    (
+        "04143.dxbc",
+        "sha256:9c1ad19cd3dc8767b680d0a3e3febd6bf26c784538eb3ce73f450222012e878c",
+        CELL_NOISE,
+    ),
+    (
+        "04144.dxbc",
+        "sha256:72f01bea1e779d02b5fd65b25f1a91e89ee7202079771760473dc81c4a592e16",
+        CELL_NOISE,
+    ),
+    (
+        "04145.dxbc",
+        "sha256:f9e79078bcd6db62af1f04bd5b1d67b2b265b649896d8ec0b5328f323ec28c0c",
+        CELL_NOISE,
+    ),
+    (
+        "04146.dxbc",
+        "sha256:4316761fa8a5352902dbf6ea55a49fa97c98eb5e41ce9f4ec51dfab5729f588d",
+        CELL_NOISE,
+    ),
+    (
+        "04147.dxbc",
+        "sha256:2405df6b6eada3e01d100b47457d791c455ed0a4bb75269f6553ff315ee8fa5d",
+        CELL_NOISE,
+    ),
+    (
+        "04148.dxbc",
+        "sha256:8f75def7f915427ca59229eb0e4baebb8170e435ba4222efbbf7a49771a2cf20",
+        CELL_NOISE,
+    ),
+    (
+        "04149.dxbc",
+        "sha256:4e19324c029ad2404cef72c1ab2cce64992c6df8e927eb0eefa5c64bc81357e6",
+        CELL_NOISE,
+    ),
+    (
+        "04150.dxbc",
+        "sha256:46eba4b4543479bf7926f277390565ca44c1ea7ebee1c316cabb0bc2e6b1adcb",
+        CELL_NOISE,
+    ),
+    (
+        "04151.dxbc",
+        "sha256:e35d8815f3ba29be4cf11043aff4a706ff886cd59c17582b505f6e9bc06243cb",
+        CELL_NOISE,
+    ),
+    (
+        "04152.dxbc",
+        "sha256:f62605d111d605eb79449141b91b5b6171b8f850548c28df30e73316af732166",
+        CELL_NOISE,
+    ),
+    (
+        "04153.dxbc",
+        "sha256:cc8487e764e5fd228e4ac16591b3128a22b9f7f4377065857ab1494a5c02a7f3",
+        CELL_NOISE,
+    ),
+    (
+        "04154.dxbc",
+        "sha256:b8a8bc33a84f2986d3395565199818db3025ec1d1d82ef5c6275df1b9000d2ec",
+        CELL_NOISE,
+    ),
+    (
+        "04155.dxbc",
+        "sha256:34c24220b460c8cd3601fde6697cc7f912abc86aa5661d4819e26dffc8733e7b",
+        CELL_NOISE,
+    ),
+    (
+        "04156.dxbc",
+        "sha256:5372a6d99ecd26f35a90a74a7036185b7be92b0f12d0521f3ae0089a99466fb2",
+        CELL_NOISE,
+    ),
+    (
+        "04161.dxbc",
+        "sha256:da31221d9877ce55fa160842a5e331ba771761fa067098435a2488295cf0da72",
+        CELL_NOISE,
+    ),
+    (
+        "04162.dxbc",
+        "sha256:da0d877c0bb9076a1536945728ad4027b6846d3cc349ba2f77ad8cbd4b952337",
+        CELL_NOISE,
+    ),
+    (
+        "04163.dxbc",
+        "sha256:3163463e9dff393a3dada6090cc3bce491b53da7879f13aa2146ffdccc45e997",
+        CELL_NOISE,
+    ),
+    (
+        "04164.dxbc",
+        "sha256:70195113297cf0f197f23bab70b8b450a4dd2fcf3675c8858611cf875d5b4acb",
+        CELL_NOISE,
+    ),
+    (
+        "04167.dxbc",
+        "sha256:fd69b548f628ba234d9e0331d92cc85d737aecb8db98b0a3ba0135ce0b0d8180",
+        CELL_NOISE,
+    ),
+    (
+        "04168.dxbc",
+        "sha256:ce9698c92b49034a77ed3a96a216eb8511e65ebb401e4391d6fa326de17d4081",
+        CELL_NOISE,
+    ),
+    (
+        "04169.dxbc",
+        "sha256:62cd0ab29beac9d1040d30ac06d88fc1f00fe61dfab2d0a1aef73f53257954a0",
+        CELL_NOISE,
+    ),
+    (
+        "04170.dxbc",
+        "sha256:3f255215235488e0c2c0d75199bec65e102f468bbab88476d8c08f449ad16406",
+        CELL_NOISE,
+    ),
+    (
+        "04171.dxbc",
+        "sha256:3d5df3cfd5f035eaa12bc66cb412ec7477a4baae4d3e8bb0f2f48fb2d9eda0d0",
+        CELL_NOISE,
+    ),
+    (
+        "04172.dxbc",
+        "sha256:5ef469fb526d73361a839a25ea24d7b385d65be748c3c05ab775b70639b4ea82",
+        CELL_NOISE,
+    ),
+    (
+        "04173.dxbc",
+        "sha256:9c50e43ef9843ac1b91f3d0e49b656e23d4bc24c0181a4a0c459e26d03ca4eb2",
+        CELL_NOISE,
+    ),
+    (
+        "04174.dxbc",
+        "sha256:9f7a19554c6dce81a308a16d797b1e81ddd153a1e260787c9ac62454d55ba18d",
+        CELL_NOISE,
+    ),
+    (
+        "04175.dxbc",
+        "sha256:3955f5e7a020adf171dba97e043405e0c76a9ade69922ce9d3e9c3b83fda84dc",
+        CELL_NOISE,
+    ),
+    (
+        "04176.dxbc",
+        "sha256:0f5d2ed7626bfe1b6e23e2651c06a0a4f52430043abe2afdaa3b70bff656c4fe",
+        CELL_NOISE,
+    ),
+    (
+        "04177.dxbc",
+        "sha256:3fe7ebad8fdf47184e6c08466e0d7730c5d281f0163a1c4df845cc1177a0b667",
+        CELL_NOISE,
+    ),
+    (
+        "04178.dxbc",
+        "sha256:195e496e69a36b95afa37b6201a46d446ec87d8dcd722a5b977dcb593439d423",
+        CELL_NOISE,
+    ),
+    (
+        "04179.dxbc",
+        "sha256:07c3752683f9e3dc03328b04b73b58284630f99b1d5db81d77f7c2e900971f98",
+        CELL_NOISE,
+    ),
+    (
+        "04180.dxbc",
+        "sha256:24feddc456810dd7f1742af583a045a9c8d53c0970f214258a6775dc61e82e67",
+        CELL_NOISE,
+    ),
+    (
+        "04183.dxbc",
+        "sha256:456403b6bbdebe3c7031de76afdde11ef7f335a93831d34a407cb051de13d545",
+        CELL_NOISE,
+    ),
+    (
+        "04211.dxbc",
+        "sha256:eb055b74556e8b5c5228ff3b85d6c80d2ef05f5b54a907bd5ff79e991ee2d468",
+        CELL_NOISE,
+    ),
+];
+
+/// The reason `name` (of source hash `hash`) may differ from WARP, if [`GRAPHICS_EXPECTED`] lists it.
+fn graphics_expected(name: &str, hash: &str) -> Option<&'static str> {
+    GRAPHICS_EXPECTED
+        .iter()
+        .find(|(n, h, _)| *n == short(name) && *h == hash)
+        .map(|(_, _, why)| *why)
+}
+
+/// Cell noise as [`CELL_NOISE`] says, but `shader.sin=reference` leaves one lane (case 2 lane 0 o0.2: 0.0011223652 against
+/// 0.0011211843, 1.2e-6 apart on a value of 1.1e-3), within one ulp of `sin` times 43758 (about 2.6e-3 on a hash), so the cause
+/// is proven by another run: WARP running the program's own fxc bytecode gives the WGSL's values, not the executor's (the
+/// header's account of 03688, `exec_warp`).
+const CELL_NOISE_NATIVE: &str = "cell noise, WARP's sin past D3D's bound: proven by WARP running the program's own fxc bytecode (it gives the WGSL's values); one lane of 1.2e-6 stays under shader.sin=reference, within one ulp of sin times 43758";
+
+/// Cell noise, `fract(sin(dot(cell, k)) * 43758.547)` hashes of integer cells, and what is computed from them: the sin
+/// of a cell's argument is beyond D3D's -100 pi..100 pi bound for most cells (WGSL bounds it only within -pi..pi), where
+/// WARP's is not the reference's (tools/wgsl-run/probes/sin_cells.py: for Unity program 04211's cells -3..3 and its two
+/// constants, WARP's differs from the f64 reference by up to 5.9e-5 and the hash by more than 1e-3 for 95 of 98
+/// arguments), and the cell's feature point moves with its hash. Each program listed with it was run with `shader.sin=reference`
+/// (WARP's builtin `sin` swapped for one within 8.5e-8 of the reference) and then has no lane beyond 1e-3: proven by sin
+/// substitution, not inferred.
+const CELL_NOISE: &str = "cell noise, WARP's sin past D3D's bound: no lane beyond 1e-3 with shader.sin=reference (proven by sin substitution)";
 
 /// `fract(abs(sin(x) * 100000))` hashes: WARP's `sin` is within D3D's absolute bound (0.0008 in -100 pi to 100 pi, none
 /// beyond: Microsoft Learn's `sincos (sm4 - asm)`) or outside its range, and the shader scales the difference by 1e5; the
@@ -1498,6 +1788,13 @@ fn report(title: &str, t: &Tally) {
             println!("    {} ({}/{}/{}): {why}", short(n), w[0], w[1], w[2]);
         }
     }
+    for (n, (hash, why)) in &t.graphics_differs {
+        println!(
+            "  graphics program {} {hash}: {}",
+            short(n),
+            why.unwrap_or("NOT IN GRAPHICS_EXPECTED")
+        );
+    }
     for (n, (hash, why)) in &t.differs {
         println!(
             "  compute program {} {hash}: {}",
@@ -1588,6 +1885,7 @@ fn corpus_over(corpus: &common::Corpus) {
         }
         t.unordered.extend(one.unordered);
         t.differs.extend(one.differs);
+        t.graphics_differs.extend(one.graphics_differs);
         t.unordered_why.extend(one.unordered_why);
         for (source, (lanes, programs)) in one.amplified {
             let (n, all) = t.amplified.entry(source).or_default();
