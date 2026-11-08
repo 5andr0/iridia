@@ -133,14 +133,17 @@ fn signed_feature_comparisons_take_both_paths() {
 }
 
 #[test]
-fn unsupported_feature_arithmetic_returns_a_typed_refusal() {
+fn feature_arithmetic_uses_the_reference_evaluator() {
     for (_, ir) in cases("root") {
         let words = Words::from([((buffer(&ir), 4), 4f32.to_bits())]);
         assert_eq!(feature_words(&ir, &words).unwrap(), words);
-        assert!(matches!(
-            specialise(&ir, &words),
-            Err(SpecialiseError::UnresolvedDecision { .. })
-        ));
+        let result = specialise(&ir, &words).unwrap();
+        let id = buffer(&ir);
+        let inputs = [[0; 4], [3f32.to_bits(); 4]];
+        assert_eq!(
+            run(&ir, &inputs, id, [0, 4f32.to_bits(), 0, 0]),
+            run(&result.program, &inputs, id, [0, 4f32.to_bits(), 0, 0])
+        );
         assert!(specialise(&ir, &Words::new()).is_ok());
     }
 }
@@ -204,10 +207,102 @@ fn float_feature_comparisons_respect_nan_signed_zero_and_denormal_controls() {
         }
     }
     ir.float.f32 = iridia_ir::Denormals::Any;
+    let result = specialise(&ir, &Words::from([((id, 0), 1)])).unwrap();
+    // The reference keeps subnormals when the program leaves their treatment open.
+    assert_eq!(
+        run(&ir, &inputs, id, [1, 0, 0, 0]),
+        run(&result.program, &inputs, id, [1, 0, 0, 0])
+    );
+}
+
+#[test]
+fn exact_integer_conversion_and_float_decisions_fold_without_freezing_data() {
+    for (source_ty, ty, operation, zero, comparison) in [
+        ("u32", "u32", "not %0", "u32(0)", "ucmp.ne"),
+        ("i32", "i32", "firstbithighsigned %0", "i32(0)", "scmp.ne"),
+        (
+            "u32",
+            "u32",
+            "bitextract.unsigned %0, %1, %2",
+            "u32(0)",
+            "ucmp.ne",
+        ),
+        ("f32", "f32", "fdiv %1, %0", "f32(0.0)", "fcmp.ne"),
+        ("f32", "f32", "fsqrt %0", "f32(0.0)", "fcmp.ne"),
+        ("i32", "f32", "convert.undef %0", "f32(0.0)", "fcmp.ne"),
+        ("u32", "f32", "convert.undef %0", "f32(0.0)", "fcmp.ne"),
+        ("f32", "i32", "convert.saturate %0", "i32(0)", "scmp.ne"),
+        ("f32", "u32", "convert.saturate %0", "u32(0)", "ucmp.ne"),
+    ] {
+        let mut ir = float_decision();
+        let id = buffer(&ir);
+        let constants = if ty == "f32" {
+            "%1: f32 = f32(1.0)\n  %2: f32 = f32(5.0)"
+        } else {
+            "%1: u32 = u32(1)\n  %2: u32 = u32(5)"
+        };
+        ir.entry=iridia_ir::text::parse(&format!("iridia-ir 1\nfn main {{\n  %0: {source_ty} = buffer r{} + 0 oob.zero\n  {constants}\n  %3: {ty} = {operation}\n  %4: {ty} = {zero}\n  %5: bool = {comparison} %3, %4\n  %6: f32 = input 1.x\n  %7: f32 = f32(2.0)\n  %8: f32 = select %5, %6, %7\n  output 0.x = %8\n  return\n}}\n",id.0)).unwrap();
+        iridia_ir::validate(&ir).unwrap();
+        for word in [0, 1, 0x8000_0000, u32::MAX, 1f32.to_bits(), 4f32.to_bits()] {
+            let result = specialise(&ir, &Words::from([((id, 0), word)])).unwrap();
+            assert!(result.unread.contains(&id));
+            for data in [0.0f32, 0.5, 3.0] {
+                let inputs = [[0; 4], [data.to_bits(); 4]];
+                assert_eq!(
+                    run(&ir, &inputs, id, [word, 0, 0, 0]),
+                    run(&result.program, &inputs, id, [word, 0, 0, 0])
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn unsupported_reference_precision_is_a_typed_refusal() {
+    let mut ir = float_decision();
+    let id = buffer(&ir);
+    ir.entry=iridia_ir::text::parse(&format!("iridia-ir 1\nfn main {{\n  %0: f32 = buffer r{} + 0 oob.zero\n  %1: f16 = convert.undef %0\n  %2: f16 = f16(0)\n  %3: bool = fcmp.ne %1, %2\n  %4: f32 = input 1.x\n  %5: f32 = f32(2.0)\n  %6: f32 = select %3, %4, %5\n  output 0.x = %6\n  return\n}}\n",id.0)).unwrap();
+    iridia_ir::validate(&ir).unwrap();
     assert!(matches!(
-        specialise(&ir, &Words::from([((id, 0), 1)])),
+        specialise(&ir, &Words::from([((id, 0), 1f32.to_bits())])),
         Err(SpecialiseError::UnresolvedDecision { .. })
     ));
+}
+
+#[test]
+fn a_fixed_vector_math_lane_folds_while_its_neighbour_stays_uniform() {
+    let mut ir = float_decision();
+    let id = buffer(&ir);
+    ir.entry = iridia_ir::text::parse(&format!(
+        "iridia-ir 1
+fn main {{
+  %0: vec2<f32> = buffer r{} + 0 oob.zero
+  %1: vec2<f32> = vec2<f32>(0.001, 0.001)
+  %2: vec2<f32> = fmax.minnum %0, %1
+  %3: f32 = %2.x
+  %4: f32 = f32(1.0)
+  %5: bool = fcmp.gt %3, %4
+  %6: f32 = input 1.x
+  %7: f32 = %0.y
+  %8: f32 = select %5, %6, %7
+  output 0.x = %8
+  return
+}}
+",
+        id.0
+    ))
+    .unwrap();
+    iridia_ir::validate(&ir).unwrap();
+    for flag in [0f32, 0.5, 2.0] {
+        let supplied = Words::from([((id, 0), flag.to_bits()), ((id, 4), 4f32.to_bits())]);
+        let result = specialise(&ir, &supplied).unwrap();
+        assert_eq!(result.words, Words::from([((id, 0), flag.to_bits())]));
+        for ordinary in [0f32, 0.5, 7.0] {
+            let inputs = [[0; 4], [3f32.to_bits(); 4]];
+            let row = [flag.to_bits(), ordinary.to_bits(), 0, 0];
+            assert_eq!(run(&ir, &inputs, id, row), run(&result.program, &inputs, id, row));
+        }
+    }
 }
 
 proptest::proptest! {

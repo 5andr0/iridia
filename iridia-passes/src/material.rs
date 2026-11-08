@@ -7,13 +7,15 @@ use alloc::{
 };
 
 use iridia_ir::{
-    Address, Binary, Body, Cmp, Denormals, Function, Node, Op, Program, Region, Res, Scalar, Type, Unary,
-    ValueDef, ValueId,
+    Address, Body, Denormals, Function, Node, Op, Program, Region, Res, Type, Unary, ValueDef, ValueId,
     interface::{ResourceId, ResourceKind},
 };
 
 /// Known raw constant-buffer words, keyed by resource and byte offset.
 pub type Words = BTreeMap<(ResourceId, u32), u32>;
+mod known;
+mod lanes;
+
 type Word = (ResourceId, u32);
 type Dependencies = Option<BTreeSet<Word>>;
 
@@ -151,6 +153,7 @@ fn dependencies(
     id: ValueId,
     lane: u8,
     known: &Words,
+    aliases: &lanes::Aliases,
     cache: &mut BTreeMap<(ValueId, u8), Dependencies>,
 ) -> Dependencies {
     let mut stack = vec![((id, lane), false)];
@@ -174,6 +177,7 @@ fn dependencies(
         };
         let operands: Option<Vec<(ValueId, u8)>> = match &d.op {
             Op::Literal(_) => Some(Vec::new()),
+            Op::Param => lanes::root(aliases, id, lane).map(|root| vec![root]),
             Op::LoadBuffer {
                 resource,
                 address: at,
@@ -279,11 +283,12 @@ fn decisions(f: &Function) -> Vec<ValueId> {
 }
 
 fn selected(f: &Function, known: &Words) -> Words {
+    let aliases = lanes::aliases(f);
     let mut cache = BTreeMap::new();
     let mut words = BTreeSet::new();
     for id in decisions(f) {
         let found = (0..f.ty(id).map_or(0, |t| t.lanes)).try_fold(BTreeSet::new(), |mut out, lane| {
-            out.extend(dependencies(f, id, lane, known, &mut cache)?);
+            out.extend(dependencies(f, id, lane, known, &aliases, &mut cache)?);
             Some(out)
         });
         if let Some(found) = found {
@@ -386,55 +391,34 @@ fn replace_reads(f: &mut Function, words: &Words) -> usize {
     count
 }
 
-/// Fold comparisons of known f32 words using the program's denormal policy. Other floating arithmetic stays for
-/// the target; an unsupported feature decision is refused, rather than freezing an arbitrary precision choice.
-fn compare_words(f: &mut Function, denormals: Denormals) -> usize {
+/// Fold fully known pure operations through the same numeric definition the reference executor uses.
+/// This chooses that reference's result, including its portable transcendental backend and its default of preserving
+/// denormals where the program leaves them open. Reduced-precision permissions remain explicit refusals.
+fn reference_values(f: &mut Function, denormals: Denormals) -> usize {
+    let aliases = lanes::aliases(f);
+    let known = known::values(f, &aliases, denormals);
     let mut count = 0usize;
-    for index in 0..f.values.len() {
-        let Some(d) = f.values.get(index) else {
-            continue;
-        };
-        let Op::Binary(Binary::FCmp(cmp), a, b) = d.op else {
-            continue;
-        };
-        if f.ty(a).is_none_or(|t| t.scalar != Scalar::F32) || d.precision != iridia_ir::Precision::Full {
+    for (index, d) in f.values.iter_mut().enumerate() {
+        if matches!(d.op, Op::Literal(_) | Op::Param) {
             continue;
         }
-        let pair = |id| match f.value(id)?.op {
-            Op::Literal(v) => Some(v),
-            _ => None,
-        };
-        let Some((a, b)) = pair(a).zip(pair(b)) else {
-            continue;
-        };
+        let Ok(index) = u32::try_from(index) else { break };
         let mut bits = [0; 4];
-        let float = |v: u64| {
-            let v = u32::try_from(v).ok()?;
-            if v & 0x7f80_0000 == 0 && v & 0x007f_ffff != 0 {
-                match denormals {
-                    Denormals::Any => return None,
-                    Denormals::Flush => return Some(f32::from_bits(v & 0x8000_0000)),
-                    Denormals::Preserve => {}
-                }
-            }
-            Some(f32::from_bits(v))
-        };
-        let mut ready = true;
-        for ((out, a), b) in bits.iter_mut().zip(a).zip(b).take(usize::from(d.ty.lanes)) {
-            let Some((a, b)) = float(a).zip(float(b)) else {
-                ready = false;
-                break;
-            };
-            *out = u64::from(match cmp {
-                Cmp::Eq => a == b,
-                Cmp::Ne => a != b,
-                Cmp::Lt => a < b,
-                Cmp::Le => a <= b,
-                Cmp::Gt => a > b,
-                Cmp::Ge => a >= b,
+        let complete = bits
+            .iter_mut()
+            .enumerate()
+            .take(usize::from(d.ty.lanes))
+            .all(|(lane, out)| {
+                let Ok(lane) = u8::try_from(lane) else {
+                    return false;
+                };
+                let Some(Some(word)) = known.get(&(ValueId(index), lane)) else {
+                    return false;
+                };
+                *out = *word;
+                true
             });
-        }
-        if ready && let Some(d) = f.values.get_mut(index) {
+        if complete {
             d.op = Op::Literal(bits);
             count = count.saturating_add(1);
         }
@@ -470,19 +454,23 @@ fn take_selects(f: &mut Function) {
     }
 }
 
-/// Fold fully stated material feature decisions into a validated copy. Only words selected by [`feature_words`]
+/// Fold fully stated material feature decisions into a validated copy, by [`iridia_ir::eval`], the reference
+/// executor's numeric definition (one portable `libm` backend, denormals preserved where unspecified). This fixes
+/// that reference result rather than a platform math library's choice. Reduced-precision decisions are refused.
+/// Only words selected by [`feature_words`]
 /// are frozen; all other uniform values remain runtime inputs. A selected decision the fold cannot take returns
 /// [`SpecialiseError::UnresolvedDecision`]. The source is never modified.
 pub fn specialise(source: &Program, known: &Words) -> Result<Specialised, SpecialiseError> {
     let mut p = prepare(source, known)?;
     let words = selected(&p.entry, known);
+    let aliases = lanes::aliases(&p.entry);
     let required: BTreeSet<_> = decisions(&p.entry)
         .into_iter()
         .filter(|&id| {
             let mut cache = BTreeMap::new();
             (0..p.entry.ty(id).map_or(0, |t| t.lanes))
                 .try_fold(BTreeSet::new(), |mut out, l| {
-                    out.extend(dependencies(&p.entry, id, l, &words, &mut cache)?);
+                    out.extend(dependencies(&p.entry, id, l, &words, &aliases, &mut cache)?);
                     Some(out)
                 })
                 .is_some_and(|d| !d.is_empty())
@@ -491,7 +479,7 @@ pub fn specialise(source: &Program, known: &Words) -> Result<Specialised, Specia
     let mut folded = replace_reads(&mut p.entry, &words);
     loop {
         let before = p.entry.clone();
-        let n = crate::fold(&mut p.entry).saturating_add(compare_words(&mut p.entry, p.float.f32));
+        let n = crate::fold(&mut p.entry).saturating_add(reference_values(&mut p.entry, p.float.f32));
         folded = folded.saturating_add(n);
         take_selects(&mut p.entry);
         super::specialise::fold_control(&mut p.entry);
