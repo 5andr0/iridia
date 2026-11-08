@@ -1,0 +1,18 @@
+[package]
+name = "iridia-warp-client"
+description = "The client of tools/wgsl-run for iridia's tests: a WGSL entry point run on WARP and read back as the IR executor's register files"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+iridia-ir.workspace = true
+iridia-naga.workspace = true
+primase-testdata.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

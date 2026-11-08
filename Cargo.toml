@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["iridia", "iridia-analysis", "iridia-d3d9", "iridia-d3d9-ir", "iridia-dxbc", "iridia-dxil", "iridia-exec", "iridia-exec-ir", "iridia-interface", "iridia-ir", "iridia-mojo", "iridia-naga", "iridia-passes", "iridia-wgsl", "tools/coverage"]
+members = ["iridia", "iridia-analysis", "iridia-d3d9", "iridia-d3d9-ir", "iridia-dxbc", "iridia-dxil", "iridia-exec", "iridia-exec-ir", "iridia-interface", "iridia-ir", "iridia-mojo", "iridia-naga", "iridia-passes", "iridia-wgsl", "tools/coverage", "tools/warp-client"]
 
 [workspace.package]
 version = "0.6.0"
@@ -28,6 +28,7 @@ iridia-exec = { path = "iridia-exec" }
 iridia-interface = { version = "0.6.0", path = "iridia-interface" }
 iridia-ir = { version = "0.6.0", path = "iridia-ir" }
 iridia-passes = { version = "0.6.0", path = "iridia-passes" }
+iridia-warp-client = { path = "tools/warp-client" }
 iridia-wgsl = { version = "0.6.0", path = "iridia-wgsl" }
 naga = { version = "30.0.1", package = "primase-naga", default-features = false, features = ["wgsl-out"] }
 primase-foundations = "0.3.1"

@@ -323,42 +323,6 @@ fn quad(b: &ProgramShader, c: u32) -> Vec<common::Case> {
     lanes
 }
 
-/// An accurate `sin` and `sin4` (wgsl_run/reference_sin.wgsl), what `shader.sin=reference` swaps for the builtin.
-const REFERENCE_SIN: &str = include_str!("../wgsl_run/reference_sin.wgsl");
-
-/// `wgsl` with each `sin` of an `f32` or `vec4<f32>` (as the writers emit it: `sin(bitcast<..>(..))`) made `iridia_sin` or
-/// `iridia_sin4` and their definitions added; a `sin` of another form, or a `cos`, is an error, so a run that says it swapped
-/// `sin` did.
-fn substitute_sin(wgsl: &str) -> Result<String, String> {
-    let mut out = String::with_capacity(wgsl.len() + REFERENCE_SIN.len());
-    let mut rest = wgsl;
-    while let Some(at) = rest.find("sin(") {
-        let (before, after) = rest.split_at(at);
-        out.push_str(before);
-        let named = before
-            .chars()
-            .next_back()
-            .is_some_and(|c| c.is_alphanumeric() || c == '_');
-        let args = &after["sin(".len()..];
-        if named {
-            out.push_str("sin(");
-        } else if args.starts_with("bitcast<vec4<f32>>(") {
-            out.push_str("iridia_sin4(");
-        } else if args.starts_with("bitcast<f32>(") {
-            out.push_str("iridia_sin(");
-        } else {
-            return Err("a sin of a form shader.sin=reference does not swap".to_owned());
-        }
-        rest = args;
-    }
-    out.push_str(rest);
-    if out.contains(" cos(") || out.contains("(cos(") {
-        return Err("a cos, which shader.sin=reference does not swap".to_owned());
-    }
-    out.push_str(REFERENCE_SIN);
-    Ok(out)
-}
-
 /// The WGSL of a program in naga's dialect by the writer `shader.writer` names: `naga` (the default, `iridia_naga`) or `wgsl`
 /// (`iridia_wgsl`).
 fn write(p: &iridia_ir::Program) -> Result<String, String> {
@@ -382,7 +346,7 @@ fn tint() -> Option<&'static wgsl_run::Tint> {
     static TINT: std::sync::OnceLock<Option<wgsl_run::Tint>> = std::sync::OnceLock::new();
     TINT.get_or_init(|| {
         if inputs::debug("shader.tint").as_deref() == Some("1") {
-            wgsl_run::Tint::configured()
+            wgsl_run::tint()
         } else {
             None
         }
@@ -466,7 +430,7 @@ fn run_program(harness: &Harness, name: &str, bytes: &[u8], t: &mut Tally) {
     };
     let wgsl = match inputs::debug("shader.sin").as_deref() {
         None => wgsl,
-        Some("reference") => match substitute_sin(&wgsl) {
+        Some("reference") => match wgsl_run::substitute_sin(&wgsl) {
             Ok(w) => w,
             Err(e) => {
                 tally(&mut t.gaps, &e, name);
@@ -2179,7 +2143,7 @@ fn report(title: &str, t: &Tally) {
 
 /// The vertex and pixel programs of `corpus` through the harness, as many at a time as `[run] threads` allows.
 pub(crate) fn corpus_over(corpus: &common::Corpus) {
-    let Some(harness) = Harness::configured() else {
+    let Some(harness) = wgsl_run::harness() else {
         println!(
             "tools.wgsl_run is not configured: skipped (build tools/wgsl-run with `cargo build --release` there, and set \
              tools.wgsl_run_dxc to the dxcompiler.dll of DXC 1.8.2502 or later)"

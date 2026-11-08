@@ -92,7 +92,7 @@ fn main {
 
 #[test]
 fn tint_takes_the_scan_loop_a_lane_at_a_time_and_refuses_it_as_a_vector() {
-    let Some(tint) = wgsl_run::Tint::configured() else {
+    let Some(tint) = wgsl_run::tint() else {
         println!("tools.tint is not configured: skipped");
         return;
     };

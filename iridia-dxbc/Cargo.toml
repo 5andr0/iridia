@@ -30,6 +30,8 @@ proptest.workspace = true
 # tests/ir_gate.rs's column C: the IR lowered to stock naga, its WGSL read back by naga's front end
 iridia-naga = { path = "../iridia-naga", default-features = false, features = ["wgsl"] }
 iridia-wgsl = { path = "../iridia-wgsl" }
+# tests/wgsl_run: the client of tools/wgsl-run, which the WARP comparisons run WGSL through
+iridia-warp-client.workspace = true
 naga = { workspace = true, features = ["wgsl-in"] }
 # tests/lift_corpus.rs reads the text of iridia-wgsl back with the published naga
 naga-wgsl = { package = "naga", version = "=30.0.1", default-features = false, features = ["wgsl-in"] }

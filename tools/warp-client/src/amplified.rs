@@ -341,7 +341,7 @@ pub fn downstream(p: &Program) -> BTreeMap<(u32, usize), Source> {
     let mut users: BTreeMap<ValueId, Vec<ValueId>> = BTreeMap::new();
     let mut seeds: BTreeMap<Source, Vec<ValueId>> = BTreeMap::new();
     for (i, def) in f.values.iter().enumerate() {
-        let v = ValueId(u32::try_from(i).unwrap());
+        let v = ValueId(u32::try_from(i).expect("a function has fewer than 2^32 values"));
         let from = sources.get(&v).into_iter().flatten().copied();
         for o in def.op.operands().into_iter().chain(from) {
             users.entry(o).or_default().push(v);

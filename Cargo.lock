@@ -363,6 +363,7 @@ dependencies = [
  "iridia-ir",
  "iridia-naga",
  "iridia-passes",
+ "iridia-warp-client",
  "iridia-wgsl",
  "naga",
  "primase-naga",
@@ -482,6 +483,16 @@ dependencies = [
  "iridia-ir",
  "iridia-naga",
  "iridia-wgsl",
+]
+
+[[package]]
+name = "iridia-warp-client"
+version = "0.6.0"
+dependencies = [
+ "iridia-ir",
+ "iridia-naga",
+ "primase-testdata",
+ "serde_json",
 ]
 
 [[package]]
