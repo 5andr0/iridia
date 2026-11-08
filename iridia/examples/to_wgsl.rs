@@ -22,22 +22,27 @@ fn main() -> ExitCode {
         }
     };
     // a Shader Model 6 container carries its program in a part called DXIL
-    let program = if bytes.windows(4).any(|w| w == b"DXIL") {
-        iridia_dxil::lift(&bytes)
+    let lifted = if bytes.windows(4).any(|w| w == b"DXIL") {
+        iridia_dxil::ir::lift(&bytes)
     } else {
-        iridia_dxbc::lift(&bytes)
+        iridia_dxbc::ir::lift(&bytes)
     };
-    let program = match program {
+    let mut program = match lifted {
         Ok(program) => program,
         Err(refusal) => {
             eprintln!("refused: {refusal}");
             return ExitCode::FAILURE;
         }
     };
+    // the form the writers take: structured control flow, locals promoted to values
+    if let Err(refusal) = iridia_passes::prepare(&mut program) {
+        eprintln!("refused: {refusal}");
+        return ExitCode::FAILURE;
+    }
     for note in &program.notes {
         eprintln!("note: {note}");
     }
-    match iridia::emit::wgsl(&program) {
+    match iridia_wgsl::wgsl(&program, &iridia_wgsl::Profile::BROWSER) {
         Ok(text) => {
             print!("{text}");
             ExitCode::SUCCESS

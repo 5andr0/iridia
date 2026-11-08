@@ -270,6 +270,8 @@ dependencies = [
  "iridia-mojo",
  "iridia-naga",
  "iridia-passes",
+ "iridia-wgsl",
+ "naga",
  "primase-naga",
  "primase-testdata",
  "sha2",
@@ -542,6 +544,7 @@ dependencies = [
  "num-traits",
  "once_cell",
  "rustc-hash",
+ "spirv",
  "thiserror",
  "unicode-ident",
 ]

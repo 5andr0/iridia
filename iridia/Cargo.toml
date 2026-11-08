@@ -32,6 +32,9 @@ naga = { workspace = true, features = ["wgsl-in", "spv-out"] }
 iridia-d3d9 = { path = "../iridia-d3d9" }
 iridia-d3d9-ir = { path = "../iridia-d3d9-ir" }
 iridia-naga = { path = "../iridia-naga", default-features = false, features = ["wgsl"] }
+# the examples write WGSL with iridia-wgsl, and SPIR-V with the naga iridia-naga lowers to (published naga 30.0.1)
+iridia-wgsl = { path = "../iridia-wgsl" }
+naga-spv = { package = "naga", version = "=30.0.1", default-features = false, features = ["spv-out"] }
 primase-testdata.workspace = true
 
 [lints]

@@ -4,10 +4,10 @@
 //! cargo run -p iridia --example to_spirv -- path/to/shader.dxbc out.spv
 //! ```
 //!
-//! A [`iridia::Program`] holds a `naga::Module`, so any writer naga has can take it; this one enables naga's `spv-out`
-//! feature. The writer is naga's: it refuses what SPIR-V output cannot express, and the module is written as the
-//! program was lifted, in Direct3D's clip-space and texture conventions
-//! ([`iridia::Program::conventions`]), which a pipeline that wants Vulkan's applies where it meets the program.
+//! `iridia_naga::module` lowers an IR program to a `naga::Module`, so any writer naga has can take it; this one enables
+//! naga's `spv-out` feature. The writer is naga's: it refuses what SPIR-V output cannot express, and the module is
+//! written as the program was lifted, in Direct3D's clip-space and texture conventions
+//! ([`iridia_ir::Program::conventions`]), which a pipeline that wants Vulkan's applies where it meets the program.
 
 use std::process::ExitCode;
 
@@ -25,30 +25,48 @@ fn main() -> ExitCode {
         }
     };
     let lifted = if bytes.windows(4).any(|w| w == b"DXIL") {
-        iridia_dxil::lift(&bytes)
+        iridia_dxil::ir::lift(&bytes)
     } else {
-        iridia_dxbc::lift(&bytes)
+        iridia_dxbc::ir::lift(&bytes)
     };
-    let program = match lifted {
+    let mut program = match lifted {
         Ok(program) => program,
         Err(refusal) => {
             eprintln!("refused: {refusal}");
             return ExitCode::FAILURE;
         }
     };
-    let info = match program.validate() {
-        Ok(info) => info,
-        Err(problems) => {
-            for problem in problems {
-                eprintln!("invalid: {problem}");
-            }
+    if let Err(refusal) = iridia_passes::prepare(&mut program) {
+        eprintln!("refused: {refusal}");
+        return ExitCode::FAILURE;
+    }
+    if let Err(problems) = iridia_ir::validate(&program) {
+        for problem in problems {
+            eprintln!("invalid: {problem:?}");
+        }
+        return ExitCode::FAILURE;
+    }
+    let module = match iridia_naga::BindingPlan::d3d(&program.interface)
+        .map_err(iridia_naga::Error)
+        .and_then(|plan| iridia_naga::module(&program, &plan))
+    {
+        Ok(module) => module,
+        Err(e) => {
+            eprintln!("{e}");
             return ExitCode::FAILURE;
         }
     };
-    let words = match naga::back::spv::write_vec(
-        &program.module,
+    let info = match iridia_naga::validate(&module, &iridia_naga::Profile::NAGA) {
+        Ok(info) => info,
+        Err(e) => {
+            eprintln!("{e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let words = match naga_spv::back::spv::write_vec(
+        &module,
         &info,
-        &naga::back::spv::Options::default(),
+        &naga_spv::back::spv::Options::default(),
         None,
     ) {
         Ok(words) => words,
