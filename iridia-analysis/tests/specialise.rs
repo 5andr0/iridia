@@ -1,29 +1,22 @@
-//! Material specialisation against the old specialiser and both unmodified executions.
+//! Material specialisation against the unmodified program's execution, and the executions' recorded digests.
 #![allow(clippy::unwrap_used)]
 
-use iridia_exec::PixelShader;
 use iridia_ir::{
     Program,
     interface::{ResourceId, ResourceKind},
 };
 use iridia_passes::{SpecialiseError, Words, feature_words, specialise};
 
-fn cases(name: &str) -> Vec<(iridia::Program, Program)> {
+fn cases(name: &str) -> Vec<Program> {
     let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../iridia/tests/fixtures");
     ["dxbc", "dxil"]
         .into_iter()
         .map(|ext| {
             let bytes = std::fs::read(base.join(format!("specialise_{name}.{ext}"))).unwrap();
             if ext == "dxbc" {
-                (
-                    iridia_dxbc::lift(&bytes).unwrap(),
-                    iridia_dxbc::ir::lift(&bytes).unwrap(),
-                )
+                iridia_dxbc::ir::lift(&bytes).unwrap()
             } else {
-                (
-                    iridia_dxil::lift(&bytes).unwrap(),
-                    iridia_dxil::ir::lift(&bytes).unwrap(),
-                )
+                iridia_dxil::ir::lift(&bytes).unwrap()
             }
         })
         .collect()
@@ -55,35 +48,44 @@ fn run(p: &Program, inputs: &[[u32; 4]], id: ResourceId, row: [u32; 4]) -> iridi
     .unwrap()
 }
 
+/// FNV-1a of `bytes` after `h`.
+fn fnv(mut h: u64, bytes: &[u8]) -> u64 {
+    for b in bytes {
+        h ^= u64::from(*b);
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    h
+}
+
+/// The digest of the unmodified program's 64 runs of `check`, by fixture, word offset and supplied value: the same for
+/// both bytecodes of a fixture. Recorded while the executor of the older lift and specialiser, run on the same inputs,
+/// gave these outputs bit for bit.
+const RUNS: [(&str, u32, u32, u64); 4] = [
+    ("integer", 8, 4294967295, 0xe0d497afdd4431ff),
+    ("integer", 8, 5, 0x6d6b38504f51e6cb),
+    ("word", 0, 0, 0x8019a0b68dfd3bed),
+    ("word", 0, 1, 0x62fc217480dcd7e6),
+];
+
 fn check(name: &str, offset: u32, values: &[u32]) {
-    for (old, ir) in cases(name) {
+    for ir in cases(name) {
         let original = ir.clone();
         let id = buffer(&ir);
-        let old_id = old
-            .interface
-            .resources
-            .iter()
-            .find(|r| matches!(r.kind, ResourceKind::ConstantBuffer { .. }))
-            .unwrap()
-            .id;
         for &value in values {
             // An ordinary scale is supplied too: it must stay a uniform, including when it shares a vector load
             // with the feature word. Vary it at execution time after specialising.
             let words = Words::from([((id, offset), value), ((id, 4), 0.5f32.to_bits())]);
-            let old_words =
-                iridia::specialise::Words::from([((old_id, offset), value), ((old_id, 4), 0.5f32.to_bits())]);
-            let result = specialise(&ir, &words)
-                .unwrap_or_else(|e| panic!("{name}: {e}\n{}", iridia_ir::text::print(&ir.entry)));
+            let result = specialise(&ir, &words).unwrap_or_else(|e| {
+                panic!(
+                    "{name}: {e}
+{}",
+                    iridia_ir::text::print(&ir.entry)
+                )
+            });
             let before = iridia_ir::text::print(&ir.entry);
-            let old_result = iridia::specialise::specialise(&old, &old_words).unwrap();
             assert_eq!(result.words, Words::from([((id, offset), value)]));
-            assert_eq!(
-                old_result.words,
-                iridia::specialise::Words::from([((old_id, offset), value)])
-            );
             assert!(result.folded > 0);
-            let old_source = iridia_exec::ProgramShader::new(old.clone()).unwrap();
-            let old_specialised = iridia_exec::ProgramShader::new(old_result.program).unwrap();
+            let mut digest = 0xcbf29ce484222325u64;
             for i in 0..64u32 {
                 let inputs = [
                     [0; 4],
@@ -101,21 +103,20 @@ fn check(name: &str, offset: u32, values: &[u32]) {
                 assert_eq!(
                     a,
                     b,
-                    "{name}, value={value}, input={i}\n{}",
+                    "{name}, value={value}, input={i}
+{}",
                     iridia_ir::text::print(&result.program.entry)
                 );
-                for shader in [&old_source, &old_specialised] {
-                    let mut reads =
-                        iridia_exec::probe::AnsweredReads::new(|_: &iridia_exec::ImageSample<u32>| {
-                            Ok([0.; 4])
-                        });
-                    let old_run = shader.execute(&inputs, &[(0, &[row])], &mut reads).unwrap();
-                    assert_eq!(
-                        old_run.outputs,
-                        a.outputs.iter().map(|v| v.unwrap_or([0; 4])).collect::<Vec<_>>()
-                    );
-                }
+                digest = fnv(digest, format!("{:?}", a.outputs).as_bytes());
             }
+            let recorded = RUNS
+                .iter()
+                .find(|r| (r.0, r.1, r.2) == (name, offset, value))
+                .unwrap();
+            assert_eq!(
+                digest, recorded.3,
+                "{name}, value={value}: the program's outputs changed"
+            );
             assert_eq!(ir, original);
             assert_eq!(iridia_ir::text::print(&ir.entry), before);
         }
@@ -134,7 +135,7 @@ fn signed_feature_comparisons_take_both_paths() {
 
 #[test]
 fn feature_arithmetic_uses_the_reference_evaluator() {
-    for (_, ir) in cases("root") {
+    for ir in cases("root") {
         let words = Words::from([((buffer(&ir), 4), 4f32.to_bits())]);
         assert_eq!(feature_words(&ir, &words).unwrap(), words);
         let result = specialise(&ir, &words).unwrap();
@@ -150,7 +151,7 @@ fn feature_arithmetic_uses_the_reference_evaluator() {
 
 #[test]
 fn malformed_words_have_distinct_typed_errors_and_leave_the_source_unchanged() {
-    let (_, ir) = cases("word").remove(0);
+    let ir = cases("word").remove(0);
     let saved = ir.clone();
     let id = buffer(&ir);
     assert!(matches!(
@@ -169,7 +170,7 @@ fn malformed_words_have_distinct_typed_errors_and_leave_the_source_unchanged() {
 }
 
 fn float_decision() -> Program {
-    let (_, mut ir) = cases("word").remove(0);
+    let mut ir = cases("word").remove(0);
     let id = buffer(&ir).0;
     ir.entry = iridia_ir::text::parse(&format!(
         "iridia-ir 1
@@ -389,7 +390,7 @@ fn main {{
 proptest::proptest! {
     #[test]
     fn arbitrary_feature_bits_preserve_runtime_inputs(flag: u32, scale in -64i16..64, x: u8, w: u8) {
-        let (_, ir) = cases("word").remove(0);
+        let ir = cases("word").remove(0);
         let id = buffer(&ir);
         let result = specialise(&ir, &Words::from([((id,0),flag), ((id,4),1f32.to_bits())])).unwrap();
         proptest::prop_assert_eq!(&result.words, &Words::from([((id,0),flag)]));

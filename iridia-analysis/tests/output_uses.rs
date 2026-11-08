@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used)]
-//! What a program's discard and its targets' blend show of its output lanes ([`iridia::output_uses::output_uses`]), on
-//! `fixtures/output_uses.hlsl`, each entry point compiled to both bytecodes and lifted by both lifters: an alpha-tested
+//! What a program's discard and its targets' blend show of its output lanes (`output_uses`), on
+//! `fixtures/output_uses.hlsl`, each entry point compiled to both bytecodes and lifted: an alpha-tested
 //! program's tested alpha is a lane a discard tests where it writes it, a discard on a value written nowhere tests no
 //! lane, and a target blended by the source alpha has its alpha lane as a blend weight.
 use iridia_analysis::ProgramGraph;
@@ -179,8 +179,42 @@ fn without_a_value_graph_no_lane_is_tested() {
     }
 }
 
+/// A fixture, a bytecode, a state's index and the `(target, blend_weight, discard_tested)` of each target.
+type Shown = (&'static str, &'static str, usize, [(u32, u8, u8); 3]);
+
+/// What `output_uses` shows of each fixture and bytecode under each render state: (fixture, bytecode, state, the
+/// `(target, blend_weight, discard_tested)` of each target). The four states are, in order, the default, `One`/`One`,
+/// `SrcAlpha`/`OneMinusSrcAlpha` and `One`/`OneMinusSrcAlpha` on target 2. Taken from the analysis this one replaced
+/// (the rows were equal to its on all 24 cases before it was removed); the tests above check their cases by hand.
+const SHOWN: [Shown; 24] = [
+    ("tested", "dxbc", 0, [(0, 0, 0), (1, 0, 0), (2, 0, 8)]),
+    ("tested", "dxbc", 1, [(0, 0, 0), (1, 0, 0), (2, 0, 8)]),
+    ("tested", "dxbc", 2, [(0, 0, 0), (1, 0, 0), (2, 8, 8)]),
+    ("tested", "dxbc", 3, [(0, 0, 0), (1, 0, 0), (2, 8, 8)]),
+    ("tested", "dxil", 0, [(0, 0, 0), (1, 0, 0), (2, 0, 8)]),
+    ("tested", "dxil", 1, [(0, 0, 0), (1, 0, 0), (2, 0, 8)]),
+    ("tested", "dxil", 2, [(0, 0, 0), (1, 0, 0), (2, 8, 8)]),
+    ("tested", "dxil", 3, [(0, 0, 0), (1, 0, 0), (2, 8, 8)]),
+    ("unrelated", "dxbc", 0, [(0, 0, 0), (1, 0, 0), (2, 0, 0)]),
+    ("unrelated", "dxbc", 1, [(0, 0, 0), (1, 0, 0), (2, 0, 0)]),
+    ("unrelated", "dxbc", 2, [(0, 0, 0), (1, 0, 0), (2, 8, 0)]),
+    ("unrelated", "dxbc", 3, [(0, 0, 0), (1, 0, 0), (2, 8, 0)]),
+    ("unrelated", "dxil", 0, [(0, 0, 0), (1, 0, 0), (2, 0, 0)]),
+    ("unrelated", "dxil", 1, [(0, 0, 0), (1, 0, 0), (2, 0, 0)]),
+    ("unrelated", "dxil", 2, [(0, 0, 0), (1, 0, 0), (2, 8, 0)]),
+    ("unrelated", "dxil", 3, [(0, 0, 0), (1, 0, 0), (2, 8, 0)]),
+    ("opaque", "dxbc", 0, [(0, 0, 0), (1, 0, 0), (2, 0, 0)]),
+    ("opaque", "dxbc", 1, [(0, 0, 0), (1, 0, 0), (2, 0, 0)]),
+    ("opaque", "dxbc", 2, [(0, 0, 0), (1, 0, 0), (2, 8, 0)]),
+    ("opaque", "dxbc", 3, [(0, 0, 0), (1, 0, 0), (2, 8, 0)]),
+    ("opaque", "dxil", 0, [(0, 0, 0), (1, 0, 0), (2, 0, 0)]),
+    ("opaque", "dxil", 1, [(0, 0, 0), (1, 0, 0), (2, 0, 0)]),
+    ("opaque", "dxil", 2, [(0, 0, 0), (1, 0, 0), (2, 8, 0)]),
+    ("opaque", "dxil", 3, [(0, 0, 0), (1, 0, 0), (2, 8, 0)]),
+];
+
 #[test]
-fn output_uses_agree_with_the_legacy_graph_under_each_blend() {
+fn output_uses_show_what_they_showed_under_each_blend() {
     let states = [
         RenderState::default(),
         blended(BlendFactor::One, BlendFactor::One),
@@ -188,28 +222,16 @@ fn output_uses_agree_with_the_legacy_graph_under_each_blend() {
         blended(BlendFactor::One, BlendFactor::OneMinusSrcAlpha),
     ];
     let mut compared = 0;
-    for (name, dxbc, dxil) in FIXTURES {
-        for (old, new) in [
-            (
-                iridia_dxbc::lift(dxbc).unwrap(),
-                iridia_dxbc::ir::lift(dxbc).unwrap(),
-            ),
-            (
-                iridia_dxil::lift(dxil).unwrap(),
-                iridia_dxil::ir::lift(dxil).unwrap(),
-            ),
-        ] {
-            let old_graph = old.graph().unwrap();
-            let new_graph = ProgramGraph::of_program(&new).unwrap();
-            for state in &states {
-                assert_eq!(
-                    iridia::output_uses::output_uses(&old.interface, Some(&old_graph), state),
-                    output_uses(&new.interface, Some(&new_graph), state),
-                    "{name}"
-                );
-                compared += 1;
-            }
-        }
+    for (name, bytecode, k, expected) in SHOWN {
+        let (_, program) = lifted(name).into_iter().find(|(b, _)| *b == bytecode).unwrap();
+        let graph = ProgramGraph::of_program(&program).unwrap();
+        let uses = output_uses(&program.interface, Some(&graph), &states[k]);
+        let got: Vec<_> = uses
+            .iter()
+            .map(|u| (u.target, u.blend_weight, u.discard_tested))
+            .collect();
+        assert_eq!(got, expected, "{name} {bytecode} state {k}");
+        compared += 1;
     }
     assert_eq!(compared, 24);
 }

@@ -236,11 +236,15 @@ fn a_dither_bound_to_its_default_adds_exactly_its_value() {
     }
 }
 
+/// What the alpha analysis says of each program of the fixtures, against `expected/alpha-reference.tsv`: for each
+/// bytecode of each entry point, how its discard's comparison classifies under no dither source, `dither_map` and
+/// `base_map` (`classify`), then each alpha test it finds (its word, whether the expression is exact, whether it has an
+/// alpha texel, and its scale and offset where every unknown is 0.5). The answers are the ones the analysis this one
+/// replaced gave (equal to it on all 66 classifications and 22 expressions before it was removed).
 #[test]
-fn alpha_evidence_agrees_with_the_legacy_analysis() {
+fn alpha_evidence_is_the_recorded_answer() {
     let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../iridia/tests/fixtures");
-    let mut classifications = 0;
-    let mut expressions = 0;
+    let mut got = String::new();
     for entry in [
         "direct",
         "transformed",
@@ -255,70 +259,49 @@ fn alpha_evidence_agrees_with_the_legacy_analysis() {
         "unwritten_dither",
     ] {
         for extension in ["dxbc", "dxil"] {
+            let label = format!("{entry}.{extension}");
             let bytes = std::fs::read(base.join(format!("alpha_reference_{entry}.{extension}"))).unwrap();
-            let (old, new) = if extension == "dxbc" {
-                (
-                    iridia_dxbc::lift(&bytes).unwrap(),
-                    iridia_dxbc::ir::lift(&bytes).unwrap(),
-                )
+            let program = if extension == "dxbc" {
+                iridia_dxbc::ir::lift(&bytes).unwrap()
             } else {
-                (
-                    iridia_dxil::lift(&bytes).unwrap(),
-                    iridia_dxil::ir::lift(&bytes).unwrap(),
-                )
+                iridia_dxil::ir::lift(&bytes).unwrap()
             };
-            let old = old.graph().unwrap();
-            let new = iridia_analysis::ProgramGraph::of_program(&new).unwrap();
-            let ob = old.reads.buffer_at(0, 0).unwrap();
-            let nb = new.reads.buffer_at(0, 0).unwrap();
+            let graph = iridia_analysis::ProgramGraph::of_program(&program).unwrap();
+            let buffer = graph.reads.buffer_at(0, 0).unwrap();
             for name in [None, Some("dither_map"), Some("base_map")] {
-                let od = name
-                    .and_then(|name| old.interface.resources.iter().find(|r| r.provenance.name == name))
-                    .map(|r| iridia::output_uses::AlphaDither {
-                        texture: r.id,
-                        scale_word: 1,
-                    });
-                let nd = name
-                    .and_then(|name| new.interface.resources.iter().find(|r| r.provenance.name == name))
+                let dither = name
+                    .and_then(|name| {
+                        graph
+                            .interface
+                            .resources
+                            .iter()
+                            .find(|r| r.provenance.name == name)
+                    })
                     .map(|r| AlphaDither {
                         texture: r.id,
                         scale_word: 1,
                     });
-                assert_eq!(
-                    iridia::output_uses::discard_compares(&old, ob, 0, od),
-                    discard_compares(&new, nb, 0, nd),
-                    "{entry}.{extension}, {name:?}"
-                );
-                classifications += 1;
+                got.push_str(&format!(
+                    "{label}\t{name:?}\t{:?}\n",
+                    discard_compares(&graph, buffer, 0, dither)
+                ));
             }
-            let old_tests = iridia::output_uses::alpha_tests(&old);
-            let new_tests = alpha_tests(&new);
-            assert_eq!(old_tests.len(), new_tests.len(), "{entry}.{extension}");
-            for (old_test, new_test) in old_tests.iter().zip(&new_tests) {
-                assert_eq!(old_test.word, new_test.word, "{entry}.{extension}");
-                assert_eq!(
-                    old_test.tested.is_exact(),
-                    new_test.tested.is_exact(),
-                    "{entry}.{extension}"
-                );
-                assert_eq!(
-                    old_test.tested.has_alpha_texel(),
-                    new_test.tested.has_alpha_texel(),
-                    "{entry}.{extension}"
-                );
-                if old_test.tested.is_exact() {
-                    let a = old_test
-                        .tested
-                        .linear(&mut |_| iridia::output_uses::Known::Value(0.5))
-                        .unwrap();
-                    let b = new_test.tested.linear(&mut |_| Known::Value(0.5)).unwrap();
-                    assert_eq!((a.scale, a.offset), (b.scale, b.offset), "{entry}.{extension}");
-                }
-                expressions += 1;
+            for test in alpha_tests(&graph) {
+                let linear = test.tested.is_exact().then(|| {
+                    let l = test.tested.linear(&mut |_| Known::Value(0.5)).unwrap();
+                    (l.scale, l.offset)
+                });
+                got.push_str(&format!(
+                    "{label}\ttest\t{}\t{}\t{}\t{linear:?}\n",
+                    test.word,
+                    test.tested.is_exact(),
+                    test.tested.has_alpha_texel()
+                ));
             }
         }
     }
-    assert_eq!(classifications, 66);
-    assert!(expressions >= 20, "{expressions}");
-    eprintln!("alpha oracle: {classifications} classifications, {expressions} expressions agree");
+    assert_eq!(
+        got,
+        include_str!("expected/alpha-reference.tsv").replace("\r\n", "\n")
+    );
 }

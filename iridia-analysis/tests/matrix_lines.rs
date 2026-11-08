@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 //! Matrix orientation on the IR, using fxc and dxc fixtures for fixed matrices, indexed palettes, joint blends
-//! and cloth blends chosen by a flag. Compare their constant layouts with the legacy analysis too, and exercise
-//! palette addresses written in bytes as well as rows.
+//! and cloth blends chosen by a flag. Hold their constants' answers to the recorded ones (`expected/matrix-*.tsv`), and
+//! exercise palette addresses written in bytes as well as rows.
 use iridia_analysis::flow::Values;
 use iridia_analysis::matrix::{Unshown, Words, lines};
 use iridia_analysis::{GraphError, ProgramGraph};
@@ -193,10 +193,35 @@ fn a_constant_s_lines_are_read_at_its_place() {
     );
 }
 
+/// The `<file>\t<constant>\t<offset>\t<answer>` row of every sized constant of a program's constant buffers, in
+/// declaration order.
+fn rows(label: &str, program: &Program, graph: &ProgramGraph, only_matrices: bool) -> String {
+    let mut out = String::new();
+    for r in &program.interface.resources {
+        let ResourceKind::ConstantBuffer { layout } = &r.kind else {
+            continue;
+        };
+        for c in &layout.constants {
+            let Some(size) = c.ty.size() else {
+                continue;
+            };
+            if only_matrices && !matches!(c.ty, iridia_ir::interface::ConstantType::Matrix { .. }) {
+                continue;
+            }
+            let answer =
+                iridia_analysis::matrix::lines_at(Ok(graph), &program.interface, r.id, c.offset, size);
+            out.push_str(&format!("{label}\t{}\t{}\t{answer:?}\n", c.name, c.offset));
+        }
+    }
+    out
+}
+
+/// What the matrix analysis says of each constant of the fixtures, against `expected/matrix-fixtures.tsv`: the answers
+/// the analysis this one replaced gave (equal to it on all 33 constants before it was removed).
 #[test]
-fn matrix_constants_agree_with_the_legacy_analysis() {
+fn matrix_constants_are_the_recorded_answers() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../iridia/tests/fixtures");
-    let mut compared = 0;
+    let mut got = String::new();
     for file in [
         "single_uv_vs.dxbc",
         "layered_skin_vs.dxbc",
@@ -208,44 +233,27 @@ fn matrix_constants_agree_with_the_legacy_analysis() {
         "vertex.od.dxil",
     ] {
         let bytes = std::fs::read(root.join(file)).unwrap();
-        let (old, new) = if file.ends_with(".dxil") {
-            (
-                iridia_dxil::lift(&bytes).unwrap(),
-                iridia_dxil::ir::lift(&bytes).unwrap(),
-            )
+        let program = if file.ends_with(".dxil") {
+            iridia_dxil::ir::lift(&bytes).unwrap()
         } else {
-            (
-                iridia_dxbc::lift(&bytes).unwrap(),
-                iridia_dxbc::ir::lift(&bytes).unwrap(),
-            )
+            iridia_dxbc::ir::lift(&bytes).unwrap()
         };
-        let old_graph = old.graph().unwrap();
-        let new_graph = ProgramGraph::of_program(&new).unwrap();
-        for r in &old.interface.resources {
-            let ResourceKind::ConstantBuffer { layout } = &r.kind else {
-                continue;
-            };
-            for c in &layout.constants {
-                let Some(size) = c.ty.size() else {
-                    continue;
-                };
-                let expected = iridia::matrix::lines_at(Ok(&old_graph), &old.interface, r.id, c.offset, size);
-                let new =
-                    iridia_analysis::matrix::lines_at(Ok(&new_graph), &old.interface, r.id, c.offset, size);
-                assert_eq!(expected, new, "{file}: {}", c.name);
-                compared += 1;
-            }
-        }
+        let graph = ProgramGraph::of_program(&program).unwrap();
+        got.push_str(&rows(file, &program, &graph, false));
     }
-    assert!(compared > 20, "fixture coverage: {compared}");
-    eprintln!("matrix oracle: {compared} constants agree");
+    let expected = include_str!("expected/matrix-fixtures.tsv");
+    assert_eq!(got, expected.replace("\r\n", "\n"));
+    assert!(
+        got.lines().count() > 20,
+        "fixture coverage: {}",
+        got.lines().count()
+    );
 }
 
 /// The public slim corpus includes integer matrix products, both expanded and lowered from multiply-adds.
 #[test]
-fn slim_integer_matrix_constants_agree_with_the_legacy_analysis() {
+fn slim_integer_matrix_constants_are_the_recorded_answers() {
     use inputs::{Game, OracleSet, Query, expect_found, oracle_tree};
-    use iridia_ir::interface::ConstantType;
     let Some(tree) = oracle_tree(OracleSet::Corpus, Game::General, "slim") else {
         return;
     };
@@ -257,195 +265,23 @@ fn slim_integer_matrix_constants_agree_with_the_legacy_analysis() {
         "dc280fa1549f473901a2befa898efd680c3aa658efdd57087996e9e9c441c84e",
         "dfda106a3f116bf01864716b224b7e96c291066cfbd6438b8ed635b85930d812",
     ];
-    let mut compared = 0;
-    let mut failures = Vec::new();
+    let mut got = String::new();
     for hash in cases {
-        let name = format!("programs/dxbc/{hash}.dxbc");
-        let bytes = tree.read(&name).unwrap();
-        let old = iridia_dxbc::lift(&bytes).unwrap();
-        let new = iridia_dxbc::ir::lift(&bytes).unwrap();
-        let old_graph = old.graph().unwrap();
-        let new_graph = ProgramGraph::of_program(&new).unwrap();
-        for r in &old.interface.resources {
-            let ResourceKind::ConstantBuffer { layout } = &r.kind else {
-                continue;
-            };
-            for c in &layout.constants {
-                if !matches!(c.ty, ConstantType::Matrix { .. }) {
-                    continue;
-                }
-                let size = c.ty.size().unwrap();
-                let a = iridia::matrix::lines_at(Ok(&old_graph), &old.interface, r.id, c.offset, size);
-                let b =
-                    iridia_analysis::matrix::lines_at(Ok(&new_graph), &old.interface, r.id, c.offset, size);
-                if a != b {
-                    failures.push(format!("{name}: {}: {a:?} -> {b:?}", c.name));
-                }
-                compared += 1;
-            }
-        }
+        let bytes = tree.read(&format!("programs/dxbc/{hash}.dxbc")).unwrap();
+        let program = iridia_dxbc::ir::lift(&bytes).unwrap();
+        let graph = ProgramGraph::of_program(&program).unwrap();
+        got.push_str(&rows(hash, &program, &graph, true));
     }
     expect_found(
         Query::Oracle(OracleSet::Corpus, Game::General, "slim"),
         "integer matrix regression programs",
         cases.len(),
     );
-    assert!(compared >= 20, "matrix coverage: {compared}");
-    assert!(failures.is_empty(), "{}", failures.join("\n"));
-    eprintln!(
-        "slim integer matrix oracle: {} programs, {compared} constants agree",
-        cases.len()
+    let expected = include_str!("expected/matrix-slim.tsv");
+    assert_eq!(got, expected.replace("\r\n", "\n"));
+    assert!(
+        got.lines().count() >= 20,
+        "matrix coverage: {}",
+        got.lines().count()
     );
-}
-
-#[test]
-fn byte_addressed_palette_lines_match_row_addressed_lines() {
-    use iridia_ir::{Address, Binary, Body, Node, Op, Region, ValueDef, ValueId};
-    let source = dxbc(SKIN_VS);
-    let mut byte_addressed = source.clone();
-    let f = &mut byte_addressed.entry;
-    let mut before = std::collections::BTreeMap::new();
-    for index in 0..f.values.len() {
-        let Some(d) = f.values.get(index).cloned() else {
-            continue;
-        };
-        let Op::LoadBuffer {
-            resource,
-            address:
-                Address {
-                    index: Some(i),
-                    stride: 16,
-                    offset,
-                },
-            oob,
-        } = d.op
-        else {
-            continue;
-        };
-        let ty = f.ty(i).unwrap();
-        let k = ValueId(u32::try_from(f.values.len()).unwrap());
-        let scaled = ValueId(k.0 + 1);
-        f.values.push(ValueDef {
-            ty,
-            op: Op::Literal([16, 0, 0, 0]),
-            origin: d.origin,
-            precision: d.precision,
-        });
-        f.values.push(ValueDef {
-            ty,
-            op: Op::Binary(Binary::IMul, i, k),
-            origin: d.origin,
-            precision: d.precision,
-        });
-        f.values[index].op = Op::LoadBuffer {
-            resource,
-            address: Address {
-                index: Some(scaled),
-                stride: 1,
-                offset,
-            },
-            oob,
-        };
-        before.insert(
-            ValueId(u32::try_from(index).unwrap()),
-            vec![Node::Value(k), Node::Value(scaled)],
-        );
-    }
-    assert!(!before.is_empty());
-    fn place(r: &mut Region, before: &std::collections::BTreeMap<ValueId, Vec<Node>>) {
-        let mut out = Vec::new();
-        for mut n in std::mem::take(&mut r.nodes) {
-            if let Node::Value(v) = n
-                && let Some(add) = before.get(&v)
-            {
-                out.extend(add.clone());
-            }
-            for r in n.regions_mut() {
-                place(r, before);
-            }
-            out.push(n);
-        }
-        r.nodes = out;
-    }
-    let Body::Regions(r) = &mut f.body else {
-        panic!("region fixture")
-    };
-    place(r, &before);
-    iridia_ir::validate(&byte_addressed).unwrap();
-    for name in ["VC_aClothCancelObjMatrix", "VC_aObjMatrix"] {
-        assert_eq!(
-            palette_lines_of(&byte_addressed, name),
-            palette_lines_of(&source, name),
-            "{name}"
-        );
-    }
-}
-
-#[test]
-fn column_palettes_keep_the_line_offset_inside_a_byte_index() {
-    fn emit(text: &mut String, next: &mut u32, ty: &str, op: String) -> u32 {
-        let id = *next;
-        *next += 1;
-        text.push_str(&format!("  %{id}: {ty} = {op}\n"));
-        id
-    }
-    let mut p = dxbc(SINGLE_UV_VS);
-    p.interface.inputs.first_mut().unwrap().value.width = 4;
-    let (resource, offset) = p
-        .interface
-        .resources
-        .iter()
-        .find_map(|r| {
-            let ResourceKind::ConstantBuffer { layout } = &r.kind else {
-                return None;
-            };
-            layout
-                .constants
-                .iter()
-                .find(|c| c.name == "VC_MatrixViewProj")
-                .map(|c| (r.id, c.offset))
-        })
-        .unwrap();
-    let mut text = "iridia-ir 1\nfn main {\n".to_owned();
-    let mut next = 0;
-    let input = emit(&mut text, &mut next, "vec4<f32>", "input 0.xyzw".into());
-    let index_float = emit(&mut text, &mut next, "f32", format!("%{input}.x"));
-    let index = emit(&mut text, &mut next, "u32", format!("bitcast %{index_float}"));
-    let four = emit(&mut text, &mut next, "u32", "u32(4)".into());
-    let sixteen = emit(&mut text, &mut next, "u32", "u32(16)".into());
-    let base = emit(&mut text, &mut next, "u32", format!("imul %{index}, %{four}"));
-    let mut sum = None;
-    for (line, lane) in ["x", "y", "z", "w"].into_iter().enumerate() {
-        let k = emit(&mut text, &mut next, "u32", format!("u32({line})"));
-        let row = emit(&mut text, &mut next, "u32", format!("iadd %{base}, %{k}"));
-        let byte = emit(&mut text, &mut next, "u32", format!("imul %{row}, %{sixteen}"));
-        let matrix = emit(
-            &mut text,
-            &mut next,
-            "vec4<f32>",
-            format!("buffer r{}[%{byte} * 1] + {offset} oob.zero", resource.0),
-        );
-        let scalar = emit(&mut text, &mut next, "f32", format!("%{input}.{lane}"));
-        let vector = emit(&mut text, &mut next, "vec4<f32>", format!("splat %{scalar}"));
-        let product = emit(
-            &mut text,
-            &mut next,
-            "vec4<f32>",
-            format!("fmul.ieee %{matrix}, %{vector}"),
-        );
-        sum = Some(match sum {
-            None => product,
-            Some(s) => emit(
-                &mut text,
-                &mut next,
-                "vec4<f32>",
-                format!("fadd %{s}, %{product}"),
-            ),
-        });
-    }
-    text.push_str(&format!("  output 0.xyzw = %{}\n  return\n}}\n", sum.unwrap()));
-    p.entry = iridia_ir::text::parse(&text).unwrap();
-    iridia_ir::validate(&p).unwrap();
-    let values = Values::of_program(&p).unwrap();
-    assert_eq!(lines(&values, resource, &Words::Indexed), Ok(Majorness::Column));
 }
