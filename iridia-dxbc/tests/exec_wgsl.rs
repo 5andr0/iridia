@@ -37,8 +37,15 @@ mod wgsl_run;
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use iridia_exec::{Dim, ImageLoad, ImageQuery, ImageSample, PixelShader, ProgramShader, QueryKind, Sampler};
-use iridia_ir::interface::{SampleType, ScalarType, Stage, SystemValue, TextureDim};
+use iridia_exec::{
+    Backend, Dim, Element, Executable, ImageLoad, ImageQuery, ImageSample, PixelShader, ProgramShader,
+    QueryKind, Resources, Sampler,
+};
+use iridia_ir::interface::{
+    BufferKind, ResourceId, ResourceKind, SampleType, ScalarType, Stage, StorageTarget, SystemValue,
+    TextureDim,
+};
+use iridia_ir::{Body, Node, Region};
 use wgsl_run::amplified::Source;
 use wgsl_run::{Bound, Class, Environment, Harness, Layout};
 
@@ -47,6 +54,9 @@ const CASES: u32 = 3;
 
 /// The lanes beyond 1e-3 a report shows of one program.
 const SHOWN: usize = 4;
+
+/// The lanes beyond 1e-3 a report prints in all.
+const WORST_SHOWN: usize = 40;
 
 fn has_dxil(bytes: &[u8]) -> bool {
     let word = |at: usize| -> Option<usize> {
@@ -231,6 +241,16 @@ struct Tally {
     unprovable: BTreeMap<String, (usize, String)>,
     browser_refused: BTreeMap<String, (usize, String)>,
     lanes: BTreeMap<Class, usize>,
+    /// Per compute program, the words that differ from WARP that the program's own writes leave unordered, by what shows
+    /// them so: WARP gives the word differently on two runs of the same job; more stores than store instructions (no
+    /// loop) gave it different values, so two invocations stored to it; two stores gave it different values, which one
+    /// invocation's loop could do (not shown to come from two).
+    unordered: BTreeMap<String, [usize; 3]>,
+    /// Per compute program that differs from WARP (beyond 1e-3, or in words its writes leave unordered): its source hash and
+    /// why [`COMPUTE_EXPECTED`] lets it, where it does.
+    differs: BTreeMap<String, (String, Option<&'static str>)>,
+    /// Per such program, why its best shown word is unordered, with the grade.
+    unordered_why: BTreeMap<String, (usize, String)>,
     /// Per source of an amplified lane: the lanes and the programs.
     amplified: BTreeMap<Source, (usize, BTreeSet<String>)>,
     by_program: BTreeMap<String, Class>,
@@ -391,12 +411,25 @@ fn run_program(harness: &Harness, name: &str, bytes: &[u8], t: &mut Tally) {
             Err(e) => tally(&mut t.browser_refused, &at(&e), name),
         }
     }
-    if !matches!(stage, Stage::Vertex | Stage::Pixel) {
-        let why = format!(
-            "{} program: this test runs vertex and pixel programs",
-            stage.with_article()
-        );
-        tally(&mut t.gaps, &why, name);
+    if stage == Stage::Compute {
+        let hash = p.provenance.source_hash.clone().unwrap_or_else(|| "-".to_owned());
+        if compute_wanted(name, &hash) {
+            run_compute(harness, name, &hash, p, t);
+            return;
+        }
+    }
+    if !matches!(stage, Stage::Vertex | Stage::Pixel) || compute_only() {
+        let why = if stage == Stage::Compute {
+            "a compute program outside the sample (shader.compute=1 runs every one)".to_owned()
+        } else {
+            format!(
+                "{} program: this test runs vertex and pixel programs",
+                stage.with_article()
+            )
+        };
+        if !compute_only() {
+            tally(&mut t.gaps, &why, name);
+        }
         return;
     }
     *t.stages.entry(format!("{stage:?}")).or_default() += 1;
@@ -643,6 +676,718 @@ fn run_program(harness: &Harness, name: &str, bytes: &[u8], t: &mut Tally) {
     }
 }
 
+/// Which compute programs run, as `shader.compute` says.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ComputeScope {
+    /// `0`: none.
+    Off,
+    /// Unset: a fixed sample, and every program [`COMPUTE_EXPECTED`] names.
+    Sample,
+    /// `1`: every one.
+    All,
+    /// `sample`: the sample, and no vertex or pixel program.
+    SampleOnly,
+    /// `only`: every one, and no vertex or pixel program.
+    Only,
+}
+
+fn compute_scope() -> ComputeScope {
+    match inputs::debug("shader.compute").as_deref() {
+        None => ComputeScope::Sample,
+        Some("0") => ComputeScope::Off,
+        Some("1") => ComputeScope::All,
+        Some("sample") => ComputeScope::SampleOnly,
+        Some("only") => ComputeScope::Only,
+        Some(other) => panic!("shader.compute is 0, 1, sample or only, not {other}"),
+    }
+}
+
+/// Whether nothing but compute programs runs (`shader.compute` is `sample` or `only`).
+fn compute_only() -> bool {
+    matches!(compute_scope(), ComputeScope::SampleOnly | ComputeScope::Only)
+}
+
+/// One compute program in this many (by a hash of its file name) is in the sample.
+const COMPUTE_SAMPLE: u64 = 16;
+
+/// Whether the compute program `name` (of source hash `hash`) runs.
+fn compute_wanted(name: &str, hash: &str) -> bool {
+    match compute_scope() {
+        ComputeScope::Off => false,
+        ComputeScope::All | ComputeScope::Only => true,
+        ComputeScope::Sample | ComputeScope::SampleOnly => {
+            let fnv = short(name).bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| {
+                (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
+            });
+            compute_expected(name, hash).is_some() || common::mix64(fnv).is_multiple_of(COMPUTE_SAMPLE)
+        }
+    }
+}
+
+/// Programs whose words are known to differ from WARP's with the executor and the writers right: each by program name and
+/// source hash, with why. A program with other source of the same name, or the same source under another name, is not
+/// listed.
+const COMPUTE_EXPECTED: &[(&str, &str, &str)] = &[
+    (
+        "1021.dxbc",
+        "sha256:1e5fef301327669be749764f0463efea892e79ae3ec98255869a4ae67d62fcf1",
+        UNORDERED_UNPROVEN,
+    ),
+    (
+        "1022.dxbc",
+        "sha256:1721d8b909772e2a80aa81c279583b8afcae48a1a6b0630f945b18e24fda13d0",
+        WARP_UNSTABLE,
+    ),
+    (
+        "1023.dxbc",
+        "sha256:e4b8c5e4982aacd1238821a934a7b1188bc6ccbf72d9060b08b6dc18abc38724",
+        WARP_UNSTABLE,
+    ),
+    (
+        "1024.dxbc",
+        "sha256:3958f23ecb90f75b90dc658f04cdd742923372885f476a9830554ecde96afe0c",
+        WARP_UNSTABLE,
+    ),
+    (
+        "1026.dxbc",
+        "sha256:62d4aca061e9dbfc9aec3a706eb8822c8b5e83c125ae89cc7bed903c1d093a75",
+        UNORDERED_UNPROVEN,
+    ),
+    (
+        "1029.dxbc",
+        "sha256:0a84f8bb618611e84a54b3e15c20fdb34f1d992b84e1754a81d4a6d08595d336",
+        WARP_SIN_INFERRED,
+    ),
+    (
+        "BitonicSortSinglePass512.cpo",
+        "sha256:752ec5b2a57ebc63792422a7f84c7fd1f5890161d4c742f2d5bb278469510157",
+        WARP_UNSTABLE,
+    ),
+    (
+        "MatrixTranspose.cpo",
+        "sha256:bd1e5cfcc36c067d643f98e6dd7aafd90750a5630ea5c0255fd1791dd616859f",
+        SOURCE_ORDER,
+    ),
+    (
+        "SpeedTree_50777_w32082_Animation.cpo",
+        "sha256:4f6accfeb935a49d4831fc9d58502b5ed9c14b7cea158920f247b921506ebf79",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_50777_w3636187_Animation.cpo",
+        "sha256:bb9de44c08b9516581a9c2301798666daa89743675df5c3f7358d362944fe928",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_50777_w36361a7_Animation.cpo",
+        "sha256:91d98722f42a100e78310813bfa2b0af7145383d6aee4f7859af67ef39f58108",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_50777_w36369a7_Animation.cpo",
+        "sha256:6fd7d8b8edd9260af0d72e2bec628c698055444e2dec268caa6246d80cafab10",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_50777_w36b6187_Animation.cpo",
+        "sha256:2997ea2b7e16a23eb7a7760c422592bd72d013db5b82b8a07074242454629416",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_50777_w36b68a6_Animation.cpo",
+        "sha256:d154876e4bcf0eb3b44e9809ec63e1a5c66da33c0e807c97a0024680815a1ce1",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_50777_w3eb4087_Animation.cpo",
+        "sha256:a1b8f61d332006a43c4d99eafd22c464fdd31a43d66f855359e4ab1f10aba001",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_50777_w3f7a187_Animation.cpo",
+        "sha256:37ff1403b952be37bbf9c805d2c62aa83aec6333c8a24139782afb0e4d0670ae",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_50777f4_w3636187_Animation.cpo",
+        "sha256:1f8fb6cbb672fe997a2ce848ed431c968201f62d58803a13ba781e389a3475ee",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_50777f4b_w32082_Animation.cpo",
+        "sha256:b28bf3a81d57ef9a79f94893c408f127c8a43ff2bd19cdbfdbb8c1a72e68f258",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_50777f8_w3636187_Animation.cpo",
+        "sha256:46cbfb7d22f8db85715483eadd7a954b41fccb926c367b3156a27046fb9a5317",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_50777f9_w3636187_Animation.cpo",
+        "sha256:956a5a2adef636fec68aefe945e445281d1a988bfea31d5738f26da071515576",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_50777f9_w3f7a187_Animation.cpo",
+        "sha256:34c70278b5c976a55ebe2f771a4c6ff8215eac0bdc5a9d4617c4bdb3a95b4ae9",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_5077f_w32187_Animation.cpo",
+        "sha256:9d0798277dbcfa46b815d940585d51079b202c28efd67796cd72b926470cb34e",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_5077f_w34002082_Animation.cpo",
+        "sha256:cdad01c17a303437a3560214c70f90bd50238c46f8044ed59c664b25653414e9",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_5077f_w340028a2_Animation.cpo",
+        "sha256:4853a83bf373cca034e876938f36ecf7f7ff593f792e1ef410b2674f66972fc3",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_5077f_w34636187_Animation.cpo",
+        "sha256:c357b79e6a9e805a9b1524369b7e5100ef23732a42054f12107383ac98afcd66",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_5077f_w34636987_Animation.cpo",
+        "sha256:4bb38d2e6d835966a066f406e6048a2efac95e25a24ff7bbf162db406f8aef7b",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_5077f_w346369a7_Animation.cpo",
+        "sha256:8590b30c3d8dd38b6e05704d7966f689818928ea744d43843a288fecf4f1a79e",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_5077f_w346b6187_Animation.cpo",
+        "sha256:0f3c34ddf399689ed4bd18b6096158066782dd49770dafbdf3eea25cc4711f58",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_5077f_w346b68a6_Animation.cpo",
+        "sha256:030dd9fabadcfe75697b9ddd23f0a7e3af3996b516ff594cdd3412559a02c627",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_5077f_w36002082_Animation.cpo",
+        "sha256:947fc8513636779bc3af07392ddbb426756b70039f7b4b7b6c5b117868c581ee",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_5077f_w3636187_Animation.cpo",
+        "sha256:ebe6a690d05911590fe114fa4b440f4f0fac811059cf7c747d171fd05bb926a0",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_5077f_w36361a7_Animation.cpo",
+        "sha256:d0ebd1ee251f2818396fcba06623b8d0021883e88a980c7460ed8466143183bf",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_5077f_w36f7a187_Animation.cpo",
+        "sha256:adab6720c2cfc15e8f362819a0ce3d17d6b518fb195aeeff66dfa105f1b017d2",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_5077ff8_w34636187_Animation.cpo",
+        "sha256:43b73cb1b0046280653352a087298f9faf1eab771c2e5910e8224524b7ed8f1d",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_5077ff8_w346369a7_Animation.cpo",
+        "sha256:90060fbf258df9947471be4393309ce554907966fe7aaf650c34a6711d5909a2",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_5077ff8_w346b68a6_Animation.cpo",
+        "sha256:104bf4bf3933f793141da24e50ed4cb88fd575d158621fe777c5cd5999a7e13a",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_5077ff8b_w34002082_Animation.cpo",
+        "sha256:77f6dd689a5dedeec7a4e7f87d5f1cdab333ac7b2462970af1fa163ad1ea3d59",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_5077ff8b_w34636187_Animation.cpo",
+        "sha256:e03c18718c243ed68eb7c4765398e291ce19a91db0745522653ffd5a8608cc27",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_5077ff8b_w36002082_Animation.cpo",
+        "sha256:dd7406734514af456914b6c390902c3b22a91251394fbea5a7e68c72098bf89d",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_5077ff9_w34636187_Animation.cpo",
+        "sha256:02a4b69ca5b962a1fabd97b4d041d71d97ff0a28dcc3d4c96acec31916e47aeb",
+        WARP_SIN,
+    ),
+    (
+        "SpeedTree_5077ff9_w346369a7_Animation.cpo",
+        "sha256:e34165771e4a67fa7d2ebcb308623d188b052a1c2dc1922eaf8c3a7044495cce",
+        WARP_SIN,
+    ),
+];
+
+/// The reason `name` (of source hash `hash`) may differ from WARP, if [`COMPUTE_EXPECTED`] lists it.
+fn compute_expected(name: &str, hash: &str) -> Option<&'static str> {
+    COMPUTE_EXPECTED
+        .iter()
+        .find(|(n, h, _)| *n == short(name) && *h == hash)
+        .map(|(_, _, why)| *why)
+}
+
+/// `fract(abs(sin(x) * 100000))` hashes: WARP's `sin` is within D3D's absolute bound (0.0008 in -100 pi to 100 pi, none
+/// beyond: Microsoft Learn's `sincos (sm4 - asm)`) or outside its range, and the shader scales the difference by 1e5; the
+/// executor's `sin` is the f64 reference rounded (tools/wgsl-run/probes/sin_args.py measures it: 12 of its 16 arguments are inside the range).
+const WARP_SIN: &str =
+    "WARP's sin is within D3D's absolute bound or outside its range, scaled x1e5 by fract(abs(sin(x) * 1e5))";
+
+/// Two invocations store different words to one word, so the result depends on an order the executor and WARP do not share.
+const SOURCE_ORDER: &str =
+    "invocations store different words to one word: the result is order-dependent in the source";
+
+/// WARP gives different words on different runs of the same job.
+const WARP_UNSTABLE: &str = "WARP gives different words on different runs of the same job (intermittent)";
+
+/// A word two stores gave different values, and the program differs from WARP there; WARP's own variation between runs was
+/// not seen in the run that listed it.
+const UNORDERED_UNPROVEN: &str =
+    "two stores give one word different values and it differs from WARP there; WARP's own variation not seen";
+
+/// Differences of a few thousandths in an FFT's cancelled lanes, in a program with sin and cos; cause inferred, not probed.
+const WARP_SIN_INFERRED: &str =
+    "inferred, not probed: twiddle factors from sin and cos, cancelled in the butterfly";
+
+/// The vectors a compute program runs on: 0 and 2 seed the words no reflection names as floats, 1 as small integers, 3
+/// the buffers' words as pairs of half floats from 0.25 to 2 (data a program unpacks).
+const COMPUTE_CASES: u32 = 4;
+
+/// How many times each compute job runs on WARP (`shader.compute_runs`, 2 by default, at least 2).
+fn warp_runs() -> usize {
+    inputs::debug("shader.compute_runs")
+        .and_then(|s| s.parse().ok())
+        .map_or(2, |n: usize| n.max(2))
+}
+
+/// The words of each buffer a compute program reads or writes: 16 K, more than any index the programs make of a
+/// 2 x 1 x 1 dispatch reaches, so no access leaves the buffer (where the executor reads zeros and wgpu clamps).
+const COMPUTE_WORDS: u32 = 16384;
+
+/// The thread groups a compute program is dispatched over.
+const COMPUTE_GROUPS: [u32; 3] = [2, 1, 1];
+
+/// The words of compute buffer `id` in vector `c`: floats from -0.25 to 1.75 for vectors 0 and 2, integers 0 to 7 for 1
+/// (an integer buffer's indices and counts stay inside the buffer, a float's bits would not).
+fn compute_words(id: ResourceId, per: u32, c: u32) -> Vec<u32> {
+    (0..COMPUTE_WORDS / per * per)
+        .map(|w| {
+            let h = common::mix(u64::from(c) << 44 ^ u64::from(id.0) << 32 ^ u64::from(w) ^ 0xc07e);
+            match c {
+                1 => h % 8,
+                3 => {
+                    // a half float of exponent -2 to 0 and a mantissa, twice
+                    let half = |h: u32| (((h % 3) + 13) << 10) | ((h >> 8) & 1023);
+                    half(h) | half(common::mix(u64::from(h) ^ 0x4a1f)) << 16
+                }
+                _ => (common::unit(h) * 2.0 - 0.25).to_bits(),
+            }
+        })
+        .collect()
+}
+
+/// The rows of constant buffer `layout` in vector `c`, each word seeded as its reflection class says (bool, integer 0 to
+/// 2, float from -0.25 to 1.75; a word no reflection names a float in vectors 0 and 2, an integer in 1).
+fn compute_rows(id: ResourceId, layout: &iridia_ir::interface::BufferLayout, c: u32) -> Vec<[u32; 4]> {
+    let mut classes = BTreeMap::new();
+    for k in &layout.constants {
+        common::classify(&k.ty, k.offset, &mut classes);
+    }
+    let unknown = if c == 1 { 2 } else { 3 };
+    let rows = layout.size.div_ceil(16).max(1);
+    (0..rows)
+        .map(|r| {
+            std::array::from_fn(|k| {
+                let word = r * 4 + k as u32;
+                let h = common::mix(u64::from(c) << 44 ^ u64::from(id.0) << 32 ^ u64::from(word) ^ 0x77);
+                match classes.get(&word).copied().unwrap_or(unknown) {
+                    1 => h & 1,
+                    2 => h % 3,
+                    _ => (common::unit(h) * 2.0 - 0.25).to_bits(),
+                }
+            })
+        })
+        .collect()
+}
+
+/// Why a compute program is not run here: its resources are not constant buffers and structured or raw buffers, or it
+/// takes atomics, counters or wave operations.
+fn compute_gap(p: &iridia_ir::Program) -> Option<String> {
+    if let Some(why) = wgsl_run::gap_compute(p) {
+        return Some(why);
+    }
+    for v in &p.entry.values {
+        match v.op {
+            iridia_ir::Op::Atomic { .. } | iridia_ir::Op::Counter(..) => {
+                return Some("an atomic or a counter".into());
+            }
+            iridia_ir::Op::Wave(_) => return Some("a wave operation".into()),
+            _ => {}
+        }
+    }
+    None
+}
+
+/// How many instructions of a region store to each buffer, and whether it has a loop (inside which one instruction runs
+/// more than once per invocation).
+fn store_shape(r: &Region, stores: &mut BTreeMap<ResourceId, u32>) -> bool {
+    let mut loops = false;
+    for n in &r.nodes {
+        match n {
+            Node::StoreBuffer { resource, .. } => *stores.entry(resource.id).or_default() += 1,
+            Node::Loop { .. } => loops = true,
+            _ => {}
+        }
+        for inner in n.regions() {
+            loops |= store_shape(inner, stores);
+        }
+    }
+    loops
+}
+
+/// The elements a word buffer is divided in: a structured buffer's words an element.
+fn words_per(kind: &ResourceKind) -> u32 {
+    match kind {
+        ResourceKind::Buffer(BufferKind::Structured { stride })
+        | ResourceKind::Storage {
+            target: StorageTarget::Buffer(BufferKind::Structured { stride }),
+            ..
+        } => (stride / 4).max(1),
+        _ => 1,
+    }
+}
+
+/// An executor backend that owns the written buffers (a compute program that asks for a sample or a load is not run), and
+/// notes the words that stores gave two different values: the invocations run in an order the executor chooses and WARP
+/// does not, so a word they disagree on is not the program's to say.
+struct Memory {
+    words: BTreeMap<ResourceId, Vec<u32>>,
+    /// Per word stored to: the first value, whether a later store gave another, and how many stores it had.
+    stored: BTreeMap<(ResourceId, u32), (u32, bool, u32)>,
+}
+impl Backend for Memory {
+    fn sample(&mut self, _: ImageSample<Element>) -> Result<[f32; 4], String> {
+        Err("a texture sample".into())
+    }
+    fn store_buffer(&mut self, view: ResourceId, word: u32, value: [u32; 4], mask: u8) -> Result<(), String> {
+        let words = self.words.get_mut(&view).ok_or("a store to a buffer not given")?;
+        for lane in (0..4u32).filter(|l| mask >> l & 1 != 0) {
+            let at = word + lane;
+            let v = value[lane as usize];
+            // a store outside the buffer changes nothing
+            let Some(slot) = words.get_mut(at as usize) else {
+                continue;
+            };
+            *slot = v;
+            let e = self.stored.entry((view, at)).or_insert((v, false, 0));
+            e.1 |= e.0 != v;
+            e.2 += 1;
+        }
+        Ok(())
+    }
+    fn read_buffer(&mut self, view: ResourceId, word: u32, count: u8) -> Result<[u32; 4], String> {
+        let words = self.words.get(&view).ok_or("a read of a buffer not given")?;
+        Ok(std::array::from_fn(|k| {
+            if k < usize::from(count) {
+                words.get(word as usize + k).copied().unwrap_or(0)
+            } else {
+                0
+            }
+        }))
+    }
+    fn buffer_words(&mut self, view: ResourceId) -> Result<u32, String> {
+        let words = self.words.get(&view).ok_or("a buffer not given")?;
+        u32::try_from(words.len()).map_err(|_| "a buffer of too many words".into())
+    }
+}
+
+/// How far apart two words of a written buffer are: a word that reads as a float in either (an integer below 2^23 reads
+/// as a denormal) is classed as a float, any other must be equal.
+fn compute_class(a: u32, b: u32) -> Class {
+    wgsl_run::classify(a >= 0x0080_0000 || b >= 0x0080_0000, a, b)
+}
+
+/// A compute program (the executor's `dispatch`) against the harness: every written buffer, every vector, word for word.
+fn run_compute(harness: &Harness, name: &str, hash: &str, p: iridia_ir::Program, t: &mut Tally) {
+    let excused = compute_expected(name, hash);
+    *t.stages.entry("Compute".to_owned()).or_default() += 1;
+    if let Some(why) = compute_gap(&p) {
+        tally(&mut t.gaps, &why, name);
+        return;
+    }
+    let wgsl = match write(&p) {
+        Ok(w) => w,
+        Err(e) => {
+            tally(&mut t.refused, &e, name);
+            return;
+        }
+    };
+    let bindings = match iridia_naga::BindingPlan::d3d(&p.interface) {
+        Ok(plan) => plan.bindings,
+        Err(e) => {
+            tally(&mut t.errors, &format!("the binding plan: {e}"), name);
+            return;
+        }
+    };
+    let at = |id: ResourceId| {
+        bindings
+            .iter()
+            .find(|b| b.resource == id)
+            .map(|b| (b.group, b.binding))
+    };
+    let exe = match Executable::from_ir(&p) {
+        Ok(e) => e,
+        Err(e) => {
+            tally(&mut t.unrun, &format!("B: {e}"), name);
+            return;
+        }
+    };
+    if let Some(dir) = inputs::debug("shader.dump") {
+        let _ = std::fs::create_dir_all(&dir);
+        let _ = std::fs::write(
+            std::path::Path::new(&dir).join(format!("{}.wgsl", short(name))),
+            &wgsl,
+        );
+    }
+    let show_lanes = inputs::debug("shader.lanes").is_some_and(|s| name.contains(&s));
+    let mut static_stores = BTreeMap::new();
+    let loops = match &p.entry.body {
+        Body::Regions(body) => store_shape(body, &mut static_stores),
+        _ => true,
+    };
+    let mut worst = Class::Exact;
+    let mut counts: BTreeMap<Class, usize> = BTreeMap::new();
+    let mut changed = false;
+    for c in 0..COMPUTE_CASES {
+        let mut resources = Resources::default();
+        let mut written: BTreeMap<ResourceId, Vec<u32>> = BTreeMap::new();
+        let mut job_resources = Vec::new();
+        for r in &p.interface.resources {
+            let Some((group, binding)) = at(r.id) else {
+                continue;
+            };
+            let words = match &r.kind {
+                ResourceKind::ConstantBuffer { layout } => {
+                    let rows = compute_rows(r.id, layout, c);
+                    let words = rows.iter().flatten().copied().collect();
+                    resources.constants.insert(r.id, rows);
+                    words
+                }
+                ResourceKind::Buffer(_) => {
+                    let words = compute_words(r.id, words_per(&r.kind), c);
+                    resources.buffers.insert(r.id, words.clone());
+                    words
+                }
+                ResourceKind::Storage { .. } => {
+                    let words = compute_words(r.id, words_per(&r.kind), c);
+                    written.insert(r.id, words.clone());
+                    words
+                }
+                _ => continue,
+            };
+            if show_lanes {
+                println!(
+                    "{name} case {c} resource {} (group {group} binding {binding}) first words {:08x?}",
+                    r.id.0,
+                    &words[..words.len().min(16)]
+                );
+            }
+            job_resources.push(
+                serde_json::json!({ "group": group, "binding": binding, "buffer": { "words": words } }),
+            );
+        }
+        let initial = written.clone();
+        let mut memory = Memory {
+            words: written,
+            stored: BTreeMap::new(),
+        };
+        let bound = match exe.bind_resources(&resources) {
+            Ok(b) => b,
+            Err(e) => {
+                tally(&mut t.unrun, &format!("B: {e}"), name);
+                return;
+            }
+        };
+        if let Err(e) = exe.dispatch(&bound, &mut memory, &mut BTreeMap::new(), COMPUTE_GROUPS, 32) {
+            tally(&mut t.unrun, &format!("B: {e}"), name);
+            return;
+        }
+        let written = &memory.words;
+        let job = serde_json::json!({
+            "wgsl": wgsl,
+            "dispatch": COMPUTE_GROUPS,
+            "resources": job_resources,
+        });
+        // the job more than once: a word WARP gives differently on a later run is one the program's own writes leave
+        // unordered
+        let mut runs = Vec::new();
+        for _ in 0..warp_runs() {
+            let reply = match harness.run(&job) {
+                Ok(r) => r,
+                Err(e) => {
+                    tally(&mut t.errors, &format!("the harness: {e}"), name);
+                    return;
+                }
+            };
+            let words: BTreeMap<(u32, u32), Vec<u32>> = reply["resources"]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|r| {
+                            let words = r["words"]
+                                .as_array()?
+                                .iter()
+                                .map(|w| w.as_u64().and_then(|w| u32::try_from(w).ok()))
+                                .collect::<Option<Vec<u32>>>()?;
+                            Some((
+                                (r["group"].as_u64()? as u32, r["binding"].as_u64()? as u32),
+                                words,
+                            ))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            runs.push(words);
+        }
+        let theirs = &runs[0];
+        t.runs += 1;
+        for (id, ours) in written {
+            let Some((group, binding)) = at(*id) else { continue };
+            let Some(warp) = theirs.get(&(group, binding)) else {
+                tally(&mut t.errors, "the reply lacks a written buffer", name);
+                return;
+            };
+            if warp.len() != ours.len() {
+                tally(
+                    &mut t.errors,
+                    &format!(
+                        "a written buffer of {} words in the reply, {} given",
+                        warp.len(),
+                        ours.len()
+                    ),
+                    name,
+                );
+                return;
+            }
+            changed |= ours != &initial[id] || warp != &initial[id];
+            for (k, (&o, &w)) in ours.iter().zip(warp).enumerate() {
+                let class = compute_class(o, w);
+                // a word two stores gave different values, or WARP gave differently on its second run
+                let stores = memory.stored.get(&(*id, k as u32));
+                let second = runs[1..]
+                    .iter()
+                    .filter_map(|r| r.get(&(group, binding)).and_then(|a| a.get(k)).copied())
+                    .find(|&x| x != w);
+                let why = match (stores, second) {
+                    (_, Some(second)) => Some((
+                        0,
+                        format!(
+                            "buffer {} word {k}: WARP gives {w:#x} on one run of the job and {second:#x} on another",
+                            id.0
+                        ),
+                    )),
+                    // each store instruction runs once per invocation outside a loop, so more stores than instructions
+                    // to the buffer came from more than one invocation
+                    (Some(&(first, true, n)), _)
+                        if !loops && n > static_stores.get(id).copied().unwrap_or(0) =>
+                    {
+                        Some((
+                            1,
+                            format!(
+                                "buffer {} word {k}: {n} stores from at least two invocations ({} store instructions to the buffer, no loop), the first {first:#x}, the last {o:#x}",
+                                id.0,
+                                static_stores.get(id).copied().unwrap_or(0)
+                            ),
+                        ))
+                    }
+                    (Some(&(first, true, n)), _) => Some((
+                        2,
+                        format!(
+                            "buffer {} word {k}: {n} stores of different words, the first {first:#x}, the last {o:#x} (not shown to come from two invocations: {} store instructions to the buffer{})",
+                            id.0,
+                            static_stores.get(id).copied().unwrap_or(0),
+                            if loops { ", the program has a loop" } else { "" }
+                        ),
+                    )),
+                    _ => None,
+                };
+                if class != Class::Exact
+                    && let Some((kind, why)) = why
+                {
+                    t.unordered.entry(name.to_owned()).or_default()[kind] += 1;
+                    // the strongest reason a program has is the one it shows
+                    let shown = t
+                        .unordered_why
+                        .entry(name.to_owned())
+                        .or_insert((kind, why.clone()));
+                    if kind < shown.0 {
+                        *shown = (kind, why);
+                    }
+                    continue;
+                }
+                *t.lanes.entry(class).or_default() += 1;
+                *counts.entry(class).or_default() += 1;
+                worst = worst.max(class);
+                if class != Class::Exact && show_lanes {
+                    println!(
+                        "{name} case {c} u{} word {k}: {class:?} B {o:#010x} ({}) WARP {w:#010x} ({})",
+                        id.0,
+                        f32::from_bits(o),
+                        f32::from_bits(w)
+                    );
+                }
+                if class == Class::Beyond && t.worst.len() < SHOWN && excused.is_none() {
+                    t.worst.push(format!(
+                        "{name} case {c} buffer {} word {k}: B {o:#010x} ({}) WARP {w:#010x} ({})",
+                        id.0,
+                        f32::from_bits(o),
+                        f32::from_bits(w)
+                    ));
+                }
+            }
+        }
+    }
+    if worst == Class::Beyond || t.unordered.contains_key(name) {
+        t.differs.insert(name.to_owned(), (hash.to_owned(), excused));
+    } else if let Some(why) = excused
+        && [WARP_SIN, SOURCE_ORDER].contains(&why)
+    {
+        // an intermittent excuse is exact on some runs; a deterministic one that is exact in every vector is stale
+        tally(
+            &mut t.errors,
+            "a program COMPUTE_EXPECTED excuses agrees with WARP in every vector: remove it from the table",
+            name,
+        );
+    }
+    if !changed && worst != Class::Beyond {
+        tally(
+            &mut t.all_discarded,
+            "no word of a written buffer changed on either side: nothing to compare",
+            name,
+        );
+        return;
+    }
+    t.compared += 1;
+    t.by_program.insert(name.to_owned(), worst);
+    t.program_lanes.insert(name.to_owned(), counts);
+}
+
 fn report(title: &str, t: &Tally) {
     // `shader.worst`: a file that takes each program's worst class, to set one writer's run against another's
     if let Some(path) = inputs::debug("shader.worst") {
@@ -705,6 +1450,27 @@ fn report(title: &str, t: &Tally) {
             programs.iter().map(String::as_str).collect::<Vec<_>>().join(" ")
         );
     }
+    if !t.unordered.is_empty() {
+        let sum = |k: usize| t.unordered.values().map(|w| w[k]).sum::<usize>();
+        println!(
+            "  words of {} compute programs differ from WARP where the program's own writes are unordered: {} that WARP gives differently on different runs of the job, {} that stores of more than one invocation gave different values, {} that two stores gave different values (not shown to be two invocations)",
+            t.unordered.len(),
+            sum(0),
+            sum(1),
+            sum(2)
+        );
+        for (n, (_, why)) in &t.unordered_why {
+            let w = t.unordered[n];
+            println!("    {} ({}/{}/{}): {why}", short(n), w[0], w[1], w[2]);
+        }
+    }
+    for (n, (hash, why)) in &t.differs {
+        println!(
+            "  compute program {} {hash}: {}",
+            short(n),
+            why.unwrap_or("NOT IN COMPUTE_EXPECTED")
+        );
+    }
     let beyond: Vec<&str> = t
         .by_program
         .iter()
@@ -714,8 +1480,11 @@ fn report(title: &str, t: &Tally) {
     if !beyond.is_empty() {
         println!("  programs beyond 1e-3: {}", beyond.join(" "));
     }
-    for w in &t.worst {
+    for w in t.worst.iter().take(WORST_SHOWN) {
         println!("  BEYOND {w}");
+    }
+    if t.worst.len() > WORST_SHOWN {
+        println!("  and {} more BEYOND lines", t.worst.len() - WORST_SHOWN);
     }
 }
 
@@ -783,6 +1552,9 @@ fn corpus_over(corpus: &common::Corpus) {
         for (k, n) in one.lanes {
             *t.lanes.entry(k).or_default() += n;
         }
+        t.unordered.extend(one.unordered);
+        t.differs.extend(one.differs);
+        t.unordered_why.extend(one.unordered_why);
         for (source, (lanes, programs)) in one.amplified {
             let (n, all) = t.amplified.entry(source).or_default();
             *n += lanes;

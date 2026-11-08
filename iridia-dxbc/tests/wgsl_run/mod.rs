@@ -327,6 +327,39 @@ pub fn gap(program: &iridia_ir::Program) -> Option<String> {
     None
 }
 
+/// Why the harness cannot run a compute program as [`job`]-less callers bind it: it needs a resource other than constant
+/// buffers and structured or raw buffers (read or written), an array of resources, or f64.
+pub fn gap_compute(program: &iridia_ir::Program) -> Option<String> {
+    let needs = iridia_ir::target::requirements(program);
+    if needs
+        .iter()
+        .any(|r| r.capability == iridia_ir::target::Capability::Float64)
+    {
+        return Some("f64: WARP through wgpu has no SHADER_F64".into());
+    }
+    for r in &program.interface.resources {
+        if r.count != 1 && !matches!(r.kind, ResourceKind::PipelineState(_)) {
+            return Some("a resource array".into());
+        }
+        let why = match &r.kind {
+            ResourceKind::ConstantBuffer { .. } => continue,
+            ResourceKind::Buffer(BufferKind::Structured { .. } | BufferKind::Raw) => continue,
+            ResourceKind::Storage {
+                target:
+                    iridia_ir::interface::StorageTarget::Buffer(BufferKind::Structured { .. } | BufferKind::Raw),
+                ..
+            } => continue,
+            ResourceKind::Buffer(BufferKind::Typed(_)) => "a typed buffer view",
+            ResourceKind::Storage { .. } => "an unordered-access view that is not a structured or raw buffer",
+            ResourceKind::Texture { .. } => "a texture",
+            ResourceKind::Sampler { .. } => "a sampler",
+            _ => "a resource of another kind",
+        };
+        return Some(why.into());
+    }
+    None
+}
+
 /// The job running `wgsl` (whose entry point carries `program`'s interface as `layout`, its resources bound where
 /// `bindings` says) on `invocations`, each one's input register file, in `env`.
 pub fn job(
