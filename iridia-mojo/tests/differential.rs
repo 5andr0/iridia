@@ -1,17 +1,15 @@
-//! Random pixel programs of the dialect both lifts read (assignments through write masks, swizzles, the arithmetic,
-//! the built-in functions, `?:`, `if`/`else`, `rep` loops, `discard`, samples), lifted by both: the IR lift, as it is,
-//! after the passes and compiled into `iridia-exec`, runs as the older lift does on seeded inputs (`tests/pairing`).
+//! Random pixel programs of the dialect the IR lift reads (assignments through write masks, swizzles, the arithmetic,
+//! the built-in functions, `?:`, `if`/`else`, `rep` loops, `discard`, samples): the IR lift as it is, after the passes and
+//! compiled into `iridia-exec` runs alike on seeded inputs (`tests/pairing`).
 //!
-//! The IR lift must lift and run every program the grammar makes; the older lift is the reference where it has an
-//! answer, and a program it refuses or `iridia-exec` cannot compile from it is set aside (it takes the replicated lane
-//! of `cross(a.xxx, b)` for a float, for one). The grammar keeps clear of what the two may rightly compute otherwise: `pow` and `normalize` (the older lift's are
-//! naga's, which `iridia-exec` computes otherwise: `normalize` as `x / sqrt(dot(x, x))`, where the IR's is Direct3D 9's
-//! `nrm`, `x * inversesqrt(dot(x, x))`, the instruction MojoShader writes it for; `tests/ir.rs` and `tests/oracle.rs`
-//! hold the IR's to the Direct3D 9 programs) and a NaN or infinity reaching `min`, `max` or `clamp` (the result is left open):
-//! a function defined on part of the line reads `abs(x) + 1.0`, and a quotient's divisor too.
+//! The IR lift must lift and run every program the grammar makes. The grammar keeps clear of what the three forms may
+//! rightly compute otherwise: `normalize` (Direct3D 9's `nrm`, `x * inversesqrt(dot(x, x))`, the instruction MojoShader
+//! writes it for; `tests/ir.rs` and `tests/oracle.rs` hold the IR's to the Direct3D 9 programs) and a NaN or infinity
+//! reaching `min`, `max` or `clamp` (the result is left open): a function defined on part of the line reads `abs(x) + 1.0`,
+//! and a quotient's divisor too.
 mod pairing;
 
-use iridia::Stage;
+use iridia_ir::interface::Stage;
 use iridia_mojo::{Hints, Sampler};
 use proptest::prelude::*;
 use proptest::strategy::BoxedStrategy;
@@ -263,12 +261,9 @@ proptest! {
     #![proptest_config(ProptestConfig { cases: 128, failure_persistence: None, ..ProptestConfig::default() })]
 
     #[test]
-    fn the_ir_lift_runs_as_the_older_lift_does(source in program()) {
-        match pairing::lifts_agree(&source, Stage::Pixel, &hints(), 4) {
-            Ok(None) => {}
-            // the older lift is the reference only where it has an answer; the IR lift must have one everywhere
-            Ok(Some(why)) => prop_assume!(false, "{}", why),
-            Err(e) => prop_assert!(false, "{e}\n{source}"),
+    fn the_ir_forms_run_alike(source in program()) {
+        if let Err(e) = pairing::forms_agree(&source, Stage::Pixel, &hints(), 4) {
+            prop_assert!(false, "{e}\n{source}");
         }
     }
 }

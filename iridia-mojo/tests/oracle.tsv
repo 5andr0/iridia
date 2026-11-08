@@ -1,16 +1,10 @@
 # What tests/oracle.rs counts of each oracle set: set, class, count (tab-separated); a change fails the test.
 general/sm3	agree on every run	1
-general/sm3	agree with D' (the def constants as the GLSL prints them), not D	1
-general/sm3	agree with D' (the def constants as the GLSL prints them), not D; the older lift (A) does not	1
-shaun-white/sdb2	agree on every run	977
-shaun-white/sdb2	agree on every run; some runs read past the constant arrays (not compared)	7
-shaun-white/sdb2	agree on every run; the older lift (A) does not	153
-shaun-white/sdb2	agree on every run; the older lift (A) does not; some runs read past the constant arrays (not compared)	2
-shaun-white/sdb2	agree on every run; the older lift (A) refuses it	14
-shaun-white/sdb2	agree with D' (the def constants as the GLSL prints them), not D	3617
-shaun-white/sdb2	agree with D' (the def constants as the GLSL prints them), not D; the older lift (A) does not	1522
-shaun-white/sdb2	agree with D' (the def constants as the GLSL prints them), not D; the older lift (A) does not; some runs read past the constant arrays (not compared)	2
-shaun-white/sdb2	agree with D' (the def constants as the GLSL prints them), not D; the older lift (A) refuses it	951
+general/sm3	agree with D' (the def constants as the GLSL prints them), not D	2
+shaun-white/sdb2	agree on every run	1144
+shaun-white/sdb2	agree on every run; some runs read past the constant arrays (not compared)	9
+shaun-white/sdb2	agree with D' (the def constants as the GLSL prints them), not D	6090
+shaun-white/sdb2	agree with D' (the def constants as the GLSL prints them), not D; some runs read past the constant arrays (not compared)	2
 shaun-white/sdb2	agree, killed on every run (outputs never compared)	61
 general/slim-d3d9	D3D9 lift refused: CTAB ran: an allocation of N registers ends inside an element of Array { element: Array { element: Scalar(Sint), count: N, stride: N }, count: N, stride: N }	1
 general/slim-d3d9	D3D9 lift refused: duplicate or modified sampler declaration	2
@@ -81,14 +75,9 @@ general/slim-d3d9	MojoShader refused: unknown token (NxabababN) (at N)	1
 general/slim-d3d9	MojoShader's GLSL departs from the program: CMP or CND that reads a lane of its destination that an earlier lane of it wrote (MojoShader writes the lanes one after the other, Direct3D 9 reads the old register)	1
 general/slim-d3d9	MojoShader's GLSL departs from the program: NRM of lanes other than xyz (GLSL's normalize takes the length of the lanes written, Direct3D 9's NRM of x, y and z)	1
 general/slim-d3d9	MojoShader's GLSL departs from the program: TEXLDL's level dropped (the GLSL samples at the implicit level)	2
-general/slim-d3d9	agree on every run	210
-general/slim-d3d9	agree on every run; some runs read past the constant arrays (not compared)	3
-general/slim-d3d9	agree on every run; the older lift (A) does not	8
-general/slim-d3d9	agree on every run; the older lift (A) does not; some runs read past the constant arrays (not compared)	1
-general/slim-d3d9	agree on every run; the older lift (A) refuses it	18
-general/slim-d3d9	agree on every run; the older lift (A) refuses it; the GLSL's fog is one float (the program's other fog lanes are not compared)	1
-general/slim-d3d9	agree with D' (the def constants as the GLSL prints them), not D	70
-general/slim-d3d9	agree with D' (the def constants as the GLSL prints them), not D; the older lift (A) does not	18
-general/slim-d3d9	agree with D' (the def constants as the GLSL prints them), not D; the older lift (A) does not; some runs read past the constant arrays (not compared)	2
-general/slim-d3d9	agree with D' (the def constants as the GLSL prints them), not D; the older lift (A) refuses it	21
+general/slim-d3d9	agree on every run	236
+general/slim-d3d9	agree on every run; some runs read past the constant arrays (not compared)	4
+general/slim-d3d9	agree on every run; the GLSL's fog is one float (the program's other fog lanes are not compared)	1
+general/slim-d3d9	agree with D' (the def constants as the GLSL prints them), not D	109
+general/slim-d3d9	agree with D' (the def constants as the GLSL prints them), not D; some runs read past the constant arrays (not compared)	2
 general/slim-d3d9	an output the GLSL does not write: Varying("COLOR", 2)	1

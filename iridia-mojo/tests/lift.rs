@@ -1,18 +1,25 @@
 #![allow(clippy::unwrap_used)]
-//! Programs in MojoShader's dialect, written as it writes them, lifted: they validate and are written as WGSL; what the
-//! dialect does not have is refused by name.
-mod inputs;
+//! Programs in MojoShader's dialect, written as it writes them, lifted onto the IR: they validate and are written as
+//! WGSL; what the dialect does not have is refused by name.
 mod programs;
 
-use iridia::{Stage, emit};
-use iridia_mojo::{Constant, Hints, lift};
+use iridia_ir::interface::Stage;
+use iridia_mojo::ir::lift;
+use iridia_mojo::{Constant, Hints};
 use programs::{CONTROL, GAMMA, VERTEX, hints};
+
+/// The program in the form the writers take, written for naga's WGSL reader.
+fn written(p: &iridia_ir::Program) -> String {
+    let mut prepared = p.clone();
+    iridia_passes::prepare(&mut prepared).unwrap();
+    iridia_naga::wgsl(&prepared, &iridia_naga::Profile::NAGA).unwrap_or_else(|e| panic!("{e}"))
+}
 
 #[test]
 fn a_pixel_program_lifts_validates_and_is_written() {
     let p = lift(GAMMA, Stage::Pixel, &hints()).unwrap();
-    p.validate().unwrap();
-    let wgsl = emit::wgsl(&p).unwrap();
+    iridia_ir::validate(&p).unwrap();
+    let wgsl = written(&p);
     assert!(wgsl.contains("textureSample"), "{wgsl}");
     assert!(wgsl.contains("exp2"), "{wgsl}");
     let names: Vec<_> = p
@@ -35,9 +42,9 @@ fn a_pixel_program_lifts_validates_and_is_written() {
 #[test]
 fn a_vertex_program_drops_the_clip_space_fix_of_the_api() {
     let p = lift(VERTEX, Stage::Vertex, &hints()).unwrap();
-    p.validate().unwrap();
+    iridia_ir::validate(&p).unwrap();
     assert!(p.notes.iter().any(|n| n.contains("posFixup")), "{:?}", p.notes);
-    let wgsl = emit::wgsl(&p).unwrap();
+    let wgsl = written(&p);
     assert!(!wgsl.contains("posFixup"), "{wgsl}");
     let outputs: Vec<_> = p
         .interface
@@ -53,8 +60,8 @@ fn a_vertex_program_drops_the_clip_space_fix_of_the_api() {
 #[test]
 fn loops_relative_addressing_branches_and_discard_lift() {
     let p = lift(CONTROL, Stage::Pixel, &Hints::default()).unwrap();
-    p.validate().unwrap();
-    let wgsl = emit::wgsl(&p).unwrap();
+    iridia_ir::validate(&p).unwrap();
+    let wgsl = written(&p);
     assert!(wgsl.contains("loop"), "{wgsl}");
     assert!(wgsl.contains("discard"), "{wgsl}");
     assert_eq!(p.interface.outputs.len(), 2);
@@ -164,33 +171,4 @@ fn constants_the_program_cannot_hold_are_said_in_its_notes() {
     sorted.sort();
     sorted.dedup();
     assert_eq!(p.notes, sorted);
-}
-
-/// The version gate (`iridia::gate`): what the lifter makes of these programs is hashed under `LIFTER_VERSION` and
-/// `PROGRAM_VERSION` in `tests/lifted.hashes`. A change to the output without a bump of the version that names it fails here,
-/// and so does a bump without the table of that version; the current table is written to the scratch root's `mojoshader-lifted.hashes`.
-#[test]
-fn what_the_lifter_makes_of_its_programs_is_the_versions() {
-    let programs = [
-        ("gamma.ps", GAMMA, Stage::Pixel, hints()),
-        ("vertex.vs", VERTEX, Stage::Vertex, hints()),
-        ("control.ps", CONTROL, Stage::Pixel, Hints::default()),
-    ];
-    let outcomes: Vec<_> = programs
-        .into_iter()
-        .map(|(name, source, stage, hints)| {
-            let outcome = lift(source, stage, &hints)
-                .map(|p| p.text().unwrap())
-                .map_err(|e| e.to_string());
-            (name.to_owned(), outcome)
-        })
-        .collect();
-    let current = iridia::gate::table("iridia-mojo", iridia_mojo::LIFTER_VERSION, &outcomes);
-    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
-    let committed = std::fs::read_to_string(dir.join("lifted.hashes")).unwrap_or_default();
-    if let Err(what) = iridia::gate::check(&committed, &current) {
-        let new = inputs::scratch().join("mojoshader-lifted.hashes");
-        std::fs::write(&new, &current).unwrap();
-        panic!("{what}; the current table is {}", new.display());
-    }
 }

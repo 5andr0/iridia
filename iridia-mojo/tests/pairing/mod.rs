@@ -1,19 +1,17 @@
 //! A Direct3D 9 program and MonoGame's GLSL of it (MojoShader's translation, made by `tests/oracles/mojoshader.py`),
 //! each lifted onto the IR and run on the same inputs, constants and texels: the D3D9 program by `iridia-d3d9-ir` is
-//! the oracle of the GLSL's by `iridia_mojo::ir`. Each pair runs five ways:
+//! the oracle of the GLSL's by `iridia_mojo::ir`. Each pair runs four ways:
 //!
 //! - `D`, the D3D9 program on the IR, in `iridia-exec-ir` (lifted with IEEE 754's multiply, which is GLSL's);
 //! - `M`, the GLSL on the IR, in `iridia-exec-ir`; `P`, the same after `iridia_passes::prepare`;
-//! - `X`, `P` compiled into `iridia-exec` (`ProgramShader::from_ir`), and `A`, the older lift of the GLSL
-//!   (`iridia_mojo::lift`, a naga module) in `iridia-exec`, the varyings each in the register of its slot.
+//! - `X`, `P` compiled into `iridia-exec` (`ProgramShader::from_ir`), the varyings each in the register of its slot.
 //!
 //! `M`, `P` and `X` must agree with `D` on every lane `D` writes: the same bits, or a NaN in both (IEEE 754 leaves a
 //! NaN's sign and payload open). A pixel program runs as a 2 x 2 quad, each lane on inputs of its own.
 //!
 //! MojoShader prints a `def` constant's floats as C's `%f` does, six decimals (`-0.00033333333` is `-0.000333`), so the
 //! GLSL of a program whose constants need more holds other numbers. Such a pair is held to `D'`, the D3D9 program with
-//! each `def` holding the number its GLSL prints, and counted apart. `A` is compared too, and a pair whose IR forms
-//! agree where `A` does not is counted apart: the older lift's `pow` is naga's, which `iridia-exec` computes otherwise.
+//! each `def` holding the number its GLSL prints, and counted apart.
 #![allow(dead_code, reason = "each test uses the part it needs")]
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -571,12 +569,6 @@ fn pair_once(name: &str, bytes: &[u8], line: &Line, runs: u64) -> (String, Strin
             Err(e) => return fail("D' not lifted".into(), e.to_string()),
         }
     };
-    // the older lift reads less of the dialect (no cube or volume samples, no `break`, no fog varying): what it
-    // refuses has no `A`
-    let old = iridia_mojo::lift(glsl, stage, &hints).ok();
-    if old.as_ref().is_some_and(|old| old.interface != m.interface) {
-        return fail("the interfaces of the two lifts differ".into(), String::new());
-    }
     if let Err(problems) = iridia_ir::validate(&m) {
         return fail("IR validation".into(), problems[0].to_string());
     }
@@ -593,17 +585,6 @@ fn pair_once(name: &str, bytes: &[u8], line: &Line, runs: u64) -> (String, Strin
     let x = match ProgramShader::from_ir(x) {
         Ok(s) => s,
         Err(e) => return fail("X not compiled".into(), e.to_string()),
-    };
-    let a = match old {
-        Some(mut a) => {
-            with_registers(&mut a.interface);
-            let interface = a.interface.clone();
-            match ProgramShader::new(a) {
-                Ok(s) => Some((s, interface)),
-                Err(e) => return fail("A not compiled".into(), e.to_string()),
-            }
-        }
-        None => None,
     };
     let mut x_interface = m.interface.clone();
     with_registers(&mut x_interface);
@@ -653,8 +634,8 @@ fn pair_once(name: &str, bytes: &[u8], line: &Line, runs: u64) -> (String, Strin
     }
     let seed = seed_of(name);
     let invocations = if stage == Stage::Vertex { 1 } else { 4 };
-    // whether every run of the IR forms (M, P, X) agrees with D, with D', and A with either; whether only NaN's bits
-    let (mut with_d, mut with_d2, mut a_with_d, mut a_with_d2) = (true, true, true, true);
+    // whether every run of the IR forms (M, P, X) agrees with D, with D'; whether only NaN's bits
+    let (mut with_d, mut with_d2) = (true, true);
     let (mut compared, mut nan_only) = (0, false);
     let mut example = String::new();
     // a run whose D reads a float register past its constant arrays by relative addressing is not compared (`OUTSIDE`)
@@ -674,23 +655,19 @@ fn pair_once(name: &str, bytes: &[u8], line: &Line, runs: u64) -> (String, Strin
             ir_views(&m, &m_inputs, &m_banks),
             ir_views(&p, &m_inputs, &m_banks),
             exec_views(&x, &x_interface, &m_inputs, &m_banks),
-            a.as_ref()
-                .map(|(a, interface)| exec_views(a, interface, &m_inputs, &m_banks))
-                .transpose(),
         );
-        let (vd, vd2, vm, vp, vx, va) = match views {
-            (Ok(d), Ok(d2), Ok(m), Ok(p), Ok(x), Ok(a)) => (d, d2, m, p, x, a),
-            (d, d2, m, p, x, a) => {
+        let (vd, vd2, vm, vp, vx) = match views {
+            (Ok(d), Ok(d2), Ok(m), Ok(p), Ok(x)) => (d, d2, m, p, x),
+            (d, d2, m, p, x) => {
                 return fail(
                     "not run".into(),
                     format!(
-                        "D {:?}, D' {:?}, M {:?}, P {:?}, X {:?}, A {:?}",
+                        "D {:?}, D' {:?}, M {:?}, P {:?}, X {:?}",
                         d.err(),
                         d2.err(),
                         m.err(),
                         p.err(),
-                        x.err(),
-                        a.err()
+                        x.err()
                     ),
                 );
             }
@@ -731,27 +708,25 @@ fn pair_once(name: &str, bytes: &[u8], line: &Line, runs: u64) -> (String, Strin
                 with_d2 &= two;
                 nan_only |= one && !agrees(d, v, &lanes, true);
             }
-            if let Some(va) = &va {
-                a_with_d &= agrees(d, &va[i], &lanes, false);
-                a_with_d2 &= agrees(d2, &va[i], &lanes, false);
-            }
         }
         if !with_d && !with_d2 {
             break;
         }
     }
-    let (outcome, a_agrees) = match (compared, with_d, with_d2) {
-        (0, ..) if outside > 0 => (OUTSIDE, true),
-        (0, ..) => (KILLED, true),
-        (_, true, _) => (if nan_only { AGREE_NAN } else { AGREE }, a_with_d),
-        (_, false, true) => (PRINTED, a_with_d2),
+    let outcome = match (compared, with_d, with_d2) {
+        (0, ..) if outside > 0 => OUTSIDE,
+        (0, ..) => KILLED,
+        (_, true, _) => {
+            if nan_only {
+                AGREE_NAN
+            } else {
+                AGREE
+            }
+        }
+        (_, false, true) => PRINTED,
         _ => return (DIFFER.into(), example),
     };
-    let mut outcome = match (&a, a_agrees) {
-        (None, _) => format!("{outcome}; the older lift (A) refuses it"),
-        (Some(_), false) => format!("{outcome}; the older lift (A) does not"),
-        (Some(_), true) => outcome.to_owned(),
-    };
+    let mut outcome = outcome.to_owned();
     if outside > 0 && compared > 0 {
         outcome.push_str("; some runs read past the constant arrays (not compared)");
     }
@@ -895,36 +870,18 @@ impl RelativeReads {
     }
 }
 
-/// Whether the two lifts of `glsl` run alike: `M`, `P` and `X` against `A` on `runs` seeded runs, on every lane of every
-/// output, NaN for NaN; the uniform array's row `n` holds float register `n`. `Ok(None)` when they do, `Ok(Some(why))`
-/// when the older lift has no answer (it refuses the program, or `iridia-exec` does not compile or run its module);
-/// what differs, or what the IR forms refuse or fail to run, is the error.
-pub fn lifts_agree(
-    glsl: &str,
-    stage: Stage,
-    hints: &iridia_mojo::Hints,
-    runs: u64,
-) -> Result<Option<String>, String> {
+/// Whether the three IR forms of `glsl` run alike: `P` (after the passes) and `X` (`P` compiled into `iridia-exec`)
+/// against `M` (as lifted) on `runs` seeded runs, on every lane of every output, NaN for NaN; the uniform array's row
+/// `n` holds float register `n`. What differs, or what the IR lift refuses or the forms fail to run, is the error.
+pub fn forms_agree(glsl: &str, stage: Stage, hints: &iridia_mojo::Hints, runs: u64) -> Result<(), String> {
     let m = iridia_mojo::ir::lift(glsl, stage, hints).map_err(|e| format!("the IR lift refuses: {e}"))?;
-    let mut a = match iridia_mojo::lift(glsl, stage, hints) {
-        Ok(a) => a,
-        Err(e) => return Ok(Some(format!("the older lift refuses: {e}"))),
-    };
-    if a.interface != m.interface {
-        return Err("the interfaces of the two lifts differ".into());
-    }
     let mut p = m.clone();
     iridia_passes::prepare(&mut p)?;
     iridia_ir::validate(&p).map_err(|e| format!("after the passes: {e:?}"))?;
     let mut x = p.clone();
     with_registers(&mut x.interface);
+    let registers = x.interface.clone();
     let x = ProgramShader::from_ir(x).map_err(|e| format!("X not compiled: {e}"))?;
-    with_registers(&mut a.interface);
-    let registers = a.interface.clone();
-    let a = match ProgramShader::new(a) {
-        Ok(a) => a,
-        Err(e) => return Ok(Some(format!("A not compiled: {e}"))),
-    };
     let rows: Vec<u32> = m
         .interface
         .resources
@@ -949,29 +906,25 @@ pub fn lifts_agree(
             .map(|i| slots(&m.interface, mix(seed ^ (run * 4 + i))))
             .collect();
         let banks = glsl_banks(&m.interface, &rows, mix(seed ^ run));
-        let va = match exec_views(&a, &registers, &inputs, &banks) {
-            Ok(va) => va,
-            Err(e) => return Ok(Some(format!("A not run: {e}"))),
-        };
+        let vm = ir_views(&m, &inputs, &banks).map_err(|e| format!("M not run: {e}"))?;
         let forms = [
-            ("M", ir_views(&m, &inputs, &banks)),
             ("P", ir_views(&p, &inputs, &banks)),
             ("X", exec_views(&x, &registers, &inputs, &banks)),
         ];
         for (form, views) in forms {
             let views = views.map_err(|e| format!("{form} not run: {e}"))?;
-            for (i, (v, a)) in views.iter().zip(&va).enumerate() {
-                if !agrees(a, v, &lanes, false) {
+            for (i, (v, m)) in views.iter().zip(&vm).enumerate() {
+                if !agrees(m, v, &lanes, false) {
                     return Err(format!(
                         "run {run} invocation {i}: {form}
-   A {a:x?}
+   M {m:x?}
    {form} {v:x?}"
                     ));
                 }
             }
         }
     }
-    Ok(None)
+    Ok(())
 }
 
 /// The outcome of a pair whose IR forms agree with `D'`, not `D`: MojoShader printed a `def` constant at less precision.

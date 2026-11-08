@@ -1,18 +1,42 @@
 #![allow(clippy::unwrap_used)]
 //! Programs in MojoShader's dialect lifted onto the IR (`iridia_mojo::ir`): they validate, print and read back as the
-//! same text, take the passes, are written as WGSL and have the older lift's interface; what the dialect does not have
-//! is refused by name, as the older lift refuses it; and the GLSL MonoGame's MojoShader made of the fixtures' Direct3D
-//! 9 programs (`tests/fixtures`) runs as those programs do (`tests/pairing`).
+//! same text, take the passes, are written as WGSL and have the interface (a digest of it) and notes the older lift,
+//! which they were once held to, gave them; what the dialect does not have is refused by name, in the older lift's
+//! words; and the GLSL MonoGame's MojoShader made of the fixtures' Direct3D 9 programs (`tests/fixtures`) runs as those
+//! programs do (`tests/pairing`).
 mod inputs;
 mod pairing;
 mod programs;
 
 use std::path::{Path, PathBuf};
 
-use iridia::Stage;
+use iridia_ir::interface::Stage;
 use iridia_mojo::{Hints, ir};
 use programs::{CONTROL, GAMMA, VERTEX, hints};
 use sha2::{Digest, Sha256};
+
+/// FNV-1a of `text`, as 16 hex digits.
+fn fnv(text: &str) -> String {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in text.bytes() {
+        h = (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3);
+    }
+    format!("{h:016x}")
+}
+
+/// The digest of each program's interface (its `Debug` text) and its notes, as the older lift's gave them while the
+/// two were held equal.
+const OLDER: [(&str, &str, &[&str]); 3] = [
+    ("gamma.ps", "98bbb2828e2c86d2", &[]),
+    (
+        "vertex.vs",
+        "1429271d3a1fa697",
+        &[
+            "the clip-space fix for OpenGL that MojoShader ends a vertex program with (posFixup: flip y, half-pixel offset, depth 0..1 to -1..1) is dropped: the program keeps Direct3D's clip space",
+        ],
+    ),
+    ("control.ps", "07f70fd7e1c3ecfd", &[]),
+];
 
 fn programs() -> [(&'static str, &'static str, Stage, Hints); 3] {
     [
@@ -39,9 +63,9 @@ fn the_programs_lift_print_take_the_passes_and_are_written() {
         let text = iridia_ir::text::print(&p.entry);
         let read = iridia_ir::text::parse(&text).unwrap_or_else(|e| panic!("{name}: {e}\n{text}"));
         assert_eq!(iridia_ir::text::print(&read), text, "{name}");
-        let old = iridia_mojo::lift(source, stage, &hints).unwrap();
-        assert_eq!(p.interface, old.interface, "{name}");
-        assert_eq!(p.notes, old.notes, "{name}");
+        let (_, digest, notes) = OLDER.iter().find(|o| o.0 == name).unwrap();
+        assert_eq!(fnv(&format!("{:?}", p.interface)), *digest, "{name}");
+        assert_eq!(p.notes, *notes, "{name}");
         assert_eq!(p.provenance.lifter, ir::LIFTER);
         assert_eq!(
             p.provenance.policies,
@@ -68,9 +92,9 @@ fn the_vertex_program_drops_the_clip_space_fix_of_the_api() {
     assert!(!iridia_ir::text::print(&p.entry).contains("posFixup"));
 }
 
-/// What both lifts refuse, they refuse alike: the same line and reason.
+/// What the dialect does not have is refused by line and reason, in the words the older lift used.
 #[test]
-fn what_the_dialect_does_not_have_is_refused_as_the_older_lift_refuses_it() {
+fn what_the_dialect_does_not_have_is_refused_as_the_older_lift_refused_it() {
     let with = |body: &str| {
         format!(
             "uniform vec4 ps_uniforms_vec4[1];\nvec4 ps_r0;\n#define ps_oC0 gl_FragColor\nvoid main()\n{{\n{body}\n}}\n"
@@ -121,11 +145,25 @@ fn what_the_dialect_does_not_have_is_refused_as_the_older_lift_refuses_it() {
         ),
         (with("ps_r0 = texture2D(ps_s0, ps_r0.xy);"), Stage::Pixel, "ps_s0"),
     ];
-    for (source, stage, words) in cases {
+    let said = [
+        "MojoShader GLSL at line 6: the function tanh",
+        "MojoShader GLSL at line 6: while",
+        "MojoShader GLSL at line 6: gl_FragCoord",
+        "MojoShader GLSL at line 1: the preprocessor directive #version",
+        "MojoShader GLSL at line 0: a Compute program is not in the dialect",
+        "MojoShader GLSL at line 25: posFixup used outside the clip-space fix MojoShader ends a vertex program with",
+        "MojoShader GLSL at line 20: arithmetic on vectors of 2 and 4 lanes",
+        "MojoShader GLSL at line 25: the two sides of ?: differ in type or width",
+        "MojoShader GLSL at line 21: dot of vectors of different widths",
+        "MojoShader GLSL at line 11: ps_r1 declared twice",
+        "MojoShader GLSL at line 21: the number 1e999, which is not finite",
+        "MojoShader GLSL at line 6: texture2D of ps_s0, which is not a sampler",
+    ];
+    assert_eq!(cases.len(), said.len());
+    for ((source, stage, words), said) in cases.into_iter().zip(said) {
         let new = ir::lift(&source, stage, &hints()).unwrap_err();
-        let old = iridia_mojo::lift(&source, stage, &hints()).unwrap_err();
         assert!(new.detail.contains(words), "{words}: {new}");
-        assert_eq!(new.to_string(), old.to_string(), "{words}");
+        assert_eq!(new.to_string(), said, "{words}");
     }
 }
 
