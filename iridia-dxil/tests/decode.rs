@@ -34,7 +34,15 @@ fn loops_are_backward_branches() {
             .count();
         assert!(back >= 3, "{name}: {back} backward branches (three loops)");
         // the lift takes them as structured loops
-        let program = iridia_dxil::lift(&bytes).unwrap_or_else(|e| panic!("{name}: {e}"));
-        program.validate().unwrap_or_else(|p| panic!("{name}: {p:?}"));
+        let mut program = iridia_dxil::ir::lift(&bytes).unwrap_or_else(|e| panic!("{name}: {e}"));
+        iridia_ir::validate(&program).unwrap_or_else(|p| panic!("{name}: {p:?}"));
+        iridia_passes::prepare(&mut program).unwrap_or_else(|e| panic!("{name}: {e}"));
+        iridia_ir::validate(&program).unwrap_or_else(|p| panic!("{name}: {p:?}"));
+        let text = iridia_ir::text::print(&program.entry);
+        let loops = text.matches("loop '").count();
+        assert!(
+            loops >= 3,
+            "{name}: {loops} loops in the lifted program (three)\n{text}"
+        );
     }
 }
