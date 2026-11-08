@@ -796,6 +796,21 @@ impl Lift<'_> {
                 let u = self.b.bitcast(i, Kind::U);
                 self.mask_narrow(u, t)
             }
+            // a half is carried as the float it equals, so its bits are the 16 of the half and not the float's 32
+            (CastOp::BitCast, None, Some(16)) if v.kind == Kind::F => {
+                self.notes.insert(
+                    "the bits of a half are made through pack2x16float: a half carried is already rounded to one, so the                      implementation's rounding has nothing left to do"
+                        .into(),
+                );
+                let zero = self.b.lit_f(0.0);
+                let pair = self.b.compose(&[v, zero]);
+                let packed = self.b.math(Mf::Pack2x16float, &[pair]);
+                self.mask_narrow(packed, 16)
+            }
+            (CastOp::BitCast, Some(16), None) if self.kind_of_type(to)? == Kind::F => {
+                let pair = self.b.math(Mf::Unpack2x16float, &[v]);
+                self.b.lane(pair, 0)
+            }
             (CastOp::BitCast, _, _) => {
                 let kind = self.kind_of_type(to)?;
                 self.b.bitcast_to(v, kind)

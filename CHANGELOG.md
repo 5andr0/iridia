@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `iridia-dxil` (the older lift, `iridia_dxil::lift`): the older lift had the same bug as the IR lift's `LIFTER_VERSION` 6: a bitcast between a half and a
+  16-bit integer took the widened float's 32 bits as the integer (the exponent and mantissa tests dxc makes of a half in
+  `isnan`, `isinf`, `isfinite` and `isnormal`, `asint16`, `asuint16`, a 16-bit store of a half), so those programs ran and gave wrong
+  values. A half's bits are made with `pack2x16float` and a 16-bit integer's half with `unpack2x16float`; the gate's column A (the
+  older lift) and the IR lift now agree on the 32 slim-set programs they differed on (4059 programs, 0 differ).
 - `iridia-dxil` (IR lift, `LIFTER_VERSION` 6): a bitcast between a half and a 16-bit integer (`asint16`, `asuint16`, and the
   exponent and mantissa tests dxc makes of a half in `isnan`, `isinf` and `isfinite`) gives the half's bits. A half is carried
   widened to 32 bits, and the lift had taken the widened float's bits as the integer, so those programs ran and gave wrong
