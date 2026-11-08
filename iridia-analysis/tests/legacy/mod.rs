@@ -22,12 +22,19 @@ struct Worker {
     readers: Vec<JoinHandle<()>>,
 }
 
+#[derive(serde::Deserialize)]
+struct Reply {
+    cpu_seconds: f64,
+    answer: Result<Answers, String>,
+}
+
 impl Worker {
     fn start() -> Self {
         let python = if cfg!(windows) { "python" } else { "python3" };
         let mut child = Command::new(python)
             .arg("-I")
             .arg(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/legacy/capped.py"))
+            .args(["--cpu-seconds", "30", "--"])
             .arg(std::env::current_exe().unwrap())
             .args(["--exact", "legacy_worker", "--ignored", "--nocapture"])
             .stdin(Stdio::piped())
@@ -76,9 +83,14 @@ impl Worker {
             .map_err(|e| e.to_string())?;
         let reply = self
             .replies
-            .recv_timeout(Duration::from_secs(30))
+            // A broken protocol must still end, but wall time is not the worker's CPU budget.
+            .recv_timeout(Duration::from_secs(600))
             .map_err(|e| e.to_string())?;
-        serde_json::from_str(&reply).map_err(|e| format!("legacy protocol: {e}"))
+        let reply: Reply = serde_json::from_str(&reply).map_err(|e| format!("legacy protocol: {e}"))?;
+        if std::env::var_os("ORACLE_ONE").is_some() {
+            eprintln!("legacy worker CPU: {:.6} s", reply.cpu_seconds);
+        }
+        Ok(reply.answer)
     }
 
     fn stop(&mut self) {
@@ -109,8 +121,8 @@ pub(super) fn answers(bytes: &[u8]) -> Result<Answers, String> {
                 if error.contains("memory allocation") || error.contains("out of memory") {
                     eprintln!("legacy oracle resource budget: memory cap won (512 MiB)\n{error}");
                     Err(RESOURCE_BUDGET.into())
-                } else if why.contains("timed out") {
-                    eprintln!("legacy oracle resource budget: time cap won (30 s)\n{error}");
+                } else if error.contains("legacy CPU budget exceeded") {
+                    eprintln!("legacy oracle resource budget: CPU cap won\n{error}");
                     Err(RESOURCE_BUDGET.into())
                 } else {
                     panic!("legacy oracle subprocess failed: {why}\n{error}");

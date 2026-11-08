@@ -861,6 +861,41 @@ fn elden() {
     hold("elden", Source::Tree(tree, names, true));
 }
 
+/// Exercise the actual supervisor with a small worker that speaks the same framed protocol.
+fn legacy_budget_contract(case: &str) {
+    let output = std::process::Command::new(if cfg!(windows) { "python" } else { "python3" })
+        .arg("-I")
+        .arg(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/legacy/budget_contract.py"
+        ))
+        .arg(case)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    println!("{}", String::from_utf8_lossy(&output.stdout));
+}
+
+#[test]
+fn legacy_cpu_budget_does_not_count_idle_wall_time() {
+    legacy_budget_contract("idle");
+}
+
+#[test]
+fn legacy_cpu_budget_starts_again_for_each_request() {
+    legacy_budget_contract("reset");
+}
+
+#[test]
+fn legacy_cpu_budget_stops_a_busy_worker() {
+    legacy_budget_contract("busy");
+}
+
 /// The real program behind the exponential loop-walk failure: the IR completes, the capped legacy graph aborts
 /// without taking down this process, and a subsequent request uses a fresh worker and returns its real answer.
 #[test]

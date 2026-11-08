@@ -101,7 +101,10 @@ Two inputs still exhaust the default and the representative 1,048,576-step probe
   2^64 iterations on the nonzero-input path. A separate test supplies input.x=0 and compares the early exit exactly:
   one output lane, one step.
 
-The legacy analysis runs in a separate process capped at 512 MiB and 30 seconds per request. Either limit produces
+The legacy analysis runs in a separate process capped at 512 MiB and 30 seconds of worker CPU time per request.
+The supervisor measures the worker with `GetProcessTimes` on Windows and `/proc/<pid>/stat` on Linux, so time waiting
+to be scheduled does not consume its budget. A separate 600-second wall deadline fails a broken protocol; it is not
+an accepted budget refusal. Either resource limit produces
 `legacy oracle refused (resource budget)`. Diagnostics log which cap won; scheduling can change
 that winner without changing the analysis answer. The unbounded SceneBokeh legacy graph previously allocated
 21.7 GB. Both SceneBokeh rows retain the explicit resource refusal while their IR analyses complete. The regression
