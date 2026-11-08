@@ -16,6 +16,8 @@
   refusal now says iridia-wgsl writes them. `exec_warp_rq.rs` also compares the grid, procedural and object-space
   programs through three roads on WARP (the fixture's DXIL, the naga module through stock naga's HLSL writer, the WGSL text
   read by stock naga and written as HLSL), by the same two-of-three consensus: no ray differs.
+- `iridia-naga`: construct each emitted expression range directly from its arena suffix, so lowering many
+  subgroup operations takes linear work instead of repeatedly scanning the growing expression arena.
 - `iridia-naga`: a filtered sample of an integer texture (a sample, a biased or a level one, or one at gradients, of a texture
   of unsigned or signed integers) is refused by name, "a filtered sample of an integer texture has no WGSL form", as
   `iridia-wgsl` already did; naga's writer made text its own validator refused ("Unable to operate on image class

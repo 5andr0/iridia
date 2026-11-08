@@ -312,10 +312,11 @@ impl Lower<'_> {
     fn flush(&mut self) {
         if let Some((block, start)) = self.blocks.last_mut()
             && let Some(first) = start.take()
-            && let Some(last) = self.func.expressions.iter().last().map(|(h, _)| h)
         {
+            // The arena is append-only here. Scanning it for the last handle at every flush makes lowering
+            // quadratic in the number of expressions; the arena can construct this suffix directly.
             block.push(
-                Statement::Emit(naga::Range::new_from_bounds(first, last)),
+                Statement::Emit(self.func.expressions.range_from(first.index())),
                 Span::UNDEFINED,
             );
         }
