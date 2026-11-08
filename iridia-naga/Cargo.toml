@@ -27,6 +27,8 @@ naga = { version = "=30.0.1", default-features = false, features = ["wgsl-in"] }
 # tests/ops.rs runs each operation in iridia-exec-ir (the IR's definition) and, as WGSL, on WARP (tools/wgsl-run)
 iridia-exec = { path = "../iridia-exec" }
 iridia-exec-ir = { path = "../iridia-exec-ir" }
+# tests/support/warp.rs: the client of tools/wgsl-run
+iridia-warp-client.workspace = true
 # tests/compute.rs generates the programs it runs both ways
 proptest.workspace = true
 primase-testdata.workspace = true

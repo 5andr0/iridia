@@ -157,8 +157,11 @@ impl Harness {
         })
     }
 
-    /// Run one job: its reply, or why there is none (the process's reply is the harness's error where it gives one).
+    /// Run one job: its reply, or why there is none (the process's reply is the harness's error where it gives one). The
+    /// machine-wide lock on the adapter (`primase_testdata::warp_exclusive`) is held for the job and no longer, so callers
+    /// never take it and a long run of jobs does not shut other WARP users out.
     pub fn run(&self, job: &serde_json::Value) -> Result<serde_json::Value, String> {
+        let _exclusive = primase_testdata::warp_exclusive();
         let idle = self.idle.lock().ok().and_then(|mut v| v.pop());
         let mut p = match idle {
             Some(p) => p,

@@ -467,6 +467,7 @@ dependencies = [
  "iridia-exec",
  "iridia-exec-ir",
  "iridia-ir",
+ "iridia-warp-client",
  "iridia-wgsl",
  "naga",
  "primase-testdata",
