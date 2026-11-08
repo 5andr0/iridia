@@ -1,27 +1,24 @@
 #![allow(clippy::unwrap_used)]
-//! The analyses on the IR against the `iridia` crate's, on every program both read: each DXBC, DXIL and Direct3D 9
-//! program of the fixtures, the slim set and Elden Ring's corpus is lifted both ways (the older lift and the IR lift
-//! of its family), and what may reach each output lane and the discard ([`Flow`]) and the constant words read
-//! ([`WordsRead`]) are compared; the fixtures' vertex and pixel programs, each vertex program with each pixel program
-//! of its family, must give the same [`VertexDemand`]. Resources are named by their D3D bind point, so two lifts that
-//! number them otherwise agree.
+//! The analyses on the IR, on every program of the fixtures, the slim set and Elden Ring's corpus: what may reach each
+//! output lane and the discard ([`Flow`]) and the constant words read ([`WordsRead`]) of each DXBC, DXIL and Direct3D 9
+//! program, held to tests/expected/<set>.tsv (each program's answers as a hash, or what refused it, and the judgement),
+//! and the fixtures' vertex and pixel programs, each vertex program with each pixel program of its family, held to
+//! tests/expected/demand.tsv for their [`VertexDemand`]. Resources are named by their D3D bind point.
 //!
-//! Where the answers differ, the difference is judged: each source the IR's answers leave out of a lane is changed in
-//! runs of the IR program in `iridia-exec-ir`, and one that changes the lane fails (the IR's answers are unsound);
-//! each source they add is changed too, and one that changes its lane is one the older answers miss. The judgement
-//! (each kind of difference and what the runs showed) is recorded with the program's answers.
+//! The IR's answers were judged against the older analyses (the `iridia` crate's) while those ran beside them: where
+//! the answers differed, each source the IR's answers leave out of a lane was changed in runs of the IR program in
+//! `iridia-exec-ir`, and one that changed its lane would have made them unsound; each source they add was changed too,
+//! and one that changed its lane is one the older answers missed. tests/expected/judged.tsv records, for each program the
+//! two read otherwise, the kinds of difference and those sources; the test runs them again, so the judgement of
+//! each is as it was, and an answer that changes, or a source that now changes its lane, fails.
 //!
-//! The IR's answers are held to tests/expected/<set>.tsv (each program's answers as a hash, or what refused it, and
-//! the judgement where the older answers differ), which keep them once the older analyses are gone: an answer or a
-//! judgement that changes fails, a new difference among them, and the current table is written to the scratch root
-//! (the path is in the failure) to replace the committed one where the change is meant.
-//!
-//! A program the older analyses refuse and the IR's read is counted, not compared; one the IR's refuse and the older
-//! read fails. A lift that refuses is the lifter's, counted. Each program's value graph is also evaluated
+//! The IR's answers are held to tests/expected/<set>.tsv: an answer or a judgement that changes fails, a new
+//! difference among them, and the current table is written to the scratch root (the path is in the failure) to replace
+//! the committed one where the change is meant. A program the IR's analyses refuse and the table does not say refused is a
+//! failure; a lift that refuses is the lifter's, counted. Each program's value graph is also evaluated
 //! ([`iridia_exec_ir::value`]) from the inputs and constant words of a run, and an output lane it gives otherwise than
 //! the run fails.
 mod inputs;
-mod legacy;
 mod perturb;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -54,19 +51,6 @@ fn has_part(bytes: &[u8], kind: &[u8; 4]) -> bool {
     })
 }
 
-/// A program lifted both ways, by its family's older lift and IR lift: DXIL's for a container with a `DXIL` part,
-/// DXBC's for another container, Direct3D 9's for a token stream.
-fn lift_older(bytes: &[u8]) -> Result<iridia::Program, String> {
-    let text = |e: iridia::Refusal| e.to_string();
-    if !bytes.starts_with(b"DXBC") {
-        iridia_d3d9::lift(bytes).map_err(text)
-    } else if has_part(bytes, b"DXIL") {
-        iridia_dxil::lift(bytes).map_err(text)
-    } else {
-        iridia_dxbc::lift(bytes).map_err(text)
-    }
-}
-
 fn lift_ir(bytes: &[u8]) -> Result<iridia_ir::Program, String> {
     let text = |e: iridia::Refusal| e.to_string();
     if !bytes.starts_with(b"DXBC") {
@@ -78,16 +62,7 @@ fn lift_ir(bytes: &[u8]) -> Result<iridia_ir::Program, String> {
     }
 }
 
-fn lift_both(
-    bytes: &[u8],
-) -> (
-    Result<iridia::Program, String>,
-    Result<iridia_ir::Program, String>,
-) {
-    (lift_older(bytes), lift_ir(bytes))
-}
-
-/// A resource as both lifts name it: its kind and D3D bind point (its id where it has none).
+/// A resource as the IR lift names it: its kind and D3D bind point (its id where it has none).
 fn resource(interface: &Interface, id: ResourceId) -> String {
     match interface.resources.iter().find(|r| r.id == id) {
         Some(r) => {
@@ -109,14 +84,11 @@ fn resource(interface: &Interface, id: ResourceId) -> String {
     }
 }
 
-/// What may reach one output lane or the discard, by names both lifts share.
-#[derive(Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+/// What may reach one output lane or the discard, by names the interface gives.
+#[derive(Debug, Default, PartialEq, Eq)]
 struct Reached {
-    #[serde(with = "legacy::entries")]
     inputs: BTreeMap<(usize, u8), String>,
-    #[serde(with = "legacy::entries")]
     texels: BTreeMap<(String, u8), String>,
-    #[serde(with = "legacy::entries")]
     words: BTreeMap<(String, u32), String>,
 }
 
@@ -126,19 +98,17 @@ impl Reached {
     }
 }
 
-/// A program's answers, by names both lifts share: each output lane's reach (a lane nothing reaches left out: the
-/// older analyses leave out a lane the program does not store, the IR's give it the zero it is), the discard's, and the
-/// constant words read.
-#[derive(Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+/// A program's answers: each output lane's reach (a lane nothing reaches left out), the discard's, and the constant
+/// words read.
+#[derive(Debug, Default, PartialEq, Eq)]
 struct Answers {
-    #[serde(with = "legacy::entries")]
     outputs: BTreeMap<(usize, u8), Reached>,
     discard: Reached,
     words: BTreeMap<String, BTreeSet<u32>>,
     indexed: BTreeSet<String>,
 }
 
-/// A reach of either crate's [`Flow`] as [`Reached`] (the two crates' types have the same fields).
+/// A reach of [`Flow`] as [`Reached`].
 macro_rules! reached {
     ($reach:expr, $interface:expr) => {{
         let (r, interface) = ($reach, $interface);
@@ -162,7 +132,7 @@ macro_rules! reached {
     }};
 }
 
-/// Either crate's flow and constant reads as [`Answers`].
+/// A flow and constant reads as [`Answers`].
 macro_rules! answers {
     ($flow:expr, $reads:expr, $interface:expr) => {{
         let (flow, reads, interface): (_, _, &Interface) = ($flow, $reads, $interface);
@@ -187,20 +157,6 @@ macro_rules! answers {
         }
         out
     }};
-}
-
-fn older_answers(program: &iridia::Program) -> Result<Answers, String> {
-    let started = Instant::now();
-    let values = iridia::flow::Values::of_program(program)?;
-    if std::env::var_os("ORACLE_ONE").is_some() {
-        eprintln!("older Values: {:?}", started.elapsed());
-    }
-    let flow = iridia::flow::Flow::of_values(&values);
-    if std::env::var_os("ORACLE_ONE").is_some() {
-        eprintln!("older Flow: {:?}", started.elapsed());
-    }
-    let reads = iridia::WordsRead::of_values(&values, &program.interface);
-    Ok(answers!(&flow, &reads, &program.interface))
 }
 
 fn ir_answers(program: &iridia_ir::Program) -> Result<Answers, String> {
@@ -237,32 +193,28 @@ fn fnv(text: &str) -> String {
     format!("{h:016x}")
 }
 
-/// How one program's analyses compare.
+/// How one program's analyses are judged.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Verdict {
-    /// Both read it and agree.
+    /// The older analyses read it alike (the table records no other judgement).
     Agree,
     /// A lift refused it: not compared.
     NotLifted(String),
-    /// Both analyses refuse it.
+    /// Neither the IR's analyses nor the older ones read it.
     BothRefuse,
-    /// The older analyses refuse it and the IR's read it.
-    Widened(String),
-    /// The IR's analyses refuse it and the older read it: a failure.
-    IrRefuses(String),
-    /// Both read it and disagree: how (each kind of difference, by place), what the executor's runs showed of the
-    /// sources the IR's leave out and add, and the first difference. Recorded with the answers, not a failure itself.
-    Differ {
-        kinds: String,
-        runs: String,
-        first: String,
-    },
+    /// The older analyses answered otherwise than by reading it, as the table says (a refusal of theirs, or of their lift).
+    Recorded(String),
+    /// Both read it and the answers differed: how (each kind of difference, by place) and what the executor's runs showed
+    /// of the sources the IR's leave out and add. Recorded with the answers, not a failure itself.
+    Differ { kinds: String, runs: String },
     /// The IR's analyses leave out a source the executor's runs show reaching its lane: a failure.
     Unsound(String),
     /// The IR's analyses panic: a failure.
     Panic(String),
     /// The value graph's evaluator gives an output lane otherwise than a run of the program: a failure.
     EvaluatorDiffers(String),
+    /// The IR's analyses refuse a program the table does not record as refused: a failure.
+    IrRefuses(String),
     /// Execution evidence stopped at the measured corpus budget; never counted as an agreement.
     BudgetExhausted(u64, String),
 }
@@ -281,9 +233,9 @@ impl Verdict {
             Verdict::Agree => "agree".into(),
             Verdict::NotLifted(why) => format!("not lifted: {why}"),
             Verdict::BothRefuse => "both refuse".into(),
-            Verdict::Widened(why) => format!("older refuses: {why}"),
+            Verdict::Recorded(group) => group.clone(),
             Verdict::IrRefuses(why) => format!("IR refuses: {why}"),
-            Verdict::Differ { kinds, runs, .. } => format!("differ: {kinds}; {runs}"),
+            Verdict::Differ { kinds, runs } => format!("differ: {kinds}; {runs}"),
             Verdict::Unsound(_) => "IR unsound".into(),
             Verdict::Panic(why) => format!("IR panics: {why}"),
             Verdict::EvaluatorDiffers(_) => "the evaluator differs from a run".into(),
@@ -294,143 +246,98 @@ impl Verdict {
     }
 }
 
-/// The first place two programs' answers differ, for a report.
-fn first_difference(old: &Answers, new: &Answers) -> String {
-    let keys: BTreeSet<&(usize, u8)> = old.outputs.keys().chain(new.outputs.keys()).collect();
-    for key in keys {
-        let (a, b) = (old.outputs.get(key), new.outputs.get(key));
-        if a != b {
-            return format!("output {} lane {}: older {a:?}, IR {b:?}", key.0, key.1);
-        }
-    }
-    if old.discard != new.discard {
-        return format!("discard: older {:?}, IR {:?}", old.discard, new.discard);
-    }
-    if old.words != new.words {
-        return format!("words read: older {:?}, IR {:?}", old.words, new.words);
-    }
-    format!("indexed: older {:?}, IR {:?}", old.indexed, new.indexed)
-}
-
-/// A place's sources by name: how each reaches it, and the source the executor changes for it (`None` where the
-/// interface names no resource of its binding).
-type Sources = BTreeMap<String, (String, Option<perturb::Source>)>;
-
 /// How many pairs of runs the executor takes for each source the IR's analyses leave out.
 const RUNS: u64 = 6;
 
-/// Two answers that differ, judged: each kind of difference by place, and each source the IR's analyses leave out
-/// of a lane's reach run in the executor changed ([`perturb::check`]); one that changes its lane makes the IR's
-/// answers unsound.
-fn judge(old: &Answers, new: &Answers, program: &iridia_ir::Program) -> Verdict {
-    let interface = &program.interface;
-    let id = |name: &str| {
-        interface
-            .resources
-            .iter()
-            .map(|r| r.id)
-            .find(|r| resource(interface, *r) == name)
-    };
-    let mut kinds = BTreeSet::new();
-    let mut dropped: Vec<(perturb::Target, perturb::Source)> = Vec::new();
-    let mut added: Vec<(perturb::Target, perturb::Source)> = Vec::new();
-    let empty = Reached::default();
-    let keys: BTreeSet<&(usize, u8)> = old.outputs.keys().chain(new.outputs.keys()).collect();
-    let places = keys
-        .into_iter()
-        .map(|k| {
-            (
-                perturb::Target::Output(k.0, k.1),
-                old.outputs.get(k).unwrap_or(&empty),
-                new.outputs.get(k).unwrap_or(&empty),
-            )
+/// What the older analyses said of one program (a line of tests/expected/judged.tsv).
+enum Judged {
+    /// The answers differed: the kinds of difference, and the (target, source) pairs the IR's answers drop and add.
+    Differ {
+        kinds: String,
+        dropped: Vec<(perturb::Target, perturb::Source)>,
+        added: Vec<(perturb::Target, perturb::Source)>,
+    },
+    /// The older analyses answered otherwise than by reading it: the verdict's report line.
+    Other(String),
+}
+
+fn parse_target(text: &str) -> perturb::Target {
+    if text == "d" {
+        return perturb::Target::Discard;
+    }
+    let (slot, lane) = text.strip_prefix('o').unwrap().split_once('.').unwrap();
+    perturb::Target::Output(slot.parse().unwrap(), lane.parse().unwrap())
+}
+
+fn parse_source(text: &str) -> perturb::Source {
+    let (kind, rest) = text.split_at(1);
+    let (a, b) = rest.split_once('.').unwrap();
+    match kind {
+        "i" => perturb::Source::Input(a.parse().unwrap(), b.parse().unwrap()),
+        "w" => perturb::Source::Word(ResourceId(a.parse().unwrap()), b.parse().unwrap()),
+        "t" => perturb::Source::Texel(ResourceId(a.parse().unwrap()), b.parse().unwrap()),
+        _ => panic!("a source: {text}"),
+    }
+}
+
+fn parse_pairs(text: &str) -> Vec<(perturb::Target, perturb::Source)> {
+    text.split(';')
+        .filter(|p| !p.is_empty())
+        .map(|p| {
+            let (target, source) = p.split_once("<-").unwrap();
+            (parse_target(target), parse_source(source))
         })
-        .chain([(perturb::Target::Discard, &old.discard, &new.discard)]);
-    for (target, a, b) in places {
-        let place = if target == perturb::Target::Discard {
-            "discard"
-        } else {
-            "output"
-        };
-        let mut diff = |what: &str, a: Sources, b: Sources| {
-            for (key, (via, source)) in &a {
-                match b.get(key).map(|(v, _)| v) {
-                    None => {
-                        kinds.insert(format!("{place}: IR drops {what}"));
-                        if let Some(s) = source {
-                            dropped.push((target, *s));
-                        }
-                    }
-                    Some(v) if v != via => {
-                        kinds.insert(format!("{place}: {what} via {via} -> {v}"));
-                    }
-                    Some(_) => {}
-                }
-            }
-            for (key, (_, source)) in &b {
-                if !a.contains_key(key) {
-                    kinds.insert(format!("{place}: IR adds {what}"));
-                    if let Some(s) = source {
-                        added.push((target, *s));
-                    }
-                }
-            }
-        };
-        let inputs = |r: &Reached| -> Sources {
-            r.inputs
-                .iter()
-                .map(|(k, v)| {
-                    (
-                        format!("{k:?}"),
-                        (v.clone(), Some(perturb::Source::Input(k.0, k.1))),
-                    )
-                })
-                .collect()
-        };
-        let texels = |r: &Reached| -> Sources {
-            r.texels
-                .iter()
-                .map(|(k, v)| {
-                    (
-                        format!("{k:?}"),
-                        (v.clone(), id(&k.0).map(|r| perturb::Source::Texel(r, k.1))),
-                    )
-                })
-                .collect()
-        };
-        let words = |r: &Reached| -> Sources {
-            r.words
-                .iter()
-                .map(|(k, v)| {
-                    (
-                        format!("{k:?}"),
-                        (v.clone(), id(&k.0).map(|r| perturb::Source::Word(r, k.1))),
-                    )
-                })
-                .collect()
-        };
-        diff("an input", inputs(a), inputs(b));
-        diff("a texel", texels(a), texels(b));
-        diff("a word", words(a), words(b));
+        .collect()
+}
+
+/// A program's key in tests/expected/judged.tsv: FNV-1a of its bytes, then its length.
+fn key(bytes: &[u8]) -> String {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in bytes {
+        h = (h ^ u64::from(*b)).wrapping_mul(0x0100_0000_01b3);
     }
-    for (r, a) in &old.words {
-        let b = new.words.get(r).cloned().unwrap_or_default();
-        if a.iter().any(|w| !b.contains(w)) {
-            kinds.insert("words read: IR drops some".into());
-        }
-    }
-    for (r, b) in &new.words {
-        let a = old.words.get(r).cloned().unwrap_or_default();
-        if b.iter().any(|w| !a.contains(w)) {
-            kinds.insert("words read: IR adds some".into());
-        }
-    }
-    if old.indexed != new.indexed {
-        kinds.insert("indexed buffers".into());
-    }
+    format!("{h:016x}{:08x}", bytes.len())
+}
+
+/// The judgements recorded in tests/expected/judged.tsv, by program key.
+fn judged() -> &'static BTreeMap<String, Judged> {
+    static JUDGED: std::sync::OnceLock<BTreeMap<String, Judged>> = std::sync::OnceLock::new();
+    JUDGED.get_or_init(|| {
+        include_str!("expected/judged.tsv")
+            .replace("\r\n", "\n")
+            .lines()
+            .filter(|l| !l.starts_with('#') && !l.is_empty())
+            .map(|line| {
+                let mut fields = line.split('\t');
+                let key = fields.next().unwrap().to_owned();
+                let what = fields.next().unwrap();
+                let judged = match what.split_at(1) {
+                    ("~", kinds) => Judged::Differ {
+                        kinds: kinds.to_owned(),
+                        dropped: parse_pairs(fields.next().unwrap_or_default()),
+                        added: parse_pairs(fields.next().unwrap_or_default()),
+                    },
+                    ("=", group) => Judged::Other(group.to_owned()),
+                    _ => panic!("a judgement: {line}"),
+                };
+                (key, judged)
+            })
+            .collect()
+    })
+}
+
+/// The recorded difference judged again: each source the IR's analyses leave out of a lane's reach run in the executor
+/// changed ([`perturb::check`]); one that changes its lane makes the IR's answers unsound. The sources they add are run
+/// too, to say whether the older answers missed them.
+fn judge(
+    kinds: &str,
+    dropped: &[(perturb::Target, perturb::Source)],
+    added: &[(perturb::Target, perturb::Source)],
+    program: &iridia_ir::Program,
+) -> Verdict {
     let mut kept = 0;
     let mut not_run = BTreeSet::new();
-    for (target, source) in &dropped {
+    for (target, source) in dropped {
         match perturb::check(program, *target, *source, RUNS) {
             perturb::Outcome::Kept(n) => kept += n,
             perturb::Outcome::NotRun(why) => {
@@ -456,7 +363,7 @@ fn judge(old: &Answers, new: &Answers, program: &iridia_ir::Program) -> Verdict 
         let mut changes = 0;
         let mut completed = 0;
         let mut not_run = BTreeSet::new();
-        for (target, source) in &added {
+        for (target, source) in added {
             match perturb::check(program, *target, *source, RUNS) {
                 perturb::Outcome::Changed(_) => changes += 1,
                 perturb::Outcome::Kept(_) => completed += 1,
@@ -481,9 +388,8 @@ fn judge(old: &Answers, new: &Answers, program: &iridia_ir::Program) -> Verdict 
         });
     }
     Verdict::Differ {
-        kinds: kinds.into_iter().collect::<Vec<_>>().join(", "),
+        kinds: kinds.to_owned(),
         runs,
-        first: first_difference(old, new),
     }
 }
 
@@ -537,30 +443,34 @@ fn compare_inner(bytes: &[u8]) -> (Verdict, String) {
         let reads = WordsRead::of_values(&values, &new.interface);
         Ok((answers!(&flow, &reads, &new.interface), values))
     });
-    let recorded = match &graph {
+    let mut recorded = match &graph {
         Ok((a, _)) => fnv(&format!("{a:?}")),
         Err(e) => format!("refused: {}", grouped(e)),
     };
-    let older = legacy::answers(bytes);
     let evaluator = graph
         .as_ref()
         .ok()
         .map(|(_, values)| perturb::evaluations(&new, values));
     let execution_note = evaluator.as_ref().and_then(|e| e.not_run.clone());
     let ir = graph.map(|(answers, _)| answers);
-    let verdict = match (older, ir) {
+    let verdict = match (judged().get(&key(bytes)), ir) {
         (_, Err(e)) if e.starts_with("panic: ") => Verdict::Panic(e),
         _ if let Some(e) = evaluator.filter(|e| !e.differ.is_empty()) => {
             Verdict::EvaluatorDiffers(e.differ.join("; "))
         }
-        (Err(e), _) if e.starts_with("older lift: ") => Verdict::NotLifted(grouped(&e)),
-        (Ok(a), Ok(b)) if a == b => Verdict::Agree,
-        (Ok(a), Ok(b)) => judge(&a, &b, &new),
-        (Ok(_), Err(e)) => Verdict::IrRefuses(grouped(&e)),
-        (Err(e), Ok(_)) => Verdict::Widened(grouped(&e)),
-        (Err(_), Err(_)) => Verdict::BothRefuse,
+        (Some(Judged::Other(group)), _) => Verdict::Recorded(group.clone()),
+        (
+            Some(Judged::Differ {
+                kinds,
+                dropped,
+                added,
+            }),
+            Ok(_),
+        ) => judge(kinds, dropped, added, &new),
+        (Some(Judged::Differ { .. }), Err(e)) => Verdict::IrRefuses(grouped(&e)),
+        (None, Ok(_)) => Verdict::Agree,
+        (None, Err(_)) => Verdict::BothRefuse,
     };
-    let mut recorded = recorded;
     if let Some(why) = execution_note {
         recorded.push_str(&format!("\texecution not compared: {why}"));
     }
@@ -695,12 +605,6 @@ fn hold(set: &str, source: Source) {
     for (group, (n, example)) in &counts {
         println!("  {n:5}  {group}  (e.g. {example})");
     }
-    // each difference's first place, for the judgement (shown with --nocapture)
-    for (name, verdict, _) in &outcomes {
-        if let Verdict::Differ { first, .. } = verdict {
-            println!("  {name}: {first}");
-        }
-    }
 
     let failures: Vec<String> = outcomes
         .iter()
@@ -732,7 +636,7 @@ fn hold(set: &str, source: Source) {
     let mut why = Vec::new();
     if !failures.is_empty() {
         why.push(format!(
-            "{} programs' analyses on the IR are not the older ones':\n{}",
+            "{} programs' analyses on the IR fail:\n{}",
             failures.len(),
             failures.iter().take(30).cloned().collect::<Vec<_>>().join("\n")
         ));
@@ -861,61 +765,15 @@ fn elden() {
     hold("elden", Source::Tree(tree, names, true));
 }
 
-/// Exercise the actual supervisor with a small worker that speaks the same framed protocol.
-fn legacy_budget_contract(case: &str) {
-    let output = std::process::Command::new(if cfg!(windows) { "python" } else { "python3" })
-        .arg("-I")
-        .arg(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/tests/legacy/budget_contract.py"
-        ))
-        .arg(case)
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "{}\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    println!("{}", String::from_utf8_lossy(&output.stdout));
-}
-
+/// The real program behind the exponential loop-walk failure of the older analyses: the IR's complete.
 #[test]
-fn legacy_cpu_budget_does_not_count_idle_wall_time() {
-    legacy_budget_contract("idle");
-}
-
-#[test]
-fn legacy_cpu_budget_starts_again_for_each_request() {
-    legacy_budget_contract("reset");
-}
-
-#[test]
-fn legacy_cpu_budget_stops_a_busy_worker() {
-    legacy_budget_contract("busy");
-}
-
-/// The real program behind the exponential loop-walk failure: the IR completes, the capped legacy graph aborts
-/// without taking down this process, and a subsequent request uses a fresh worker and returns its real answer.
-#[test]
-fn scene_bokeh_legacy_budget() {
+fn scene_bokeh_completes() {
     let Some(tree) = oracle_tree(OracleSet::Corpus, Game::Elden, "shaders") else {
         return;
     };
     let bytes = tree.read("gxposteffect/SceneBokeh_SimpleBlurFadePS.ppo").unwrap();
-    let program = lift_both(&bytes).1.unwrap();
+    let program = lift_ir(&bytes).unwrap();
     assert!(ir_answers(&program).is_ok());
-    assert_eq!(legacy::answers(&bytes).unwrap_err(), legacy::RESOURCE_BUDGET);
-    let fixture = std::fs::read(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../iridia-dxbc/tests/fixtures/compute_basic.dxbc"),
-    )
-    .unwrap();
-    let program = lift_both(&fixture).0.unwrap();
-    assert_eq!(
-        legacy::answers(&fixture).unwrap(),
-        older_answers(&program).unwrap()
-    );
 }
 
 /// Tint's deliberate two-word countdown has a second input that exits immediately and can be compared exactly.
@@ -941,52 +799,45 @@ fn tint_countdown_early_exit() {
     );
 }
 
-/// Each vertex fixture with each pixel fixture of its family: the vertex input lanes the pair needs, the same of both
-/// crates (an error alike where either refuses), held to tests/expected/demand.tsv.
+/// Each vertex fixture with each pixel fixture of its family: the vertex input lanes the pair needs
+/// (or why it has none), held to tests/expected/demand.tsv.
 #[test]
 fn vertex_demand() {
-    let mut lifted: Vec<(String, bool, iridia::Program, iridia_ir::Program)> = Vec::new();
+    let mut lifted: Vec<(String, bool, iridia_ir::Program)> = Vec::new();
     for (name, path) in fixture_files() {
         let bytes = std::fs::read(&path).unwrap();
-        if let (Ok(old), Ok(new)) = lift_both(&bytes) {
-            lifted.push((name, has_part(&bytes, b"DXIL"), old, new));
+        if let Ok(new) = lift_ir(&bytes) {
+            lifted.push((name, has_part(&bytes, b"DXIL"), new));
         }
     }
-    let of = |stage| lifted.iter().filter(move |(_, _, _, p)| p.stage == stage);
+    let of = |stage| lifted.iter().filter(move |(_, _, p)| p.stage == stage);
     let mut pairs = 0;
-    let mut failures = Vec::new();
     let mut current =
         "# Each vertex fixture with each pixel fixture of its family: the vertex input lanes the pair needs on the IR \
          (tests/oracle.rs), or why it has none.\n"
             .to_owned();
-    for (vn, vdxil, vold, vnew) in of(Stage::Vertex) {
-        for (pn, _, pold, pnew) in of(Stage::Pixel).filter(|p| p.1 == *vdxil) {
+    for (vn, vdxil, vnew) in of(Stage::Vertex) {
+        for (pn, _, pnew) in of(Stage::Pixel).filter(|p| p.1 == *vdxil) {
             pairs += 1;
-            let old = iridia::flow::VertexDemand::of_programs(vold, pold).map(|d| (d.vertex, d.pixel));
             let new = caught(|| VertexDemand::of_programs(vnew, pnew).map_err(|e| e.to_string()))
                 .map(|d| (d.vertex, d.pixel));
-            if old != new {
-                failures.push(format!("  {vn} with {pn}: older {old:?}, IR {new:?}"));
-            }
             current.push_str(&format!("{vn} {pn}\t{new:?}\n"));
         }
     }
-    println!("vertex demand: {pairs} pairs, {} differ", failures.len());
+    println!("vertex demand: {pairs} pairs");
     assert!(pairs >= 50, "{pairs} pairs");
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/expected/demand.tsv");
     let committed = std::fs::read_to_string(&path)
         .unwrap_or_default()
         .replace("\r\n", "\n");
     let changed = differences(&committed, &current);
-    if failures.is_empty() && changed.is_empty() {
+    if changed.is_empty() {
         return;
     }
     let written = inputs::scratch().join("analyses-demand.tsv");
     std::fs::write(&written, &current).unwrap();
     panic!(
-        "{} pairs differ:\n{}\n{} answers are not the recorded ones ({}):\n{}\nthe current table is {}",
-        failures.len(),
-        failures.iter().take(30).cloned().collect::<Vec<_>>().join("\n"),
+        "{} answers are not the recorded ones ({}):\n{}\nthe current table is {}",
         changed.len(),
         path.display(),
         changed.iter().take(30).cloned().collect::<Vec<_>>().join("\n"),
@@ -994,43 +845,35 @@ fn vertex_demand() {
     );
 }
 
-/// One program's lifts and answers, for a difference the oracle prints: `ORACLE_ONE=<file> cargo test -p
+/// One program's lift and answers, for a difference the oracle prints: `ORACLE_ONE=<file> cargo test -p
 /// iridia-analysis --test oracle one -- --ignored --nocapture`. The IR lift as text (structured where it is a control
-/// flow graph), the older lift as WGSL, and both answers.
+/// flow graph), its answers and value graph, and the row the oracle makes of it.
 #[test]
 #[ignore = "a diagnostic: names its program in ORACLE_ONE"]
 fn one() {
     let path = std::env::var("ORACLE_ONE").expect("ORACLE_ONE names a program");
     let bytes = std::fs::read(&path).unwrap();
-    let (old, new) = lift_both(&bytes);
+    let new = lift_ir(&bytes);
     if let Ok(which) = std::env::var("ORACLE_ANALYSIS") {
         let started = Instant::now();
-        if which == "ir" || which == "summary" {
-            let mut new = new.unwrap();
-            iridia_passes::structurize(&mut new.entry).unwrap();
-            eprintln!("IR structured: {:?}", started.elapsed());
-            fn depth(region: &iridia_ir::Region) -> usize {
-                region
-                    .nodes
-                    .iter()
-                    .map(|n| {
-                        let inside = n.regions().into_iter().map(depth).max().unwrap_or(0);
-                        inside + usize::from(matches!(n, iridia_ir::Node::Loop { .. }))
-                    })
-                    .max()
-                    .unwrap_or(0)
-            }
-            if let iridia_ir::Body::Regions(r) = &new.entry.body {
-                println!("nested loop depth: {}", depth(r));
-            }
-            println!("IR: {:#?}", ir_answers(&new));
-            if which == "summary" {
-                println!("IR elapsed: {:?}", started.elapsed());
-                println!("legacy: {:?}", legacy::answers(&bytes));
-            }
-        } else {
-            println!("older: {:#?}", legacy::answers(&bytes));
+        let mut new = new.unwrap();
+        iridia_passes::structurize(&mut new.entry).unwrap();
+        eprintln!("IR structured: {:?}", started.elapsed());
+        fn depth(region: &iridia_ir::Region) -> usize {
+            region
+                .nodes
+                .iter()
+                .map(|n| {
+                    let inside = n.regions().into_iter().map(depth).max().unwrap_or(0);
+                    inside + usize::from(matches!(n, iridia_ir::Node::Loop { .. }))
+                })
+                .max()
+                .unwrap_or(0)
         }
+        if let iridia_ir::Body::Regions(r) = &new.entry.body {
+            println!("nested loop depth: {}", depth(r));
+        }
+        println!("IR: {:#?}", ir_answers(&new));
         println!("{which} elapsed: {:?}", started.elapsed());
         return;
     }
@@ -1041,12 +884,6 @@ fn one() {
         }
         println!("IR:\n{}", iridia_ir::text::print(f));
     }
-    let old = old.unwrap();
-    println!(
-        "older as WGSL:\n{}",
-        iridia::emit::wgsl(&old).unwrap_or_else(|e| e.to_string())
-    );
-    println!("older: {:#?}", legacy::answers(&bytes));
     println!("IR: {:#?}", ir_answers(&new));
     let values = Values::of_program(&new).unwrap();
     println!("value graph: {values:#?}");
@@ -1084,30 +921,4 @@ fn view_probe() {
     let bytes = std::fs::read(std::env::var("ORACLE_ONE").unwrap()).unwrap();
     let program = lift_ir(&bytes).unwrap();
     println!("{}", perturb::view_report(&program));
-}
-
-/// The capped subprocess reads one length-prefixed container at a time, replying with one JSON answer. The parent
-/// replaces a worker killed by its memory budget and records that refusal; no program names are special-cased.
-#[test]
-#[ignore = "subprocess protocol for the legacy oracle"]
-fn legacy_worker() {
-    use std::io::{Read, Write};
-    let mut input = std::io::stdin().lock();
-    let mut output = std::io::stdout().lock();
-    loop {
-        let mut length = [0u8; 4];
-        match input.read_exact(&mut length) {
-            Ok(()) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
-            Err(e) => panic!("legacy request: {e}"),
-        }
-        let mut bytes = vec![0u8; u32::from_le_bytes(length) as usize];
-        input.read_exact(&mut bytes).unwrap();
-        let answer = caught(|| {
-            let p = lift_older(&bytes).map_err(|e| format!("older lift: {e}"))?;
-            older_answers(&p)
-        });
-        writeln!(output, "REPLY\t{}", serde_json::to_string(&answer).unwrap()).unwrap();
-        output.flush().unwrap();
-    }
 }
