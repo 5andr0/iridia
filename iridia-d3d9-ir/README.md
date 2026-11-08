@@ -51,6 +51,8 @@ assert!(iridia_d3d9_ir::lift(&other_model).is_err());
 
 `cargo test -p iridia-d3d9-ir` needs no game files: `tests/tokens.rs` runs hand-worked token fixtures, `tests/assembled.rs` the assembled fixtures and `tests/vkd3d.rs` vkd3d's tests, each in the IR, in its control flow graph, in that graph structured again, and as WGSL read back by naga. `tests/versions.tsv` gates the lifter version on what it makes of all of them. With `GAME_DATA` naming a folder of your own extracted programs (see [`tests/inputs/README.md`](tests/inputs/README.md)), `tests/disassembly.rs`, `tests/corpus.rs` and `tests/gate.rs` compare the decoded instructions against Microsoft's `D3DDisassemble`, lift every program and compare it with the older reader's. The assembled fixtures are rebuilt with `tests/oracles/assemble.py` (Windows Python and `d3dcompiler_47.dll`, or Wine).
 
+With `tools.wgsl_run` configured (the WGSL harness, `tools/wgsl-run`, which runs a WGSL entry point on Direct3D 12's WARP adapter through wgpu), `tests/assembled.rs`, `tests/vkd3d.rs` and `tests/gate.rs` also run the WGSL of both writers, `iridia-naga`'s and `iridia-wgsl`'s, on WARP and hold it to the IR's run on the same inputs and constants, within 1e-3 relative (`tests/warp`): every assembled fixture, and one program in 128 of the others by file-name hash (`shader.graphics=1` runs every one). `pow` of a zero base and an exponent of 0 or less is undefined in the IR and in WGSL and a target compiles it as it likes, so a program that differs only there (it agrees in every lane once `pow` gives libm's value there) is counted in a class of its own, per writer.
+
 ## Licence
 
 GPL-3.0-or-later.

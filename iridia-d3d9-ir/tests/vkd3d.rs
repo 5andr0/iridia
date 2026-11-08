@@ -10,7 +10,9 @@
 //! Every program a case draws with lifts, validates, prints and parses back, and writes WGSL for browsers. A draw is
 //! the runner's full-target triangle with its pass-through vertex shader, run here pixel by pixel: two ways, which must
 //! agree, the IR in `iridia-exec-ir` and the WGSL read back by naga's front end in `iridia-exec`. A probe is checked
-//! at its rectangle's corners, edge midpoints and centre, against the test's value within its ulps as vkd3d compares.
+//! at its rectangle's corners, edge midpoints and centre, against the test's value within its ulps as vkd3d compares. A
+//! sample of the programs (one in 128 by file-name hash, every one with `shader.graphics=1`) also has the WGSL of both
+//! writers run on WARP (`tests/warp`) and held to the IR's run on seeded inputs and constants.
 //!
 //! A pixel takes the value of the last draw that wrote it, a clear's, or none: a probe of a pixel nothing wrote, or
 //! that a draw this test cannot run decided, is counted and not checked, and so is one whose value depends on a
@@ -18,7 +20,9 @@
 //! and the test fails on a program that does not lift or run, on two ways that disagree, and on a probe that differs.
 mod fixtures;
 mod harness;
+mod inputs;
 mod tally;
+mod warp;
 
 use std::collections::BTreeMap;
 
@@ -346,6 +350,7 @@ fn every_case_draws_what_vkd3d_expects_of_direct3d_9() {
     let mut programs = Tally::default();
     // the programs with each construct, and how many of it there are in all
     let mut flow = Tally::default();
+    let mut on_warp = Tally::default();
     let mut flow_count = BTreeMap::from([("if", 0), ("loop", 0), ("block", 0)]);
     let mut lifted = BTreeMap::new();
     for (name, bytes) in &all.programs {
@@ -374,6 +379,14 @@ fn every_case_draws_what_vkd3d_expects_of_direct3d_9() {
                     name,
                 );
                 if why.is_none() {
+                    if let Some(outcome) = warp::compare_sampled(&p.p, name, warp::SAMPLE) {
+                        for (what, failing, example) in outcome.classes() {
+                            on_warp.note(
+                                if failing { class(&what) } else { what },
+                                if failing { example } else { name.clone() },
+                            );
+                        }
+                    }
                     lifted.insert(name.clone(), p);
                 }
             }
@@ -462,6 +475,7 @@ fn every_case_draws_what_vkd3d_expects_of_direct3d_9() {
         all.left_out
     );
     programs.print("programs");
+    on_warp.print("programs on WARP");
     flow.print("programs with control flow, by construct");
     println!("constructs in all: {flow_count:?}");
     probes.print("probes");
@@ -471,6 +485,11 @@ fn every_case_draws_what_vkd3d_expects_of_direct3d_9() {
         programs.failing(|c| c != RUNS && c != RUNS_BRANCHING && !unmodelled(c)),
         0,
         "programs failed"
+    );
+    assert_eq!(
+        on_warp.failing(|c| c.starts_with("WARP FAILED")),
+        0,
+        "programs failed on WARP"
     );
     assert_eq!(
         probes.failing(|c| c != AGREE && c != FLUSHED && !c.starts_with("not checked")),

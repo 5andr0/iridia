@@ -12,7 +12,8 @@
 //!   graph structured again (`structurize`); and it writes WGSL for browsers;
 //! - each run its comments state gives the outputs they state, worked by hand from the instruction definitions, in
 //!   the IR, in its graph and in the graph structured again (bit for bit), and in the WGSL read back by naga's front
-//!   end in `iridia-exec`;
+//!   end in `iridia-exec`; and the WGSL of both writers runs on WARP (`tests/warp`, every fixture unless
+//!   `shader.graphics=0`) and gives the IR's lanes within 1e-3 on the same inputs, constants and (WARP's) uniform texels;
 //! - a program that reads pipeline state (a pixel 1.x texture stage's dimension and projection, its bump matrix) runs
 //!   in the IR reading it, then specialised by each run's state every way; where the run states a stage's dimension,
 //!   the program lifted knowing it, specialised by the rest, runs every way too.
@@ -34,6 +35,8 @@
 //!   alone, the level is the sampler's, `tex(...;auto)`). A program that takes a derivative runs as a quad.
 mod fixtures;
 mod harness;
+mod inputs;
+mod warp;
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -392,7 +395,7 @@ fn check_lane(at: &str, lane: &Lane, got: &Option<BTreeMap<String, [u32; 4]>>) -
 const MISPRINTS: &[(&str, &str)] = &[("break p0.", "breakp p0.x")];
 
 /// One fixture through every check.
-fn fixture(folder: &Path, name: &str) -> Result<(), String> {
+fn fixture(folder: &Path, name: &str, warped: &mut BTreeMap<String, usize>) -> Result<(), String> {
     let source = std::fs::read_to_string(folder.join(format!("{name}.asm"))).unwrap();
     if let Ok(err) = std::fs::read_to_string(folder.join(format!("{name}.err"))) {
         return Err(format!("Microsoft's assembler refuses it: {}", err.trim()));
@@ -448,7 +451,7 @@ fn fixture(folder: &Path, name: &str) -> Result<(), String> {
         for run in &statement.runs {
             check(run, &outputs(&p, run)?)?;
         }
-        return Ok(());
+        return on_warp(&p, name, &statement.runs, warped);
     }
     // pipeline state (a pixel 1.x texture stage's dimension and projection, its bump matrix): the IR runs reading it,
     // then the program specialised by the run's state runs every way; where the run states a stage's dimension, so
@@ -459,6 +462,8 @@ fn fixture(folder: &Path, name: &str) -> Result<(), String> {
         check(run, &ir_outputs(&unknown, run)?)?;
         let specialised = specialise_by(unknown.clone(), run).map_err(|e| format!("specialised: {e}"))?;
         check(run, &outputs(&specialised, run)?).map_err(|e| format!("specialised: {e}"))?;
+        on_warp(&specialised, name, std::slice::from_ref(run), warped)
+            .map_err(|e| format!("specialised: {e}"))?;
         let mut stated = statement.options.clone();
         for (name, value) in &run.shared().inputs {
             if let Some(n) = name.strip_prefix("texdim") {
@@ -474,8 +479,51 @@ fn fixture(folder: &Path, name: &str) -> Result<(), String> {
                 .map_err(|e| format!("lift knowing the dimension: {e}"))?;
             let told = specialise_by(told, run).map_err(|e| format!("lifted knowing the dimension: {e}"))?;
             check(run, &outputs(&told, run)?).map_err(|e| format!("lifted knowing the dimension: {e}"))?;
+            on_warp(&told, name, std::slice::from_ref(run), warped)
+                .map_err(|e| format!("lifted knowing the dimension: {e}"))?;
         }
     }
+    Ok(())
+}
+
+/// A fixture's runs on WARP: both writers' WGSL of `p` held to the IR's run (`warp::compare`) on each run's inputs and
+/// constants, in WARP's environment. The outcome is counted in `warped`; a pixel program that does not take a derivative
+/// states lanes alone, and runs as a quad of four copies. Every fixture runs unless `shader.graphics` says otherwise (the
+/// programs are a few instructions each).
+fn on_warp(
+    p: &Prepared,
+    name: &str,
+    runs: &[Run],
+    warped: &mut BTreeMap<String, usize>,
+) -> Result<(), String> {
+    let Some(harness) = warp::harness() else {
+        return Ok(());
+    };
+    if !warp::wanted(name, 1) {
+        *warped.entry("outside the sample".into()).or_default() += 1;
+        return Ok(());
+    }
+    let mut cases = Vec::new();
+    for run in runs {
+        let all = bind_all(&p.ir.interface, run)?;
+        let mut lanes: Vec<Vec<[u32; 4]>> = all.iter().map(|b| b.slots.clone()).collect();
+        if p.ir.stage == iridia_ir::interface::Stage::Pixel && lanes.len() == 1 {
+            lanes = vec![lanes[0].clone(); 4];
+        }
+        cases.push(warp::Case {
+            lanes,
+            banks: all[0].banks.iter().map(|(_, r, d)| (*r, d.clone())).collect(),
+        });
+    }
+    let what = match warp::compare(harness, p, name, &cases) {
+        warp::Outcome::Gap(why) => format!("gap: {why}"),
+        warp::Outcome::Failed(why) => return Err(format!("WARP: {why}")),
+        warp::Outcome::Ran { reports, .. } => {
+            let worst = reports.iter().filter_map(|(_, r)| r.worst).max();
+            format!("ran, both writers; worst lane {worst:?}")
+        }
+    };
+    *warped.entry(what).or_default() += 1;
     Ok(())
 }
 
@@ -495,6 +543,7 @@ fn every_assembled_fixture_runs_as_its_comments_state() {
     let (folder, names) = (fixtures::assembled_folder(), fixtures::assembled());
     let mut failed = Vec::new();
     let mut versions = BTreeMap::<String, usize>::new();
+    let mut warped = BTreeMap::<String, usize>::new();
     for name in &names {
         let version = std::fs::read_to_string(folder.join(format!("{name}.asm")))
             .unwrap()
@@ -504,11 +553,12 @@ fn every_assembled_fixture_runs_as_its_comments_state() {
             .unwrap_or_default()
             .to_owned();
         *versions.entry(version).or_default() += 1;
-        if let Err(e) = fixture(&folder, name) {
+        if let Err(e) = fixture(&folder, name, &mut warped) {
             failed.push(format!("{name}: {e}"));
         }
     }
     println!("{} fixtures by version: {versions:?}", names.len());
+    println!("runs on WARP (a count per program run): {warped:?}");
     assert!(
         failed.is_empty(),
         "{} of {} failed:\n{}",

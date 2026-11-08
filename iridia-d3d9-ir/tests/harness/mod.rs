@@ -6,7 +6,9 @@
 use std::{cell::RefCell, collections::BTreeMap};
 
 use iridia_exec::{Dim, Execution, ImageLod, ImageSample, PixelShader, ProgramShader, Sample, Sampler};
-use iridia_ir::interface::{D3dSignature, Interface, ResourceId, Stage, SystemValue};
+use iridia_ir::interface::{
+    D3dSignature, Interface, InterpMode, ResourceId, ResourceKind, ScalarType, Stage, SystemValue,
+};
 
 /// The lanes a write mask names, in order.
 pub fn lanes_of(mask: u8) -> Vec<usize> {
@@ -60,6 +62,21 @@ pub struct Prepared {
     pub wgsl: ProgramShader,
     /// The interface `wgsl` is run by: the program's, with each varying in a register of its own (see [`from_wgsl`]).
     pub wgsl_interface: Interface,
+    /// The WGSL for browsers by each writer, by the writer's name: both read back by naga's front end and validated, and run
+    /// on WARP by `warp::compare`.
+    pub writers: Vec<(&'static str, String)>,
+}
+
+/// The text as wgpu's naga reads it: parsed and validated with every capability.
+fn read_back(text: &str) -> Result<(), String> {
+    let module = naga_wgsl::front::wgsl::parse_str(text).map_err(|e| e.emit_to_string(text))?;
+    naga_wgsl::valid::Validator::new(
+        naga_wgsl::valid::ValidationFlags::all(),
+        naga_wgsl::valid::Capabilities::all(),
+    )
+    .validate(&module)
+    .map(|_| ())
+    .map_err(|e| e.to_string())
 }
 
 /// Promote, simplify, validate and print a lifted program, make it a graph and structure it again (each form
@@ -86,16 +103,21 @@ pub fn prepare(mut ir: iridia_ir::Program) -> Result<Prepared, String> {
     }
     round_trip(&restructured.entry)?;
     let wgsl = iridia_naga::wgsl(&ir, &iridia_naga::Profile::BROWSER).map_err(|e| format!("WGSL: {e}"))?;
+    read_back(&wgsl).map_err(|e| format!("WGSL read back: {e}"))?;
+    let other =
+        iridia_wgsl::wgsl(&ir, &iridia_wgsl::Profile::BROWSER).map_err(|e| format!("iridia-wgsl: {e}"))?;
+    read_back(&other).map_err(|e| format!("iridia-wgsl read back: {e}"))?;
     let program = from_wgsl(&ir, &wgsl)?;
     let wgsl_interface = program.interface.clone();
-    let wgsl =
+    let shader =
         ProgramShader::new(program).map_err(|e| format!("WGSL program not compiled for iridia-exec: {e}"))?;
     Ok(Prepared {
         ir,
         graph,
         restructured,
-        wgsl,
+        wgsl: shader,
         wgsl_interface,
+        writers: vec![("iridia-naga", wgsl), ("iridia-wgsl", other)],
     })
 }
 
@@ -126,7 +148,7 @@ pub fn from_wgsl(p: &iridia_ir::Program, wgsl: &str) -> Result<iridia::Program, 
     let mut interface = p.interface.clone();
     for (n, v) in interface.inputs.iter_mut().enumerate() {
         v.provenance.d3d = Some(D3dSignature {
-            register: u32::try_from(n).unwrap(),
+            register: u32::try_from(n).expect("a slot fits 32 bits"),
             mask: v
                 .provenance
                 .d3d
@@ -136,7 +158,7 @@ pub fn from_wgsl(p: &iridia_ir::Program, wgsl: &str) -> Result<iridia::Program, 
     }
     for (n, v) in interface.outputs.iter_mut().enumerate() {
         if let (Some(d), None | Some(SystemValue::Target(_))) = (&mut v.provenance.d3d, v.system) {
-            d.register = u32::try_from(n).unwrap();
+            d.register = u32::try_from(n).expect("a slot fits 32 bits");
         }
     }
     let io = iridia::entry_io(&interface)?;
@@ -246,8 +268,22 @@ pub struct Bound<'a> {
 
 /// A run of the IR in `iridia-exec-ir`, its inputs by slot (each varying's lanes packed from lane 0).
 pub fn run_ir(p: &iridia_ir::Program, inputs: &[[u32; 4]], bound: &mut Bound<'_>) -> Result<View, String> {
-    let interface = &p.interface;
-    let run = iridia_exec_ir::run(
+    run_ir_within(p, inputs, bound, iridia_exec_ir::STEP_LIMIT)?.ok_or_else(|| {
+        format!(
+            "more than {} loop iterations and block executions",
+            iridia_exec_ir::STEP_LIMIT
+        )
+    })
+}
+
+/// [`run_ir`] taking at most `budget` loop iterations and block executions: `None` for a run that needs more.
+pub fn run_ir_within(
+    p: &iridia_ir::Program,
+    inputs: &[[u32; 4]],
+    bound: &mut Bound<'_>,
+    budget: u64,
+) -> Result<Option<View>, String> {
+    let counted = iridia_exec_ir::run_counted(
         p,
         &mut iridia_exec_ir::Bound {
             inputs,
@@ -256,8 +292,12 @@ pub fn run_ir(p: &iridia_ir::Program, inputs: &[[u32; 4]], bound: &mut Bound<'_>
             sampler: &mut *bound.sampler,
             denormals: bound.denormals,
         },
+        budget,
     )?;
-    ir_view(interface, run)
+    match counted.finish {
+        iridia_exec_ir::Finish::Complete(run) => ir_view(&p.interface, run).map(Some),
+        iridia_exec_ir::Finish::Exhausted => Ok(None),
+    }
 }
 
 /// A quad's runs of the IR in `iridia-exec-ir` (lanes 0 and 1 the top row), each lane's inputs by slot, the lanes
@@ -267,6 +307,22 @@ pub fn run_ir_quad(
     inputs: [&[[u32; 4]]; 4],
     bound: &mut Bound<'_>,
 ) -> Result<[View; 4], String> {
+    run_ir_quad_within(p, inputs, bound, iridia_exec_ir::STEP_LIMIT)?.ok_or_else(|| {
+        format!(
+            "more than {} loop iterations and block executions",
+            iridia_exec_ir::STEP_LIMIT
+        )
+    })
+}
+
+/// [`run_ir_quad`] with each lane taking at most `budget` loop iterations and block executions in a pass: `None` for a quad
+/// in which a lane needs more.
+pub fn run_ir_quad_within(
+    p: &iridia_ir::Program,
+    inputs: [&[[u32; 4]]; 4],
+    bound: &mut Bound<'_>,
+    budget: u64,
+) -> Result<Option<[View; 4]>, String> {
     let shared = RefCell::new(&mut *bound.sampler);
     let answer = |s: iridia_exec_ir::Sample| (shared.borrow_mut())(s);
     let [mut a, mut b, mut c, mut d] = [answer; 4];
@@ -284,14 +340,16 @@ pub fn run_ir_quad(
         lane(i2, &mut c),
         lane(i3, &mut d),
     );
-    let runs = iridia_exec_ir::run_quad(p, [&mut b0, &mut b1, &mut b2, &mut b3])?;
-    let [r0, r1, r2, r3] = runs;
-    Ok([
+    let counted = iridia_exec_ir::run_quad_counted(p, [&mut b0, &mut b1, &mut b2, &mut b3], budget)?;
+    let iridia_exec_ir::QuadFinish::Complete([r0, r1, r2, r3]) = counted.finish else {
+        return Ok(None);
+    };
+    Ok(Some([
         ir_view(&p.interface, r0)?,
         ir_view(&p.interface, r1)?,
         ir_view(&p.interface, r2)?,
         ir_view(&p.interface, r3)?,
-    ])
+    ]))
 }
 
 /// The view of a run of the IR.
@@ -387,6 +445,92 @@ fn naga_view(interface: &Interface, e: Execution, position: Option<[u32; 4]>) ->
         other: BTreeMap::new(),
         killed: e.discarded,
     })
+}
+
+/// One seeded run's inputs, in the register view (D) and by slot (B), and its constant banks.
+pub struct Inputs {
+    pub registers: Vec<[u32; 4]>,
+    pub slots: Vec<[u32; 4]>,
+    pub banks: Vec<(ResourceId, u32, Vec<[u32; 4]>)>,
+}
+
+pub fn seeded(interface: &Interface, rng: &mut Rng) -> Inputs {
+    let mut registers = vec![[0u32; 4]; 16];
+    let mut slots = Vec::new();
+    for v in &interface.inputs {
+        let d = v.provenance.d3d.unwrap_or_else(|| {
+            panic!(
+                "input {}{} has no Direct3D register to seed it by",
+                v.label.name, v.label.index
+            )
+        });
+        let mut packed = [0u32; 4];
+        for (k, l) in lanes_of(d.mask).into_iter().enumerate() {
+            let x = rng.float().to_bits();
+            registers[d.register as usize][l] = x;
+            packed[k] = x;
+        }
+        slots.push(packed);
+    }
+    let mut banks = Vec::new();
+    for r in &interface.resources {
+        if let ResourceKind::ConstantBuffer { layout } = &r.kind {
+            let rows = layout.size.div_ceil(16);
+            let data = (0..rows)
+                .map(|_| [(); 4].map(|_| rng.float().to_bits()))
+                .collect();
+            let d = r.provenance.d3d.unwrap_or_else(|| {
+                panic!(
+                    "constant buffer {:?} has no Direct3D register to seed it by",
+                    r.id
+                )
+            });
+            banks.push((r.id, d.register, data));
+        }
+    }
+    Inputs {
+        registers,
+        slots,
+        banks,
+    }
+}
+
+impl Inputs {
+    pub fn by_register(&self) -> Vec<(u32, &[[u32; 4]])> {
+        self.banks.iter().map(|(_, r, d)| (*r, d.as_slice())).collect()
+    }
+    pub fn by_id(&self) -> Vec<(ResourceId, &[[u32; 4]])> {
+        self.banks.iter().map(|(i, _, d)| (*i, d.as_slice())).collect()
+    }
+}
+
+/// A pixel program's quad from its first lane's inputs by slot: every interpolated float input then the first lane's plus a
+/// step of its own along x and y, the first lane's constants and facing, `vPos` a pixel apart (lanes 0 and 1 the top row).
+pub fn quad(interface: &Interface, first: &[[u32; 4]], rng: &mut Rng) -> Vec<Vec<[u32; 4]>> {
+    let mut lanes = vec![first.to_vec(); 4];
+    for (n, v) in interface.inputs.iter().enumerate() {
+        let interpolated = v.system.is_none()
+            && v.value.scalar == ScalarType::Float
+            && v.interp.is_none_or(|i| i.mode != InterpMode::Flat);
+        for j in 0..usize::from(v.value.width.min(4)) {
+            let base = f32::from_bits(first[n][j]);
+            let (dx, dy) = (
+                (rng.float() / 64.0).clamp(-0.1, 0.1),
+                (rng.float() / 64.0).clamp(-0.1, 0.1),
+            );
+            for (k, lane) in lanes.iter_mut().enumerate().skip(1) {
+                if interpolated {
+                    lane[n][j] = (base + dx * (k & 1) as f32 + dy * (k >> 1) as f32).to_bits();
+                }
+            }
+            if v.system == Some(SystemValue::FragCoord) && j < 2 {
+                for (k, lane) in lanes.iter_mut().enumerate() {
+                    lane[n][j] = (0.5 + if j == 0 { k & 1 } else { k >> 1 } as f32).to_bits();
+                }
+            }
+        }
+    }
+    lanes
 }
 
 impl Prepared {

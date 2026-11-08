@@ -15,12 +15,19 @@
 //!   back by naga's front end in `iridia-exec`; D, the IR compiled into `iridia-exec` itself
 //!   (`ProgramShader::from_ir`). A program whose runs agree only so is counted in a class of its own;
 //!
+//! - a sample of the programs (one in 128 by file-name hash, every one with `shader.graphics=1`) has the WGSL of both
+//!   writers run on Direct3D 12's WARP adapter (`tests/warp`) and held to B's run on the same inputs, a quad of four lanes
+//!   for a pixel program: no lane beyond 1e-3 relative on either writer, except at `pow` of a zero base and an exponent of 0 or less (a
+//!   program that agrees in every lane once that case is given libm's value is counted in a class of its own,
+//!   `warp::Outcome::Ran`). What the harness cannot bind is a named gap, counted.
+//!
 //! Every failure is counted by class and the test fails on any. Without the oracle set it prints SKIP and passes.
 mod harness;
 mod inputs;
 mod tally;
+mod warp;
 
-use harness::{Rng, Texels, View, ir_texels, lanes_of, round_trip};
+use harness::{Rng, Texels, View, ir_texels, round_trip, seeded};
 use inputs::{Game, OracleSet, oracle_tree};
 use iridia_exec::ProgramShader;
 use iridia_ir::interface::{Interface, ResourceId, ResourceKind};
@@ -195,52 +202,6 @@ fn from_wgsl(old: &iridia::Program, wgsl: &str) -> Result<iridia::Program, Strin
     Ok(p)
 }
 
-/// One seeded run's inputs, in the register view (A, C) and by slot (B), and its constant banks.
-struct Inputs {
-    registers: Vec<[u32; 4]>,
-    slots: Vec<[u32; 4]>,
-    banks: Vec<(ResourceId, u32, Vec<[u32; 4]>)>,
-}
-
-fn seeded(interface: &Interface, rng: &mut Rng) -> Inputs {
-    let mut registers = vec![[0u32; 4]; 16];
-    let mut slots = Vec::new();
-    for v in &interface.inputs {
-        let d = v.provenance.d3d.unwrap();
-        let mut packed = [0u32; 4];
-        for (k, l) in lanes_of(d.mask).into_iter().enumerate() {
-            let x = rng.float().to_bits();
-            registers[d.register as usize][l] = x;
-            packed[k] = x;
-        }
-        slots.push(packed);
-    }
-    let mut banks = Vec::new();
-    for r in &interface.resources {
-        if let ResourceKind::ConstantBuffer { layout } = &r.kind {
-            let rows = layout.size.div_ceil(16);
-            let data = (0..rows)
-                .map(|_| [(); 4].map(|_| rng.float().to_bits()))
-                .collect();
-            banks.push((r.id, r.provenance.d3d.unwrap().register, data));
-        }
-    }
-    Inputs {
-        registers,
-        slots,
-        banks,
-    }
-}
-
-impl Inputs {
-    fn by_register(&self) -> Vec<(u32, &[[u32; 4]])> {
-        self.banks.iter().map(|(_, r, d)| (*r, d.as_slice())).collect()
-    }
-    fn by_id(&self) -> Vec<(ResourceId, &[[u32; 4]])> {
-        self.banks.iter().map(|(i, _, d)| (*i, d.as_slice())).collect()
-    }
-}
-
 const AGREE: &str = "A = B = C = D on every run";
 const AGREE_NAN: &str = "A = B = C = D on every run, NaN for NaN (a NaN's sign or payload differs)";
 const KILLED: &str = "A = B = C = D, killed in all four on every run (outputs never compared)";
@@ -339,14 +300,33 @@ fn gate(name: &str, bytes: &[u8], runs: &mut (usize, usize)) -> (String, String)
     (outcome.into(), name.into())
 }
 
+/// The WARP comparison's outcome of a program, noted in `tally`: a named gap or a class per writer.
+fn on_warp(tally: &mut Tally, name: &str, bytes: &[u8]) {
+    let Ok(program) = lifted(bytes) else { return };
+    let Ok(prepared) = harness::prepare(program) else {
+        return;
+    };
+    let Some(outcome) = warp::compare_sampled(&prepared, name, warp::SAMPLE) else {
+        return;
+    };
+    for (what, failing, example) in outcome.classes() {
+        tally.note(
+            if failing { class(&what) } else { what },
+            if failing { example } else { name.to_owned() },
+        );
+    }
+}
+
 #[test]
 fn every_program_lifts_round_trips_and_runs_as_iridia_d3d9s() {
     let Some(programs) = programs() else { return };
     let mut tally = Tally::default();
+    let mut warp_tally = Tally::default();
     let mut runs = (0, 0);
     for (name, bytes) in &programs {
         let (class, example) = gate(name, bytes, &mut runs);
         tally.note(class, example);
+        on_warp(&mut warp_tally, name, bytes);
     }
     println!(
         "{} programs; runs compared {}, runs killed in all three (outputs not compared) {}",
@@ -355,10 +335,16 @@ fn every_program_lifts_round_trips_and_runs_as_iridia_d3d9s() {
         runs.1
     );
     tally.print("outcomes");
+    warp_tally.print("WARP outcomes");
     assert_eq!(
         tally.failures(&[AGREE, AGREE_NAN, KILLED]),
         0,
         "programs failed the gate"
+    );
+    assert_eq!(
+        warp_tally.failing(|c| c.starts_with("WARP FAILED")),
+        0,
+        "programs failed on WARP"
     );
     assert_eq!(programs.len(), 7_306);
 }

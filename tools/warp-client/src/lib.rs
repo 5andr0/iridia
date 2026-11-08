@@ -669,3 +669,37 @@ pub fn substitute_sin(wgsl: &str) -> Result<String, String> {
     out.push_str(REFERENCE_SIN);
     Ok(out)
 }
+
+/// `pow` of an `f32` with a base of 0 and an exponent of 0 or less is undefined in WGSL (the IR's `FPow` says the same, and the
+/// executor gives libm's value), and a target compiles it as it likes: the answers of WARP, a GPU and the executor differ
+/// there. [`REFERENCE_POW`] is `pow` with that case given libm's value.
+pub const REFERENCE_POW: &str = "
+fn iridia_pow(x: f32, y: f32) -> f32 {
+    if x == 0.0f && y == y {
+        if y == 0.0f { return 1.0f; }
+        if y < 0.0f { return bitcast<f32>(0x7f800000u); }
+        return 0.0f;
+    }
+    return pow(x, y);
+}
+";
+
+/// `wgsl` with each `pow` of two `f32` made `iridia_pow` and its definition added; a `pow` of another form is an error, so a
+/// run that says it defined `pow`'s zero base did.
+pub fn substitute_pow(wgsl: &str) -> Result<String, String> {
+    let mut out = String::with_capacity(wgsl.len() + REFERENCE_POW.len());
+    let mut rest = wgsl;
+    while let Some(at) = rest.find("pow(") {
+        let (before, after) = rest.split_at(at);
+        out.push_str(before);
+        let named = before
+            .chars()
+            .next_back()
+            .is_some_and(|c| c.is_alphanumeric() || c == '_');
+        out.push_str(if named { "pow(" } else { "iridia_pow(" });
+        rest = &after["pow(".len()..];
+    }
+    out.push_str(rest);
+    out.push_str(REFERENCE_POW);
+    Ok(out)
+}

@@ -24,7 +24,11 @@ iridia-exec = { path = "../iridia-exec" }
 iridia-exec-ir = { path = "../iridia-exec-ir" }
 iridia-naga = { path = "../iridia-naga", default-features = false, features = ["wgsl"] }
 iridia-passes = { path = "../iridia-passes" }
+iridia-warp-client.workspace = true
+iridia-wgsl = { path = "../iridia-wgsl" }
 naga = { workspace = true, features = ["wgsl-in"] }
+# tests/harness reads the text of both WGSL writers back with the published naga
+naga-wgsl = { package = "naga", version = "=30.0.1", default-features = false, features = ["wgsl-in"] }
 primase-testdata.workspace = true
 serde_json.workspace = true
 
