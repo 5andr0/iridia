@@ -1973,13 +1973,47 @@ fn arguments(interface: &Interface, sig: &FunctionSig, c: u32, pointers: &[Vec<u
     registers
 }
 
-/// One run of stage function `exe` (of `program`'s interface, as `sig`) on case `c`'s arguments and memory: its
-/// result's members (NaNs alike) and the memory it leaves.
+/// The scalar type of each leaf of the structures a ray tracing program's facts state for its payload and hit
+/// attributes, in order, a word each (see [`module_leaves`]). The facts' integers carry no sign: they are seeded as
+/// unsigned. A leaf of other than 32 bits is refused as A's lift refuses it.
+fn facts_leaves(interface: &Interface) -> Result<Vec<Vec<iridia_ir::interface::ScalarType>>, String> {
+    use iridia_ir::interface::{LeafKind, ScalarType};
+    let StageFacts::RayTracing(facts) = &interface.facts else {
+        return Ok(Vec::new());
+    };
+    let lists: &[&[iridia_ir::interface::Leaf]] = match interface.stage {
+        Stage::AnyHit | Stage::ClosestHit => &[&facts.payload_leaves, &facts.attribute_leaves],
+        Stage::Miss | Stage::Callable => &[&facts.payload_leaves],
+        _ => &[],
+    };
+    lists
+        .iter()
+        .map(|leaves| {
+            leaves
+                .iter()
+                .map(|leaf| match leaf.kind {
+                    LeafKind::Float32 => Ok(ScalarType::Float),
+                    LeafKind::Int32 => Ok(ScalarType::Uint),
+                    LeafKind::Bool => Ok(ScalarType::Bool),
+                    other => Err(format!("a pointer argument's leaf of {other:?}")),
+                })
+                .collect()
+        })
+        .collect()
+}
+
+/// Whether two leaf types are one kind of value: the facts' integers carry no sign, A's are signed or unsigned.
+fn same_kind(a: iridia_ir::interface::ScalarType, b: iridia_ir::interface::ScalarType) -> bool {
+    use iridia_ir::interface::ScalarType::{Sint, Uint};
+    a == b || matches!((a, b), (Sint | Uint, Sint | Uint))
+}
+
 /// The scalar type of each 32-bit leaf of the structure each pointer argument of function `name` of A's module points
 /// to (a ray tracing program's payload, then its attributes), in order. Both columns pass the structure as a word per
 /// leaf, in order: the executor lays A's naga structure out so, and the IR lays it out as Direct3D does, which for
-/// leaves of 32 bits (the naga-path lift refuses memory of other widths) is one word after another.
-fn pointer_leaves(
+/// leaves of 32 bits (the naga-path lift refuses memory of other widths) is one word after another. Only
+/// [`facts_leaves`] is held to it: the vectors are seeded from the facts.
+fn module_leaves(
     old: &iridia::Program,
     name: &str,
 ) -> Result<Vec<Vec<iridia_ir::interface::ScalarType>>, String> {
@@ -2038,7 +2072,7 @@ fn pointer_leaves(
     Ok(all)
 }
 
-/// One run of a stage function's result members, its pointer arguments' words after it (see [`pointer_leaves`]) and
+/// One run of a stage function's result members, its pointer arguments' words after it (see [`facts_leaves`]) and
 /// the memory it leaves.
 type Call = (Vec<[u32; 4]>, Vec<Vec<u32>>, Memory);
 
@@ -2124,9 +2158,26 @@ fn functions(
             Ok(e) => a.push(e),
             Err(e) => return tally(&mut g.a_fails, &format!("A not built: {e}"), at),
         }
-        match pointer_leaves(old, sig.name) {
-            Ok(l) => leaves.push(l),
-            Err(e) => return tally(&mut g.a_fails, &format!("A's pointer arguments: {e}"), at),
+        match (facts_leaves(&interface), module_leaves(old, sig.name)) {
+            (Ok(facts), Ok(module)) => {
+                // the facts state what A's module says, but for the sign of an integer
+                let same = facts.len() == module.len()
+                    && facts
+                        .iter()
+                        .zip(&module)
+                        .all(|(f, m)| f.len() == m.len() && f.iter().zip(m).all(|(&f, &m)| same_kind(f, m)));
+                if !same {
+                    g.differ.push(format!(
+                        "{at}: {}: the facts' leaves {facts:?} are not A's module's {module:?}",
+                        sig.name
+                    ));
+                    return;
+                }
+                leaves.push(facts);
+            }
+            (Err(e), _) | (_, Err(e)) => {
+                return tally(&mut g.a_fails, &format!("A's pointer arguments: {e}"), at);
+            }
         }
     }
     g.a += 1;
