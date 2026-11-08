@@ -128,6 +128,8 @@ primase_testdata::inputs! {
         "shader.worst" => "a file name prefix: each corpus's programs and their worst class are written to `<prefix>-<corpus>.txt`",
         "shader.census" => "`1`: the compute census (compute_census.rs) lifts every compute program of the corpus and counts them by what a comparison would have to account for",
         "shader.compute" => "`0` runs no compute program; unset runs a fixed sample (one program in 16 by file-name hash, and every program `COMPUTE_EXPECTED` names) with the vertex and pixel programs; `sample` runs that sample alone; `1` runs every compute program of a corpus with them, as they are bound by `exec_wgsl` (buffer-only and group-shared programs); `only` runs every one and nothing else",
+        "shader.graphics" => "`1` runs every vertex and pixel program of a corpus in the WARP comparison; `0` none; unset runs a fixed sample (one program in `shader.graphics_every`, 128 by default, by file-name hash), or every program `shader.only` names",
+        "shader.graphics_every" => "the sample of the vertex and pixel programs takes one program in this many (128 by default; `shader.graphics`)",
         "shader.compute_runs" => "how many times each compute job runs on WARP (2 by default): a word that differs between the runs is one the program leaves unordered",
         "shader.dump" => "a folder: the WGSL of each program that runs is written to it, named by the program",
         "shader.only" => "`|`-separated parts of program names: only the programs of a corpus with one of them in the name run",

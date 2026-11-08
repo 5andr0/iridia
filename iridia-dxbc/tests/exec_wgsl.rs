@@ -418,6 +418,14 @@ fn run_program(harness: &Harness, name: &str, bytes: &[u8], t: &mut Tally) {
             return;
         }
     }
+    if matches!(stage, Stage::Vertex | Stage::Pixel) && !compute_only() && !graphics_wanted(name) {
+        tally(
+            &mut t.gaps,
+            "a vertex or pixel program outside the sample (shader.graphics=1 runs every one)",
+            name,
+        );
+        return;
+    }
     if !matches!(stage, Stage::Vertex | Stage::Pixel) || compute_only() {
         let why = if stage == Stage::Compute {
             "a compute program outside the sample (shader.compute=1 runs every one)".to_owned()
@@ -710,16 +718,42 @@ fn compute_only() -> bool {
 /// One compute program in this many (by a hash of its file name) is in the sample.
 const COMPUTE_SAMPLE: u64 = 16;
 
+/// One vertex or pixel program in this many (by a hash of its file name) is in the sample, unless `shader.graphics_every`
+/// says another number: Elden Ring alone has some 48,000, and the sample is what a gate can afford of them.
+const GRAPHICS_SAMPLE: u64 = 128;
+
+/// Whether the program `name` is in the one-in-`every` sample, by a hash of its file name.
+fn sampled(name: &str, every: u64) -> bool {
+    let fnv = short(name).bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| {
+        (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
+    });
+    common::mix64(fnv).is_multiple_of(every)
+}
+
+/// Whether the vertex or pixel program `name` runs: `shader.graphics` is `1` (every one), `0` (none), or unset and the
+/// program is in the sample (or `shader.only` names programs, which are the ones to run).
+fn graphics_wanted(name: &str) -> bool {
+    match inputs::debug("shader.graphics").as_deref() {
+        None | Some("sample") if inputs::debug("shader.only").is_some() => true,
+        None | Some("sample") => {
+            let every = inputs::debug("shader.graphics_every").map_or(GRAPHICS_SAMPLE, |v| {
+                v.parse().expect("shader.graphics_every is a number")
+            });
+            sampled(name, every)
+        }
+        Some("1") => true,
+        Some("0") => false,
+        Some(other) => panic!("shader.graphics is 0, 1 or sample, not {other}"),
+    }
+}
+
 /// Whether the compute program `name` (of source hash `hash`) runs.
 fn compute_wanted(name: &str, hash: &str) -> bool {
     match compute_scope() {
         ComputeScope::Off => false,
         ComputeScope::All | ComputeScope::Only => true,
         ComputeScope::Sample | ComputeScope::SampleOnly => {
-            let fnv = short(name).bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| {
-                (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
-            });
-            compute_expected(name, hash).is_some() || common::mix64(fnv).is_multiple_of(COMPUTE_SAMPLE)
+            compute_expected(name, hash).is_some() || sampled(name, COMPUTE_SAMPLE)
         }
     }
 }
