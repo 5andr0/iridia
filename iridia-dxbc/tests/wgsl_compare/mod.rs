@@ -1,6 +1,7 @@
 //! Physical inputs and comparisons shared by the WARP corpus tests and the IR gate.
 use crate::{common, inputs, wgsl_run};
 
+mod quantized_shape;
 mod word_types;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -194,7 +195,8 @@ impl Sampler for Uniform {
 struct Tally {
     compute_class_changes: BTreeMap<String, BTreeMap<String, usize>>,
     compute_program_class_changes: BTreeMap<String, (Class, Class)>,
-    compute_store_types: BTreeMap<String, BTreeMap<ResourceId, word_types::WordType>>,
+    compute_word_origins: BTreeMap<String, BTreeMap<word_types::WordType, usize>>,
+    origin_controlled_vectors: usize,
     programs: usize,
     stages: BTreeMap<String, usize>,
     compared: usize,
@@ -795,6 +797,252 @@ fn compute_wanted(name: &str, hash: &str) -> bool {
 /// listed.
 const COMPUTE_EXPECTED: &[(&str, &str, &str)] = &[
     (
+        "1028.dxbc",
+        "sha256:4a06a8ae41d5ef5131001e15c861d913077b09c6b6f030be8988bc93b491e11e",
+        WARP_SEEDED_NONFINITE,
+    ),
+    // Generated from all 48 rows of the reviewed per-word proof (capture 81015009, 83 words).
+    (
+        "M[AMSN_V][Ov_N][HierarchicalPivotAnim_3rdLayer]_Animation.cpo",
+        "sha256:405aedbace663895dc63d2a37969bb908c2c4ffbf15ecd85076428374ce74e3b",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "M[AMSN_V][Ov_N][HierarchicalPivotAnim_Child]_Animation.cpo",
+        "sha256:ce95a820786e6ad4bb1352a812724313d075b6e7c055199ac2d800db8a5a0589",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_50107_w32187_Animation.cpo",
+        "sha256:84dabbe985c7bfcd54faba4e0e3f940ed437e076a3493c61d0e98c09d1b11a7a",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010f_w312187_Animation.cpo",
+        "sha256:bbaeb10f87c7f05579ebc0140363f20fe8ec30bcb5ce02b7dc751f1f7e17f898",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010f_w312987_Animation.cpo",
+        "sha256:8901a0baeeca6cb6026e6b78ed10df5479c13777e5e941435425c0071a3b1a67",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010f_w3129a7_Animation.cpo",
+        "sha256:acd6fd6f308d3a13295f37d781edb96cacb24aa626ec1dce6ef8f1726b0afc20",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010f_w3131c7_Animation.cpo",
+        "sha256:31757b02312eeaa9fd6e93dfb238e8b2f1c45a3d4ca60983c618bcfddbe2eff9",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010f_w32187_Animation.cpo",
+        "sha256:9f1b05b915f2a539ddf21fb7b7a1e65005eb9906692fe24910baa261fc1fac06",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010f_w321a7_Animation.cpo",
+        "sha256:84862caa82620b214909f356deb4c48769d3aaf7281dc1b3c68f176b80466c25",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010f_w329a7_Animation.cpo",
+        "sha256:2d5f8e0cdef91dbf8c53f6f859cb2e5f7bf703960681e3e8e902ff121b266b66",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010f_w33187_Animation.cpo",
+        "sha256:811b2efc0b15ba667fc2d16e5b31a96bdb82c9c48e5686554242a990749afea4",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010f_w331e7_Animation.cpo",
+        "sha256:f39f1ad25408257528b18e055adc1009069331702b716f861e7ffbb87996d3ad",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010fb_w312187_Animation.cpo",
+        "sha256:39d62a3f1e0647f82bca079af0cf07b7b095ee74483bb3beae58c98228261e11",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010fb_w3129a7_Animation.cpo",
+        "sha256:c89114a1a80ab38c4e37f93e89920faa275ae16e64a397ae2f8b362633ccec9b",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010fdmo_w312187_Animation.cpo",
+        "sha256:8e81fbd71711631b7de8c32dca492b24e4d39cad2b1c5e2c585ef1787f661c2f",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010fdmo_w312987_Animation.cpo",
+        "sha256:ac9ae718841f7f0996f8e901ca07de0cfe50d360e3c603082940ca7de63c5583",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010fdmo_w3129a7_Animation.cpo",
+        "sha256:d887f62f366434e2b3ada89c6ce75b347c2c6eb2924f3299fee3566feca4a171",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010fdmo_w32187_Animation.cpo",
+        "sha256:81fabadbca6fd9a64bd1d98856450f8155dff8e5306e755d60c0645662a12f69",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010fdmo_w321a7_Animation.cpo",
+        "sha256:56735a4f9e9fb53c25d90283177d7dcd2a9b09edfed6350fe0f32688c47f973c",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010fdmo_w32987_Animation.cpo",
+        "sha256:541163162f931d50f844c2d4b764cb09e5cb3edf3b9c6c2c6209e68359fc58de",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010fdmo_w329a7_Animation.cpo",
+        "sha256:4f91a8245ac2d6e7552799de201379a0603ded24a3e4f4d49dbb1c5a3967a16b",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010fdmo_w33187_Animation.cpo",
+        "sha256:d2b7e99d93aad1dc14ff63e3462b0a917d0f9990deab806d378ba8a52393f142",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010fdmo_w331c7_Animation.cpo",
+        "sha256:bc076a4288777a4c62928f8f9fe869a71b590913c0f38f184f19e64b3dc8bebd",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010fdmo_w331e7_Animation.cpo",
+        "sha256:0e18e767f8d247226800fc6cfa31a2d4db11398ec9018d07dc5d641c903de315",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010fdmof9_w32187_Animation.cpo",
+        "sha256:5709be42c2f445be148757db14c69073223ff609a4266f421ba01ced094eedb6",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010ff1_w3129a7_Animation.cpo",
+        "sha256:81e12838bccb4faed69182dc50bb1591b0d02804f33d16bd96eec606881296a2",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010ff4_w3129a7_Animation.cpo",
+        "sha256:3a47a0c2b21e998972b541226be68e6191e7eb4f1923d91b07c5ffc269f15044",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010ff4_w3131c7_Animation.cpo",
+        "sha256:b8174c78c16ecc8e28ed4b487dd6aa9a9a2c4d254955c7624a969e92a5c29735",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010ff4b_w312187_Animation.cpo",
+        "sha256:b78f17ffe9adbc2e6b67a1eaaf5404f1a4c3770519db2da64d34ac724b882361",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010ff4b_w312987_Animation.cpo",
+        "sha256:78a182b80a3fd0364aa9e686a0fe4afbd044494ba926166150bc5764c8fd2e0e",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010ff4b_w3129a7_Animation.cpo",
+        "sha256:4352d07a657db7b28d2e68e496aac28cbb0b69f00280c767af50ac7848ff5dcf",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010ff8_w312187_Animation.cpo",
+        "sha256:481ddc9d9b34ca955124e31e98193e2a9ddcca8b4aa991395b3eb255f72964e9",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010ff8b_w312187_Animation.cpo",
+        "sha256:48c666b68d8c546fb1e1a387be84873842e54a23289a03d411cde7c91985c7e5",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010ff8b_w3129a7_Animation.cpo",
+        "sha256:5dd89bea8dba216a9c8f4f61cc36a77675beb521273327fcb7da19255def808c",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010ff9_w3131c7_Animation.cpo",
+        "sha256:684d1bf1672cc8fdd6a7e79def602ab160997b855b7323e9021c97487cae41b7",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010ff9_w33187_Animation.cpo",
+        "sha256:8fe79617bfac0dde3e449c481b3a6a1b226e23f6c94ef9adee914bb7ff1b50f8",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010ff9b_w312187_Animation.cpo",
+        "sha256:647f58b4632bfd90d0436ae726391918be46c125ff35c91dfcc5b100ade53cf4",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010ff9b_w312987_Animation.cpo",
+        "sha256:749b9498a4fc682caf91fcf1c05c8ea5d7d6c74ad6ee5b7fda38f33c8e584ab2",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5010ff9b_w3129a7_Animation.cpo",
+        "sha256:3d2fb83d2f75553c9407d8179e0b7b0590ce5a641762d23a18b160c01a0dcd88",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5030f_w31a187_Animation.cpo",
+        "sha256:a1b5889f83e26d69efa2c121eafa7886cdbeac25f51b074dc308640aade50a8e",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5030fb_w31a187_Animation.cpo",
+        "sha256:4c97a057e26c575bb164172d08b9024a8844320137ea48b647752cf1c38fa3ad",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5030fdmo_w31a187_Animation.cpo",
+        "sha256:0f9d9578e362bf3e811f6a88f790c29359cae543876fd527094ecedf03ef1336",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5030ff8_w31a187_Animation.cpo",
+        "sha256:4c833c0d1c6926c80d6a847f26a50b800504845391a0dd4648fb7f91445c1309",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_5030ff8b_w31a187_Animation.cpo",
+        "sha256:8cd72a51f780202df2e96b0bc68a3f8746369cc9b32a9861d33a1da45a2dd65a",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_50f1f_w3636187_Animation.cpo",
+        "sha256:6f93e9f1bd56b3b16cbbdf30a80f3d266a7b5201fb748e761060813aeff40e98",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_50f1f_w36369a7_Animation.cpo",
+        "sha256:d469c7bb9bd9c4faaf1f21b77e8c0c1dae4a97d6378b408113c8505da41b4a4a",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_50f1f_w386087_Animation.cpo",
+        "sha256:2ec059ecac2c5b6dc64cb957a92393cd37980ca886fb651eeb86fd843c6f17ee",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "SpeedTree_50f1f_w3ef8087_Animation.cpo",
+        "sha256:5a7c725064f897e4792a8a42e8ee6ec0dcbe209aa4b75b64719d53045745fa51",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
         "1021.dxbc",
         "sha256:1e5fef301327669be749764f0463efea892e79ae3ec98255869a4ae67d62fcf1",
         UNORDERED_UNPROVEN,
@@ -1260,6 +1508,20 @@ const WARP_FLOAT_BITS: &str = "integer words built from float bits; upstream 1-3
 where D3D11.3 22.13.6 recommends but does not require nearest-even (executor: nearest-even; WARP: toward zero); \
 proven by lane capture 567964d0";
 
+/// Every differing word of these name/hash rows was captured and mechanically checked (192 vectors, 83 words).
+/// https://microsoft.github.io/DirectX-Specs/d3d/archive/D3D11_3_FunctionalSpec.htm#22.13.6%20utof
+const WARP_QUANTIZED_FLOAT_BITS: &str = "an upstream fadd difference within the float bound, quantized to up to \
+256-unit steps by bitcast->utof, with WARP's utof faithfully rounded (D3D11.3 22.13.6); each final saturate \
+conversion exactly accounts for the stored integer; proven per word by capture 81015009";
+
+/// The original output words stay unchanged when the overflowing expression's operands/argument are captured.
+/// https://www.w3.org/TR/2026/CRD-WGSL-20261106/#floating-point-evaluation
+/// https://www.w3.org/TR/2026/CRD-WGSL-20261106/#indeterminate-values
+const WARP_SEEDED_NONFINITE: &str = "exp2 overflows on our seeded inputs (dot 7.85e18), then Inf*0; \
+WGSL 15.7.2 (Finite Math Assumption) and 8.2 leave non-finite intermediates indeterminate; captures \
+e5ca67ac/0b022ba6/41499eda cover all 64 differing words with unchanged original outputs; the huge dot \
+comes from our seeds, so seeding by use may retire this row (remove it when the stale check fires)";
+
 /// WARP gives different words on different runs of the same job.
 const WARP_UNSTABLE: &str = "WARP gives different words on different runs of the same job (intermittent)";
 
@@ -1383,7 +1645,10 @@ fn words_per(kind: &ResourceKind) -> u32 {
 /// An executor backend that owns the written buffers (a compute program that asks for a sample or a load is not run), and
 /// notes the words that stores gave two different values: the invocations run in an order the executor chooses and WARP
 /// does not, so a word they disagree on is not the program's to say.
+#[derive(Default)]
 struct Memory {
+    aliases: BTreeMap<ResourceId, word_types::StoreOrigin>,
+    origins: BTreeMap<(ResourceId, u32), word_types::WordType>,
     words: BTreeMap<ResourceId, Vec<u32>>,
     /// Per word stored to: the first value, whether a later store gave another, and how many stores it had.
     stored: BTreeMap<(ResourceId, u32), (u32, bool, u32)>,
@@ -1393,6 +1658,12 @@ impl Backend for Memory {
         Err("a texture sample".into())
     }
     fn store_buffer(&mut self, view: ResourceId, word: u32, value: [u32; 4], mask: u8) -> Result<(), String> {
+        let (view, types) = self
+            .aliases
+            .get(&view)
+            .map_or((view, [word_types::WordType::Unknown; 4]), |site| {
+                (site.buffer, site.lanes)
+            });
         let words = self.words.get_mut(&view).ok_or("a store to a buffer not given")?;
         for lane in (0..4u32).filter(|l| mask >> l & 1 != 0) {
             let at = word + lane;
@@ -1402,6 +1673,11 @@ impl Backend for Memory {
                 continue;
             };
             *slot = v;
+            let origin = types[lane as usize];
+            self.origins
+                .entry((view, at))
+                .and_modify(|old| *old = old.merge(origin))
+                .or_insert(origin);
             let e = self.stored.entry((view, at)).or_insert((v, false, 0));
             e.1 |= e.0 != v;
             e.2 += 1;
@@ -1409,6 +1685,7 @@ impl Backend for Memory {
         Ok(())
     }
     fn read_buffer(&mut self, view: ResourceId, word: u32, count: u8) -> Result<[u32; 4], String> {
+        let view = self.aliases.get(&view).map_or(view, |site| site.buffer);
         let words = self.words.get(&view).ok_or("a read of a buffer not given")?;
         Ok(std::array::from_fn(|k| {
             if k < usize::from(count) {
@@ -1419,12 +1696,13 @@ impl Backend for Memory {
         }))
     }
     fn buffer_words(&mut self, view: ResourceId) -> Result<u32, String> {
+        let view = self.aliases.get(&view).map_or(view, |site| site.buffer);
         let words = self.words.get(&view).ok_or("a buffer not given")?;
         u32::try_from(words.len()).map_err(|_| "a buffer of too many words".into())
     }
 }
 
-/// A store's declared IR view decides the comparison: integers and unknown/mixed views are exact.
+/// The executed store's value origin decides the comparison: integers and unknown/mixed origins are exact.
 fn compute_class(view: word_types::WordType, a: u32, b: u32) -> Class {
     wgsl_run::classify(view == word_types::WordType::Float32, a, b)
 }
@@ -1432,9 +1710,13 @@ fn compute_class(view: word_types::WordType, a: u32, b: u32) -> Class {
 /// A compute program (the executor's `dispatch`) against the harness: every written buffer, every vector, word for word.
 fn run_compute(harness: &Harness, name: &str, hash: &str, p: iridia_ir::Program, t: &mut Tally) {
     let excused = compute_expected(name, hash);
-    let store_types = word_types::stores(&p);
-    t.compute_store_types.insert(name.to_owned(), store_types.clone());
     *t.stages.entry("Compute".to_owned()).or_default() += 1;
+    if excused == Some(WARP_QUANTIZED_FLOAT_BITS)
+        && let Err(why) = quantized_shape::check(&p.entry)
+    {
+        tally(&mut t.errors, why, name);
+        return;
+    }
     if let Some(why) = compute_gap(&p) {
         tally(&mut t.gaps, &why, name);
         return;
@@ -1466,8 +1748,18 @@ fn run_compute(harness: &Harness, name: &str, hash: &str, p: iridia_ir::Program,
             return;
         }
     };
+    let (observed_program, aliases) =
+        word_types::instrument(&p).expect("store-origin observation must preserve valid IR");
+    let observer = Executable::from_ir(&observed_program).expect("store-origin observation must compile");
     if let Some(dir) = inputs::debug("shader.dump") {
         let _ = std::fs::create_dir_all(&dir);
+        let _ = std::fs::write(
+            std::path::Path::new(&dir).join(format!("{}.ir", short(name))),
+            format!(
+                "{}\nStore origins:\n{aliases:#?}",
+                iridia_ir::text::print(&p.entry)
+            ),
+        );
         let _ = std::fs::write(
             std::path::Path::new(&dir).join(format!("{}.wgsl", short(name))),
             &wgsl,
@@ -1524,7 +1816,7 @@ fn run_compute(harness: &Harness, name: &str, hash: &str, p: iridia_ir::Program,
         let initial = written.clone();
         let mut memory = Memory {
             words: written,
-            stored: BTreeMap::new(),
+            ..Memory::default()
         };
         let bound = match exe.bind_resources(&resources) {
             Ok(b) => b,
@@ -1536,6 +1828,39 @@ fn run_compute(harness: &Harness, name: &str, hash: &str, p: iridia_ir::Program,
         if let Err(e) = exe.dispatch(&bound, &mut memory, &mut BTreeMap::new(), COMPUTE_GROUPS, 32) {
             tally(&mut t.unrun, &format!("B: {e}"), name);
             return;
+        }
+        let mut observed = Memory {
+            words: initial.clone(),
+            aliases: aliases.clone(),
+            ..Memory::default()
+        };
+        let observed_bound = observer
+            .bind_resources(&resources)
+            .expect("observer resource bindings must match B");
+        observer
+            .dispatch(
+                &observed_bound,
+                &mut observed,
+                &mut BTreeMap::new(),
+                COMPUTE_GROUPS,
+                32,
+            )
+            .expect("observer execution must match B");
+        assert_eq!(
+            memory.words, observed.words,
+            "store-origin observation changed B's output: {name} vector {c}"
+        );
+        assert_eq!(
+            memory.stored, observed.stored,
+            "store-origin observation changed B's writes: {name} vector {c}"
+        );
+        t.origin_controlled_vectors += 1;
+        for &origin in observed.origins.values() {
+            *t.compute_word_origins
+                .entry(name.to_owned())
+                .or_default()
+                .entry(origin)
+                .or_default() += 1;
         }
         let written = &memory.words;
         let job = serde_json::json!({
@@ -1596,8 +1921,9 @@ fn run_compute(harness: &Harness, name: &str, hash: &str, p: iridia_ir::Program,
             }
             changed |= ours != &initial[id] || warp != &initial[id];
             for (k, (&o, &w)) in ours.iter().zip(warp).enumerate() {
-                let view = store_types
-                    .get(id)
+                let view = observed
+                    .origins
+                    .get(&(*id, k as u32))
                     .copied()
                     .unwrap_or(word_types::WordType::Unknown);
                 let class = compute_class(view, o, w);
@@ -1693,7 +2019,14 @@ fn run_compute(harness: &Harness, name: &str, hash: &str, p: iridia_ir::Program,
     if worst == Class::Beyond || t.unordered.contains_key(name) {
         t.differs.insert(name.to_owned(), (hash.to_owned(), excused));
     } else if let Some(why) = excused
-        && [WARP_SIN, SOURCE_ORDER, WARP_FLOAT_BITS].contains(&why)
+        && [
+            WARP_SIN,
+            SOURCE_ORDER,
+            WARP_FLOAT_BITS,
+            WARP_QUANTIZED_FLOAT_BITS,
+            WARP_SEEDED_NONFINITE,
+        ]
+        .contains(&why)
     {
         // an intermittent excuse is exact on some runs; a deterministic one that is exact in every vector is stale
         tally(
@@ -1725,14 +2058,17 @@ fn report(title: &str, t: &Tally) {
             changes.values().sum::<usize>()
         );
     }
-    for (name, views) in &t.compute_store_types {
-        let unknown: Vec<_> = views
-            .iter()
-            .filter(|(_, view)| **view == word_types::WordType::Unknown)
-            .map(|(id, _)| id.0)
-            .collect();
-        if !unknown.is_empty() {
-            println!("compute-unknown-store-view {name}: resources {unknown:?}; compared exactly");
+    if t.origin_controlled_vectors != 0 {
+        println!(
+            "store-origin control: {} vectors have identical original and observed B outputs and write histories",
+            t.origin_controlled_vectors
+        );
+    }
+    for (name, origins) in &t.compute_word_origins {
+        if let Some(unknown) = origins.get(&word_types::WordType::Unknown) {
+            println!(
+                "compute-unknown-store-origin {name}: {unknown} actually written words across vectors; compared exactly"
+            );
         }
     }
     // `shader.worst`: a file that takes each program's worst class, to set one writer's run against another's
@@ -1911,7 +2247,8 @@ pub(crate) fn corpus_over(corpus: &common::Corpus) {
         t.compute_class_changes.extend(one.compute_class_changes);
         t.compute_program_class_changes
             .extend(one.compute_program_class_changes);
-        t.compute_store_types.extend(one.compute_store_types);
+        t.compute_word_origins.extend(one.compute_word_origins);
+        t.origin_controlled_vectors += one.origin_controlled_vectors;
         t.unordered_why.extend(one.unordered_why);
         for (source, (lanes, programs)) in one.amplified {
             let (n, all) = t.amplified.entry(source).or_default();
