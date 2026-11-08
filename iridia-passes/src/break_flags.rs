@@ -544,6 +544,10 @@ pub fn break_flags(f: &mut Function) -> Result<usize, String> {
         f.body = Body::Regions(body);
         return Ok(0);
     }
+    // Demote only slots that can reach an effect or a control condition. Otherwise dead transfers become private
+    // variables, copied through every routing guard and promoted into a much larger dead network again.
+    // Leave the no-routing path above unchanged, as this pass promises.
+    crate::simplify::prune_unused(f, &mut body);
     let body = Demote {
         f,
         labels: BTreeMap::new(),

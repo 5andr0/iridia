@@ -8,6 +8,8 @@ use alloc::{vec, vec::Vec};
 
 use iridia_ir::{Body, End, Function, Node, Op, Region, Type, ValueId};
 
+mod live;
+
 fn ty(f: &Function, v: ValueId) -> Option<Type> {
     f.ty(v)
 }
@@ -156,66 +158,24 @@ impl Simplify<'_> {
     }
 }
 
-fn add(uses: &mut [u32], v: ValueId) {
-    if let Some(u) = uses.get_mut(v.0 as usize) {
-        *u = u.saturating_add(1);
-    }
-}
-
-fn count(f: &Function, r: &Region, uses: &mut [u32]) {
-    for n in &r.nodes {
-        match n {
-            Node::Value(v) => {
-                if let Some(d) = f.value(*v) {
-                    d.op.operands().into_iter().for_each(|o| add(uses, o));
-                }
-            }
-            other => {
-                other.values().into_iter().for_each(|o| add(uses, o));
-                for inner in other.regions() {
-                    count(f, inner, uses);
-                }
-            }
-        }
-    }
-    if let Some(End::Yield(vs) | End::Br(_, vs) | End::Continue(_, vs)) = &r.end {
-        vs.iter().for_each(|&o| add(uses, o));
-    }
-}
-
-fn drop_unused(f: &Function, r: &mut Region, uses: &[u32]) -> bool {
-    let before = r.nodes.len();
-    // an operation with an effect (an atomic, a counter) stays where nothing reads its value
-    r.nodes.retain(|n| {
-        !matches!(n, Node::Value(v) if uses.get(v.0 as usize).copied().unwrap_or(1) == 0
-            && !f.value(*v).is_some_and(|d| d.op.has_effect()))
-    });
-    let mut changed = r.nodes.len() != before;
-    for n in &mut r.nodes {
-        for inner in n.regions_mut() {
-            changed |= drop_unused(f, inner, uses);
-        }
-    }
-    changed
-}
-
-/// Fold lane bookkeeping and remove unused values, in a `Regions` function (a graph body is left as it is).
+/// Fold lane bookkeeping and remove unused values and construct slots, in a `Regions` function (a graph body is
+/// left as it is). A worklist follows operations and live transfer destinations to a fixed point: dead loop-carried
+/// cycles do not keep themselves alive. Effects and control flow stay in place, including unused atomics.
 pub fn simplify(f: &mut Function) {
-    let Body::Regions(mut body) = core::mem::replace(&mut f.body, Body::Regions(Region::default())) else {
-        return;
+    let mut body = match &mut f.body {
+        Body::Regions(body) => core::mem::take(body),
+        Body::Cfg(_) => return,
     };
     let mut s = Simplify {
         subst: vec![None; f.values.len()],
         f,
     };
     s.region(&mut body);
-    // every operation but the effects is pure: a value nothing uses is removed, until none is left
-    loop {
-        let mut uses = vec![0u32; f.values.len()];
-        count(f, &body, &mut uses);
-        if !drop_unused(f, &mut body, &uses) {
-            break;
-        }
-    }
+    prune_unused(f, &mut body);
     f.body = Body::Regions(body);
+}
+
+pub(crate) fn prune_unused(f: &Function, body: &mut Region) {
+    let live = live::values(f, body);
+    live::prune(body, &live);
 }

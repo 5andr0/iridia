@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `iridia-passes`: remove unused construct results, loop parameters and their incoming arguments by a dependency
+  worklist, including dead transfer cycles. Exit routing demotes only live slots and prunes again after promotion,
+  avoiding large networks of temporary copies in both WGSL writers.
 - `iridia-wgsl` writes ray queries, for wgpu's `wgpu_ray_query` WGSL extension (`Profile::NAGA`; `Profile::BROWSER` has
   none and refuses them by name): `enable wgpu_ray_query;`, an `acceleration_structure` resource, a function-level
   `var q: ray_query` per query, `rayQueryInitialize` with the query's declared flags joined to the ray's, `rayQueryProceed`,

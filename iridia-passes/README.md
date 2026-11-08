@@ -7,11 +7,11 @@ Part of [iridia](https://github.com/Kalmarv/iridia), which turns compiled shader
 ## Passes
 
 - `promote`: variables (a source's registers) to SSA values, carried out of `If` and `Block` constructs as results and through loops as parameters. A variable a load reads before any store is undefined there, as the IR says.
-- `simplify`: lane bookkeeping folded (a swizzle of a swizzle is one swizzle, the compose of every lane of a value in order is that value, the compose of some of its lanes a swizzle) and values nothing uses removed.
+- `simplify`: lane bookkeeping folded (a swizzle of a swizzle is one swizzle, the compose of every lane of a value in order is that value, the compose of some of its lanes a swizzle) and unused values, construct results and loop parameters removed together with their transfer arguments. A worklist follows dependencies from effects and control conditions, so dead loop-carried cycles disappear without repeated scans of the function. Atomics whose old value is unused remain effects.
 - `specialise_state`: pipeline state the caller knows (`ResourceKind::PipelineState`, such as D3D9's projected-texture flag) made literals, the branches they decide folded and the resources taken out of the interface. A state value that does not fit its parameter is refused.
 - `specialise`: a material copy with fully supplied feature decisions folded by `iridia_ir::eval`, the reference executor's numeric definition (one portable `libm` backend, subnormals kept where unspecified). `feature_words` selects only words that decide a branch or select without runtime inputs; colours and scales stay uniforms. Returns `Result<Specialised, SpecialiseError>`, including the selected words, removed resources and fold count. A decision the reference cannot evaluate is a typed refusal.
 - `structurize`: a `Cfg` body made `Regions`, by Ramsey's structuring of reducible control flow (`structure`, which works on any graph of nodes and edges); an irreducible graph is refused.
-- `break_flags`: an exit to a construct that is not the innermost one, which targets whose `break` and `continue` are innermost-only (naga, WGSL) cannot take, routed through a `jump` variable: the inner constructs break, and a guard after each one passes the exit on. It returns how many exits it routed.
+- `break_flags`: an exit to a construct that is not the innermost one, which targets whose `break` and `continue` are innermost-only (naga, WGSL) cannot take, routed through a `jump` variable: the inner constructs break, and a guard after each one passes the exit on. Dead transfer slots are removed before demotion so they need no routing copies; promotion and simplification remove dead slots afterwards too. It returns how many exits it routed.
 
 ## Example
 
