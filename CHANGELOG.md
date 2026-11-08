@@ -68,6 +68,10 @@
 - Material feature folding uses the IR reference evaluator, including integer bit operations, conversions and float
   arithmetic. Folded decisions now agree with reference execution by construction, including its portable math and
   denormal rules. Unsupported reference operations remain typed refusals.
+- Reference float rounding preserves an input NaN's sign and payload and sets its quiet bit for all five modes.
+  Nearest-away rounding deliberately now quiets signaling NaNs, consistent with the other modes; its old result
+  inconsistently left them signaling. Finite rounding results are unchanged.
+
 - The reference evaluator's pure operations live in `iridia_ir::eval`, shared by execution and material folding.
   `iridia-exec-ir` re-exports its existing evaluation API. Reference transcendentals now come from `libm` on every
   target, instead of the platform math library; there is one backend for folding and execution.

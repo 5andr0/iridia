@@ -782,12 +782,21 @@ fn unary_arms<D: Drive1>(u: Unary, m: u8, logical: bool, d: D) -> D::Out {
         Unary::FNeg => d.each(|w| w ^ 0x8000_0000),
         Unary::FAbs => d.each(|w| w & 0x7fff_ffff),
         Unary::FFract => d.float(|f| f - libm::floorf(f)),
-        Unary::FRound(Rounding::Floor) => d.float(libm::floorf),
-        Unary::FRound(Rounding::Ceil) => d.float(libm::ceilf),
-        Unary::FRound(Rounding::Trunc) => d.float(libm::truncf),
-        Unary::FRound(Rounding::NearestEven) => d.float(libm::roundevenf),
-        // Rust's `round` is to the nearest, halves away from zero
-        Unary::FRound(Rounding::NearestAway) => d.float(libm::roundf),
+        Unary::FRound(rounding) => d.each(|bits| {
+            // A rounding operation quiets a signaling NaN without changing its sign or payload.
+            if bits & 0x7fff_ffff > 0x7f80_0000 {
+                bits | 0x0040_0000
+            } else {
+                let round = match rounding {
+                    Rounding::Floor => libm::floorf,
+                    Rounding::Ceil => libm::ceilf,
+                    Rounding::Trunc => libm::truncf,
+                    Rounding::NearestEven => libm::roundevenf,
+                    Rounding::NearestAway => libm::roundf,
+                };
+                round(fb(bits)).to_bits()
+            }
+        }),
         Unary::FSqrt => d.float(|f| narrow(libm::sqrt(f64::from(f)))),
         Unary::FInverseSqrt => d.float(|f| narrow(1.0 / libm::sqrt(f64::from(f)))),
         Unary::FExp2 => d.float(|f| narrow(libm::exp2(f64::from(f)))),
@@ -1098,6 +1107,56 @@ impl<A: Fn(usize) -> bool> Drive2 for Lanes2<'_, A> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rounding_quiets_nans_without_changing_their_sign_or_payload() {
+        struct Given(Lanes, Type);
+        impl Operands for Given {
+            fn get(&self, _: ValueId) -> Result<Lanes, String> {
+                Ok(self.0)
+            }
+            fn ty(&self, _: ValueId) -> Result<Type, String> {
+                Ok(self.1)
+            }
+        }
+        for rounding in [
+            Rounding::Floor,
+            Rounding::Ceil,
+            Rounding::Trunc,
+            Rounding::NearestEven,
+            Rounding::NearestAway,
+        ] {
+            for (scalar, exponent, sign, quiet) in [
+                (Scalar::F32, 0x7f80_0000u64, 0x8000_0000u64, 0x0040_0000u64),
+                (
+                    Scalar::F64,
+                    0x7ff0_0000_0000_0000,
+                    0x8000_0000_0000_0000,
+                    0x0008_0000_0000_0000,
+                ),
+            ] {
+                let ty = Type::vector(scalar, 1);
+                for sign in [0, sign] {
+                    for payload in [1, 0x12345, quiet, quiet | 0x12345] {
+                        let bits = exponent | sign | payload;
+                        let input = literal_words(&[bits, 0, 0, 0], ty);
+                        let wanted = literal_words(&[bits | quiet, 0, 0, 0], ty);
+                        assert_eq!(
+                            eval(
+                                &Op::Unary(Unary::FRound(rounding), ValueId(0)),
+                                ty,
+                                &Given(input, ty),
+                                false
+                            )
+                            .unwrap(),
+                            Some(wanted),
+                            "{rounding:?}/{scalar:?}/{bits:x}"
+                        );
+                    }
+                }
+            }
+        }
+    }
 
     /// Every NaN, of either sign and any payload, converts to the one quiet half NaN; an infinity keeps its sign.
     #[test]

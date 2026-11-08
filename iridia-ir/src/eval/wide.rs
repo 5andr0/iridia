@@ -117,17 +117,20 @@ pub(crate) fn eval(op: &Op, t: Type, ops: &dyn Operands, flush: bool) -> Result<
                 Unary::FNeg if float => each(m, &x, |w| w ^ 1 << 63),
                 Unary::FAbs if float => each(m, &x, |w| w & !(1 << 63)),
                 Unary::FFract if float => double(m, &x, |f| f - libm::floor(f)),
-                Unary::FRound(r) if float => double(
-                    m,
-                    &x,
-                    match r {
-                        Rounding::Floor => libm::floor,
-                        Rounding::Ceil => libm::ceil,
-                        Rounding::Trunc => libm::trunc,
-                        Rounding::NearestEven => libm::roundeven,
-                        Rounding::NearestAway => libm::round,
-                    },
-                ),
+                Unary::FRound(r) if float => each(m, &x, |bits| {
+                    if bits & 0x7fff_ffff_ffff_ffff > 0x7ff0_0000_0000_0000 {
+                        bits | 0x0008_0000_0000_0000
+                    } else {
+                        let round = match r {
+                            Rounding::Floor => libm::floor,
+                            Rounding::Ceil => libm::ceil,
+                            Rounding::Trunc => libm::trunc,
+                            Rounding::NearestEven => libm::roundeven,
+                            Rounding::NearestAway => libm::round,
+                        };
+                        round(f64::from_bits(bits)).to_bits()
+                    }
+                }),
                 Unary::FSqrt if float => double(m, &x, libm::sqrt),
                 Unary::FSign if float => double(m, &x, |f| {
                     if is_nan(f) {
