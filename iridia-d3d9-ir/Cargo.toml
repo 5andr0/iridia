@@ -16,17 +16,14 @@ d3d9-reader.workspace = true
 iridia-ir.workspace = true
 
 [dev-dependencies]
-# the gate (tests/gate.rs) holds this crate to the naga-based lifter it replaces, run in that lifter's executor; naga
-# here is that lifter's, with its WGSL front end to read the new WGSL back
-iridia = { path = "../iridia" }
-iridia-d3d9 = { path = "../iridia-d3d9" }
+# tests/gate.rs, tests/assembled.rs and tests/vkd3d.rs run the IR in iridia-exec-ir and compiled into iridia-exec, and the WGSL
+# of both writers on WARP (tests/warp); the text is also read back and validated with the published naga's WGSL front end
 iridia-exec = { path = "../iridia-exec" }
 iridia-exec-ir = { path = "../iridia-exec-ir" }
 iridia-naga = { path = "../iridia-naga", default-features = false, features = ["wgsl"] }
 iridia-passes = { path = "../iridia-passes" }
 iridia-warp-client.workspace = true
 iridia-wgsl = { path = "../iridia-wgsl" }
-naga = { workspace = true, features = ["wgsl-in"] }
 # tests/harness reads the text of both WGSL writers back with the published naga
 naga-wgsl = { package = "naga", version = "=30.0.1", default-features = false, features = ["wgsl-in"] }
 primase-testdata.workspace = true

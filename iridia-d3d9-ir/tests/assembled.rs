@@ -11,8 +11,7 @@
 //! - the program lifts, validates, prints and parses back, and so does its control flow graph (`flatten`) and the
 //!   graph structured again (`structurize`); and it writes WGSL for browsers;
 //! - each run its comments state gives the outputs they state, worked by hand from the instruction definitions, in
-//!   the IR, in its graph and in the graph structured again (bit for bit), and in the WGSL read back by naga's front
-//!   end in `iridia-exec`; and the WGSL of both writers runs on WARP (`tests/warp`, every fixture unless
+//!   the IR, in its graph and in the graph structured again (bit for bit), ; and the WGSL of both writers runs on WARP (`tests/warp`, every fixture unless
 //!   `shader.graphics=0`) and gives the IR's lanes within 1e-3 on the same inputs, constants and (WARP's) uniform texels;
 //! - a program that reads pipeline state (a pixel 1.x texture stage's dimension and projection, its bump matrix) runs
 //!   in the IR reading it, then specialised by each run's state every way; where the run states a stage's dimension,
@@ -41,7 +40,7 @@ mod warp;
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use harness::{Bound, Prepared, Texels, ir_texels, prepare};
+use harness::{Bound, Prepared, ir_texels, prepare};
 use iridia_ir::interface::{Interface, ResourceId, ResourceKind, StateParam, SystemValue, TextureDim};
 
 /// The lanes of a value list: floats, `0x` bits, `true` and `false`; or the texel of a sample the run should make,
@@ -310,7 +309,6 @@ fn outputs(p: &Prepared, run: &Run) -> Result<Outputs, String> {
     let all = bind_all(interface, run)?;
     let b = &all[0];
     let by_id: Vec<_> = b.banks.iter().map(|(i, _, d)| (*i, d.as_slice())).collect();
-    let by_register: Vec<_> = b.banks.iter().map(|(_, r, d)| (*r, d.as_slice())).collect();
     let mut sampler = ir_texels(interface);
     let mut bound = Bound {
         buffers: &by_id,
@@ -319,10 +317,9 @@ fn outputs(p: &Prepared, run: &Run) -> Result<Outputs, String> {
         denormals: iridia_ir::Denormals::Any,
     };
     let views = if all.len() == 1 {
-        vec![p.run(&b.slots, &mut bound, &by_register, &mut Texels)?]
+        vec![p.run(&b.slots, &mut bound)?]
     } else {
-        p.run_quad(quad(&all)?, &mut bound, &by_register, &mut Texels)?
-            .to_vec()
+        p.run_quad(quad(&all)?, &mut bound)?.to_vec()
     };
     Ok(lanes_of(interface, &views))
 }

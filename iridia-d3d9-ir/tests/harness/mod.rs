@@ -1,14 +1,12 @@
 //! What the tests that run lifted programs share: the forms a program is checked in (as lifted, as a control flow
-//! graph and structured again, and as WGSL read back by naga's front end), the runs of the IR in `iridia-exec-ir` and of
-//! a naga program in `iridia-exec` in one register view, and a texture model both executors sample alike.
+//! graph and structured again, and as WGSL for browsers by both writers, read back by naga's front end), the runs of the IR in `iridia-exec-ir` and of
+//! the IR compiled into `iridia-exec` in one register view, and a texture model both executors sample alike.
 #![allow(dead_code, reason = "each test uses the part it needs")]
 
 use std::{cell::RefCell, collections::BTreeMap};
 
 use iridia_exec::{Dim, Execution, ImageLod, ImageSample, PixelShader, ProgramShader, Sample, Sampler};
-use iridia_ir::interface::{
-    D3dSignature, Interface, InterpMode, ResourceId, ResourceKind, ScalarType, Stage, SystemValue,
-};
+use iridia_ir::interface::{Interface, InterpMode, ResourceId, ResourceKind, ScalarType, Stage, SystemValue};
 
 /// The lanes a write mask names, in order.
 pub fn lanes_of(mask: u8) -> Vec<usize> {
@@ -58,10 +56,6 @@ pub struct Prepared {
     pub graph: iridia_ir::Program,
     /// The graph structured again, by `structurize` (which promotes) and `simplify`.
     pub restructured: iridia_ir::Program,
-    /// The WGSL for browsers, read back by naga's front end, for `iridia-exec`.
-    pub wgsl: ProgramShader,
-    /// The interface `wgsl` is run by: the program's, with each varying in a register of its own (see [`from_wgsl`]).
-    pub wgsl_interface: Interface,
     /// The WGSL for browsers by each writer, by the writer's name: both read back by naga's front end and validated, and run
     /// on WARP by `warp::compare`.
     pub writers: Vec<(&'static str, String)>,
@@ -107,110 +101,12 @@ pub fn prepare(mut ir: iridia_ir::Program) -> Result<Prepared, String> {
     let other =
         iridia_wgsl::wgsl(&ir, &iridia_wgsl::Profile::BROWSER).map_err(|e| format!("iridia-wgsl: {e}"))?;
     read_back(&other).map_err(|e| format!("iridia-wgsl read back: {e}"))?;
-    let program = from_wgsl(&ir, &wgsl)?;
-    let wgsl_interface = program.interface.clone();
-    let shader =
-        ProgramShader::new(program).map_err(|e| format!("WGSL program not compiled for iridia-exec: {e}"))?;
     Ok(Prepared {
         ir,
         graph,
         restructured,
-        wgsl: shader,
-        wgsl_interface,
         writers: vec![("iridia-naga", wgsl), ("iridia-wgsl", other)],
     })
-}
-
-/// The program the WGSL is, for `iridia-exec`: the IR program's interface over the module naga's front end reads
-/// back, each resource bound to the global at the binding the plan gives it. `iridia-exec` carries varyings in a
-/// register view by their D3D registers, where shader model 1 and 2 put two in one (`v0` and `t0`, `oD0` and `oT0`)
-/// and `vPos` and `vFace` have none: each input and each colour or varying output is put in the register of its slot,
-/// its lanes as before. What WGSL text cannot say is put back from the interface: the entry point's argument and result
-/// member names (naga's namer writes `COLOR0_` for `COLOR0`) and bindings (WGSL cannot say a varying has no
-/// interpolation, so naga's front end supplies the default).
-pub fn from_wgsl(p: &iridia_ir::Program, wgsl: &str) -> Result<iridia::Program, String> {
-    let mut module = naga::front::wgsl::parse_str(wgsl).map_err(|e| format!("naga's WGSL front end: {e}"))?;
-    let plan = iridia_naga::BindingPlan::d3d(&p.interface).map_err(|e| e.to_string())?;
-    let mut bindings = Vec::new();
-    for b in &plan.bindings {
-        let at = naga::ResourceBinding {
-            group: b.group,
-            binding: b.binding,
-        };
-        let g = module
-            .global_variables
-            .iter()
-            .find(|(_, g)| g.binding.as_ref() == Some(&at))
-            .map(|(h, _)| h)
-            .ok_or_else(|| format!("no global at group {} binding {}", b.group, b.binding))?;
-        bindings.push((b.resource, g));
-    }
-    let mut interface = p.interface.clone();
-    for (n, v) in interface.inputs.iter_mut().enumerate() {
-        v.provenance.d3d = Some(D3dSignature {
-            register: u32::try_from(n).expect("a slot fits 32 bits"),
-            mask: v
-                .provenance
-                .d3d
-                .map_or(if v.value.width == 1 { 1 } else { 0b1111 }, |d| d.mask),
-            read_write_mask: 0,
-        });
-    }
-    for (n, v) in interface.outputs.iter_mut().enumerate() {
-        if let (Some(d), None | Some(SystemValue::Target(_))) = (&mut v.provenance.d3d, v.system) {
-            d.register = u32::try_from(n).expect("a slot fits 32 bits");
-        }
-    }
-    let io = iridia::entry_io(&interface)?;
-    let ep = module
-        .entry_points
-        .first_mut()
-        .ok_or("the WGSL has no entry point")?;
-    let entry = ep.name.clone();
-    if ep.function.arguments.len() != io.arguments.len() {
-        return Err("the WGSL entry point's arguments are not the interface's".into());
-    }
-    for (a, item) in ep.function.arguments.iter_mut().zip(&io.arguments) {
-        a.name = Some(item.name.clone());
-        a.binding = Some(item.binding.clone());
-    }
-    if let Some(result) = &ep.function.result {
-        let mut t = module.types[result.ty].clone();
-        let naga::TypeInner::Struct { members, .. } = &mut t.inner else {
-            return Err("the WGSL entry point's result is not a structure".into());
-        };
-        if members.len() != io.results.len() {
-            return Err("the WGSL entry point's results are not the interface's".into());
-        }
-        for (m, item) in members.iter_mut().zip(&io.results) {
-            m.name = Some(item.name.clone());
-            m.binding = Some(item.binding.clone());
-        }
-        module.types.replace(result.ty, t);
-    }
-    let program = iridia::Program {
-        module,
-        stage: p.stage,
-        entry,
-        interface,
-        bindings,
-        conventions: iridia::Conventions::D3D,
-        modes: iridia::D3dModes {
-            min_max_nan: true,
-            saturate_nan: true,
-            ..Default::default()
-        },
-        provenance: iridia::Provenance {
-            format: iridia_ir::interface::ShaderFormat::D3d9,
-            target: p.provenance.target.clone(),
-            lifter: "iridia-d3d9-ir through WGSL".into(),
-            lifter_version: 0,
-            source_hash: None,
-            instruction_count: None,
-        },
-        notes: Vec::new(),
-    };
-    Ok(program)
 }
 
 /// One invocation's results: each colour and varying output's four lanes by interface slot (lanes its mask does not
@@ -380,9 +276,9 @@ fn ir_view(interface: &Interface, run: iridia_exec_ir::Run) -> Result<View, Stri
     })
 }
 
-/// A run of a naga program in `iridia-exec`, its inputs in the register view, its outputs read from it by the registers
+/// A run of the IR compiled into `iridia-exec`, its inputs in the register view, its outputs read from it by the registers
 /// and lanes `interface` gives them.
-pub fn run_naga(
+pub fn run_exec(
     shader: &ProgramShader,
     interface: &Interface,
     inputs: &[[u32; 4]],
@@ -402,11 +298,11 @@ pub fn run_naga(
             None,
         )
     };
-    naga_view(interface, e, position)
+    exec_view(interface, e, position)
 }
 
-/// A quad's runs of a naga program in `iridia-exec` (lanes 0 and 1 the top row), as [`run_naga`] runs one.
-pub fn run_naga_quad(
+/// A quad's runs of the IR compiled into `iridia-exec` (lanes 0 and 1 the top row), as [`run_exec`] runs one.
+pub fn run_exec_quad(
     shader: &ProgramShader,
     interface: &Interface,
     inputs: [&[[u32; 4]]; 4],
@@ -417,15 +313,15 @@ pub fn run_naga_quad(
         .execute_quad(inputs, buffers, sampler)
         .map_err(|e| e.to_string())?;
     Ok([
-        naga_view(interface, e0, None)?,
-        naga_view(interface, e1, None)?,
-        naga_view(interface, e2, None)?,
-        naga_view(interface, e3, None)?,
+        exec_view(interface, e0, None)?,
+        exec_view(interface, e1, None)?,
+        exec_view(interface, e2, None)?,
+        exec_view(interface, e3, None)?,
     ])
 }
 
-/// The view of a run of a naga program, its outputs read from the register view.
-fn naga_view(interface: &Interface, e: Execution, position: Option<[u32; 4]>) -> Result<View, String> {
+/// The view of a run of a program in `iridia-exec`, its outputs read from the register view.
+fn exec_view(interface: &Interface, e: Execution, position: Option<[u32; 4]>) -> Result<View, String> {
     let mut outputs = BTreeMap::new();
     for (slot, v) in interface.outputs.iter().enumerate() {
         if !matches!(v.system, None | Some(SystemValue::Target(_))) {
@@ -534,31 +430,9 @@ pub fn quad(interface: &Interface, first: &[[u32; 4]], rng: &mut Rng) -> Vec<Vec
 }
 
 impl Prepared {
-    /// The register view of inputs given by slot: each varying's packed lanes put in the lanes its mask names, in the
-    /// register of its slot.
-    pub fn register_view(&self, slots: &[[u32; 4]]) -> Vec<[u32; 4]> {
-        let mut registers = vec![[0u32; 4]; slots.len().max(1)];
-        for (n, (v, packed)) in self.wgsl_interface.inputs.iter().zip(slots).enumerate() {
-            for (k, l) in lanes_of(v.provenance.d3d.map_or(0, |d| d.mask))
-                .into_iter()
-                .enumerate()
-            {
-                registers[n][l] = packed[k];
-            }
-        }
-        registers
-    }
-
     /// The IR's run, which its graph and the graph structured again must match bit for bit (no operation differs
-    /// between them, only the control around them); then, where `bound` keeps denormals as `iridia-exec` does, the
-    /// WGSL's, which must be alike. `banks` are the constant banks by `iridia-exec` register, `sampler` its sampler.
-    pub fn run(
-        &self,
-        slots: &[[u32; 4]],
-        bound: &mut Bound<'_>,
-        banks: &[(u32, &[[u32; 4]])],
-        sampler: &mut dyn Sampler,
-    ) -> Result<View, String> {
+    /// between them, only the control around them).
+    pub fn run(&self, slots: &[[u32; 4]], bound: &mut Bound<'_>) -> Result<View, String> {
         let b = run_ir(&self.ir, slots, bound)?;
         for (form, program) in [("graph", &self.graph), ("restructured graph", &self.restructured)] {
             let got = run_ir(program, slots, bound).map_err(|e| format!("the {form}: {e}"))?;
@@ -566,56 +440,17 @@ impl Prepared {
                 return Err(format!("the IR and its {form} disagree: {b:x?} and {got:x?}"));
             }
         }
-        if bound.denormals == iridia_ir::Denormals::Flush {
-            return Ok(b);
-        }
-        let c = run_naga(
-            &self.wgsl,
-            &self.wgsl_interface,
-            &self.register_view(slots),
-            banks,
-            sampler,
-        )
-        .map_err(|e| format!("iridia-exec: {e}"))?;
-        if !b.alike(&c) {
-            return Err(format!("the IR and the WGSL disagree: {b:x?} and {c:x?}"));
-        }
         Ok(b)
     }
 
     /// [`Prepared::run`] for a pixel program's 2 x 2 quad (lanes 0 and 1 the top row), each lane's inputs by slot:
     /// every form's four lanes must match the IR's as there.
-    pub fn run_quad(
-        &self,
-        slots: [&[[u32; 4]]; 4],
-        bound: &mut Bound<'_>,
-        banks: &[(u32, &[[u32; 4]])],
-        sampler: &mut dyn Sampler,
-    ) -> Result<[View; 4], String> {
+    pub fn run_quad(&self, slots: [&[[u32; 4]]; 4], bound: &mut Bound<'_>) -> Result<[View; 4], String> {
         let b = run_ir_quad(&self.ir, slots, bound)?;
         for (form, program) in [("graph", &self.graph), ("restructured graph", &self.restructured)] {
             let got = run_ir_quad(program, slots, bound).map_err(|e| format!("the {form}: {e}"))?;
             if got != b {
                 return Err(format!("the IR and its {form} disagree: {b:x?} and {got:x?}"));
-            }
-        }
-        if bound.denormals == iridia_ir::Denormals::Flush {
-            return Ok(b);
-        }
-        let registers = slots.map(|s| self.register_view(s));
-        let c = run_naga_quad(
-            &self.wgsl,
-            &self.wgsl_interface,
-            [&registers[0], &registers[1], &registers[2], &registers[3]],
-            banks,
-            sampler,
-        )
-        .map_err(|e| format!("iridia-exec: {e}"))?;
-        for (l, (b, c)) in b.iter().zip(&c).enumerate() {
-            if !b.alike(c) {
-                return Err(format!(
-                    "the IR and the WGSL disagree in lane {l}: {b:x?} and {c:x?}"
-                ));
             }
         }
         Ok(b)

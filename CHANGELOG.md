@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `iridia-d3d9-ir` tests: the gate no longer runs the older lift (`iridia-d3d9`) and the WGSL read back into the naga
+  interpreter (`iridia-exec`) beside the IR; it holds the IR's run to the IR compiled into `iridia-exec` and to the WGSL
+  of both writers on WARP, and its assembled and vkd3d tests run the IR, its graph and the graph structured again. The
+  older-lift half of the projection gate is gone with it; the crate's dev-dependencies on `iridia`, `iridia-d3d9` and the
+  naga fork are gone.
 - `iridia-ir`: a ray tracing program's facts state the scalars of the structures it declares its payload and hit attributes
   as (`RayTracingFacts::payload_leaves` and `attribute_leaves`, each a `Leaf` of a byte offset and a `LeafKind`: bool, 16, 32
   or 64-bit integer, 16, 32 or 64-bit float; integers carry no sign), and `Interface::verify` holds them in ascending order

@@ -339,8 +339,6 @@ name = "iridia-d3d9-ir"
 version = "0.6.0"
 dependencies = [
  "d3d9-reader",
- "iridia",
- "iridia-d3d9",
  "iridia-exec",
  "iridia-exec-ir",
  "iridia-ir",
@@ -349,7 +347,6 @@ dependencies = [
  "iridia-warp-client",
  "iridia-wgsl",
  "naga",
- "primase-naga",
  "primase-testdata",
  "serde_json",
 ]

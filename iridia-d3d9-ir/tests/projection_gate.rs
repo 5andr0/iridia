@@ -4,25 +4,27 @@
 )]
 //! The derived programs of shader model 3 on the IR (`project`, `reencode`, `project_vertex_output`), over every distinct
 //! vertex and pixel program of Shaun White Skateboarding's three SDB2 bundles (the oracle set
-//! `d3d-disassembler/shaun-white/sdb2`), against `iridia-d3d9`'s, the naga-based lifter's:
+//! `d3d-disassembler/shaun-white/sdb2`):
 //!
 //! - up to three cuts of each pixel program (after an instruction that writes three or more lanes of a temporary) and
-//!   every declared output of each vertex program are derived both ways; the two either both refuse or both give a program,
-//!   and the programs run alike (the older one in `iridia-exec`, the IR one in `iridia-exec-ir` and compiled into
-//!   `iridia-exec`) on the same seeded inputs, constants and texels;
-//! - each IR derivation is held to the whole program as well, with no older lifter in it: a vertex output's selected
-//!   lanes are what the whole program writes there, and a pixel program's `reencode` given what its `project` computes is
-//!   the whole program;
-//! - the harness sees a change: a projection with its lanes permuted differs from the older lifter's on most programs.
+//!   every declared output of each vertex program are derived; each derivation either is a program, which validates and
+//!   runs alike (the IR in `iridia-exec-ir`, compiled into `iridia-exec`) on the same seeded inputs, constants and
+//!   texels, or is refused, by reason;
+//! - each IR derivation is held to the whole program as well: a vertex output's selected lanes are what the whole program
+//!   writes there, and a pixel program's `reencode` given what its `project` computes is the whole program;
+//! - the harness sees a change: a projection with its lanes permuted differs from the cut's own on most programs.
 //!
-//! A refusal of the IR's that the older lifter does not make is counted by reason: a vertex program with flow control (the
-//! older slice drops the flow control and keeps the writes inside it) is the one the IR means. Every other failure is
-//! counted by class and the test fails on any. Without the oracle set it prints SKIP and passes.
+//! The migration from the naga-based lifter `iridia-d3d9` ran the first of these against that lifter's derivations (the
+//! two either both refused or both gave a program, and the programs ran alike); that comparison is gone with the lifter.
+//!
+//! A vertex program with flow control is refused (the older slice dropped the flow control and kept the writes inside it;
+//! the IR means the program). Every other refusal is counted by reason and fails the test, and so does every other
+//! failure, counted by class. Without the oracle set it prints SKIP and passes.
 mod harness;
 mod inputs;
 mod tally;
 
-use harness::{Bound, Rng, Texels, View, ir_texels, lanes_of, run_ir, run_naga};
+use harness::{Bound, Rng, Texels, View, ir_texels, lanes_of, run_exec, run_ir};
 use inputs::{Game, OracleSet, oracle_tree};
 use iridia_d3d9_ir::{Opcode, Options, Register, Shader};
 use iridia_exec::ProgramShader;
@@ -48,7 +50,7 @@ fn programs() -> Option<Vec<(String, Vec<u8>)>> {
     )
 }
 
-/// The older lifter's multiply rule, IEEE 754, so the two mean the same.
+/// The multiply rule IEEE 754, as `iridia-exec` computes it.
 fn ieee() -> Options {
     Options {
         multiply: MulZero::Ieee,
@@ -56,7 +58,7 @@ fn ieee() -> Options {
     }
 }
 
-/// The inputs of one seeded run: by register (the older executor, the IR compiled into `iridia-exec`) and by slot
+/// The inputs of one seeded run: by register (the IR compiled into `iridia-exec`) and by slot
 /// (`iridia-exec-ir`), and the constant banks.
 struct Inputs {
     registers: Vec<[u32; 4]>,
@@ -127,8 +129,8 @@ impl Inputs {
     }
 }
 
-fn run_old(shader: &ProgramShader, interface: &Interface, i: &Inputs) -> Result<View, String> {
-    run_naga(shader, interface, &i.registers, &i.by_register(), &mut Texels)
+fn run_compiled(shader: &ProgramShader, interface: &Interface, i: &Inputs) -> Result<View, String> {
+    run_exec(shader, interface, &i.registers, &i.by_register(), &mut Texels)
 }
 
 fn run_new(p: &iridia_ir::Program, i: &Inputs) -> Result<View, String> {
@@ -145,9 +147,8 @@ fn run_new(p: &iridia_ir::Program, i: &Inputs) -> Result<View, String> {
     )
 }
 
-const AGREE: &str = "the older derivation and the IR's run alike on every run";
-const BOTH_REFUSE: &str = "both refuse the derivation";
-const FLOW: &str = "the IR refuses a vertex program with flow control, which the older slice does not";
+const AGREE: &str = "the derivation runs alike in both executors on every run";
+const FLOW: &str = "refused: a vertex program with flow control";
 
 /// The cuts of a pixel program: after an instruction that writes three or more lanes of a temporary, the first three of
 /// them, at most [`CUTS`] spread over the program.
@@ -172,83 +173,42 @@ fn cuts(shader: &Shader) -> Vec<iridia_d3d9_ir::Projection> {
     all.into_iter().step_by(step).collect()
 }
 
-fn old_cut(c: iridia_d3d9_ir::Projection) -> iridia_d3d9::Projection {
-    iridia_d3d9::Projection {
-        after_word: c.after_word,
-        temporary: c.temporary,
-        lanes: c.lanes,
-    }
-}
-
-/// One derivation both ways: the class it lands in and the example to show for it.
+/// One derivation: the class it lands in and the example to show for it.
 fn compare(
     name: &str,
     what: &str,
-    old: Result<iridia::Program, String>,
     new: Result<iridia_ir::Program, String>,
     runs: &mut usize,
 ) -> (String, String) {
     let fail = |why: String| (class(&why), format!("{name} {what}: {why}"));
-    let (old, new) = match (old, new) {
-        (Err(_), Err(_)) => return (BOTH_REFUSE.into(), format!("{name} {what}")),
-        (Ok(_), Err(e)) if e.contains("flow control") => return (FLOW.into(), format!("{name} {what}: {e}")),
-        (Ok(_), Err(e)) => return fail(format!("the IR refuses what the older lifter derives: {e}")),
-        (Err(e), Ok(_)) => return fail(format!("the older lifter refuses what the IR derives: {e}")),
-        (Ok(o), Ok(n)) => (o, n),
+    let new = match new {
+        Err(e) if e.contains("flow control") => return (FLOW.into(), format!("{name} {what}: {e}")),
+        Err(e) => return (format!("refused: {}", class(&e)), format!("{name} {what}: {e}")),
+        Ok(n) => n,
     };
     if let Err(e) = iridia_ir::validate(&new) {
         return fail(format!("IR validation: {}", e[0]));
     }
-    let (sa, sd) = match (
-        ProgramShader::new(old.clone()),
-        ProgramShader::from_ir(new.clone()),
-    ) {
-        (Ok(a), Ok(d)) => (a, d),
-        (a, d) => {
-            return fail(format!(
-                "not compiled for iridia-exec: older {:?}, IR {:?}",
-                a.err().map(|e| e.to_string()),
-                d.err().map(|e| e.to_string())
-            ));
-        }
+    let sd = match ProgramShader::from_ir(new.clone()) {
+        Ok(d) => d,
+        Err(e) => return fail(format!("not compiled for iridia-exec: {e}")),
     };
     let mut rng = Rng::of(&format!("{name} {what}"));
     for run in 0..RUNS {
-        let i = seeded(&new.interface, &[&old.interface], &mut rng);
-        let (ra, rb, rd) = match (
-            run_old(&sa, &old.interface, &i),
-            run_new(&new, &i),
-            run_old(&sd, &new.interface, &i),
-        ) {
-            (Ok(a), Ok(b), Ok(d)) => (a, b, d),
-            (a, b, d) => {
-                return fail(format!(
-                    "not run: older {:?}, IR {:?}, compiled {:?}",
-                    a.err(),
-                    b.err(),
-                    d.err()
-                ));
-            }
+        let i = seeded(&new.interface, &[], &mut rng);
+        let (rb, rd) = match (run_new(&new, &i), run_compiled(&sd, &new.interface, &i)) {
+            (Ok(b), Ok(d)) => (b, d),
+            (b, d) => return fail(format!("not run: IR {:?}, compiled {:?}", b.err(), d.err())),
         };
         *runs += 1;
-        if !(ra.alike(&rb) && ra.alike(&rd)) {
+        if !rb.alike(&rd) {
             return (
-                format!(
-                    "differ: older = IR {} older = compiled {}",
-                    ra.alike(&rb),
-                    ra.alike(&rd)
-                ),
-                format!(
-                    "{name} {what} run {run}\n   older    {ra:?}\n   IR       {rb:?}\n   compiled {rd:?}"
-                ),
+                "differ: IR and compiled".into(),
+                format!("{name} {what} run {run}\n   IR       {rb:?}\n   compiled {rd:?}"),
             );
         }
     }
     (AGREE.into(), format!("{name} {what}"))
-}
-
-fn old_ok<T>(r: Result<T, iridia_d3d9::Error>) -> Result<T, String> {
-    r.map_err(|e| e.to_string())
 }
 
 fn new_ok<T>(r: Result<T, iridia_d3d9_ir::Error>) -> Result<T, String> {
@@ -256,7 +216,7 @@ fn new_ok<T>(r: Result<T, iridia_d3d9_ir::Error>) -> Result<T, String> {
 }
 
 #[test]
-fn the_pixel_programs_cuts_are_the_older_lifters() {
+fn the_pixel_programs_cuts_derive_and_run_alike_in_both_executors() {
     let Some(programs) = programs() else { return };
     let (mut tally, mut runs, mut derived) = (Tally::default(), 0usize, 0usize);
     for (name, bytes) in programs.iter().filter(|(n, _)| n.ends_with(".ps")) {
@@ -272,20 +232,14 @@ fn the_pixel_programs_cuts_are_the_older_lifters() {
                 cut.after_word, cut.temporary, cut.lanes
             );
             for tail in [false, true] {
-                let (old, new) = if tail {
-                    (
-                        old_ok(iridia_d3d9::reencode(bytes, old_cut(cut))),
-                        new_ok(iridia_d3d9_ir::reencode_with(bytes, cut, &ieee())),
-                    )
+                let new = if tail {
+                    new_ok(iridia_d3d9_ir::reencode_with(bytes, cut, &ieee()))
                 } else {
-                    (
-                        old_ok(iridia_d3d9::project(bytes, old_cut(cut))),
-                        new_ok(iridia_d3d9_ir::project_with(bytes, cut, &ieee())),
-                    )
+                    new_ok(iridia_d3d9_ir::project_with(bytes, cut, &ieee()))
                 };
-                derived += usize::from(old.is_ok());
+                derived += usize::from(new.is_ok());
                 let what = format!("{} {what}", if tail { "reencode" } else { "project" });
-                let (c, example) = compare(name, &what, old, new, &mut runs);
+                let (c, example) = compare(name, &what, new, &mut runs);
                 tally.note(c, example);
             }
         }
@@ -293,15 +247,11 @@ fn the_pixel_programs_cuts_are_the_older_lifters() {
     println!("{derived} derived programs, {runs} runs compared");
     tally.print("outcomes");
     assert!(derived > 0);
-    assert_eq!(
-        tally.failures(&[AGREE, BOTH_REFUSE]),
-        0,
-        "derivations failed the gate"
-    );
+    assert_eq!(tally.failures(&[AGREE]), 0, "derivations failed the gate");
 }
 
 #[test]
-fn the_vertex_outputs_slices_are_the_older_lifters() {
+fn the_vertex_outputs_slices_derive_and_run_alike_in_both_executors() {
     let Some(programs) = programs() else { return };
     let (mut tally, mut runs, mut derived) = (Tally::default(), 0usize, 0usize);
     for (name, bytes) in programs.iter().filter(|(n, _)| n.ends_with(".vs")) {
@@ -316,29 +266,24 @@ fn the_vertex_outputs_slices_are_the_older_lifters() {
                 continue;
             };
             let what = format!("output o{register} mask {:#x}", o.mask);
-            let old = old_ok(iridia_d3d9::project_vertex_output(bytes, register, o.mask));
             let new = new_ok(iridia_d3d9_ir::project_vertex_output_with(
                 bytes,
                 register,
                 o.mask,
                 &ieee(),
             ));
-            derived += usize::from(old.is_ok());
-            let (c, example) = compare(name, &what, old, new, &mut runs);
+            derived += usize::from(new.is_ok());
+            let (c, example) = compare(name, &what, new, &mut runs);
             tally.note(c, example);
         }
     }
     println!("{derived} derived programs, {runs} runs compared");
     tally.print("outcomes");
     assert!(derived > 0);
-    assert_eq!(
-        tally.failures(&[AGREE, BOTH_REFUSE, FLOW]),
-        0,
-        "derivations failed the gate"
-    );
+    assert_eq!(tally.failures(&[AGREE, FLOW]), 0, "derivations failed the gate");
 }
 
-/// The whole program, lifted as the derivations are (the older lifter's multiply rule).
+/// The whole program, lifted as the derivations are (the multiply rule IEEE 754).
 fn whole(bytes: &[u8]) -> Option<iridia_ir::Program> {
     iridia_d3d9_ir::lift_with(bytes, &ieee()).ok()
 }
@@ -547,15 +492,9 @@ fn the_comparison_sees_a_projection_with_its_lanes_permuted() {
             lanes: [cut.lanes[1], cut.lanes[2], cut.lanes[0]],
             ..cut
         };
-        let (Ok(old), Ok(new)) = (
-            iridia_d3d9::project(bytes, old_cut(cut)),
+        let (Ok(plain), Ok(permuted)) = (
+            iridia_d3d9_ir::project_with(bytes, cut, &ieee()),
             iridia_d3d9_ir::project_with(bytes, permuted, &ieee()),
-        ) else {
-            continue;
-        };
-        let (Ok(sa), Ok(sd)) = (
-            ProgramShader::new(old.clone()),
-            ProgramShader::from_ir(new.clone()),
         ) else {
             continue;
         };
@@ -563,9 +502,9 @@ fn the_comparison_sees_a_projection_with_its_lanes_permuted() {
         let mut rng = Rng::of(name);
         let mut differs = false;
         for _ in 0..RUNS {
-            let i = seeded(&new.interface, &[&old.interface], &mut rng);
-            if let (Ok(a), Ok(d)) = (run_old(&sa, &old.interface, &i), run_old(&sd, &new.interface, &i)) {
-                differs |= !a.alike(&d);
+            let i = seeded(&permuted.interface, &[&plain.interface], &mut rng);
+            if let (Ok(a), Ok(b)) = (run_new(&plain, &i), run_new(&permuted, &i)) {
+                differs |= !a.alike(&b);
             }
         }
         seen += usize::from(differs);

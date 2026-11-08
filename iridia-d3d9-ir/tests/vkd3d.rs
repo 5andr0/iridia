@@ -7,12 +7,13 @@
 //! Windows to draw (`tests/oracles/vkd3d_cases.py` reads the test files as vkd3d's own runner does; the file says
 //! which runs it leaves out and why).
 //!
-//! Every program a case draws with lifts, validates, prints and parses back, and writes WGSL for browsers. A draw is
-//! the runner's full-target triangle with its pass-through vertex shader, run here pixel by pixel: two ways, which must
-//! agree, the IR in `iridia-exec-ir` and the WGSL read back by naga's front end in `iridia-exec`. A probe is checked
-//! at its rectangle's corners, edge midpoints and centre, against the test's value within its ulps as vkd3d compares. A
-//! sample of the programs (one in 128 by file-name hash, every one with `shader.graphics=1`) also has the WGSL of both
-//! writers run on WARP (`tests/warp`) and held to the IR's run on seeded inputs and constants.
+//! Every program a case draws with lifts, validates, prints and parses back, and writes WGSL for browsers by both
+//! writers, each read back by naga's front end. A draw is the runner's full-target triangle with its pass-through
+//! vertex shader, run here pixel by pixel in the IR (`iridia-exec-ir`), as lifted, as a graph and structured again,
+//! which must agree. A probe is checked at its rectangle's corners, edge midpoints and centre, against the test's value
+//! within its ulps as vkd3d compares. A sample of the programs (one in 128 by file-name hash, every one with
+//! `shader.graphics=1`) also has the WGSL of both writers run on WARP (`tests/warp`) and held to the IR's run on seeded
+//! inputs and constants.
 //!
 //! A pixel takes the value of the last draw that wrote it, a clear's, or none: a probe of a pixel nothing wrote, or
 //! that a draw this test cannot run decided, is counted and not checked, and so is one whose value depends on a
@@ -26,7 +27,7 @@ mod warp;
 
 use std::collections::BTreeMap;
 
-use harness::{NoTextures, Prepared, constructs, prepare};
+use harness::{Prepared, constructs, prepare};
 use iridia_ir::interface::{D3dClass, ResourceKind, SystemValue};
 use serde_json::Value;
 use tally::{Tally, class};
@@ -243,7 +244,6 @@ fn run(l: &Lifted, banks: &Banks, x: u32, y: u32, denormals: iridia_ir::Denormal
     let once = |fill: u32| -> Result<(Option<[u32; 4]>, bool), String> {
         let mut unset = false;
         let mut by_id = Vec::new();
-        let mut by_register = Vec::new();
         for r in &p.ir.interface.resources {
             let (ResourceKind::ConstantBuffer { layout }, Some(d)) = (&r.kind, r.provenance.d3d) else {
                 continue;
@@ -251,8 +251,7 @@ fn run(l: &Lifted, banks: &Banks, x: u32, y: u32, denormals: iridia_ir::Denormal
             assert_eq!(d.class, D3dClass::ConstantBuffer);
             let (rows, some_unset) = banks.rows(d.register as usize, layout.size.div_ceil(16) as usize, fill);
             unset |= some_unset;
-            by_id.push((r.id, rows.clone()));
-            by_register.push((d.register, rows));
+            by_id.push((r.id, rows));
         }
         let slots = |x: u32, y: u32| -> Result<Vec<[u32; 4]>, String> {
             p.ir.interface
@@ -270,7 +269,6 @@ fn run(l: &Lifted, banks: &Banks, x: u32, y: u32, denormals: iridia_ir::Denormal
         let mut no_textures =
             |_: iridia_exec_ir::Sample| -> Result<[f32; 4], String> { Err("a texture sample".into()) };
         let buffers: Vec<_> = by_id.iter().map(|(i, r)| (*i, r.as_slice())).collect();
-        let banks: Vec<_> = by_register.iter().map(|(i, r)| (*i, r.as_slice())).collect();
         let mut bound = harness::Bound {
             buffers: &buffers,
             state: &[],
@@ -283,11 +281,11 @@ fn run(l: &Lifted, banks: &Banks, x: u32, y: u32, denormals: iridia_ir::Denormal
             let quad = [(0, 0), (1, 0), (0, 1), (1, 1)].map(|(dx, dy)| slots(left + dx, top + dy));
             let [a, b, c, d] = quad;
             let (a, b, c, d) = (a?, b?, c?, d?);
-            let views = p.run_quad([&a, &b, &c, &d], &mut bound, &banks, &mut NoTextures)?;
+            let views = p.run_quad([&a, &b, &c, &d], &mut bound)?;
             let lane = (x & 1) + 2 * (y & 1);
             views[lane as usize].clone()
         } else {
-            p.run(&slots(x, y)?, &mut bound, &banks, &mut NoTextures)?
+            p.run(&slots(x, y)?, &mut bound)?
         };
         let colour = (!view.killed).then(|| view.outputs.get(&l.target).copied().unwrap_or([0; 4]));
         Ok((colour, unset))
@@ -447,7 +445,7 @@ fn every_case_draws_what_vkd3d_expects_of_direct3d_9() {
                             }
                             Err(e) => {
                                 let class = if e.contains("disagree") {
-                                    "the IR and the WGSL disagree".to_string()
+                                    "the IR and its graph forms disagree".to_string()
                                 } else {
                                     format!("not checked: {}", tally::class(&e))
                                 };
