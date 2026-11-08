@@ -1,7 +1,10 @@
 //! Physical inputs and comparisons shared by the WARP corpus tests and the IR gate.
 use crate::{common, inputs, wgsl_run};
 
-mod quantized_shape;
+mod images;
+mod loop_exits;
+mod row_shape;
+mod warp_unstable;
 mod word_types;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -208,20 +211,40 @@ struct Tally {
     errors: BTreeMap<String, (usize, String)>,
     /// Programs written for a browser and held to Tint, and those a browser cannot carry.
     tinted: BTreeMap<String, usize>,
+    /// The typed buffer views of the compute programs, by the value type they declare and whether they are written, with how many
+    /// views and one program that has one.
+    typed_views: BTreeMap<String, (usize, String)>,
     /// Programs whose every run discards on both sides, so no lane is compared.
     all_discarded: BTreeMap<String, (usize, String)>,
+    /// The programs of each reason in `all_discarded`, by name.
+    all_discarded_names: BTreeMap<String, BTreeSet<String>>,
+    /// The programs a job of which the GPU did not finish within the harness's wait, by name: a harness error to find the cause
+    /// of (WARP compiling an assignment of the whole of a large workgroup array was one: `tools/wgsl-run/src/workgroup.rs`).
+    gpu_timeouts: BTreeSet<String>,
+    /// Per compute program, the longest one job took on WARP, in seconds, where it was over `SLOW_JOB_SECONDS`: how close a
+    /// program is to the harness's wait, on this run's load.
+    job_seconds: BTreeMap<String, f64>,
     /// Programs Tint refuses for a barrier whose uniformity WGSL's analysis cannot prove.
     unprovable: BTreeMap<String, (usize, String)>,
     browser_refused: BTreeMap<String, (usize, String)>,
     lanes: BTreeMap<Class, usize>,
+    /// Per compute program that [`warp_unstable::TABLE`] lists: how many words it lists and its evidence. The class is
+    /// decided by the table and the source, never by what this run's repeats show, and the listed words are not compared.
+    warp_unstable: BTreeMap<String, (usize, String)>,
+    /// Per compute program, the words the executor's own stores gave two or more different values (so which store lands last,
+    /// which D3D leaves undefined, decides the word) that differ from WARP or between WARP's repeats, and that were compared
+    /// as members: each of WARP's repeats gave a value among those the stores gave. The words so compared, and how many of
+    /// them WARP gave differently between its repeats.
+    overlap_members: BTreeMap<String, [usize; 2]>,
     /// Per compute program, the words that differ from WARP that the program's own writes leave unordered, by what shows
-    /// them so: WARP gives the word differently on two runs of the same job; more stores than store instructions (no
-    /// loop) gave it different values, so two invocations stored to it; two stores gave it different values, which one
-    /// invocation's loop could do (not shown to come from two).
-    unordered: BTreeMap<String, [usize; 3]>,
+    /// them so: more stores than store instructions (no loop) gave it different values, so two invocations stored to
+    /// it; two stores gave it different values, which one invocation's loop could do (not shown to come from two).
+    unordered: BTreeMap<String, [usize; 2]>,
     /// Per compute program that differs from WARP (beyond 1e-3, or in words its writes leave unordered): its source hash and
     /// why [`COMPUTE_EXPECTED`] lets it, where it does.
     differs: BTreeMap<String, (String, Option<&'static str>)>,
+    /// Per such program, the row shapes it has ([`row_shape::census`]).
+    differs_shape: BTreeMap<String, String>,
     /// Per vertex or pixel program with a lane beyond 1e-3 (or a discard or a missing lane): its source hash and why
     /// [`GRAPHICS_EXPECTED`] lets it, where it does.
     graphics_differs: BTreeMap<String, (String, Option<&'static str>)>,
@@ -1006,25 +1029,102 @@ const COMPUTE_EXPECTED: &[(&str, &str, &str)] = &[
         "sha256:5a7c725064f897e4792a8a42e8ee6ec0dcbe209aa4b75b64719d53045745fa51",
         WARP_QUANTIZED_FLOAT_BITS,
     ),
+    // The per-word proof of 17 Elden animation programs that recount 2 listed as not in the table (capture b857e8d2: 68 vectors,
+    // 19 words, none unproved), by the same tool as the rows above on the tree of commit 9600b11.
+    (
+        "C[AMSN][VA_Loop]_Animation_Skin.cpo",
+        "sha256:e73936e60a4ba979c1cc6b06b46b36d37b97cea4d26386aa138537d3e03a987b",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "C[c5132]_Dark_Animation.cpo",
+        "sha256:f7e9de9505c22e7cdd0ad4bf6fab63a17487aec8936ff073b41a2cc6af3bf90b",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "C[c5132]_Dark_Animation_Skin.cpo",
+        "sha256:db2326c8e94b9bfa8f661cae719ffc324297417b6149bfa29865a50141575a41",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "C[c5132]_TexScroll_Animation.cpo",
+        "sha256:bf57e4a776963da2fe9c6ee02f4a0c6a9bacfc54deea978c86cf749e92c5d232",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "C[c5132]_TexScroll_cloth_Animation.cpo",
+        "sha256:5f90613301e6dc0222355f3c5ca75592b9d5294c81994b5eb8528abf62ed16cb",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "Cutscene_NoLight_VA_test_cloth_Animation.cpo",
+        "sha256:701b1815e8a03a6ade485f6f5b1e1e650eb15267bce52b89e9ed5c73962e3a65",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "M[AMSN_V][VA_Loop]_Animation_Skin.cpo",
+        "sha256:c35776712991ba4c11d95e97a7a0cb380781974e0001caee599712b83cadde0c",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "M[Birds_Interact][PostureCorrection]_Animation.cpo",
+        "sha256:c222ebd236f9cd183a64549a9fdc7e80bb5268ebbd1b9fec4cb498d66ca28a26",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "M[Birds_liner]_Animation.cpo",
+        "sha256:f3ed4119e3c7a7d23c941788dad1fe2e6f81eb78f9b1f5d12dc7815e41d779f0",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "M[Cuckoo]_Animation_Skin.cpo",
+        "sha256:c2ee909d87346268285a484f9461ab43ceac95745027e32ccadf025b6320dae0",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "M[CutScene][Dissolve]_Animation_Skin.cpo",
+        "sha256:d1e391723fbfa68477a96f9bf64ce77c8034fea99b49f1659f0a0713307374e3",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "M[Cutscene][Waterfall2]_Animation.cpo",
+        "sha256:3fb1d3d74cc46047e1381f8f266e7bc99f2154b5be1848429220054a9dfa7420",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "M[DistantClouds_Cloth]_001_Animation.cpo",
+        "sha256:fbbc654101a1cfd6729a3cbf6bcbc3c61782488f8c7f04ca719e5d2443aefc3a",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "M[DistantClouds_Cloth]_002_Animation.cpo",
+        "sha256:e03317394b27330baabc5828362173b040ca9fa3b0964465294289297cd67747",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "M[PoisonSwamp_LOD1]_Animation.cpo",
+        "sha256:a4f2e9e1bc3fd30a559b01c5e2582e0d7612d060b5b9f55c672a01beea8aafeb",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "M[Waterfall2]_Transparent_Animation.cpo",
+        "sha256:43a662bb25d4120ee8d50628b07201f44687af6cf50f72b9877d425f597afba3",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "M[Waterfall]_Animation.cpo",
+        "sha256:9bc391ea51c0d96f9e43339324739cc8bf2a4afefd3e3f7e20c79b5bff4e8f8c",
+        WARP_QUANTIZED_FLOAT_BITS,
+    ),
+    (
+        "0026.dxbc",
+        "sha256:00b891e4d50f4578929bbf49878fbac7f9494c3d0ffe8b31c0ff83d1ae5f2967",
+        SHARED_SCAN_RACE,
+    ),
     (
         "1021.dxbc",
         "sha256:1e5fef301327669be749764f0463efea892e79ae3ec98255869a4ae67d62fcf1",
         UNORDERED_UNPROVEN,
-    ),
-    (
-        "1022.dxbc",
-        "sha256:1721d8b909772e2a80aa81c279583b8afcae48a1a6b0630f945b18e24fda13d0",
-        WARP_UNSTABLE,
-    ),
-    (
-        "1023.dxbc",
-        "sha256:e4b8c5e4982aacd1238821a934a7b1188bc6ccbf72d9060b08b6dc18abc38724",
-        WARP_UNSTABLE,
-    ),
-    (
-        "1024.dxbc",
-        "sha256:3958f23ecb90f75b90dc658f04cdd742923372885f476a9830554ecde96afe0c",
-        WARP_UNSTABLE,
     ),
     (
         "1026.dxbc",
@@ -1037,14 +1137,29 @@ const COMPUTE_EXPECTED: &[(&str, &str, &str)] = &[
         WARP_SIN_INFERRED,
     ),
     (
-        "BitonicSortSinglePass512.cpo",
-        "sha256:752ec5b2a57ebc63792422a7f84c7fd1f5890161d4c742f2d5bb278469510157",
-        WARP_UNSTABLE,
+        "1320.dxbc",
+        "sha256:891a06fc9c78881635729c9e2cce8faf7f7bf5d8b6c06df03c04eee144bdc65f",
+        SHARED_NO_SYNC,
     ),
     (
-        "MatrixTranspose.cpo",
-        "sha256:bd1e5cfcc36c067d643f98e6dd7aafd90750a5630ea5c0255fd1791dd616859f",
-        SOURCE_ORDER,
+        "1321.dxbc",
+        "sha256:f5b304967fc035dfc760bc5cb1bfb170ebb3beef69a312b0594e0bf3415c87f7",
+        SHARED_NO_SYNC,
+    ),
+    (
+        "1322.dxbc",
+        "sha256:c2ca1e6c3f7fba72791546dcc21f54b0a9ca4495b8b65401c5edfeffe8dccbc0",
+        SHARED_NO_SYNC,
+    ),
+    (
+        "1323.dxbc",
+        "sha256:22ddb8573f5befee2744a8308dcc05e19df5fae5d63415cea2e1004b738b7131",
+        SHARED_NO_SYNC,
+    ),
+    (
+        "1324.dxbc",
+        "sha256:8d32c4f43679b32ef52f2ba87ffc3b692ac75ad295682c68054141f9f060655c",
+        SHARED_NO_SYNC,
     ),
     (
         "SpeedTree_5010ff8_w3129a7_Animation.cpo",
@@ -1461,6 +1576,12 @@ const CELL_NOISE: &str = "cell noise, WARP's sin past D3D's bound: no lane beyon
 const WARP_SIN: &str =
     "WARP's sin is within D3D's absolute bound or outside its range, scaled x1e5 by fract(abs(sin(x) * 1e5))";
 
+/// Whether every one of `values` is one of `stored` (the values the executor's stores gave a word): no value of a word that has
+/// none is.
+fn all_among(mut values: impl Iterator<Item = u32>, stored: Option<&Vec<u32>>) -> bool {
+    values.all(|x| stored.is_some_and(|stored| stored.contains(&x)))
+}
+
 /// Two invocations store different words to one word, so the result depends on an order the executor and WARP do not share.
 const SOURCE_ORDER: &str =
     "invocations store different words to one word: the result is order-dependent in the source";
@@ -1472,11 +1593,12 @@ const WARP_FLOAT_BITS: &str = "integer words built from float bits; upstream 1-3
 where D3D11.3 22.13.6 recommends but does not require nearest-even (executor: nearest-even; WARP: toward zero); \
 proven by lane capture 567964d0";
 
-/// Every differing word of these name/hash rows was captured and mechanically checked (192 vectors, 83 words).
+/// Every differing word of these name/hash rows was captured and mechanically checked (192 vectors, 83 words; for the 17 rows
+/// added after, 68 vectors, 19 words).
 /// https://microsoft.github.io/DirectX-Specs/d3d/archive/D3D11_3_FunctionalSpec.htm#22.13.6%20utof
 const WARP_QUANTIZED_FLOAT_BITS: &str = "an upstream fadd difference within the float bound, quantized to up to \
 256-unit steps by bitcast->utof, with WARP's utof faithfully rounded (D3D11.3 22.13.6); each final saturate \
-conversion exactly accounts for the stored integer; proven per word by capture 81015009";
+conversion exactly accounts for the stored integer; proven per word by captures 81015009 and b857e8d2";
 
 /// The original output words stay unchanged when the overflowing expression's operands/argument are captured.
 /// https://www.w3.org/TR/2026/CRD-WGSL-20261106/#floating-point-evaluation
@@ -1486,8 +1608,19 @@ WGSL 15.7.2 (Finite Math Assumption) and 8.2 leave non-finite intermediates inde
 e5ca67ac/0b022ba6/41499eda cover all 64 differing words with unchanged original outputs; the huge dot \
 comes from our seeds, so seeding by use may retire this row (remove it when the stale check fires)";
 
-/// WARP gives different words on different runs of the same job.
-const WARP_UNSTABLE: &str = "WARP gives different words on different runs of the same job (intermittent)";
+/// A group-shared word written by one thread and read by another with no barrier between them: the DXBC declares a `dcl_tgsm`,
+/// stores to it, loads from it, and has no `sync` instruction, so the result depends on how the threads of a group are
+/// scheduled, which WARP's waves and the executor's thread order do not share. Found by reading each program's shader tokens
+/// for opcode 190 (`sync`): Riders 1320 to 1324 have none (0026, which has barriers, has it), and each declares one group-shared
+/// memory; WARP gave the same words on 8 runs of the job and the executor others (job b3c202eb), so it is not WARP's variation.
+const SHARED_NO_SYNC: &str = "group-shared words read across threads with no sync instruction in the DXBC: the result depends on thread scheduling";
+
+/// An in-place scan over group-shared memory: each step is `if (tid >= s) { x = g[tid - s]; g[tid] += x }` and then one `sync`, so
+/// a thread reads a word that another writes in the same barrier phase (the DXBC runs `ld_structured`, `iadd`,
+/// `store_structured` and `sync` in that order). On WARP the sums after the scan are not the race-free `3 * (t + 1)` of the
+/// uniform texel 3 in 121 of 128 threads (job dump of case 3 run through wgsl-run with `g0_` stored out), and WARP gave the
+/// same words on 16 runs of the job, so it is a fixed schedule other than the executor's, not WARP's variation.
+const SHARED_SCAN_RACE: &str = "in-place scan over group-shared memory: a thread reads a word another writes in the same barrier phase (DXBC: ld, add, store, then one sync); WARP's sums differ from the race-free ones in 121 of 128 threads";
 
 /// A word two stores gave different values, and the program differs from WARP there; WARP's own variation between runs was
 /// not seen in the run that listed it.
@@ -1502,7 +1635,16 @@ const WARP_SIN_INFERRED: &str =
 /// the buffers' words as pairs of half floats from 0.25 to 2 (data a program unpacks).
 const COMPUTE_CASES: u32 = 4;
 
-/// How many times each compute job runs on WARP (`shader.compute_runs`, 2 by default, at least 2).
+/// How many times a compute job runs on WARP where the executor leaves every written word as it was: nothing but WARP's own
+/// writes are then compared, and WARP gives some of them in one repeat and not the next.
+const SURVEY_RUNS: usize = 16;
+
+/// A WARP job that took this many seconds is reported with the program's longest: how near the programs are to the GPU wait.
+const SLOW_JOB_SECONDS: f64 = 5.0;
+
+/// How many times each compute job runs on WARP (`shader.compute_runs`, 2 by default, at least 2). Every repeat decides a
+/// program's class: a word that two of them give differently is a word the program must list in
+/// [`warp_unstable::TABLE`], and a word one of them changes is a word the program writes.
 fn warp_runs() -> usize {
     inputs::debug("shader.compute_runs")
         .and_then(|s| s.parse().ok())
@@ -1567,6 +1709,11 @@ fn compute_gap(p: &iridia_ir::Program) -> Option<String> {
     }
     for v in &p.entry.values {
         match v.op {
+            // an atomic of an image the harness holds is answered; a buffer's, a counter and the rest are not
+            iridia_ir::Op::Atomic {
+                memory: iridia_ir::Memory::Image(..),
+                ..
+            } => {}
             iridia_ir::Op::Atomic { .. } | iridia_ir::Op::Counter(..) => {
                 return Some("an atomic or a counter".into());
             }
@@ -1584,6 +1731,7 @@ fn store_shape(r: &Region, stores: &mut BTreeMap<ResourceId, u32>) -> bool {
     for n in &r.nodes {
         match n {
             Node::StoreBuffer { resource, .. } => *stores.entry(resource.id).or_default() += 1,
+            Node::StoreTexel { image, .. } => *stores.entry(image.id).or_default() += 1,
             Node::Loop { .. } => loops = true,
             _ => {}
         }
@@ -1606,6 +1754,13 @@ fn words_per(kind: &ResourceKind) -> u32 {
     }
 }
 
+/// A word a store can write: a word of a buffer, or a lane of a texel of one element of a storage image.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum Cell {
+    Buffer(ResourceId, u32),
+    Texel(ResourceId, u32, usize, u32),
+}
+
 /// An executor backend that owns the written buffers (a compute program that asks for a sample or a load is not run), and
 /// notes the words that stores gave two different values: the invocations run in an order the executor chooses and WARP
 /// does not, so a word they disagree on is not the program's to say.
@@ -1614,26 +1769,97 @@ struct Memory {
     aliases: BTreeMap<ResourceId, word_types::StoreOrigin>,
     origins: BTreeMap<(ResourceId, u32), word_types::WordType>,
     words: BTreeMap<ResourceId, Vec<u32>>,
+    /// The sampled and storage images, whose stores and atomics are noted as the images are.
+    images: images::Images,
+    /// Per word of a storage image stored to (its id and element, the texel and the lane): the type the value stored had, as
+    /// `origins` has for a buffer's.
+    image_origins: BTreeMap<(ResourceId, u32, usize, u32), word_types::WordType>,
     /// Per word stored to: the first value, whether a later store gave another, and how many stores it had.
-    stored: BTreeMap<(ResourceId, u32), (u32, bool, u32)>,
+    stored: BTreeMap<Cell, (u32, bool, u32)>,
+    /// Per word stored to more than once: every distinct value a store gave it, in the order they came.
+    distinct: BTreeMap<Cell, Vec<u32>>,
+    /// How many stores to a buffer or an image, and atomics on an image, the executor ran.
+    executed: usize,
 }
-impl Backend for Memory {
-    fn sample(&mut self, _: ImageSample<Element>) -> Result<[f32; 4], String> {
-        Err("a texture sample".into())
-    }
-    fn store_buffer(&mut self, view: ResourceId, word: u32, value: [u32; 4], mask: u8) -> Result<(), String> {
-        let (view, types) = self
-            .aliases
+impl Memory {
+    /// The resource a view stands for, and the types of the lanes stored through it: a store observer's alias of a buffer or
+    /// an image is the resource itself, and any other view is its own. Every access of a resource that can be aliased goes
+    /// through here, so a kind of resource added later cannot miss it.
+    fn resolve(&self, view: ResourceId) -> (ResourceId, [word_types::WordType; 4]) {
+        self.aliases
             .get(&view)
             .map_or((view, [word_types::WordType::Unknown; 4]), |site| {
                 (site.buffer, site.lanes)
-            });
-        let words = self.words.get_mut(&view).ok_or("a store to a buffer not given")?;
+            })
+    }
+
+    /// A store of `v` to `cell`: the first value it was given, whether a later store gave another, how many stores it had, and
+    /// every distinct value once it had two.
+    fn note_store(&mut self, cell: Cell, v: u32) {
+        let e = self.stored.entry(cell).or_insert((v, false, 0));
+        e.1 |= e.0 != v;
+        e.2 += 1;
+        if e.2 == 2 {
+            self.distinct
+                .insert(cell, if e.0 == v { vec![v] } else { vec![e.0, v] });
+        } else if e.2 > 2
+            && let Some(values) = self.distinct.get_mut(&cell)
+            && !values.contains(&v)
+        {
+            values.push(v);
+        }
+    }
+}
+
+impl Backend for Memory {
+    fn sample(&mut self, r: ImageSample<Element>) -> Result<[f32; 4], String> {
+        self.images.sample(r)
+    }
+    fn load(&mut self, r: ImageLoad<Element>) -> Result<[u32; 4], String> {
+        self.images.load(r)
+    }
+    fn query(&mut self, r: ImageQuery<Element>) -> Result<[u32; 4], String> {
+        self.images.query(r)
+    }
+    fn store_image(&mut self, mut r: iridia_exec::ImageStore<ResourceId>) -> Result<(), String> {
+        let (view, types) = self.resolve(r.view);
+        r.view = view;
+        self.executed += 1;
+        if let Some(texel) = self.images.store(r)? {
+            for lane in 0..u32::from(r.lanes) {
+                self.image_origins
+                    .entry((r.view, r.index, texel, lane))
+                    .and_modify(|old| *old = old.merge(types[lane as usize]))
+                    .or_insert(types[lane as usize]);
+                self.note_store(Cell::Texel(r.view, r.index, texel, lane), r.value[lane as usize]);
+            }
+        }
+        Ok(())
+    }
+    fn atomic_image(&mut self, mut r: iridia_exec::ImageAtomic<ResourceId>) -> Result<u32, String> {
+        r.view = self.resolve(r.view).0;
+        self.executed += 1;
+        let (old, texel) = self.images.atomic(r)?;
+        if let Some(texel) = texel {
+            // an atomic's word is an integer
+            self.image_origins
+                .entry((r.view, r.index, texel, 0))
+                .and_modify(|o| *o = o.merge(word_types::WordType::Integer))
+                .or_insert(word_types::WordType::Integer);
+        }
+        Ok(old)
+    }
+    fn store_buffer(&mut self, view: ResourceId, word: u32, value: [u32; 4], mask: u8) -> Result<(), String> {
+        let (view, types) = self.resolve(view);
+        if !self.words.contains_key(&view) {
+            return Err("a store to a buffer not given".into());
+        }
+        self.executed += 1;
         for lane in (0..4u32).filter(|l| mask >> l & 1 != 0) {
             let at = word + lane;
             let v = value[lane as usize];
             // a store outside the buffer changes nothing
-            let Some(slot) = words.get_mut(at as usize) else {
+            let Some(slot) = self.words.get_mut(&view).and_then(|w| w.get_mut(at as usize)) else {
                 continue;
             };
             *slot = v;
@@ -1642,14 +1868,12 @@ impl Backend for Memory {
                 .entry((view, at))
                 .and_modify(|old| *old = old.merge(origin))
                 .or_insert(origin);
-            let e = self.stored.entry((view, at)).or_insert((v, false, 0));
-            e.1 |= e.0 != v;
-            e.2 += 1;
+            self.note_store(Cell::Buffer(view, at), v);
         }
         Ok(())
     }
     fn read_buffer(&mut self, view: ResourceId, word: u32, count: u8) -> Result<[u32; 4], String> {
-        let view = self.aliases.get(&view).map_or(view, |site| site.buffer);
+        let (view, _) = self.resolve(view);
         let words = self.words.get(&view).ok_or("a read of a buffer not given")?;
         Ok(std::array::from_fn(|k| {
             if k < usize::from(count) {
@@ -1660,10 +1884,72 @@ impl Backend for Memory {
         }))
     }
     fn buffer_words(&mut self, view: ResourceId) -> Result<u32, String> {
-        let view = self.aliases.get(&view).map_or(view, |site| site.buffer);
+        let (view, _) = self.resolve(view);
         let words = self.words.get(&view).ok_or("a buffer not given")?;
         u32::try_from(words.len()).map_err(|_| "a buffer of too many words".into())
     }
+}
+
+/// `shader.job_dump`: the job as sent to WARP, and the executor's words with the words it stored to more than once (its id, the
+/// word, the first value stored, whether another store gave a different value, and how many stores), as `name-case<c>*.json`.
+fn dump_job(dir: &str, name: &str, case: u32, job: &serde_json::Value, memory: &Memory) {
+    let stem: String = short(name)
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect();
+    let write = |file: String, text: String| {
+        if let Err(e) =
+            std::fs::create_dir_all(dir).and_then(|()| std::fs::write(format!("{dir}/{file}"), text))
+        {
+            panic!("shader.job_dump {dir}: {e}");
+        }
+    };
+    write(format!("{stem}-case{case}.json"), job.to_string());
+    let words: BTreeMap<String, &Vec<u32>> =
+        memory.words.iter().map(|(id, w)| (id.0.to_string(), w)).collect();
+    let twice: Vec<(u32, u32, u32, bool, u32)> = memory
+        .stored
+        .iter()
+        .filter(|(_, (_, _, n))| *n > 1)
+        .filter_map(|(cell, (first, differs, n))| match cell {
+            Cell::Buffer(id, word) => Some((id.0, *word, *first, *differs, *n)),
+            Cell::Texel(..) => None,
+        })
+        .collect();
+    let texel_lanes_twice: Vec<(u32, u32, usize, u32, u32, bool, u32)> = memory
+        .stored
+        .iter()
+        .filter(|(_, (_, _, n))| *n > 1)
+        .filter_map(|(cell, (first, differs, n))| match cell {
+            Cell::Texel(id, element, texel, lane) => {
+                Some((id.0, *element, *texel, *lane, *first, *differs, *n))
+            }
+            Cell::Buffer(..) => None,
+        })
+        .collect();
+    write(
+        format!("{stem}-case{case}-exec.json"),
+        serde_json::json!({
+            "words": words,
+            "stored_more_than_once": twice,
+            "texel_lanes_stored_more_than_once": texel_lanes_twice,
+        })
+        .to_string(),
+    );
+}
+
+/// What the harness's error says is a limit of wgpu's DX12 path, not of the program or of WARP: a gap named by its text, which
+/// is the same on every run.
+fn harness_gap(error: &str) -> Option<&'static str> {
+    // naga 30.0.1's HLSL writer names the helper for `textureDimensions` of a storage texture by dimension alone
+    // (`NagaRWDimensions2D`) and writes it once for each storage format (its key holds the format), so two storage textures of
+    // one dimension with different formats, both asked their size, make DXC see the helper twice
+    if error.contains("redefinition of 'NagaRW") {
+        return Some(
+            "wgpu 30.0.1's HLSL writer defines its storage-texture size helper twice (two storage textures of one dimension with different formats, both asked textureDimensions)",
+        );
+    }
+    None
 }
 
 /// The executed store's value origin decides the comparison: integers and unknown/mixed origins are exact.
@@ -1674,11 +1960,30 @@ fn compute_class(view: word_types::WordType, a: u32, b: u32) -> Class {
 /// A compute program (the executor's `dispatch`) against the harness: every written buffer, every vector, word for word.
 fn run_compute(harness: &Harness, name: &str, hash: &str, p: iridia_ir::Program, t: &mut Tally) {
     let excused = compute_expected(name, hash);
+    for r in &p.interface.resources {
+        let (value, written) = match &r.kind {
+            ResourceKind::Buffer(BufferKind::Typed(v)) => (v, false),
+            ResourceKind::Storage {
+                target: StorageTarget::Buffer(BufferKind::Typed(v)),
+                ..
+            } => (v, true),
+            _ => continue,
+        };
+        t.typed_views
+            .entry(format!(
+                "{:?} x {} lanes, {}",
+                value.scalar,
+                value.width,
+                if written { "written" } else { "read" }
+            ))
+            .or_insert((0, name.to_owned()))
+            .0 += 1;
+    }
     *t.stages.entry("Compute".to_owned()).or_default() += 1;
-    if excused == Some(WARP_QUANTIZED_FLOAT_BITS)
-        && let Err(why) = quantized_shape::check(&p.entry)
+    if let Some(why) = excused
+        && let Err(e) = row_shape::check(why, &p.entry)
     {
-        tally(&mut t.errors, why, name);
+        tally(&mut t.errors, e, name);
         return;
     }
     if let Some(why) = compute_gap(&p) {
@@ -1692,6 +1997,7 @@ fn run_compute(harness: &Harness, name: &str, hash: &str, p: iridia_ir::Program,
             return;
         }
     };
+    let mut members = [0usize; 2];
     let bindings = match iridia_naga::BindingPlan::d3d(&p.interface) {
         Ok(plan) => plan.bindings,
         Err(e) => {
@@ -1739,14 +2045,89 @@ fn run_compute(harness: &Harness, name: &str, hash: &str, p: iridia_ir::Program,
     let mut previous_worst = Class::Exact;
     let mut counts: BTreeMap<Class, usize> = BTreeMap::new();
     let mut changed = false;
+    let mut executed_stores = 0usize;
+    // what the table says of the program, and the words not in it that WARP gave differently between repeats (by label)
+    let listing = warp_unstable::listing(name, hash);
+    let mut unlisted: BTreeMap<String, BTreeSet<u32>> = BTreeMap::new();
+    let mut differing_repeats = 0usize;
+    let mut most_repeats = 0usize;
     for c in 0..COMPUTE_CASES {
         let mut resources = Resources::default();
         let mut written: BTreeMap<ResourceId, Vec<u32>> = BTreeMap::new();
+        let mut images = images::Images::default();
         let mut job_resources = Vec::new();
         for r in &p.interface.resources {
             let Some((group, binding)) = at(r.id) else {
                 continue;
             };
+            // images and samplers: each element of an array (the one image of a resource that is not) its own
+            if matches!(
+                r.kind,
+                ResourceKind::Texture { .. }
+                    | ResourceKind::Sampler { .. }
+                    | ResourceKind::Storage {
+                        target: StorageTarget::Image { .. },
+                        ..
+                    }
+            ) {
+                let elements = if r.is_array() {
+                    wgsl_run::element_count(r)
+                } else {
+                    1
+                };
+                let register = r.provenance.d3d.map_or(r.id.0, |d| d.register);
+                let mut entries = Vec::new();
+                for k in 0..elements {
+                    let slot = register + 7 * k;
+                    entries.push(match &r.kind {
+                        ResourceKind::Texture {
+                            dim, arrayed, sample, ..
+                        } => {
+                            let texel = wgsl_run::texel(slot, c, *sample);
+                            images.add_sampled(
+                                r.id,
+                                k,
+                                texel,
+                                images::Shape {
+                                    dim: *dim,
+                                    arrayed: *arrayed,
+                                },
+                            );
+                            serde_json::json!({ "texture": { "texel": texel } })
+                        }
+                        ResourceKind::Storage {
+                            target: StorageTarget::Image { dim, arrayed, sample },
+                            ..
+                        } => {
+                            let texel = wgsl_run::texel(slot, c, *sample);
+                            images.add_storage(
+                                r.id,
+                                k,
+                                texel,
+                                images::Shape {
+                                    dim: *dim,
+                                    arrayed: *arrayed,
+                                },
+                            );
+                            serde_json::json!({ "texture": { "texel": texel } })
+                        }
+                        ResourceKind::Sampler { comparison: true } => {
+                            serde_json::json!({ "sampler": { "compare": wgsl_run::COMPARE } })
+                        }
+                        _ => serde_json::json!({ "sampler": {} }),
+                    });
+                }
+                if r.is_array() {
+                    job_resources
+                        .push(serde_json::json!({ "group": group, "binding": binding, "array": entries }));
+                } else {
+                    let mut entry = entries.remove(0);
+                    entry["group"] = group.into();
+                    entry["binding"] = binding.into();
+                    job_resources.push(entry);
+                }
+                continue;
+            }
             let words = match &r.kind {
                 ResourceKind::ConstantBuffer { layout } => {
                     let rows = compute_rows(r.id, layout, c);
@@ -1778,8 +2159,13 @@ fn run_compute(harness: &Harness, name: &str, hash: &str, p: iridia_ir::Program,
             );
         }
         let initial = written.clone();
+        let initial_images = images.clone();
+        // the repeats the job runs on WARP: a program the executor leaves unchanged has nothing but WARP's own writes to
+        // compare, so it is surveyed at many repeats (a word WARP changes in one of them is a word it writes)
+        let mut repeats = warp_runs();
         let mut memory = Memory {
             words: written,
+            images,
             ..Memory::default()
         };
         let bound = match exe.bind_resources(&resources) {
@@ -1790,12 +2176,34 @@ fn run_compute(harness: &Harness, name: &str, hash: &str, p: iridia_ir::Program,
             }
         };
         if let Err(e) = exe.dispatch(&bound, &mut memory, &mut BTreeMap::new(), COMPUTE_GROUPS, 32) {
-            tally(&mut t.unrun, &format!("B: {e}"), name);
+            // the executor's step budget: say whether the program has a loop that leaves on a constant-buffer word, which
+            // the harness seeds
+            let why = if e.contains("budget") {
+                let constants = p
+                    .interface
+                    .resources
+                    .iter()
+                    .filter(|r| matches!(r.kind, ResourceKind::ConstantBuffer { .. }))
+                    .map(|r| r.id)
+                    .collect();
+                let facts = loop_exits::facts(&p.entry, &constants);
+                let how = match (facts.loops, facts.constant_exits, facts.data_exits) {
+                    (0, ..) => "the program has no loop",
+                    (_, 0, 0) => "its loops all leave on fixed values",
+                    (_, 0, _) => "a loop leaves on data read from a buffer or an image",
+                    _ => "a loop leaves on a constant-buffer word",
+                };
+                format!("B: {e} ({how})")
+            } else {
+                format!("B: {e}")
+            };
+            tally(&mut t.unrun, &why, name);
             return;
         }
         let mut observed = Memory {
             words: initial.clone(),
             aliases: aliases.clone(),
+            images: initial_images.clone(),
             ..Memory::default()
         };
         let observed_bound = observer
@@ -1815,35 +2223,62 @@ fn run_compute(harness: &Harness, name: &str, hash: &str, p: iridia_ir::Program,
             "store-origin observation changed B's output: {name} vector {c}"
         );
         assert_eq!(
-            memory.stored, observed.stored,
+            (&memory.stored, &memory.distinct),
+            (&observed.stored, &observed.distinct),
             "store-origin observation changed B's writes: {name} vector {c}"
         );
+        assert!(
+            memory.images.storage_equals(&observed.images),
+            "store-origin observation changed B's images: {name} vector {c}"
+        );
         t.origin_controlled_vectors += 1;
-        for &origin in observed.origins.values() {
+        for &origin in observed.origins.values().chain(observed.image_origins.values()) {
             *t.compute_word_origins
                 .entry(name.to_owned())
                 .or_default()
                 .entry(origin)
                 .or_default() += 1;
         }
+        executed_stores += memory.executed;
         let written = &memory.words;
         let job = serde_json::json!({
             "wgsl": wgsl,
             "dispatch": COMPUTE_GROUPS,
             "resources": job_resources,
         });
-        // the job more than once: a word WARP gives differently on a later run is one the program's own writes leave
-        // unordered
+        if let Some(dir) = inputs::debug("shader.job_dump") {
+            dump_job(&dir, name, c, &job, &memory);
+        }
+        if *written == initial && memory.images.storage_equals(&initial_images) {
+            repeats = repeats.max(SURVEY_RUNS);
+        }
+        // the job more than once: a word WARP gives differently on a later run is not one the table of WARP-unstable programs
+        // can leave to chance
         let mut runs = Vec::new();
-        for _ in 0..warp_runs() {
-            let reply = match harness.run(&job) {
+        for _ in 0..repeats {
+            let started = std::time::Instant::now();
+            let sent = harness.run(&job);
+            let took = started.elapsed().as_secs_f64();
+            if took >= SLOW_JOB_SECONDS {
+                let longest = t.job_seconds.entry(name.to_owned()).or_insert(took);
+                *longest = longest.max(took);
+            }
+            let reply = match sent {
                 Ok(r) => r,
                 Err(e) => {
-                    tally(&mut t.errors, &format!("the harness: {e}"), name);
+                    match harness_gap(&e) {
+                        Some(gap) => tally(&mut t.gaps, gap, name),
+                        None => {
+                            if e.contains("did not finish within") {
+                                t.gpu_timeouts.insert(short(name).to_owned());
+                            }
+                            tally(&mut t.errors, &format!("the harness: {e}"), name);
+                        }
+                    }
                     return;
                 }
             };
-            let words: BTreeMap<(u32, u32), Vec<u32>> = reply["resources"]
+            let words: BTreeMap<(u32, u32, Option<u32>), Vec<u32>> = reply["resources"]
                 .as_array()
                 .map(|a| {
                     a.iter()
@@ -1854,7 +2289,11 @@ fn run_compute(harness: &Harness, name: &str, hash: &str, p: iridia_ir::Program,
                                 .map(|w| w.as_u64().and_then(|w| u32::try_from(w).ok()))
                                 .collect::<Option<Vec<u32>>>()?;
                             Some((
-                                (r["group"].as_u64()? as u32, r["binding"].as_u64()? as u32),
+                                (
+                                    r["group"].as_u64()? as u32,
+                                    r["binding"].as_u64()? as u32,
+                                    r["element"].as_u64().map(|e| e as u32),
+                                ),
                                 words,
                             ))
                         })
@@ -1865,11 +2304,55 @@ fn run_compute(harness: &Harness, name: &str, hash: &str, p: iridia_ir::Program,
         }
         let theirs = &runs[0];
         t.runs += 1;
-        for (id, ours) in written {
+        differing_repeats += runs[1..].iter().filter(|r| **r != runs[0]).count();
+        most_repeats += runs.len() - 1;
+        // the written buffers, then the storage images (each element of an array of them): a buffer's stores are noted, an
+        // image's are not, so an image's unordered words are those WARP gives differently on different runs
+        let mut items: Vec<(ResourceId, Option<u32>)> = written.keys().map(|id| (*id, None)).collect();
+        for r in &p.interface.resources {
+            if let ResourceKind::Storage {
+                target: StorageTarget::Image { .. },
+                ..
+            } = r.kind
+            {
+                if r.is_array() {
+                    items.extend((0..wgsl_run::element_count(r)).map(|k| (r.id, Some(k))));
+                } else {
+                    items.push((r.id, None));
+                }
+            }
+        }
+        for (id, element) in items {
+            let id = &id;
             let Some((group, binding)) = at(*id) else { continue };
-            let Some(warp) = theirs.get(&(group, binding)) else {
+            let label = element.map_or_else(|| id.0.to_string(), |e| format!("{}[{e}]", id.0));
+            let Some(warp) = theirs.get(&(group, binding, element)) else {
                 tally(&mut t.errors, "the reply lacks a written buffer", name);
                 return;
+            };
+            // a buffer's words as it is; an image's as many lanes of each texel as the host's format of it has
+            let (ours, start): (Vec<u32>, Vec<u32>) = match written.get(id) {
+                Some(ours) => (ours.clone(), initial[id].clone()),
+                None => {
+                    let k = element.unwrap_or(0);
+                    let texels = memory.images.texels(*id, k).unwrap_or(1);
+                    let lanes = warp.len() / texels;
+                    if warp.len() != lanes * texels || !(1..=4).contains(&lanes) {
+                        tally(
+                            &mut t.errors,
+                            &format!(
+                                "a written image of {} words in the reply, of {texels} texels",
+                                warp.len()
+                            ),
+                            name,
+                        );
+                        return;
+                    }
+                    (
+                        memory.images.words(*id, k, lanes).unwrap_or_default(),
+                        initial_images.words(*id, k, lanes).unwrap_or_default(),
+                    )
+                }
             };
             if warp.len() != ours.len() {
                 tally(
@@ -1883,49 +2366,91 @@ fn run_compute(harness: &Harness, name: &str, hash: &str, p: iridia_ir::Program,
                 );
                 return;
             }
-            changed |= ours != &initial[id] || warp != &initial[id];
+            // every repeat decides it: a word one repeat changes is a word the program writes
+            changed |= ours != start
+                || runs
+                    .iter()
+                    .any(|r| r.get(&(group, binding, element)).is_some_and(|a| *a != start));
             for (k, (&o, &w)) in ours.iter().zip(warp).enumerate() {
-                let view = observed
-                    .origins
-                    .get(&(*id, k as u32))
-                    .copied()
-                    .unwrap_or(word_types::WordType::Unknown);
+                let (origin, cell) = match written.get(id) {
+                    Some(_) => (
+                        observed.origins.get(&(*id, k as u32)),
+                        Cell::Buffer(*id, k as u32),
+                    ),
+                    None => {
+                        let element = element.unwrap_or(0);
+                        let lanes = ours.len() / memory.images.texels(*id, element).unwrap_or(1);
+                        let (texel, lane) = (k / lanes, (k % lanes) as u32);
+                        (
+                            observed.image_origins.get(&(*id, element, texel, lane)),
+                            Cell::Texel(*id, element, texel, lane),
+                        )
+                    }
+                };
+                let view = origin.copied().unwrap_or(word_types::WordType::Unknown);
                 let class = compute_class(view, o, w);
                 // Shadow the retired heuristic only to count the policy change; it never chooses the verdict.
                 let previous = wgsl_run::classify(o >= 0x0080_0000 || w >= 0x0080_0000, o, w);
-                // a word two stores gave different values, or WARP gave differently on its second run
-                let stores = memory.stored.get(&(*id, k as u32));
-                let second = runs[1..]
+                let shows = runs[1..]
                     .iter()
-                    .filter_map(|r| r.get(&(group, binding)).and_then(|a| a.get(k)).copied())
-                    .find(|&x| x != w);
-                let why = match (stores, second) {
-                    (_, Some(second)) => Some((
-                        0,
-                        format!(
-                            "buffer {} word {k}: WARP gives {w:#x} on one run of the job and {second:#x} on another",
-                            id.0
-                        ),
-                    )),
+                    .filter_map(|r| r.get(&(group, binding, element)).and_then(|a| a.get(k)).copied())
+                    .any(|x| x != w);
+                // a word stores gave different values (`stored`): two invocations stored to it (one invocation's stores come in
+                // its program order), and the order of their stores decides it, which the executor's and WARP's can differ on
+                let stores_differ = memory
+                    .stored
+                    .get(&cell)
+                    .is_some_and(|&(_, differs, n)| differs && n > 1);
+                // The winner of those stores is undefined (D3D leaves the order of unsynchronised stores to one word open),
+                // the value is not: WARP's value of the word in every repeat must be one of the values a store gave it. That
+                // is the whole comparison of such a word that differs, from the executor or between repeats, however many
+                // repeats show it, so it needs no table row and no survey: a word WARP gives a value no store gave is
+                // compared as any other word is, and when it also differs between repeats it is a word no cause explains
+                if stores_differ && (class != Class::Exact || shows) {
+                    let every_repeat =
+                        std::iter::once(w).chain(runs[1..].iter().filter_map(|r| {
+                            r.get(&(group, binding, element)).and_then(|a| a.get(k)).copied()
+                        }));
+                    if all_among(every_repeat, memory.distinct.get(&cell)) {
+                        members[0] += 1;
+                        members[1] += usize::from(shows);
+                        continue;
+                    }
+                }
+                // a word the table lists is not compared, whatever the repeats show; a word it does not list that two
+                // repeats give differently fails the test with the row to add
+                if let warp_unstable::Listing::Listed(words, ..) = &listing
+                    && words.contains(&label, k as u32)
+                {
+                    continue;
+                }
+                if shows {
+                    unlisted.entry(label.clone()).or_default().insert(k as u32);
+                    continue;
+                }
+                // a word two stores gave different values
+                let stores = match cell {
+                    Cell::Buffer(..) => memory.stored.get(&cell),
+                    Cell::Texel(..) => None,
+                };
+                let why = match stores {
                     // each store instruction runs once per invocation outside a loop, so more stores than instructions
                     // to the buffer came from more than one invocation
-                    (Some(&(first, true, n)), _)
-                        if !loops && n > static_stores.get(id).copied().unwrap_or(0) =>
-                    {
+                    Some(&(first, true, n)) if !loops && n > static_stores.get(id).copied().unwrap_or(0) => {
                         Some((
-                            1,
+                            0,
                             format!(
                                 "buffer {} word {k}: {n} stores from at least two invocations ({} store instructions to the buffer, no loop), the first {first:#x}, the last {o:#x}",
-                                id.0,
+                                label,
                                 static_stores.get(id).copied().unwrap_or(0)
                             ),
                         ))
                     }
-                    (Some(&(first, true, n)), _) => Some((
-                        2,
+                    Some(&(first, true, n)) => Some((
+                        1,
                         format!(
                             "buffer {} word {k}: {n} stores of different words, the first {first:#x}, the last {o:#x} (not shown to come from two invocations: {} store instructions to the buffer{})",
-                            id.0,
+                            label,
                             static_stores.get(id).copied().unwrap_or(0),
                             if loops { ", the program has a loop" } else { "" }
                         ),
@@ -1960,7 +2485,7 @@ fn run_compute(harness: &Harness, name: &str, hash: &str, p: iridia_ir::Program,
                 if class != Class::Exact && show_lanes {
                     println!(
                         "{name} case {c} u{} word {k}: {class:?} B {o:#010x} ({}) WARP {w:#010x} ({})",
-                        id.0,
+                        label,
                         f32::from_bits(o),
                         f32::from_bits(w)
                     );
@@ -1968,7 +2493,7 @@ fn run_compute(harness: &Harness, name: &str, hash: &str, p: iridia_ir::Program,
                 if class == Class::Beyond && t.worst.len() < SHOWN && excused.is_none() {
                     t.worst.push(format!(
                         "{name} case {c} buffer {} word {k}: B {o:#010x} ({}) WARP {w:#010x} ({})",
-                        id.0,
+                        label,
                         f32::from_bits(o),
                         f32::from_bits(w)
                     ));
@@ -1980,9 +2505,92 @@ fn run_compute(harness: &Harness, name: &str, hash: &str, p: iridia_ir::Program,
         t.compute_program_class_changes
             .insert(name.to_owned(), (previous_worst, worst));
     }
+    let unlisted_words = unlisted.values().map(BTreeSet::len).sum::<usize>();
+    // the cause this run shows for the unlisted words: the program has the shape of a read and a write of a shared word in one
+    // phase (the words the executor's own stores explain were compared as members above)
+    let shown_cause = if unlisted_words == 0 {
+        None
+    } else if row_shape::check(SHARED_SCAN_RACE, &p.entry).is_ok() {
+        Some(warp_unstable::Cause::SharedScanRace)
+    } else if row_shape::cross_group_race(&p, COMPUTE_GROUPS).is_ok() {
+        Some(warp_unstable::Cause::CrossGroupRace)
+    } else {
+        None
+    };
+    let shape_note = row_shape::race_note(&p.entry, row_shape::reads_group(&p), COMPUTE_GROUPS[0]);
+    match &listing {
+        warp_unstable::Listing::OtherSource => tally(
+            &mut t.errors,
+            "WARP_UNSTABLE lists this program name for other source: survey it again (shader.compute_runs=16)",
+            name,
+        ),
+        warp_unstable::Listing::Unlisted if !unlisted.is_empty() => {
+            println!(
+                "WARP differs between its own repeats, not in WARP_UNSTABLE: {}",
+                warp_unstable::row(
+                    name,
+                    hash,
+                    &unlisted,
+                    differing_repeats,
+                    most_repeats,
+                    shown_cause,
+                    &shape_note
+                )
+            );
+            tally(
+                &mut t.errors,
+                if shown_cause.is_some() {
+                    "a program WARP gives different words for on different repeats is not in WARP_UNSTABLE: add the printed row"
+                } else {
+                    "a program WARP gives different words for on different repeats is not in WARP_UNSTABLE and no cause is shown: find the cause before adding a row"
+                },
+                name,
+            );
+        }
+        warp_unstable::Listing::Listed(..) if !unlisted.is_empty() => {
+            println!(
+                "WARP differs between its own repeats in words WARP_UNSTABLE does not list: {}",
+                warp_unstable::row(
+                    name,
+                    hash,
+                    &unlisted,
+                    differing_repeats,
+                    most_repeats,
+                    shown_cause,
+                    &shape_note
+                )
+            );
+            tally(
+                &mut t.errors,
+                "a program in WARP_UNSTABLE shows words that differ between repeats which its row does not list: add them",
+                name,
+            );
+        }
+        _ => {}
+    }
+    // the cause a listed row states is checked on every run
+    if let warp_unstable::Listing::Listed(_, cause, _) = &listing {
+        let shape = match cause {
+            warp_unstable::Cause::SharedScanRace => row_shape::check(SHARED_SCAN_RACE, &p.entry),
+            warp_unstable::Cause::CrossGroupRace => row_shape::cross_group_race(&p, COMPUTE_GROUPS),
+        };
+        if let Err(e) = shape {
+            tally(&mut t.errors, &format!("WARP_UNSTABLE row: {e}"), name);
+        }
+    }
+    if members[0] > 0 {
+        let seen = t.overlap_members.entry(name.to_owned()).or_default();
+        seen[0] += members[0];
+        seen[1] += members[1];
+    }
+    // an excuse for a program in the table may be exact in a repeat
+    let unstable = matches!(listing, warp_unstable::Listing::Listed(..));
     if worst == Class::Beyond || t.unordered.contains_key(name) {
         t.differs.insert(name.to_owned(), (hash.to_owned(), excused));
+        t.differs_shape
+            .insert(name.to_owned(), row_shape::census(&p.entry));
     } else if let Some(why) = excused
+        && !unstable
         && [
             WARP_SIN,
             SOURCE_ORDER,
@@ -1999,12 +2607,29 @@ fn run_compute(harness: &Harness, name: &str, hash: &str, p: iridia_ir::Program,
             name,
         );
     }
+    // a program the table lists is in this class on every run, and not counted among the programs compared; its other words
+    // were held to the table above
+    if let warp_unstable::Listing::Listed(words, _, evidence) = listing {
+        t.warp_unstable
+            .insert(name.to_owned(), (words.len(), evidence.to_owned()));
+        return;
+    }
+    if !unlisted.is_empty() {
+        return;
+    }
     if !changed && worst != Class::Beyond {
-        tally(
-            &mut t.all_discarded,
-            "no word of a written buffer changed on either side: nothing to compare",
-            name,
-        );
+        let why = if static_stores.is_empty() {
+            "the program has no store to a buffer or an image: nothing to compare"
+        } else if executed_stores == 0 {
+            "no store ran on the executor in any vector (every store is guarded by a value the seeds fix): nothing to compare"
+        } else {
+            "stores ran but wrote the words they held on both sides: nothing to compare"
+        };
+        tally(&mut t.all_discarded, why, name);
+        t.all_discarded_names
+            .entry(common::reason(why))
+            .or_default()
+            .insert(short(name).to_owned());
         return;
     }
     t.compared += 1;
@@ -2029,6 +2654,16 @@ fn report(title: &str, t: &Tally) {
         );
     }
     for (name, origins) in &t.compute_word_origins {
+        if inputs::debug("shader.origins").is_some() {
+            println!(
+                "compute-word-origins {name}: {}",
+                origins
+                    .iter()
+                    .map(|(origin, n)| format!("{origin:?}={n}"))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
+        }
         if let Some(unknown) = origins.get(&word_types::WordType::Unknown) {
             println!(
                 "compute-unknown-store-origin {name}: {unknown} actually written words across vectors; compared exactly"
@@ -2055,7 +2690,10 @@ fn report(title: &str, t: &Tally) {
                 )
             })
             .collect();
-        let _ = std::fs::write(format!("{path}-{}.txt", title.replace(['/', '\\'], "-")), lines);
+        let _ = std::fs::write(
+            format!("{path}-{}.txt", title.replace(['/', '\\', ':'], "-")),
+            lines,
+        );
     }
     println!(
         "{title}: {} programs ({:?}), {} compared, {} runs ({} discarded on both sides)",
@@ -2078,6 +2716,7 @@ fn report(title: &str, t: &Tally) {
     for (title, map) in [
         ("not written (iridia_naga refuses)", &t.refused),
         ("not on the harness", &t.gaps),
+        ("typed buffer view", &t.typed_views),
         ("not run", &t.unrun),
         ("no run survives", &t.all_discarded),
         ("barrier not provably uniform", &t.unprovable),
@@ -2088,6 +2727,37 @@ fn report(title: &str, t: &Tally) {
             println!("  {title} {n:6}  {why}  (e.g. {at})");
         }
     }
+    if !t.job_seconds.is_empty() {
+        let mut slowest: Vec<(&String, &f64)> = t.job_seconds.iter().collect();
+        slowest.sort_by(|a, b| b.1.total_cmp(a.1));
+        println!(
+            "  longest WARP job of {} compute programs over {SLOW_JOB_SECONDS} s (the harness waits 30 s): {}",
+            slowest.len(),
+            slowest
+                .iter()
+                .map(|(n, s)| format!("{} {s:.0}", short(n)))
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
+    }
+    if !t.gpu_timeouts.is_empty() {
+        println!(
+            "  the GPU did not finish within the wait, {} programs: {}",
+            t.gpu_timeouts.len(),
+            t.gpu_timeouts
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
+    }
+    for (why, names) in &t.all_discarded_names {
+        println!(
+            "  no run survives, {} programs ({why}): {}",
+            names.len(),
+            names.iter().map(String::as_str).collect::<Vec<_>>().join(" ")
+        );
+    }
     for (source, (lanes, programs)) in &t.amplified {
         println!(
             "  amplified rounding of a {}: {lanes} lanes in {} programs: {}",
@@ -2096,18 +2766,42 @@ fn report(title: &str, t: &Tally) {
             programs.iter().map(String::as_str).collect::<Vec<_>>().join(" ")
         );
     }
+    if !t.warp_unstable.is_empty() {
+        println!(
+            "  WARP-unstable by WARP_UNSTABLE: {} compute programs, {} listed words (those words are not compared, and the programs are not counted compared)",
+            t.warp_unstable.len(),
+            t.warp_unstable.values().map(|(n, _)| n).sum::<usize>()
+        );
+        for (n, (words, at)) in &t.warp_unstable {
+            println!("    {} ({words} words): {at}", short(n));
+        }
+    }
+    if !t.overlap_members.is_empty() {
+        let sum = |k: usize| t.overlap_members.values().map(|w| w[k]).sum::<usize>();
+        println!(
+            "  words the stores gave two or more values, compared as members of what the stores gave (every WARP repeat's value among them): {} words in {} programs, {} of them differing between WARP's repeats",
+            sum(0),
+            t.overlap_members.len(),
+            sum(1)
+        );
+        for (n, [words, differing]) in &t.overlap_members {
+            println!(
+                "    {} ({words} words, {differing} differing between WARP's repeats)",
+                short(n)
+            );
+        }
+    }
     if !t.unordered.is_empty() {
         let sum = |k: usize| t.unordered.values().map(|w| w[k]).sum::<usize>();
         println!(
-            "  words of {} compute programs differ from WARP where the program's own writes are unordered: {} that WARP gives differently on different runs of the job, {} that stores of more than one invocation gave different values, {} that two stores gave different values (not shown to be two invocations)",
+            "  words of {} compute programs differ from WARP where the program's own writes are unordered: {} that stores of more than one invocation gave different values, {} that two stores gave different values (not shown to be two invocations)",
             t.unordered.len(),
             sum(0),
-            sum(1),
-            sum(2)
+            sum(1)
         );
         for (n, (_, why)) in &t.unordered_why {
             let w = t.unordered[n];
-            println!("    {} ({}/{}/{}): {why}", short(n), w[0], w[1], w[2]);
+            println!("    {} ({}/{}): {why}", short(n), w[0], w[1]);
         }
     }
     for (n, (hash, why)) in &t.graphics_differs {
@@ -2119,9 +2813,10 @@ fn report(title: &str, t: &Tally) {
     }
     for (n, (hash, why)) in &t.differs {
         println!(
-            "  compute program {} {hash}: {}",
+            "  compute program {} {hash}: {} [{}]",
             short(n),
-            why.unwrap_or("NOT IN COMPUTE_EXPECTED")
+            why.unwrap_or("NOT IN COMPUTE_EXPECTED"),
+            t.differs_shape.get(n).map_or("", String::as_str)
         );
     }
     let beyond: Vec<&str> = t
@@ -2169,9 +2864,15 @@ pub(crate) fn corpus_over(corpus: &common::Corpus) {
     let files = &selected[..selected.len().min(common::diff_limit())];
     let next = std::sync::atomic::AtomicUsize::new(0);
     let tallies: Vec<std::sync::Mutex<Tally>> = files.iter().map(|_| Default::default()).collect();
-    let workers = std::thread::available_parallelism()
-        .map_or(1, std::num::NonZero::get)
-        .min(8);
+    // `shader.workers`: how many programs run at once (8 at most by default), 1 to time a program without the others' load
+    let workers = inputs::debug("shader.workers")
+        .and_then(|n| n.parse::<usize>().ok())
+        .unwrap_or_else(|| {
+            std::thread::available_parallelism()
+                .map_or(1, std::num::NonZero::get)
+                .min(8)
+        })
+        .max(1);
     std::thread::scope(|s| {
         for _ in 0..workers {
             s.spawn(|| {
@@ -2206,7 +2907,15 @@ pub(crate) fn corpus_over(corpus: &common::Corpus) {
             *t.lanes.entry(k).or_default() += n;
         }
         t.unordered.extend(one.unordered);
+        t.warp_unstable.extend(one.warp_unstable);
+        t.overlap_members.extend(one.overlap_members);
+        for (why, names) in one.all_discarded_names {
+            t.all_discarded_names.entry(why).or_default().extend(names);
+        }
+        t.gpu_timeouts.extend(one.gpu_timeouts);
+        t.job_seconds.extend(one.job_seconds);
         t.differs.extend(one.differs);
+        t.differs_shape.extend(one.differs_shape);
         t.graphics_differs.extend(one.graphics_differs);
         t.compute_class_changes.extend(one.compute_class_changes);
         t.compute_program_class_changes
@@ -2227,6 +2936,7 @@ pub(crate) fn corpus_over(corpus: &common::Corpus) {
             (&mut t.browser_refused, one.browser_refused),
             (&mut t.all_discarded, one.all_discarded),
             (&mut t.unprovable, one.unprovable),
+            (&mut t.typed_views, one.typed_views),
         ] {
             for (why, (n, at)) in theirs {
                 mine.entry(why).or_insert((0, at)).0 += n;
@@ -2237,6 +2947,17 @@ pub(crate) fn corpus_over(corpus: &common::Corpus) {
         t.worst.extend(one.worst);
     }
     report(&corpus.name, &t);
+    let retries = harness.retries();
+    if !retries.is_empty() {
+        let mut why: BTreeMap<&str, usize> = BTreeMap::new();
+        for r in &retries {
+            *why.entry(r.as_str()).or_default() += 1;
+        }
+        println!(
+            "  {} jobs run again on a fresh process because the pooled one was dead: {why:?}",
+            retries.len()
+        );
+    }
     for (stage, n) in &t.tinted {
         println!(
             "  {n:6} {stage} programs written for a browser, accepted by Tint unless an ERROR names them"
@@ -2253,5 +2974,141 @@ pub(crate) fn corpus_over(corpus: &common::Corpus) {
 pub(crate) fn corpus(game: inputs::Game) {
     if let Some(corpus) = common::corpus(game) {
         corpus_over(&corpus);
+    }
+}
+
+#[cfg(test)]
+mod memory_tests {
+    use super::*;
+    use iridia_exec::{Dim, ImageStore};
+    use iridia_ir::interface::TextureDim;
+
+    /// The store observer renames the resource of every store; its aliases of a storage image and of a buffer are the resources
+    /// themselves, for stores, reads and counts alike.
+    #[test]
+    fn a_store_observer_alias_is_the_resource_it_stands_for() {
+        let (image, image_alias) = (ResourceId(1), ResourceId(7));
+        let (buffer, buffer_alias) = (ResourceId(2), ResourceId(8));
+        let mut images = images::Images::default();
+        images.add_storage(
+            image,
+            0,
+            [0; 4],
+            images::Shape {
+                dim: TextureDim::D2,
+                arrayed: false,
+            },
+        );
+        let origin = |buffer, lane| word_types::StoreOrigin {
+            buffer,
+            lanes: [lane; 4],
+        };
+        let mut memory = Memory {
+            aliases: BTreeMap::from([
+                (image_alias, origin(image, word_types::WordType::Float32)),
+                (buffer_alias, origin(buffer, word_types::WordType::Integer)),
+            ]),
+            words: BTreeMap::from([(buffer, vec![0; 4])]),
+            images,
+            ..Memory::default()
+        };
+        memory
+            .store_image(ImageStore {
+                view: image_alias,
+                index: 0,
+                dim: Dim::D2,
+                texel: [1, 2, 0],
+                layer: None,
+                value: [5, 6, 7, 8],
+                lanes: 2,
+            })
+            .expect("a store through an alias of a storage image");
+        memory
+            .store_buffer(buffer_alias, 1, [9, 0, 0, 0], 1)
+            .expect("a store through an alias of a buffer");
+        // texel (1, 2) of a 4 x 4 image is texel 9; the host reads two lanes of each
+        let words = memory.images.words(image, 0, 2).expect("the image");
+        assert_eq!(words[18..20], [5, 6]);
+        assert!(memory.image_origins[&(image, 0, 9, 1)] == word_types::WordType::Float32);
+        assert_eq!(memory.words[&buffer], vec![0, 9, 0, 0]);
+        assert!(memory.origins[&(buffer, 1)] == word_types::WordType::Integer);
+        assert_eq!(memory.read_buffer(buffer_alias, 1, 1).expect("a read")[0], 9);
+        assert_eq!(memory.buffer_words(buffer_alias).expect("a count"), 4);
+    }
+
+    /// A word stored more than once keeps each distinct value a store gave it, in order, and one stored once has none.
+    #[test]
+    fn a_word_stored_twice_keeps_the_values_it_was_given() {
+        let buffer = ResourceId(2);
+        let mut memory = Memory {
+            words: BTreeMap::from([(buffer, vec![0; 4])]),
+            ..Memory::default()
+        };
+        for value in [5, 7, 5, 9, 7] {
+            memory
+                .store_buffer(buffer, 1, [value, 0, 0, 0], 1)
+                .expect("a store");
+        }
+        memory.store_buffer(buffer, 2, [3, 0, 0, 0], 1).expect("a store");
+        memory.store_buffer(buffer, 3, [4, 0, 0, 0], 1).expect("a store");
+        memory.store_buffer(buffer, 3, [4, 0, 0, 0], 1).expect("a store");
+        assert_eq!(memory.stored[&Cell::Buffer(buffer, 1)], (5, true, 5));
+        assert_eq!(memory.distinct[&Cell::Buffer(buffer, 1)], vec![5, 7, 9]);
+        assert!(!memory.distinct.contains_key(&Cell::Buffer(buffer, 2)));
+        // two stores of one value: more than one store, no different value
+        assert_eq!(memory.stored[&Cell::Buffer(buffer, 3)], (4, false, 2));
+        assert_eq!(memory.distinct[&Cell::Buffer(buffer, 3)], vec![4]);
+    }
+
+    /// WARP's value of a word the stores gave two values is held to those values in every repeat: one repeat's value that no store
+    /// gave fails it, as does any value of a word nothing is recorded for.
+    #[test]
+    fn a_value_no_store_gave_is_not_among_the_stores_values() {
+        let stored = vec![4, 9];
+        assert!(all_among([4, 9, 4].into_iter(), Some(&stored)));
+        assert!(!all_among([4, 9, 5].into_iter(), Some(&stored)));
+        assert!(!all_among([4].into_iter(), None));
+    }
+
+    /// Two invocations storing different values to one texel (an image store is the same kind of overlap a buffer word's is)
+    /// leave each lane's values noted, and a store outside the image notes nothing.
+    #[test]
+    fn a_texel_stored_twice_keeps_the_values_it_was_given() {
+        let image = ResourceId(4);
+        let mut memory = Memory::default();
+        memory.images.add_storage(
+            image,
+            0,
+            [0; 4],
+            images::Shape {
+                dim: iridia_ir::interface::TextureDim::D2,
+                arrayed: false,
+            },
+        );
+        let store = |texel: [u32; 3], value: [u32; 4]| ImageStore {
+            view: image,
+            index: 0,
+            dim: Dim::D2,
+            texel,
+            layer: None,
+            value,
+            lanes: 4,
+        };
+        for value in [[1, 2, 3, 4], [1, 2, 3, 9], [1, 2, 3, 4]] {
+            memory.store_image(store([0, 0, 0], value)).expect("a store");
+        }
+        memory.store_image(store([1, 0, 0], [5; 4])).expect("a store");
+        memory.store_image(store([9, 9, 0], [6; 4])).expect("a store");
+        let lane = |texel, lane| Cell::Texel(image, 0, texel, lane);
+        assert_eq!(memory.stored[&lane(0, 0)], (1, false, 3));
+        assert_eq!(memory.stored[&lane(0, 3)], (4, true, 3));
+        assert_eq!(memory.distinct[&lane(0, 3)], vec![4, 9]);
+        assert_eq!(memory.stored[&lane(1, 0)], (5, false, 1));
+        assert!(!memory.distinct.contains_key(&lane(1, 0)));
+        assert_eq!(
+            memory.stored.len(),
+            8,
+            "texels 0 and 1, four lanes each, and nothing for the store outside the image"
+        );
     }
 }

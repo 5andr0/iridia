@@ -24,6 +24,10 @@ pub mod amplified;
 /// How long one job may take, compiles included, before its process is killed.
 const LIMIT: Duration = Duration::from_secs(120);
 
+/// How many seconds of GPU work `wgsl-run` waits for a job (`--timeout`): a job that does not finish in it is the harness's
+/// error, so a program that really hangs shows in half a minute.
+const GPU_SECONDS: u64 = 30;
+
 /// Dawn's `tint` (`tools.tint`): the WGSL compiler of Chrome, which reads a text and checks it as a browser would.
 #[derive(Debug)]
 pub struct Tint {
@@ -87,6 +91,23 @@ pub struct Harness {
     /// operations, 16-bit and 64-bit types); FXC where it is not configured.
     dxc: Option<PathBuf>,
     idle: Mutex<Vec<Process>>,
+    /// Each job run again on a fresh process because the pooled process it was given was dead (a process that died after
+    /// its last reply), with the program's reason: a failure on a fresh process is the job's own result.
+    retries: Mutex<Vec<String>>,
+}
+
+/// Why a job has no reply: the process was dead when it was given the job, or the job's own result is a failure.
+enum Failure {
+    Dead(String),
+    Result(String),
+}
+
+impl Failure {
+    fn message(self) -> String {
+        match self {
+            Failure::Dead(why) | Failure::Result(why) => why,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -118,6 +139,7 @@ impl Harness {
             program,
             dxc,
             idle: Mutex::new(Vec::new()),
+            retries: Mutex::new(Vec::new()),
         }
     }
 
@@ -131,7 +153,7 @@ impl Harness {
         if let Some(dxc) = &self.dxc {
             command.arg("--dxc").path_arg(dxc);
         }
-        command.args(["--timeout", "30"]);
+        command.args(["--timeout", &GPU_SECONDS.to_string()]);
         let mut child = command
             .command()
             .stdin(Stdio::piped())
@@ -157,42 +179,83 @@ impl Harness {
         })
     }
 
+    /// How many jobs were run again on a fresh process, and why ([`Harness::retries`]'s rows, one per job).
+    pub fn retries(&self) -> Vec<String> {
+        self.retries.lock().map(|r| r.clone()).unwrap_or_default()
+    }
+
     /// Run one job: its reply, or why there is none (the process's reply is the harness's error where it gives one). The
     /// machine-wide lock on the adapter (`primase_testdata::warp_exclusive`) is held for the job and no longer, so callers
     /// never take it and a long run of jobs does not shut other WARP users out.
+    ///
+    /// A process is kept for the next job only after a reply that is not an error: after an error or a timeout it is killed,
+    /// so the next job never meets a process that is ending. A pooled process that is dead when the job is given to it (it
+    /// ended after its last reply) is no result of the job: the job runs once more on a fresh process, and is logged in
+    /// [`Harness::retries`]. A failure on a fresh process is the job's own and is never retried, a timeout (a GPU that did not
+    /// finish) included.
     pub fn run(&self, job: &serde_json::Value) -> Result<serde_json::Value, String> {
         let _exclusive = primase_testdata::warp_exclusive();
-        let idle = self.idle.lock().ok().and_then(|mut v| v.pop());
-        let mut p = match idle {
-            Some(p) => p,
-            None => self.spawn()?,
-        };
         let line = serde_json::to_string(job).map_err(|e| e.to_string())?;
+        let pooled = self.idle.lock().ok().and_then(|mut v| v.pop());
+        match pooled {
+            Some(p) => match self.give(p, &line) {
+                Err(Failure::Dead(why)) => {
+                    if let Ok(mut retries) = self.retries.lock() {
+                        retries.push(why);
+                    }
+                    self.give_fresh(&line)
+                }
+                other => other.map_err(Failure::message),
+            },
+            None => self.give_fresh(&line),
+        }
+    }
+
+    fn give_fresh(&self, line: &str) -> Result<serde_json::Value, String> {
+        let p = self.spawn()?;
+        self.give(p, line).map_err(Failure::message)
+    }
+
+    fn give(&self, mut p: Process, line: &str) -> Result<serde_json::Value, Failure> {
         if let Err(e) = writeln!(p.stdin, "{line}").and_then(|()| p.stdin.flush()) {
             let _ = p.child.kill();
-            return Err(format!("writing a job: {e}"));
+            let _ = p.child.wait();
+            return Err(Failure::Dead(format!("writing a job: {e}")));
         }
         match p.replies.recv_timeout(LIMIT) {
             Ok(reply) => {
-                let v: serde_json::Value =
-                    serde_json::from_str(&reply).map_err(|e| format!("the reply {reply:?}: {e}"))?;
-                // a process that exited (a timed-out job's) is not kept
-                if matches!(p.child.try_wait(), Ok(None)) {
-                    if let Ok(mut idle) = self.idle.lock() {
-                        idle.push(p);
-                    }
-                } else {
-                    let _ = p.child.wait();
-                }
+                let v: serde_json::Value = serde_json::from_str(&reply)
+                    .map_err(|e| Failure::Result(format!("the reply {reply:?}: {e}")))?;
                 match v.get("error").and_then(|e| e.as_str()) {
-                    Some(e) => Err(e.to_owned()),
-                    None => Ok(v),
+                    // a process that answered with an error is not kept: it may be on its way out
+                    Some(e) => {
+                        let _ = p.child.kill();
+                        let _ = p.child.wait();
+                        Err(Failure::Result(e.to_owned()))
+                    }
+                    None => {
+                        if matches!(p.child.try_wait(), Ok(None)) {
+                            if let Ok(mut idle) = self.idle.lock() {
+                                idle.push(p);
+                            }
+                        } else {
+                            let _ = p.child.kill();
+                            let _ = p.child.wait();
+                        }
+                        Ok(v)
+                    }
                 }
             }
-            Err(_) => {
+            // the process ended without a reply
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
                 let _ = p.child.kill();
                 let _ = p.child.wait();
-                Err(format!("no reply within {} s", LIMIT.as_secs()))
+                Err(Failure::Dead("the process ended without a reply".to_owned()))
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                let _ = p.child.kill();
+                let _ = p.child.wait();
+                Err(Failure::Result(format!("no reply within {} s", LIMIT.as_secs())))
             }
         }
     }
@@ -332,8 +395,18 @@ pub fn gap(program: &iridia_ir::Program) -> Option<String> {
     None
 }
 
+/// How many elements the harness gives a resource array: the program's count, or [`ARRAY_ELEMENTS`] where it states none
+/// (an unbounded array is as long as the bound data); 1 for a resource that is not an array.
+pub fn element_count(r: &iridia_ir::interface::Resource) -> u32 {
+    if r.is_unbounded() { ARRAY_ELEMENTS } else { r.count }
+}
+
+/// The elements of an array of resources the program does not size.
+pub const ARRAY_ELEMENTS: u32 = 4;
+
 /// Why the harness cannot run a compute program as [`job`]-less callers bind it: it needs a resource other than constant
-/// buffers and structured or raw buffers (read or written), an array of resources, or f64.
+/// buffers, structured, raw or typed buffers (read or written), sampled and storage images and samplers, an array of buffers,
+/// a multisampled texture, or f64.
 pub fn gap_compute(program: &iridia_ir::Program) -> Option<String> {
     let needs = iridia_ir::target::requirements(program);
     if needs
@@ -343,8 +416,20 @@ pub fn gap_compute(program: &iridia_ir::Program) -> Option<String> {
         return Some("f64: WARP through wgpu has no SHADER_F64".into());
     }
     for r in &program.interface.resources {
-        if r.count != 1 && !matches!(r.kind, ResourceKind::PipelineState(_)) {
-            return Some("a resource array".into());
+        let is_buffer = matches!(
+            r.kind,
+            ResourceKind::ConstantBuffer { .. }
+                | ResourceKind::Buffer(_)
+                | ResourceKind::Storage {
+                    target: iridia_ir::interface::StorageTarget::Buffer(_),
+                    ..
+                }
+        );
+        if r.is_array() && is_buffer {
+            // wgpu-hal 30.0.1 src/dx12/adapter.rs:506-511 sets TEXTURE_BINDING_ARRAY and STORAGE_RESOURCE_BINDING_ARRAY (with
+            // the non-uniform indexing and partially bound ones) on the device and never BUFFER_BINDING_ARRAY, which a binding
+            // array of uniform or storage buffers needs; `wgsl-run --adapter` lists WARP's features
+            return Some("an array of buffers: wgpu 30's DX12 backend has no BUFFER_BINDING_ARRAY".into());
         }
         let why = match &r.kind {
             ResourceKind::ConstantBuffer { .. } => continue,
@@ -354,10 +439,22 @@ pub fn gap_compute(program: &iridia_ir::Program) -> Option<String> {
                     iridia_ir::interface::StorageTarget::Buffer(BufferKind::Structured { .. } | BufferKind::Raw),
                 ..
             } => continue,
-            ResourceKind::Buffer(BufferKind::Typed(_)) => "a typed buffer view",
-            ResourceKind::Storage { .. } => "an unordered-access view that is not a structured or raw buffer",
-            ResourceKind::Texture { .. } => "a texture",
-            ResourceKind::Sampler { .. } => "a sampler",
+            ResourceKind::Storage {
+                target: iridia_ir::interface::StorageTarget::Image { .. },
+                ..
+            } => continue,
+            // a typed view is four 32-bit lanes an element on both sides (the executor's `View::Typed`, the writer's
+            // `array<vec4<..>>`), the words given as the lanes of the declared type
+            ResourceKind::Buffer(BufferKind::Typed(_)) => continue,
+            ResourceKind::Storage {
+                target: iridia_ir::interface::StorageTarget::Buffer(BufferKind::Typed(_)),
+                ..
+            } => continue,
+            ResourceKind::Texture {
+                multisampled: true, ..
+            } => "a multisampled texture",
+            ResourceKind::Texture { .. } => continue,
+            ResourceKind::Sampler { .. } => continue,
             _ => "a resource of another kind",
         };
         return Some(why.into());

@@ -5,6 +5,7 @@
 //! invocation over 2x2 quads, so its derivatives and its discarded invocations' helpers are the rasterizer's own. A
 //! compute program runs as it is.
 
+use crate::job::WorkgroupInit;
 use naga::{
     AddressSpace, ArraySize, BinaryOperator as Bo, Binding, Block, BuiltIn, EntryPoint, Expression as E,
     Function, FunctionArgument, FunctionResult, GlobalVariable, Handle, Literal, ResourceBinding, Scalar,
@@ -33,6 +34,8 @@ pub struct Wrapped {
     pub arguments: Vec<u32>,
     /// The words of each of its results.
     pub results: Vec<u32>,
+    /// Whether the module zeroes its workgroup memory itself ([`crate::workgroup`]), so the pipeline is made without wgpu's.
+    pub zeroes_workgroup_memory: bool,
 }
 
 impl Wrapped {
@@ -374,7 +377,7 @@ fn validate(module: &naga::Module) -> Result<naga::valid::ModuleInfo, String> {
 }
 
 /// The program of `wgsl` ready to run its entry point `entry` (the only one where `None`).
-pub fn wrap(wgsl: &str, entry: Option<&str>) -> Result<Wrapped, String> {
+pub fn wrap(wgsl: &str, entry: Option<&str>, workgroup_init: WorkgroupInit) -> Result<Wrapped, String> {
     let mut module = naga::front::wgsl::parse_str(wgsl)
         .map_err(|e| format!("naga's WGSL front end: {}", e.emit_to_string(wgsl)))?;
     validate(&module).map_err(|e| format!("naga's validator, on the program: {e}"))?;
@@ -394,7 +397,19 @@ pub fn wrap(wgsl: &str, entry: Option<&str>) -> Result<Wrapped, String> {
     };
     let stage = module.entry_points[index].stage;
     if stage == ShaderStage::Compute {
-        let info = validate(&module)?;
+        let mut info = validate(&module)?;
+        let mut zeroes_workgroup_memory = false;
+        if workgroup_init == WorkgroupInit::Loop {
+            // a program that cannot be changed this way keeps wgpu's initialisation
+            let mut changed = module.clone();
+            if let Ok(zeroed) = crate::workgroup::initialize(&mut changed, &info, index) {
+                info = validate(&changed).map_err(|e| {
+                    format!("the workgroup initialisation does not validate (a harness bug): {e}")
+                })?;
+                module = changed;
+                zeroes_workgroup_memory = zeroed;
+            }
+        }
         let name = module.entry_points[index].name.clone();
         return Ok(Wrapped {
             module,
@@ -404,6 +419,7 @@ pub fn wrap(wgsl: &str, entry: Option<&str>) -> Result<Wrapped, String> {
             entry_index: index,
             arguments: Vec::new(),
             results: Vec::new(),
+            zeroes_workgroup_memory,
         });
     }
     if !matches!(stage, ShaderStage::Vertex | ShaderStage::Fragment) {
@@ -581,5 +597,6 @@ pub fn wrap(wgsl: &str, entry: Option<&str>) -> Result<Wrapped, String> {
         entry_index,
         arguments,
         results,
+        zeroes_workgroup_memory: false,
     })
 }

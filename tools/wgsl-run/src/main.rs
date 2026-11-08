@@ -7,6 +7,7 @@
 
 mod gpu;
 mod job;
+mod workgroup;
 mod wrap;
 
 use std::io::{BufRead as _, Write as _};

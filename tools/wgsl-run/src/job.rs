@@ -27,6 +27,21 @@ pub struct Job {
     /// The resources the entry point uses, by group and binding.
     #[serde(default)]
     pub resources: Vec<Resource>,
+    /// Who zeroes a compute program's workgroup memory.
+    #[serde(default)]
+    pub workgroup_init: WorkgroupInit,
+}
+
+/// Who zeroes a compute program's workgroup memory, which WGSL starts zeroed.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkgroupInit {
+    /// The harness, in the program's module, with loops over the group's invocations (`workgroup.rs` says why).
+    #[default]
+    Loop,
+    /// wgpu, which writes one assignment of each array in the first invocation: a program with 3,072 words of workgroup
+    /// memory then takes WARP about a minute to compile.
+    Wgpu,
 }
 
 /// A resource of the program.

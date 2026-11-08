@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- `wgsl-run` (the WARP harness): workgroup memory is zeroed in the naga module, by loops strided over `local_invocation_index`
+  and a workgroup barrier, with wgpu's own zero-initialisation turned off. wgpu 30.0.1 zeroes it with one assignment of the
+  whole array by the first invocation, which WARP takes 50 to 120 s to compile for arrays of about 3,000 words (1,024 words:
+  3.4 s, 4,096: 115 s); gfx-rs/wgpu PR 10314 fixes that on trunk and is not in a release. A job's `workgroup_init` field
+  (`"wgpu"`) selects the old behaviour; the output of a program is the same either way (a test compares them).
+- `iridia-dxbc` tests: the compute comparison of the WGSL writers against the IR executor runs programs with typed views,
+  storage images, samplers and arrays of them; a word's float or integer origin (what decides whether it is compared within
+  tolerance or exactly) now follows variables, array elements and control-flow joins and takes a typed view or image's declared
+  lane type; a word the executor's own stores gave two or more different values is compared by whether WARP's value in every
+  repeat is one of those values, with no table row. `WARP_UNSTABLE` lists the rest by name and source hash with a cause the
+  test re-checks on every run. Test-side only; no library source changes.
 - `iridia-d3d9-ir`: `log` and `logp` of a zero source give -FLT_MAX and `texdepth` with `r5.g` zero gives 1.0, as Microsoft's
   instruction reference states (`LIFTER_VERSION` 5, twelve fixtures change); the crate documentation tables what the lift
   does at every operation's documented special inputs and why. `iridia-d3d9`, the older lift, gives `log` of zero the same

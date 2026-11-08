@@ -113,7 +113,7 @@ impl Gpu {
 
     /// Run a job.
     pub fn run(&self, job: &Job) -> Result<Reply, Failure> {
-        let wrapped = wrap::wrap(&job.wgsl, job.entry.as_deref())?;
+        let wrapped = wrap::wrap(&job.wgsl, job.entry.as_deref(), job.workgroup_init)?;
         let scopes = [
             self.device.push_error_scope(wgpu::ErrorFilter::OutOfMemory),
             self.device.push_error_scope(wgpu::ErrorFilter::Internal),
@@ -334,7 +334,10 @@ impl Gpu {
                         layout: Some(&pipeline_layout),
                         module: &module,
                         entry_point: Some(&w.entry),
-                        compilation_options: Default::default(),
+                        compilation_options: wgpu::PipelineCompilationOptions {
+                            zero_initialize_workgroup_memory: !w.zeroes_workgroup_memory,
+                            ..Default::default()
+                        },
                         cache: None,
                     });
                 let groups = if stage == ShaderStage::Compute {

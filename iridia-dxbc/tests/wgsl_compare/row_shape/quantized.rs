@@ -159,20 +159,24 @@ mod tests {
 
     #[test]
     fn quantized_rows_require_the_exact_name_and_hash() {
-        let rows: Vec<_> = super::super::COMPUTE_EXPECTED
+        let rows: Vec<_> = crate::wgsl_compare::COMPUTE_EXPECTED
             .iter()
-            .filter(|(_, _, why)| *why == super::super::WARP_QUANTIZED_FLOAT_BITS)
+            .filter(|(_, _, why)| *why == crate::wgsl_compare::WARP_QUANTIZED_FLOAT_BITS)
             .collect();
-        assert_eq!(rows.len(), 48);
+        assert_eq!(
+            rows.len(),
+            65,
+            "48 rows of capture 81015009 and 17 of capture b857e8d2"
+        );
         let unique: std::collections::BTreeSet<_> = rows.iter().map(|(n, h, _)| (*n, *h)).collect();
-        assert_eq!(unique.len(), 48);
+        assert_eq!(unique.len(), 65);
         for (name, hash, _) in rows {
             assert!(hash.starts_with("sha256:") && hash.len() == 71);
             assert_eq!(
-                super::super::compute_expected(name, hash),
-                Some(super::super::WARP_QUANTIZED_FLOAT_BITS)
+                crate::wgsl_compare::compute_expected(name, hash),
+                Some(crate::wgsl_compare::WARP_QUANTIZED_FLOAT_BITS)
             );
-            assert!(super::super::compute_expected(name, "sha256:0").is_none());
+            assert!(crate::wgsl_compare::compute_expected(name, "sha256:0").is_none());
         }
     }
 }
