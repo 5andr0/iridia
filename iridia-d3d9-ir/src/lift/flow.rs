@@ -74,6 +74,10 @@ impl Lift<'_> {
             if !self.flow_instruction(i)? {
                 self.instruction(i)?;
             }
+            // a cut after this instruction: the prefix is the program, or the cut's lanes are replaced
+            if self.cut_after(i)? {
+                break;
+            }
         }
         Ok(())
     }

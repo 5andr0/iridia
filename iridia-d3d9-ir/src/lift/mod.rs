@@ -3,6 +3,7 @@
 
 mod arith;
 mod flow;
+mod project;
 mod texture;
 
 use std::collections::BTreeMap;
@@ -15,9 +16,15 @@ use iridia_ir::{
     source_hash,
 };
 
+use project::Derive;
+pub use project::{
+    Projection, project, project_vertex_output, project_vertex_output_with, project_with, reencode,
+    reencode_with,
+};
+
 use crate::{
     Destination, Index, Instruction, Register, Result, Shader, Signature, Source, error,
-    signature::{outputs, read_input, signature},
+    signature::{outputs, read_input, signature, signature_with_bank},
 };
 
 /// The lifter's name in a program's provenance.
@@ -118,6 +125,8 @@ struct Lift<'a> {
     /// The dot products of `texm3x2pad` and `texm3x3pad` so far.
     rows: Vec<ValueId>,
     notes: Vec<String>,
+    /// What the lift derives from its program: a cut after one instruction, an output padded.
+    derive: Derive,
     at: usize,
 }
 
@@ -750,9 +759,17 @@ pub fn lift(bytes: &[u8]) -> Result<Program> {
 /// Lift one complete program with the stated [`Options`].
 pub fn lift_with(bytes: &[u8], options: &Options) -> Result<Program> {
     let source = crate::read(bytes)?;
-    let signature = signature(&source, &options.texture_dims)?;
+    lift_shader(&source, bytes, options, Derive::default())
+}
+
+/// Lift the read program `source` of `bytes` with `options`, and what `derive` takes of it.
+fn lift_shader(source: &Shader, bytes: &[u8], options: &Options, derive: Derive) -> Result<Program> {
+    let signature = match derive.float_bank {
+        Some(rows) => signature_with_bank(source, &options.texture_dims, rows)?,
+        None => signature(source, &options.texture_dims)?,
+    };
     let mut l = Lift {
-        source: &source,
+        source,
         options,
         signature,
         b: Builder::new("main"),
@@ -767,10 +784,12 @@ pub fn lift_with(bytes: &[u8], options: &Options) -> Result<Program> {
         calls: Vec::new(),
         rows: Vec::new(),
         notes: Vec::new(),
+        derive,
         at: 0,
     };
     l.prepare()?;
     let main = l.subroutines()?;
     l.run(main)?;
+    l.pad_output()?;
     l.finish(bytes)
 }

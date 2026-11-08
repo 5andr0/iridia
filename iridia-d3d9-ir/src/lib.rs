@@ -21,7 +21,10 @@ mod model;
 mod signature;
 
 pub use d3d9_reader::{Comment, Constant, ConstantTable, Type, TypeMember};
-pub use lift::{LIFTER, LIFTER_VERSION, Options, Ps1x, lift, lift_with};
+pub use lift::{
+    LIFTER, LIFTER_VERSION, Options, Projection, Ps1x, lift, lift_with, project, project_vertex_output,
+    project_vertex_output_with, project_with, reencode, reencode_with,
+};
 pub use model::{
     Comparison, Destination, Index, Input, Instruction, Opcode, Output, Register, Shader, Source, Version,
     read, usage,

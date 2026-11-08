@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `iridia-d3d9-ir`: `project`, `reencode` and `project_vertex_output` (each with a `_with` taking the lift's `Options`) and
+  `Projection`, the derived programs `iridia-d3d9` makes, on the IR: a ps_3_0 program cut after an instruction (the cut's
+  lanes as RGB, alpha one), the whole program with the cut's lanes replaced by a new input `DERIVED_RGB0`, and the
+  backward slice of a vs_3_0 output run as a pixel invocation. A vertex program with flow control is refused by name
+  (the older slice dropped the flow control and kept the writes inside it).
 - `iridia-passes`: `flatten_sampler_heaps`, each array of samplers (a Shader Model 6 sampler heap, indexed at run time)
   made one sampler, for a pipeline that binds one: the program's notes say every index reads the same sampler. It is
   the older writer's `single_samplers` option as a pass over the IR.

@@ -499,6 +499,21 @@ fn bank(
 /// `texture_dims` gives the dimension of pixel 1.x texture stages the host has stated; a stage it does not name gets a
 /// texture of each dimension and a `StateParam::TextureDim` to pick by.
 pub fn signature(source: &Shader, texture_dims: &BTreeMap<u32, TextureDim>) -> Result<Signature> {
+    let float_bank = if source.stage == Stage::Vertex {
+        VERTEX_CONSTANTS
+    } else {
+        PIXEL_CONSTANTS
+    };
+    signature_with_bank(source, texture_dims, float_bank)
+}
+
+/// [`signature`] with the rows of the float constant bank a relative read can reach stated: a vertex program's slice run
+/// as a pixel invocation still reads the vertex constant file.
+pub(crate) fn signature_with_bank(
+    source: &Shader,
+    texture_dims: &BTreeMap<u32, TextureDim>,
+    float_bank: u32,
+) -> Result<Signature> {
     let mut s = Signature {
         interface: Interface {
             stage: source.stage,
@@ -545,11 +560,6 @@ pub fn signature(source: &Shader, texture_dims: &BTreeMap<u32, TextureDim>) -> R
     }
     // the rows of each bank the code reads; a relative read can reach the whole bank
     let (mut rows, mut integers, mut booleans) = (0, 0, 0);
-    let float_bank = if source.stage == Stage::Vertex {
-        VERTEX_CONSTANTS
-    } else {
-        PIXEL_CONSTANTS
-    };
     let reads = source
         .instructions
         .iter()

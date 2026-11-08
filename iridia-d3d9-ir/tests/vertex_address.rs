@@ -194,3 +194,30 @@ fn sincos_gives_the_cosine_in_x_and_the_sine_in_y() {
         assert_eq!(out[2..], [6., 7.]);
     }
 }
+
+#[test]
+fn a_vertex_outputs_slice_still_reads_the_whole_vertex_constant_file() {
+    // the slice of o7 runs as a pixel invocation, whose own constant file ends at row 223: a relative read in it reaches
+    // the vertex program's rows 224 to 255 all the same
+    let bytes = program(&[position(), relative_read(2, 0)].concat());
+    let mut slice = iridia_d3d9_ir::project_vertex_output(&bytes, 7, 0xf).unwrap();
+    iridia_passes::prepare(&mut slice).unwrap();
+    iridia_ir::validate(&slice).unwrap();
+    let rows = slice
+        .interface
+        .resources
+        .iter()
+        .find_map(|r| match &r.kind {
+            iridia_ir::interface::ResourceKind::ConstantBuffer { layout } => Some(layout.size / 16),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(rows, 256);
+    let mut bank = [[0u32; 4]; 256];
+    bank[242] = [9f32, 8., 7., 6.].map(f32::to_bits);
+    let mut v = [[0u32; 4]; 16];
+    v[15] = [240f32, 0., 0., 1.].map(f32::to_bits);
+    let run = execute(&slice, &slots(&slice, &v), &bank, &mut no_sample);
+    // a0.x = 240 and the program reads c[a0.x + 2]
+    assert_eq!(run.outputs[0].unwrap().map(f32::from_bits), [9., 8., 7., 6.]);
+}
