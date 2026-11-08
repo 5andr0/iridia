@@ -18,6 +18,7 @@ use crate::wrap::{self, Wrapped};
 
 /// The device jobs run on.
 pub struct Gpu {
+    handle: wgpu::Adapter,
     device: wgpu::Device,
     queue: wgpu::Queue,
     /// The adapter's name, as replies state it.
@@ -98,6 +99,7 @@ impl Gpu {
         // errors are caught by the error scopes around each job; one outside them is reported, not a panic
         device.on_uncaptured_error(Arc::new(|e: wgpu::Error| eprintln!("wgsl-run: uncaptured: {e}")));
         Ok(Gpu {
+            handle: adapter,
             device,
             queue,
             adapter: format!(
@@ -590,9 +592,23 @@ impl Gpu {
             (
                 AddressSpace::Handle,
                 TypeInner::Image { dim, arrayed, class },
-                ResourceKind::Texture { texel, size, layers },
+                ResourceKind::Texture {
+                    texel,
+                    size,
+                    layers,
+                    samples,
+                    per_sample,
+                },
             ) => self.texture(
-                name, *dim, *arrayed, *class, *texel, *size, *layers, at, readbacks,
+                name,
+                *dim,
+                *arrayed,
+                *class,
+                (*texel, per_sample.as_deref()),
+                *size,
+                (*layers, *samples),
+                at,
+                readbacks,
             ),
             (space, inner, kind) => Err(format!(
                 "@group({}) @binding({}){} {name}: a {space:?} {inner:?} given {}",
@@ -616,12 +632,24 @@ impl Gpu {
         dim: ImageDimension,
         arrayed: bool,
         class: ImageClass,
-        texel: [u32; 4],
+        (texel, per_sample): ([u32; 4], Option<&[[u32; 4]]>),
         size: Option<[u32; 3]>,
-        layers: Option<u32>,
+        (layers, samples): (Option<u32>, Option<u32>),
         at: At,
         readbacks: &mut Vec<Readback>,
     ) -> Result<(wgpu::BindingType, One), String> {
+        let multi = matches!(
+            class,
+            ImageClass::Sampled { multi: true, .. } | ImageClass::Depth { multi: true }
+        );
+        if multi {
+            return self.multisampled(name, dim, arrayed, class, texel, per_sample, size, samples);
+        }
+        if samples.is_some() || per_sample.is_some() {
+            return Err(format!(
+                "{name}: samples given for a texture that is not multisampled"
+            ));
+        }
         let [width, height, depth] = size.unwrap_or([4, 4, 4]);
         let (dimension, view_dimension, extent) = match (dim, arrayed) {
             (ImageDimension::D1, false) => (
@@ -667,12 +695,7 @@ impl Gpu {
             depth_or_array_layers: extent[2],
         };
         let (format, binding_type, lanes, storage) = match class {
-            ImageClass::Sampled { kind, multi } => {
-                if multi {
-                    return Err(format!(
-                        "{name}: a multisampled texture (its 32-bit formats have no multisampling)"
-                    ));
-                }
+            ImageClass::Sampled { kind, .. } => {
                 let (format, sample_type) = match kind {
                     ScalarKind::Float => (
                         wgpu::TextureFormat::Rgba32Float,
@@ -693,21 +716,16 @@ impl Gpu {
                     false,
                 )
             }
-            ImageClass::Depth { multi } => {
-                if multi {
-                    return Err(format!("{name}: a multisampled depth texture"));
-                }
-                (
-                    wgpu::TextureFormat::Depth32Float,
-                    wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Depth,
-                        view_dimension,
-                        multisampled: false,
-                    },
-                    1,
-                    false,
-                )
-            }
+            ImageClass::Depth { .. } => (
+                wgpu::TextureFormat::Depth32Float,
+                wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Depth,
+                    view_dimension,
+                    multisampled: false,
+                },
+                1,
+                false,
+            ),
             ImageClass::Storage { format, access } => {
                 let (f, lanes) =
                     storage_format(format).ok_or_else(|| format!("{name}: storage format {format:?}"))?;
@@ -818,6 +836,233 @@ impl Gpu {
             });
         }
         Ok((binding_type, One::Texture(texture, view)))
+    }
+
+    /// A multisampled 2D texture (colour in a 32-bit format, or depth): made, then drawn into once with a full-screen
+    /// triangle whose fragment shader runs for each sample and writes the sample's own texel, since a multisampled texture
+    /// cannot be uploaded to. `texel` is every sample's unless `per_sample` gives each its own.
+    #[allow(clippy::too_many_arguments)]
+    fn multisampled(
+        &self,
+        name: &str,
+        dim: ImageDimension,
+        arrayed: bool,
+        class: ImageClass,
+        texel: [u32; 4],
+        per_sample: Option<&[[u32; 4]]>,
+        size: Option<[u32; 3]>,
+        samples: Option<u32>,
+    ) -> Result<(wgpu::BindingType, One), String> {
+        if dim != ImageDimension::D2 || arrayed {
+            return Err(format!(
+                "{name}: a multisampled {dim:?} texture{} (only a 2D one that is not arrayed)",
+                if arrayed { " array" } else { "" }
+            ));
+        }
+        let [width, height, _] = size.unwrap_or([4, 4, 4]);
+        let count = samples.unwrap_or(4);
+        let (format, sample_type, fragment) = match class {
+            ImageClass::Sampled {
+                kind: ScalarKind::Float,
+                ..
+            } => (
+                wgpu::TextureFormat::Rgba32Float,
+                wgpu::TextureSampleType::Float { filterable: false },
+                "@location(0) vec4<f32> { return bitcast<vec4<f32>>(texels.v[s]); }",
+            ),
+            ImageClass::Sampled {
+                kind: ScalarKind::Sint,
+                ..
+            } => (
+                wgpu::TextureFormat::Rgba32Sint,
+                wgpu::TextureSampleType::Sint,
+                "@location(0) vec4<i32> { return bitcast<vec4<i32>>(texels.v[s]); }",
+            ),
+            ImageClass::Sampled {
+                kind: ScalarKind::Uint,
+                ..
+            } => (
+                wgpu::TextureFormat::Rgba32Uint,
+                wgpu::TextureSampleType::Uint,
+                "@location(0) vec4<u32> { return texels.v[s]; }",
+            ),
+            ImageClass::Depth { .. } => (
+                wgpu::TextureFormat::Depth32Float,
+                wgpu::TextureSampleType::Depth,
+                "@builtin(frag_depth) f32 { return bitcast<f32>(texels.v[s].x); }",
+            ),
+            other => return Err(format!("{name}: a multisampled {other:?} texture")),
+        };
+        let depth = format == wgpu::TextureFormat::Depth32Float;
+        if count < 2 {
+            return Err(format!(
+                "{name}: {count} samples, where a multisampled texture has at least 2"
+            ));
+        }
+        let flags = self.handle.get_texture_format_features(format).flags;
+        if !flags.sample_count_supported(count) {
+            let supported: Vec<u32> = [1, 2, 4, 8, 16]
+                .into_iter()
+                .filter(|n| flags.sample_count_supported(*n))
+                .collect();
+            return Err(format!(
+                "{name}: {count} samples of {format:?}, where the adapter supports {supported:?}"
+            ));
+        }
+        let texels: Vec<[u32; 4]> = match per_sample {
+            Some(each) if each.len() == count as usize => each.to_vec(),
+            Some(each) => {
+                return Err(format!(
+                    "{name}: {} per-sample texels for {count} samples",
+                    each.len()
+                ));
+            }
+            None => vec![texel; count as usize],
+        };
+        let mut words = [0u32; 64];
+        for (slot, word) in words.iter_mut().zip(texels.iter().flatten()) {
+            *slot = *word;
+        }
+        let extent = wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        };
+        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some(name),
+            size: extent,
+            mip_level_count: 1,
+            sample_count: count,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let uniform = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("sample texels"),
+            contents: &words.iter().flat_map(|w| w.to_le_bytes()).collect::<Vec<u8>>(),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+        let source = format!(
+            "struct Texels {{ v: array<vec4<u32>, 16> }}
+@group(0) @binding(0) var<uniform> texels: Texels;
+@fragment
+fn main(@builtin(sample_index) s: u32) -> {fragment}
+"
+        );
+        let module = self.device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("sample fill"),
+            source: wgpu::ShaderSource::Wgsl(Cow::Owned(source)),
+        });
+        let layout = self
+            .device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: None,
+                entries: &[layout_entry(
+                    0,
+                    wgpu::ShaderStages::FRAGMENT,
+                    buffer_type(wgpu::BufferBindingType::Uniform),
+                    None,
+                )],
+            });
+        let pipeline_layout = self
+            .device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: None,
+                bind_group_layouts: &[Some(&layout)],
+                immediate_size: 0,
+            });
+        let target = [Some(wgpu::ColorTargetState {
+            format,
+            blend: None,
+            write_mask: wgpu::ColorWrites::ALL,
+        })];
+        let pipeline = self
+            .device
+            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("sample fill"),
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &self.device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                        label: Some("triangle"),
+                        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(TRIANGLE)),
+                    }),
+                    entry_point: Some("main"),
+                    compilation_options: Default::default(),
+                    buffers: &[],
+                },
+                primitive: wgpu::PrimitiveState::default(),
+                depth_stencil: depth.then(|| wgpu::DepthStencilState {
+                    format,
+                    depth_write_enabled: Some(true),
+                    depth_compare: Some(wgpu::CompareFunction::Always),
+                    stencil: wgpu::StencilState::default(),
+                    bias: wgpu::DepthBiasState::default(),
+                }),
+                multisample: wgpu::MultisampleState {
+                    count,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &module,
+                    entry_point: Some("main"),
+                    compilation_options: Default::default(),
+                    targets: if depth { &[] } else { &target },
+                }),
+                multiview_mask: None,
+                cache: None,
+            });
+        let group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform.as_entire_binding(),
+            }],
+        });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        {
+            let colour = [Some(wgpu::RenderPassColorAttachment {
+                view: &view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    store: wgpu::StoreOp::Store,
+                },
+            })];
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: None,
+                color_attachments: if depth { &[] } else { &colour },
+                depth_stencil_attachment: depth.then_some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(&pipeline);
+            pass.set_bind_group(0, &group, &[]);
+            pass.draw(0..3, 0..1);
+        }
+        self.queue.submit([encoder.finish()]);
+        Ok((
+            wgpu::BindingType::Texture {
+                sample_type,
+                view_dimension: wgpu::TextureViewDimension::D2,
+                multisampled: true,
+            },
+            One::Texture(texture, view),
+        ))
     }
 
     /// A buffer's contents copied to one the host can map, and how to read it.

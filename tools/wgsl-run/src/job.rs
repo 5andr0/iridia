@@ -63,6 +63,14 @@ pub enum ResourceKind {
         /// (12 where absent).
         #[serde(default)]
         layers: Option<u32>,
+        /// The samples per texel of a multisampled texture (a `texture_multisampled_2d` or a
+        /// `texture_depth_multisampled_2d`; 4 where absent): a count the adapter supports for the texture's format.
+        #[serde(default)]
+        samples: Option<u32>,
+        /// A multisampled texture's texel for each of its samples, in order (as many as `samples`); where absent every
+        /// sample of every texel is `texel`.
+        #[serde(default)]
+        per_sample: Option<Vec<[u32; 4]>>,
     },
     /// A sampler: point filtering of the nearest level, coordinates clamped to the edge; a comparison sampler compares
     /// with `compare` (`less`, `less_equal`, `greater`, `greater_equal`, `equal`, `not_equal`, `always`, `never`).
