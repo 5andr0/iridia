@@ -31,6 +31,8 @@ proptest.workspace = true
 iridia-naga = { path = "../iridia-naga", default-features = false, features = ["wgsl"] }
 iridia-wgsl = { path = "../iridia-wgsl" }
 naga = { workspace = true, features = ["wgsl-in"] }
+# tests/lift_corpus.rs reads the text of iridia-wgsl back with the published naga
+naga-wgsl = { package = "naga", version = "=30.0.1", default-features = false, features = ["wgsl-in"] }
 [lints]
 workspace = true
 

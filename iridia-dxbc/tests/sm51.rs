@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used)]
 //! fxc 10.0.26100.0 fixtures from dx 292b616; their reproducible HLSL is alongside the binaries.
-use iridia::{D3dClass, Resource, ResourceKind, Stage};
+use iridia_ir::interface::{D3dClass, Resource, ResourceKind, Stage};
 
 const PIXEL: &[u8] = include_bytes!("fixtures/reflection_sm51.ps51.dxbc");
 const COMPUTE: &[u8] = include_bytes!("fixtures/bindings_sm51.cs.dxbc");
@@ -83,8 +83,8 @@ fn lifting_resolves_sm51_declaration_ids_to_registers_and_spaces() {
     for bytes in [PIXEL, COMPUTE] {
         let decoded = dxbc_reader::decode(&dxbc_reader::code(bytes).unwrap()).unwrap();
         assert_eq!((decoded.major, decoded.minor), (5, 1));
-        let program = iridia_dxbc::lift(bytes).unwrap();
-        program.validate().unwrap();
+        let program = iridia_dxbc::ir::lift(bytes).unwrap();
+        iridia_ir::validate(&program).unwrap();
         let reflected = iridia_dxbc::resource_reflection(bytes).unwrap().unwrap();
         for resource in &program.interface.resources {
             let reference = reflected
@@ -106,10 +106,10 @@ fn stripped_sm51_keeps_declared_ranges_and_spaces() {
             .filter(|p| &p.kind != b"RDEF")
             .collect();
         let stripped = dxcontainer::serialize(&parts).unwrap();
-        let program = iridia_dxbc::lift(&stripped).unwrap();
-        program.validate().unwrap();
-        let original = iridia_dxbc::lift(bytes).unwrap();
-        let bindings = |p: &iridia::Program| {
+        let program = iridia_dxbc::ir::lift(&stripped).unwrap();
+        iridia_ir::validate(&program).unwrap();
+        let original = iridia_dxbc::ir::lift(bytes).unwrap();
+        let bindings = |p: &iridia_ir::Program| {
             p.interface
                 .resources
                 .iter()
@@ -132,7 +132,7 @@ fn reflection_cannot_substitute_another_declaration_id_or_space() {
         data[at + field * 4..at + field * 4 + 4].copy_from_slice(&999u32.to_le_bytes());
         part.data = &data;
         let bytes = dxcontainer::serialize(&parts).unwrap();
-        let error = iridia_dxbc::lift(&bytes).unwrap_err();
+        let error = iridia_dxbc::ir::lift(&bytes).unwrap_err();
         assert!(error.detail.contains("reflected declaration"), "{error}");
     }
 }

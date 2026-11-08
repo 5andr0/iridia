@@ -25,6 +25,18 @@ struct Census {
     unwritten: BTreeMap<String, (usize, String)>,
 }
 
+/// The text as wgpu's naga reads it: parsed and validated with every capability.
+fn read_back(text: &str) -> Result<(), String> {
+    let module = naga_wgsl::front::wgsl::parse_str(text).map_err(|e| e.emit_to_string(text))?;
+    naga_wgsl::valid::Validator::new(
+        naga_wgsl::valid::ValidationFlags::all(),
+        naga_wgsl::valid::Capabilities::all(),
+    )
+    .validate(&module)
+    .map(|_| ())
+    .map_err(|e| e.to_string())
+}
+
 fn census(game: Game) {
     let Some(corpus) = common::corpus(game) else {
         return;
@@ -35,7 +47,7 @@ fn census(game: Game) {
         let bytes = corpus.read(file);
         let path = corpus.at(file);
         c.programs += 1;
-        let program = match iridia_dxbc::lift(&bytes) {
+        let mut program = match iridia_dxbc::ir::lift(&bytes) {
             Ok(p) => p,
             Err(e) => {
                 c.refused.entry(e.group()).or_insert((0, path.clone())).0 += 1;
@@ -43,35 +55,26 @@ fn census(game: Game) {
             }
         };
         c.lifted += 1;
-        match program.validate() {
-            Ok(_) => c.validated += 1,
+        match iridia_ir::validate(&program) {
+            Ok(()) => c.validated += 1,
             Err(problems) => {
-                c.invalid.push(format!(
-                    "{}: {}",
-                    path,
-                    problems
-                        .iter()
-                        .map(ToString::to_string)
-                        .collect::<Vec<_>>()
-                        .join("; ")
-                ));
+                c.invalid.push(format!("{}: {problems:?}", path));
                 continue;
             }
         }
-        // a program of a stage with no WGSL stage is written as its functions
-        let written = if iridia::stage_functions(&program.interface).is_ok_and(|f| f.is_some()) {
-            iridia::emit::wgsl_functions(&program)
-        } else {
-            iridia::emit::wgsl(&program)
-        };
+        // the form the writers take, then the text of iridia-wgsl for wgpu's naga; a program a pass or the writer
+        // refuses by name is counted, not wrong, and a text naga does not read back is wrong
+        let written = iridia_passes::prepare(&mut program).and_then(|()| {
+            iridia_wgsl::wgsl(&program, &iridia_wgsl::Profile::NAGA).map_err(|e| e.to_string())
+        });
         match written {
-            Ok(_) => c.written += 1,
-            // a program the validator accepts and a writer says it cannot write is counted, not wrong
-            Err(iridia::ProgramError::Unsupported { detail, .. }) => {
-                let entry = c.unwritten.entry(detail).or_insert((0, path.clone()));
-                entry.0 += 1;
-            }
-            Err(e) => c.invalid.push(format!("{}: {e}", path)),
+            Ok(text) => match read_back(&text) {
+                Ok(()) => c.written += 1,
+                Err(e) => c
+                    .invalid
+                    .push(format!("{}: the text does not read back: {e}", path)),
+            },
+            Err(detail) => c.unwritten.entry(detail).or_insert((0, path.clone())).0 += 1,
         }
     }
     println!(

@@ -364,6 +364,7 @@ dependencies = [
  "iridia-naga",
  "iridia-passes",
  "iridia-wgsl",
+ "naga",
  "primase-naga",
  "primase-testdata",
  "proptest",

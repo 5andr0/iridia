@@ -204,11 +204,11 @@ fn private_sm51_decoder_reflection_and_lift() {
             ),
             result => println!("{name}: reflection {result:?}"),
         }
-        match iridia_dxbc::lift(&bytes) {
+        match iridia_dxbc::ir::lift(&bytes) {
             Ok(program) => println!(
                 "{name}: lifted {} resources; validation {:?}",
                 program.interface.resources.len(),
-                program.validate().map(|_| ())
+                iridia_ir::validate(&program)
             ),
             Err(error) => println!("{name}: lift refused: {error}"),
         }
