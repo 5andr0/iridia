@@ -1,5 +1,5 @@
 # lifted fixtures of iridia-dxil-ir
-# versions lifter=5 ir=3
+# versions lifter=6 ir=3
 amplification.dxil	lifted	f36d227bd722caf294879e3d62a8bc6dc1ab68e2de302ff3c7044a601488e08c
 amplification_mesh.dxil	lifted	c8d6d609eccce22ca7722d5b26b8b0868a491a9bb579171d953c4fc667d29901
 arrays.66.dxil	lifted	8326b4a844846015bf0ee5f9d768f629f7f422a225cef6826f5c28429a1b1a6d

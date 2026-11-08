@@ -60,6 +60,20 @@ fn a_buffer_ending_in_half_a_word_keeps_its_last_element() {
     ]));
 }
 
+/// A bitcast between a half and a 16-bit integer is the half's bits: a half is carried widened to 32 bits, so its bits are
+/// the narrowing and not the widened float's. `asint16` and `asuint16` are one, and dxc tests `isnan`, `isinf` and `isfinite`
+/// of a half by its exponent and mantissa bits.
+#[test]
+fn a_half_bitcast_to_a_sixteen_bit_integer_is_the_halfs_bits() {
+    assert_pass(&offload_outcomes(&[
+        "Feature/HLSLLib/asint16.fp16.test",
+        "Feature/HLSLLib/asuint16.fp16.test",
+        "Feature/HLSLLib/isnan.16.test",
+        "Feature/HLSLLib/isinf.16.test",
+        "Feature/HLSLLib/isfinite.16.test",
+    ]));
+}
+
 /// Arrays of views, stated and unbounded, bind element by element at consecutive registers.
 #[test]
 fn the_offload_resource_array_tests_bind_every_element() {

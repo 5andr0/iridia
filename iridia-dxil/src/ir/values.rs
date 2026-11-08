@@ -751,8 +751,19 @@ impl Lift<'_> {
             .ok_or_else(|| crate::error(self.at, "a value of no type"))?;
         let narrow_from = from.and_then(|t| self.narrow_of_type(t));
         let narrow_to = self.narrow_of_type(to);
+        // a half is carried widened to 32 bits, so its bits as a 16-bit integer are the narrowing, and a 16-bit integer's
+        // as a half the widening
+        let half_bits = match (from.map(|t| self.type_at(t)).transpose()?, self.type_at(to)?) {
+            (Some(LlvmType::Half), LlvmType::Integer(16)) => Some(true),
+            (Some(LlvmType::Integer(16)), LlvmType::Half) => Some(false),
+            _ => None,
+        };
         Ok(match op {
-            CastOp::BitCast => self.retype(x, target)?,
+            CastOp::BitCast => match half_bits {
+                Some(true) => self.unary(target, Unary::F32ToF16, x),
+                Some(false) => self.unary(target, Unary::F16ToF32, x),
+                None => self.retype(x, target)?,
+            },
             CastOp::ZExt | CastOp::SExt if have.scalar == Scalar::Bool => {
                 let on = match (op, target.scalar) {
                     (CastOp::SExt, Scalar::U64) => u64::MAX,

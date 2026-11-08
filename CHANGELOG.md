@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `iridia-dxil` (IR lift, `LIFTER_VERSION` 6): a bitcast between a half and a 16-bit integer (`asint16`, `asuint16`, and the
+  exponent and mantissa tests dxc makes of a half in `isnan`, `isinf` and `isfinite`) gives the half's bits. A half is carried
+  widened to 32 bits, and the lift had taken the widened float's bits as the integer, so those programs ran and gave wrong
+  values; no fixture's lift changes, the version is bumped for the programs that did. A 16-bit integer bitcast to a half
+  widens it.
 - `iridia-analysis`: `blend`, the recogniser of `iridia::blend` on the IR: `Scalar`, `Term`, `Over` and `Layer` read from `flow::Values`, with `Over::at`
   and `Over::under`. A term is spelled for the IEEE operations only (`FAdd`, `FSub`, `FMul(MulZero::Ieee)`, `FNeg`, `Saturate`, `FMin`,
   `FMax` by `MinNum`); Direct3D 9's zero-wins multiply is a leaf, as it is not the operation a term evaluates. The older tests run with the
