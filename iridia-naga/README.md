@@ -76,6 +76,14 @@ assert!(wgsl.contains("select("), "{wgsl}");
 
 ## Guarantees and limits
 
+- Standard/browser WGSL filters `derivative_uniformity`, matching the IR's permission to evaluate derivatives in
+  divergent control flow. When a program uses subgroups, the `subgroup_uniformity` diagnostic is filtered only if
+  `Profile::language_features.subgroup_uniformity` is set. These language features are separate from device
+  capabilities: pass the consumer's `GPU.wgslLanguageFeatures` support through `with_language_features`, or use
+  `with_subgroup_uniformity`. Built-in profiles start with no optional language features. Naga-dialect text keeps
+  its existing directives. Naga 30 accepts both diagnostic filters; its parser still requires the existing bridge
+  for the standard `enable subgroups;` directive.
+
 - A program is lowered for a target `Profile` (`Profile::BROWSER` for WebGPU's core WGSL, `Profile::NAGA` for naga's own dialect, either widened with `Profile::with`): `preflight` refuses a program that needs a capability the profile lacks, naming the value, varying or resource that needs it, and naga's validator runs with the profile's capabilities alone. A module naga rejects after the preflight accepted is reported as a lowering bug. The profile also states the WGSL's `enable` directives (`Profile::directives`): `BROWSER` writes `enable subgroups;` before a program that uses a subgroup operation, as a browser requires; `NAGA` leaves it out, as naga's WGSL reader refuses it.
 - It lowers the vertex, pixel and compute programs the Direct3D 9 and DXBC readers make, and refuses the rest by name: hull, domain and geometry programs (WGSL has no such stage), a vertex program that feeds a tessellator, an element of an array of resources, an atomic of a storage image (naga's has no result), a multisampled array texture, a sample with a level clamp, a gather at a computed offset, a comparison sample at a level other than the derivatives' or zero, a sample of a 1D texture at an explicit level, bias or derivatives, and a biased sample of a depth texture or one at a computed level.
 - naga's `break` and `continue` reach only the innermost construct: run `iridia_passes::break_flags` first. A `Cfg` body must be structured first (`iridia_passes::structurize`).

@@ -623,10 +623,27 @@ fn main {
     let wgsl = iridia_naga::wgsl(&p, &iridia_naga::Profile::BROWSER.with(subgroups)).unwrap();
     assert!(wgsl.starts_with("enable subgroups;\n"), "{wgsl}");
     assert!(wgsl.contains("subgroupAdd("), "{wgsl}");
+    assert!(wgsl.contains("diagnostic(off, derivative_uniformity);"), "{wgsl}");
+    assert!(!wgsl.contains("diagnostic(off, subgroup_uniformity);"), "{wgsl}");
+    let language_profile = iridia_naga::Profile::BROWSER
+        .with_language_features(iridia_naga::WgslLanguageFeatures {
+            subgroup_uniformity: true,
+        })
+        .with(subgroups);
+    let filtered = iridia_naga::wgsl(&p, &language_profile).unwrap();
+    assert!(
+        filtered.contains("diagnostic(off, subgroup_uniformity);"),
+        "{filtered}"
+    );
+    // Naga 30 accepts the unknown diagnostic rule; only the already-unsupported enable directive is adapted.
+    let body = filtered.strip_prefix("enable subgroups;\n").unwrap();
+    let module = naga::front::wgsl::parse_str(body).unwrap();
+    iridia_naga::validate(&module, &language_profile).unwrap();
     // naga's reader refuses it, and naga's dialect leaves it out
     assert!(naga::front::wgsl::parse_str(&wgsl).is_err());
     let wgsl = iridia_naga::wgsl(&p, &iridia_naga::Profile::NAGA).unwrap();
     assert!(!wgsl.contains("enable subgroups"), "{wgsl}");
+    assert!(!wgsl.contains("diagnostic("), "{wgsl}");
     naga::front::wgsl::parse_str(&wgsl).unwrap_or_else(|e| panic!("{e}\n{wgsl}"));
     // a program without one states no directive
     let plain = program(
@@ -643,6 +660,9 @@ fn main {
     );
     let wgsl = iridia_naga::wgsl(&plain, &iridia_naga::Profile::BROWSER.with(subgroups)).unwrap();
     assert!(!wgsl.contains("enable"), "{wgsl}");
+    assert!(wgsl.contains("diagnostic(off, derivative_uniformity);"), "{wgsl}");
+    let plain = iridia_naga::wgsl(&plain, &language_profile).unwrap();
+    assert!(!plain.contains("subgroup_uniformity"), "{plain}");
 }
 
 /// A texture of `sample` and a sampler, for the programs that read an integer texture.

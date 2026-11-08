@@ -54,11 +54,14 @@ fn lifted(bytes: &[u8]) -> Result<iridia_ir::Program, String> {
     Ok(p)
 }
 
-/// Everything outside function bodies: the structures, the globals and the entry point's signature line.
+/// The structures, globals and entry-point signature; module diagnostic policy is not part of that interface.
 fn declarations(wgsl: &str) -> String {
     let mut out = String::new();
     let mut depth = 0i64;
     for line in wgsl.lines() {
+        if depth == 0 && line.starts_with("diagnostic(") {
+            continue;
+        }
         let in_fn = depth > 0;
         if line.starts_with("fn ") || !in_fn {
             out.push_str(line);
@@ -69,6 +72,23 @@ fn declarations(wgsl: &str) -> String {
         }
     }
     out
+}
+
+#[test]
+fn diagnostic_policy_is_not_a_declaration_but_bindings_and_signatures_are() {
+    let text = "@group(0) @binding(0) var<uniform> cb0: vec4<f32>;\nfn main() {\n    return;\n}\n";
+    assert_eq!(
+        declarations(text),
+        declarations(&format!("diagnostic(off, derivative_uniformity);\n{text}"))
+    );
+    assert_ne!(
+        declarations(text),
+        declarations(&text.replace("binding(0)", "binding(1)"))
+    );
+    assert_ne!(
+        declarations(text),
+        declarations(&text.replace("main()", "main(x: f32)"))
+    );
 }
 
 /// A run of the older lift (A) or of the WGSL read back (C) in `iridia-exec`.

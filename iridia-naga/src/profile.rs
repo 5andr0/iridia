@@ -20,9 +20,23 @@ pub enum Directives {
     /// naga's: the ones naga's WGSL writer states. naga 30 has no `enable subgroups;`: its writer leaves it out and its
     /// reader refuses it, and uses the subgroup operations without it.
     Naga,
-    /// The WGSL standard's: naga's, and `enable subgroups;` where the program uses a subgroup operation or built-in,
-    /// which a browser requires.
+    /// The WGSL standard's directives, including its uniformity diagnostic policy and `enable subgroups;`
+    /// where the program uses a subgroup operation or built-in.
     Standard,
+}
+
+/// Optional WGSL language features, independent of a device's naga capabilities and the directive style.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct WgslLanguageFeatures {
+    /// The `subgroup_uniformity` language feature, as reported by `GPU.wgslLanguageFeatures`.
+    pub subgroup_uniformity: bool,
+}
+
+impl WgslLanguageFeatures {
+    /// No optional language features.
+    pub const NONE: Self = Self {
+        subgroup_uniformity: false,
+    };
 }
 
 /// What a target lets a module use: the naga capabilities its validator runs with, how it binds resources and which
@@ -37,6 +51,8 @@ pub struct Profile {
     pub bindings: Bindings,
     /// Which `enable` directives [`crate::wgsl`] states.
     pub directives: Directives,
+    /// Language features supported by the consumer, separate from device capabilities.
+    pub language_features: WgslLanguageFeatures,
 }
 
 impl Profile {
@@ -58,6 +74,7 @@ impl Profile {
             .union(Capabilities::RAY_QUERY),
         bindings: Bindings::D3d,
         directives: Directives::Naga,
+        language_features: WgslLanguageFeatures::NONE,
     };
 
     /// WebGPU's core WGSL: per-sample shading (`sample_index`, `@interpolate(..., sample)`) and cube array textures
@@ -71,6 +88,7 @@ impl Profile {
         capabilities: Capabilities::MULTISAMPLED_SHADING.union(Capabilities::CUBE_ARRAY_TEXTURES),
         bindings: Bindings::WebGpu,
         directives: Directives::Standard,
+        language_features: WgslLanguageFeatures::NONE,
     };
 
     /// This profile with `capabilities` allowed too.
@@ -81,7 +99,22 @@ impl Profile {
             capabilities: self.capabilities.union(capabilities),
             bindings: self.bindings,
             directives: self.directives,
+            language_features: self.language_features,
         }
+    }
+
+    /// This profile with the consumer's optional WGSL language features.
+    #[must_use]
+    pub const fn with_language_features(mut self, features: WgslLanguageFeatures) -> Profile {
+        self.language_features = features;
+        self
+    }
+
+    /// This profile with the `subgroup_uniformity` language feature supported.
+    #[must_use]
+    pub const fn with_subgroup_uniformity(mut self) -> Profile {
+        self.language_features.subgroup_uniformity = true;
+        self
     }
 }
 

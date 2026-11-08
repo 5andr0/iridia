@@ -18,6 +18,12 @@
   read by stock naga and written as HLSL), by the same two-of-three consensus: no ray differs.
 - `iridia-naga`: construct each emitted expression range directly from its arena suffix, so lowering many
   subgroup operations takes linear work instead of repeatedly scanning the growing expression arena.
+- `iridia-naga` standard WGSL filters derivative-uniformity diagnostics, and subgroup-uniformity diagnostics
+  when the program uses subgroups and the consumer reports that WGSL language feature. This preserves the IR's
+  divergent operations when creating a browser shader module.
+- Breaking: `iridia_naga::Profile` now carries a separate `WgslLanguageFeatures` set; built-in profiles default
+  to no optional language features. Consumers can set it with `with_language_features` or `with_subgroup_uniformity`.
+
 - `iridia-naga`: a filtered sample of an integer texture (a sample, a biased or a level one, or one at gradients, of a texture
   of unsigned or signed integers) is refused by name, "a filtered sample of an integer texture has no WGSL form", as
   `iridia-wgsl` already did; naga's writer made text its own validator refused ("Unable to operate on image class

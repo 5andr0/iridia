@@ -35,7 +35,7 @@ pub use iridia_ir::target::{Bind, BindingPlan, Bindings};
 pub use lower::module;
 #[cfg(feature = "wgsl")]
 pub use pipeline::{Pipeline, Written, wgsl_for};
-pub use profile::{Directives, Profile, Requirement, preflight, requirements};
+pub use profile::{Directives, Profile, Requirement, WgslLanguageFeatures, preflight, requirements};
 
 /// Why a program could not be lowered, validated or written.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -83,7 +83,9 @@ pub fn wgsl(program: &iridia_ir::Program, profile: &Profile) -> Result<String, E
 }
 
 /// The WGSL of `program`'s validated `module`, with the directives of `profile`: naga's writer's, and for the
-/// standard's `enable subgroups;` where the program needs naga's subgroup capability.
+/// standard's `enable subgroups;` where the program needs naga's subgroup capability. Standard text filters
+/// derivative uniformity, and subgroup uniformity where the program uses subgroups and the consumer supports
+/// that language feature: the IR permits these operations in divergent control flow.
 #[cfg(feature = "wgsl")]
 fn write(
     program: &iridia_ir::Program,
@@ -110,12 +112,19 @@ fn write(
         && requirements(program)
             .iter()
             .any(|r| r.capability == naga::valid::Capabilities::SUBGROUP);
-    // a directive comes before every declaration; naga's own are its first lines, and their order is free
-    Ok(if subgroups {
-        format!("enable subgroups;\n{text}")
-    } else {
-        text
-    })
+    // Directives precede declarations. Device capabilities and WGSL language features are independent.
+    let mut written = String::new();
+    if subgroups {
+        written.push_str("enable subgroups;\n");
+    }
+    if profile.directives == Directives::Standard {
+        written.push_str("diagnostic(off, derivative_uniformity);\n");
+        if subgroups && profile.language_features.subgroup_uniformity {
+            written.push_str("diagnostic(off, subgroup_uniformity);\n");
+        }
+    }
+    written.push_str(&text);
+    Ok(written)
 }
 
 // Run the examples in the README as doc tests.
