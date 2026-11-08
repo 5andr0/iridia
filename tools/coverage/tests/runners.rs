@@ -45,6 +45,21 @@ fn the_offload_counter_tests_read_their_counters_back() {
     ]));
 }
 
+/// A buffer of an odd number of 16-bit elements (the 17 halves `mul.fp16` multiplies) ends in half a word: the executor
+/// holds that word with the other half zero, reads the last element from it, and the device takes back the half that is
+/// the buffer's.
+#[test]
+fn a_buffer_ending_in_half_a_word_keeps_its_last_element() {
+    assert_pass(&offload_outcomes(&[
+        "Feature/HLSLLib/mul.fp16.test",
+        "Feature/HLSLLib/mul.int16.test",
+        "Feature/HLSLLib/transpose.fp16.test",
+        "Feature/HLSLLib/transpose.int16.test",
+        "Feature/HLSLLib/countbits.16.test",
+        "Tools/Offloader/ByteAddress-16bit.test",
+    ]));
+}
+
 /// Arrays of views, stated and unbounded, bind element by element at consecutive registers.
 #[test]
 fn the_offload_resource_array_tests_bind_every_element() {

@@ -310,11 +310,19 @@ impl Resource {
         })
     }
 
-    /// The 32-bit word at byte `offset` of a buffer (0 past its end).
+    /// The 32-bit word at byte `offset` of a buffer: 0 past its end, and the bytes the buffer has of a word that
+    /// reaches past it (a buffer of 16-bit elements has an odd number of them), the rest 0.
     pub fn word(&self, offset: usize) -> u32 {
-        self.data
-            .get(offset..offset + 4)
-            .map_or(0, |b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+        let mut bytes = [0u8; 4];
+        let have = self.data.get(offset..).unwrap_or(&[]);
+        let n = have.len().min(4);
+        bytes[..n].copy_from_slice(&have[..n]);
+        u32::from_le_bytes(bytes)
+    }
+
+    /// How many 32-bit words hold the buffer's bytes: the last holds the rest of them (see [`Resource::word`]).
+    pub fn word_count(&self) -> usize {
+        self.data.len().div_ceil(4)
     }
 
     /// The view's hidden count; 0 for a view without a counter.
@@ -335,10 +343,12 @@ impl Resource {
         }
     }
 
-    /// Write the 32-bit word at byte `offset` of a buffer (nothing past its end).
+    /// Write the 32-bit word at byte `offset` of a buffer: nothing past its end, and the bytes of a word that reaches
+    /// past it that the buffer has.
     pub fn set_word(&mut self, offset: usize, value: u32) {
-        if let Some(b) = self.data.get_mut(offset..offset + 4) {
-            b.copy_from_slice(&value.to_le_bytes());
+        if let Some(have) = self.data.get_mut(offset..) {
+            let n = have.len().min(4);
+            have[..n].copy_from_slice(&value.to_le_bytes()[..n]);
         }
     }
 }

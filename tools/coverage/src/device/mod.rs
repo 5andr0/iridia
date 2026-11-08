@@ -679,13 +679,7 @@ impl<'a> IdRequests<'a> {
                     )
                 })
                 .collect(),
-            Held::Words | Held::No => r
-                .data
-                .as_chunks::<4>()
-                .0
-                .iter()
-                .map(|c| u32::from_le_bytes(*c))
-                .collect(),
+            Held::Words | Held::No => (0..r.word_count()).map(|k| r.word(k * 4)).collect(),
         })
     }
 
