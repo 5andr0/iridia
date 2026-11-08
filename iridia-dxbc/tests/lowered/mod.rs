@@ -3,6 +3,10 @@
 //! lowered column of the SM 5.1 execution fixtures (`sm51_exec.rs`).
 #![allow(dead_code)]
 
+use naga as oracle_naga;
+#[path = "../../../iridia-naga/tests/support/inline.rs"]
+mod pure_helpers;
+
 /// What naga's WGSL front end makes of the lowering's text cannot say everything the older module says, which the
 /// executor reads: put back from the older module by position, a global's name ending in a digit (naga's namer writes
 /// `cb0_` for `cb0`) and the entry point's argument and result member names and bindings (WGSL cannot say a varying
@@ -103,6 +107,7 @@ pub fn lower_c(old: &iridia::Program, p: &iridia_ir::Program) -> Result<iridia::
     let unbuilt = |e: String| Unlowered::Unbuilt(e);
     let mut module = naga::front::wgsl::parse_str(&wgsl)
         .map_err(|e| unbuilt(format!("naga's WGSL front end: {}", e.emit_to_string(&wgsl))))?;
+    pure_helpers::helpers(&mut module);
     normalise(&mut module, &old.module).map_err(unbuilt)?;
     let mut bindings = Vec::new();
     for r in &old.interface.resources {

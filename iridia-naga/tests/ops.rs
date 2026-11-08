@@ -5,6 +5,10 @@
 #![allow(clippy::unwrap_used, reason = "hand-worked fixtures")]
 
 use iridia_exec::{ImageQuery, PixelShader, ProgramShader, QueryKind, Sample, Sampler};
+use naga_fork as oracle_naga;
+#[path = "support/inline.rs"]
+mod inline;
+mod inputs;
 use iridia_ir::{
     FloatEnv, Program, Provenance,
     interface::{
@@ -76,6 +80,7 @@ fn program_with(body: &str, resources: Vec<Resource>) -> Program {
 /// point's argument and result names and bindings put back as the interface gives them.
 fn from_wgsl(p: &Program, wgsl: &str) -> iridia::Program {
     let mut module = naga_fork::front::wgsl::parse_str(wgsl).unwrap_or_else(|e| panic!("{e}\n{wgsl}"));
+    inline::helpers(&mut module);
     let io = iridia::entry_io(&p.interface).unwrap();
     let ep = module.entry_points.first_mut().unwrap();
     for (a, item) in ep.function.arguments.iter_mut().zip(&io.arguments) {
@@ -313,6 +318,143 @@ const RUNS: u64 = 4096;
 fn check(cases: &[String]) {
     let failed: Vec<String> = cases.iter().filter_map(|c| disagreement(c, RUNS)).collect();
     assert!(failed.is_empty(), "{}", failed.join("\n\n"));
+}
+
+#[test]
+fn expanded_kernels_are_shared_across_repeated_uses() {
+    for count in [2, 16, 64] {
+        let mut body = String::from("  %0: vec4<u32> = input 0.xyzw\n  %1: vec4<f32> = bitcast %0\n");
+        let mut previous = 1;
+        for n in 0..count {
+            let half = 2 + n * 2;
+            let float = half + 1;
+            body.push_str(&format!(
+                "  %{half}: vec4<u32> = f32tof16 %{previous}\n  %{float}: vec4<f32> = f16tof32 %{half}\n"
+            ));
+            previous = float;
+        }
+        let result = 2 + count * 2;
+        body.push_str(&format!(
+            "  %{result}: vec4<u32> = bitcast %{previous}\n  output 0.xyzw = %{result}\n"
+        ));
+        let p = program(&body);
+        let plan = iridia_naga::BindingPlan::d3d(&p.interface).unwrap();
+        let module = iridia_naga::module(&p, &plan).unwrap();
+        assert_eq!(module.functions.len(), 2);
+        for profile in [iridia_naga::Profile::NAGA, iridia_naga::Profile::BROWSER] {
+            let text = iridia_naga::wgsl(&p, &profile).unwrap();
+            let parsed = naga::front::wgsl::parse_str(&text).unwrap();
+            iridia_naga::validate(&parsed, &profile).unwrap();
+            assert_eq!(disagreement_written(&p, &text, 64), None);
+        }
+    }
+}
+
+#[test]
+fn emitted_pure_helper_calls_agree_with_warp() {
+    use std::{
+        io::{BufRead, BufReader, Write},
+        process::{Child, Stdio},
+        sync::mpsc,
+        time::Duration,
+    };
+    let Some(tool) = inputs::program(inputs::Tool::WgslRun) else {
+        return;
+    };
+    let _exclusive = primase_testdata::warp_exclusive();
+    let mut command = tool.command();
+    if let Some(dxc) = inputs::tool(inputs::Tool::WgslRunDxc) {
+        command.arg("--dxc").path_arg(dxc);
+    }
+    command.args(["--timeout", "20"]);
+    struct Process(Child);
+    impl Drop for Process {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+    let mut child = Process(
+        command
+            .command()
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .unwrap(),
+    );
+    let mut stdin = child.0.stdin.take().unwrap();
+    let stdout = child.0.stdout.take().unwrap();
+    let (send, receive) = mpsc::channel();
+    std::thread::spawn(move || {
+        for line in BufReader::new(stdout).lines() {
+            if send.send(line).is_err() {
+                break;
+            }
+        }
+    });
+    let cases=[
+        unary("f32tof16","f32","u32"), unary("f16tof32","u32","f32"),
+        binary("frem","f32","f32"),binary("umulhigh","u32","u32"),binary("smulhigh","i32","i32"),
+        "  %0: vec4<u32> = input 0.xyzw\n  %1: vec4<u32> = input 1.xyzw\n  %2: vec4<u32> = input 2.xyzw\n  %3: vec4<u32> = bitextract.unsigned %0, %1, %2\n  output 0.xyzw = %3\n".into(),
+        "  %0: vec4<u32> = input 0.xyzw\n  %1: vec4<u32> = input 1.xyzw\n  %2: vec4<u32> = input 2.xyzw\n  %3: vec4<u32> = bitinsert %0, %1, %2, %0\n  output 0.xyzw = %3\n".into(),
+        "  %0: vec4<u32> = input 0.xyzw\n  %1: vec4<u32> = input 1.xyzw\n  %2: vec4<u32> = input 2.xyzw\n  %3: vec4<i32> = bitcast %0\n  %4: vec4<i32> = bitextract.signed %3, %1, %2\n  %5: vec4<u32> = bitcast %4\n  output 0.xyzw = %5\n".into(),
+    ];
+    for (case, body) in cases.iter().enumerate() {
+        let p = program(body);
+        let texts = [
+            iridia_naga::wgsl(&p, &iridia_naga::Profile::BROWSER).unwrap(),
+            iridia_wgsl::wgsl(&p, &iridia_wgsl::Profile::BROWSER).unwrap(),
+        ];
+        for (writer, text) in texts.into_iter().enumerate() {
+            let given: Vec<_> = (0..128).map(inputs).collect();
+            serde_json::to_writer(
+                &mut stdin,
+                &serde_json::json!({"id":case,"wgsl":text,"invocations":given,"resources":[]}),
+            )
+            .unwrap();
+            stdin.write_all(b"\n").unwrap();
+            stdin.flush().unwrap();
+            let line = receive
+                .recv_timeout(Duration::from_secs(120))
+                .expect("WARP helper job deadline")
+                .unwrap();
+            let reply: serde_json::Value = serde_json::from_str(&line).unwrap();
+            assert!(reply.get("error").is_none(), "writer{writer}: {reply}");
+            assert!(reply["adapter"].as_str().is_some_and(|a| !a.is_empty()));
+            eprintln!(
+                "writer{writer} case{case}: {} (128 invocations)",
+                reply["adapter"]
+            );
+            assert_eq!(reply["invocations"].as_array().unwrap().len(), given.len());
+            for (n, given) in given.iter().enumerate() {
+                let want = iridia_exec_ir::run(
+                    &p,
+                    &mut iridia_exec_ir::Bound {
+                        inputs: given,
+                        buffers: &[],
+                        state: &[],
+                        sampler: &mut |_| Err("no textures".into()),
+                        denormals: iridia_ir::Denormals::Preserve,
+                    },
+                )
+                .unwrap()
+                .outputs[0]
+                    .unwrap();
+                assert_eq!(reply["invocations"][n]["returned"], true);
+                for (lane, want) in want.into_iter().enumerate() {
+                    let got = reply["invocations"][n]["results"][0][lane].as_u64().unwrap() as u32;
+                    let nan = (case == 1 || case == 2)
+                        && f32::from_bits(got).is_nan()
+                        && f32::from_bits(want).is_nan();
+                    assert!(
+                        got == want || nan,
+                        "writer{writer} case{case} invocation{n} lane{lane}: GPU {got:x}, IR {want:x}"
+                    );
+                }
+            }
+        }
+    }
 }
 
 #[test]

@@ -31,6 +31,9 @@ iridia-exec-ir = { path = "../iridia-exec-ir" }
 naga-fork = { package = "primase-naga", version = "30.0.1", default-features = false, features = ["wgsl-in"] }
 # tests/compute.rs generates the programs it runs both ways
 proptest.workspace = true
+primase-testdata.workspace = true
+serde_json.workspace = true
+iridia-wgsl.workspace = true
 
 [lints]
 workspace = true

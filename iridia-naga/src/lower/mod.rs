@@ -7,7 +7,7 @@ mod image;
 mod memory;
 mod rayquery;
 
-use alloc::{format, string::String, vec, vec::Vec};
+use alloc::{collections::BTreeMap, format, string::String, vec, vec::Vec};
 
 use iridia_ir::{
     Axis, Binary, Body, Cmp, End, Fineness, FloatToInt, Function, Memory, MinMaxNan, MulZero, Node, OnZero,
@@ -150,6 +150,30 @@ enum Outputs {
     Locals(Vec<Handle<LocalVariable>>),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum Helper {
+    FloatToHalf,
+    HalfToFloat,
+    Remainder,
+    MulHigh(bool),
+    BitExtract,
+    BitInsert,
+}
+
+impl Helper {
+    fn name(self) -> &'static str {
+        match self {
+            Self::FloatToHalf => "f32_to_f16",
+            Self::HalfToFloat => "f16_to_f32",
+            Self::Remainder => "fmod",
+            Self::MulHigh(false) => "umulhi",
+            Self::MulHigh(true) => "smulhi",
+            Self::BitExtract => "extract",
+            Self::BitInsert => "insert",
+        }
+    }
+}
+
 struct Lower<'a> {
     program: &'a Program,
     f: &'a Function,
@@ -179,9 +203,94 @@ struct Lower<'a> {
     result: Option<Handle<naga::Type>>,
     /// The function's ray queries.
     queries: Vec<rayquery::Query>,
+    helpers: BTreeMap<(Helper, Vec<Type>, Type), Handle<naga::Function>>,
 }
 
 impl Lower<'_> {
+    /// A nontrivial pure expansion, built once for each signature. Only the function and emit stack are swapped:
+    /// helpers read their arguments, never the entry point's locals, resources or control constructs.
+    fn helper(
+        &mut self,
+        kind: Helper,
+        inputs: &[(Handle<E>, Type)],
+        result: Type,
+    ) -> Result<Handle<E>, Error> {
+        let key = (kind, inputs.iter().map(|(_, t)| *t).collect(), result);
+        let function = if let Some(&function) = self.helpers.get(&key) {
+            function
+        } else {
+            self.flush();
+            let outer_function = core::mem::take(&mut self.func);
+            let outer_blocks = core::mem::replace(&mut self.blocks, vec![(Block::new(), None)]);
+            let built = (|| {
+                self.func.name = Some(format!("iridia_{}_{}", kind.name(), self.module.functions.len()));
+                let result = self.ty_of(result)?;
+                self.func.result = Some(naga::FunctionResult {
+                    ty: result,
+                    binding: None,
+                });
+                let mut args = Vec::new();
+                for (n, (_, ty)) in inputs.iter().enumerate() {
+                    let ty = self.ty_of(*ty)?;
+                    self.func.arguments.push(naga::FunctionArgument {
+                        name: Some(format!("a{n}")),
+                        ty,
+                        binding: None,
+                    });
+                    args.push(self.expr(E::FunctionArgument(
+                        u32::try_from(n).map_err(|_| err("too many helper arguments"))?,
+                    )));
+                }
+                let input = |n: usize| {
+                    inputs
+                        .get(n)
+                        .map(|(_, t)| *t)
+                        .ok_or_else(|| err("absent helper input"))
+                };
+                let arg = |n: usize| args.get(n).copied().ok_or_else(|| err("absent helper argument"));
+                let t = input(0)?;
+                let x = arg(0)?;
+                let value = match kind {
+                    Helper::FloatToHalf => self.f32_to_f16(x, t)?,
+                    Helper::HalfToFloat => self.f16_to_f32(x, t)?,
+                    Helper::Remainder => self.remainder(x, arg(1)?, t)?,
+                    Helper::MulHigh(signed) => self.mul_high(x, arg(1)?, t, signed)?,
+                    Helper::BitExtract => self.per_lane(t, |l, k| {
+                        let xs = l.lane(x, t, k)?;
+                        let os = l.lane(arg(1)?, input(1)?, k)?;
+                        let cs = l.lane(arg(2)?, input(2)?, k)?;
+                        let os = l.low_five(os)?;
+                        let cs = l.low_five(cs)?;
+                        Ok(l.math(Mf::ExtractBits, xs, &[os, cs]))
+                    })?,
+                    Helper::BitInsert => self.per_lane(t, |l, k| {
+                        let bs = l.lane(x, t, k)?;
+                        let is = l.lane(arg(1)?, input(1)?, k)?;
+                        let os = l.lane(arg(2)?, input(2)?, k)?;
+                        let cs = l.lane(arg(3)?, input(3)?, k)?;
+                        let os = l.low_five(os)?;
+                        let cs = l.low_five(cs)?;
+                        Ok(l.math(Mf::InsertBits, bs, &[is, os, cs]))
+                    })?,
+                };
+                self.statement(Statement::Return { value: Some(value) })?;
+                self.func.body = self.blocks.pop().ok_or_else(|| err("no helper body"))?.0;
+                Ok(core::mem::take(&mut self.func))
+            })();
+            self.func = outer_function;
+            self.blocks = outer_blocks;
+            let function = self.module.functions.append(built?, Span::UNDEFINED);
+            self.helpers.insert(key, function);
+            function
+        };
+        let value = self.unemitted(E::CallResult(function));
+        self.statement(Statement::Call {
+            function,
+            arguments: inputs.iter().map(|(h, _)| *h).collect(),
+            result: Some(value),
+        })?;
+        Ok(value)
+    }
     fn ty(&mut self, inner: TypeInner) -> Handle<naga::Type> {
         self.module
             .types
@@ -1392,8 +1501,8 @@ impl Lower<'_> {
                     Unary::FirstBitHighSigned => self.first_bit_high(x, at, true)?,
                     // WGSL's `firstTrailingBit` gives all ones where no bit is set, as D3D's `firstbit_lo` does
                     Unary::FirstBitLow => self.math(Mf::FirstTrailingBit, x, &[]),
-                    Unary::F32ToF16 => self.f32_to_f16(x, at)?,
-                    Unary::F16ToF32 => self.f16_to_f32(x, at)?,
+                    Unary::F32ToF16 => self.helper(Helper::FloatToHalf, &[(x, at)], t)?,
+                    Unary::F16ToF32 => self.helper(Helper::HalfToFloat, &[(x, at)], t)?,
                 }
             }
             Op::Binary(b, l, r) => {
@@ -1422,9 +1531,13 @@ impl Lower<'_> {
                     }
                     Binary::FDiv => self.binary(Bo::Divide, x, y),
                     // WGSL's `%` on floats is `x - y * trunc(x / y)`
-                    Binary::FRem => self.remainder(x, y, at)?,
-                    Binary::UMulHigh => self.mul_high(x, y, at, false)?,
-                    Binary::SMulHigh => self.mul_high(x, y, at, true)?,
+                    Binary::FRem => self.helper(Helper::Remainder, &[(x, at), (y, self.vty(r)?)], t)?,
+                    Binary::UMulHigh => {
+                        self.helper(Helper::MulHigh(false), &[(x, at), (y, self.vty(r)?)], t)?
+                    }
+                    Binary::SMulHigh => {
+                        self.helper(Helper::MulHigh(true), &[(x, at), (y, self.vty(r)?)], t)?
+                    }
                     Binary::UAddCarry => {
                         let sum = self.binary(Bo::Add, x, y);
                         let wrapped = self.binary(Bo::Less, sum, x);
@@ -1464,14 +1577,11 @@ impl Lower<'_> {
                     // WGSL's `extractBits` cuts the field at the top bit as D3D does; it does not take the counts
                     // modulo 32, so they are masked first; its counts are one scalar for every lane, so a vector's
                     // lanes are taken one at a time
-                    Ternary::BitExtract { .. } => self.per_lane(at, |l, k| {
-                        let xs = l.lane(x, at, k)?;
-                        let os = l.lane(y, at, k)?;
-                        let cs = l.lane(z, at, k)?;
-                        let os = l.low_five(os)?;
-                        let cs = l.low_five(cs)?;
-                        Ok(l.math(Mf::ExtractBits, xs, &[os, cs]))
-                    })?,
+                    Ternary::BitExtract { .. } => self.helper(
+                        Helper::BitExtract,
+                        &[(x, at), (y, self.vty(b)?), (z, self.vty(c)?)],
+                        t,
+                    )?,
                 }
             }
             Op::BitInsert {
@@ -1487,15 +1597,16 @@ impl Lower<'_> {
                     self.get(offset)?,
                     self.get(count)?,
                 );
-                self.per_lane(at, |l, k| {
-                    let bs = l.lane(b, at, k)?;
-                    let is = l.lane(i, at, k)?;
-                    let os = l.lane(o, at, k)?;
-                    let cs = l.lane(c, at, k)?;
-                    let os = l.low_five(os)?;
-                    let cs = l.low_five(cs)?;
-                    Ok(l.math(Mf::InsertBits, bs, &[is, os, cs]))
-                })?
+                self.helper(
+                    Helper::BitInsert,
+                    &[
+                        (b, at),
+                        (i, self.vty(insert)?),
+                        (o, self.vty(offset)?),
+                        (c, self.vty(count)?),
+                    ],
+                    t,
+                )?
             }
             Op::Select { cond, accept, reject } => {
                 let (c, a, r) = (self.get(cond)?, self.get(accept)?, self.get(reject)?);
@@ -2301,6 +2412,7 @@ pub fn module(program: &Program, plan: &BindingPlan) -> Result<naga::Module, Err
         members: Vec::new(),
         result: None,
         queries: Vec::new(),
+        helpers: BTreeMap::new(),
     };
     // the result structure first, then the resources, then the arguments: the order naga's writer names them in
     let mut members = Vec::new();

@@ -462,8 +462,11 @@ dependencies = [
  "iridia-exec",
  "iridia-exec-ir",
  "iridia-ir",
+ "iridia-wgsl",
  "naga",
  "primase-naga",
+ "primase-testdata",
+ "serde_json",
  "proptest",
 ]
 

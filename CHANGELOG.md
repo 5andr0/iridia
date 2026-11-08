@@ -78,6 +78,9 @@
 - `iridia-exec`: raster helper invocations evaluate for derivatives and private variables but perform no external
   writes, image or buffer atomics, or append/consume counter operations. A fullscreen triangle writes each covered
   pixel once; helper lanes previously wrote UAVs too.
+- `iridia-naga`: exact half conversions, floating remainder, high-word multiplication and bit-field operations use
+  cached typed helper functions instead of repeating their software expansions at every use. Tests execute the
+  emitted calls on WARP and retain the native differential oracle through a temporary test-only inliner.
 - `iridia-naga`: long single-use expression chains are bound to intermediate WGSL `let` values, keeping parser
   nesting bounded. The reduced deep-chain fixture validates in both profiles; generated chains agree with IR execution.
 - `iridia-naga`: IR literals and zero values have runtime `let` bindings in written WGSL. Specialising a constant
