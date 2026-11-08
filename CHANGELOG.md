@@ -16,6 +16,8 @@
   refusal now says iridia-wgsl writes them. `exec_warp_rq.rs` also compares the grid, procedural and object-space
   programs through three roads on WARP (the fixture's DXIL, the naga module through stock naga's HLSL writer, the WGSL text
   read by stock naga and written as HLSL), by the same two-of-three consensus: no ray differs.
+- `iridia-naga`: the software remainder helper's quiet NaN is a runtime bitcast of its exact word, like an IR
+  float literal, rather than a WGSL constant expression that Tint cannot represent.
 - `iridia-naga`: construct each emitted expression range directly from its arena suffix, so lowering many
   subgroup operations takes linear work instead of repeatedly scanning the growing expression arena.
 - `iridia-naga` standard WGSL filters derivative-uniformity diagnostics, and subgroup-uniformity diagnostics

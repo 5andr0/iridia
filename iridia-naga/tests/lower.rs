@@ -247,6 +247,27 @@ fn deep_single_use_expressions_parse_in_both_profiles() {
 }
 
 #[test]
+fn generated_remainder_nan_and_literal_payloads_are_runtime_bitcasts() {
+    let p = program(
+        "iridia-ir 1\nfn main {\n  %0: f32 = input 0.x\n  %1: f32 = input 0.y\n  %2: f32 = frem %0, %1\n  %3: f32 = f32(0xffc12345)\n  output 0.x = %2\n  output 0.y = %3\n  return\n}\n",
+        &[F4],
+        &[F4],
+        Vec::new(),
+    );
+    for profile in [iridia_naga::Profile::NAGA, iridia_naga::Profile::BROWSER] {
+        let text = iridia_naga::wgsl(&p, &profile).unwrap();
+        // The helper's specified quiet NaN and the IR literal's sign/payload keep their words. A named
+        // runtime word must stand between each literal and its float bitcast.
+        for bits in [0x7fc0_0000u32, 0xffc1_2345] {
+            assert!(text.contains(&format!("{bits}u")), "{text}");
+            assert!(!text.contains(&format!("bitcast<f32>({bits}u)")), "{text}");
+        }
+        let module = naga::front::wgsl::parse_str(&text).unwrap();
+        iridia_naga::validate(&module, &profile).unwrap();
+    }
+}
+
+#[test]
 fn the_largest_float_is_written_as_its_bits() {
     let p = program(
         "iridia-ir 1

@@ -1025,8 +1025,9 @@ impl Lower<'_> {
         let result = self.bitcast(bits, ScalarKind::Float);
         let kept = self.select(unchanged, x, result);
         // naga takes no NaN literal: the quiet NaN's bits
-        let quiet = k(self, 0x7fc0_0000)?;
-        let quiet = self.bitcast(quiet, ScalarKind::Float);
+        // A literal bitcast of these bits is a WGSL constant NaN even inside a helper. Use the same runtime
+        // binding as an IR float literal so Tint does not try to represent the NaN during constant evaluation.
+        let quiet = self.constant(t, Scalar::F32, 0x7fc0_0000)?;
         Ok(self.select(nan, quiet, kept))
     }
     /// The high half of the 64-bit product of 32-bit integers, from 16-bit halves (WGSL has no 64-bit integers in
