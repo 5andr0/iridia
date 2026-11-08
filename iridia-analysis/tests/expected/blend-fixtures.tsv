@@ -1,0 +1,110 @@
+# Each fixtures pixel program's blend answers on the IR (tests/blend_oracle.rs): program, a hash of each output lane's scalar and layers, and whether the older recogniser's were the same.
+iridia/alpha_reference_control_only.dxbc	3a11ef874a45b141	same
+iridia/alpha_reference_control_only.dxil	3a11ef874a45b141	same
+iridia/alpha_reference_coordinate_only.dxbc	350bb2a2deda094c	same
+iridia/alpha_reference_coordinate_only.dxil	350bb2a2deda094c	same
+iridia/alpha_reference_direct.dxbc	e922aec3f8feeea1	same
+iridia/alpha_reference_direct.dxil	e922aec3f8feeea1	same
+iridia/alpha_reference_dithered.dxbc	8d0b548574a453a5	same
+iridia/alpha_reference_dithered.dxil	779bb52b858307e5	same
+iridia/alpha_reference_product.dxbc	f37faa42ca829d75	same
+iridia/alpha_reference_product.dxil	c40462cee700a86b	same
+iridia/alpha_reference_same_source.dxbc	8d0b548574a453a5	same
+iridia/alpha_reference_same_source.dxil	779bb52b858307e5	same
+iridia/alpha_reference_shared_scale.dxbc	a6693489c15a2c67	same
+iridia/alpha_reference_shared_scale.dxil	6dfb106c81f67060	same
+iridia/alpha_reference_transformed.dxbc	3a11ef874a45b141	same
+iridia/alpha_reference_transformed.dxil	3a11ef874a45b141	same
+iridia/alpha_reference_unrelated.dxbc	e922aec3f8feeea1	same
+iridia/alpha_reference_unrelated.dxil	e922aec3f8feeea1	same
+iridia/alpha_reference_unwritten.dxbc	b5b93d48de07d9f7	same
+iridia/alpha_reference_unwritten.dxil	b5b93d48de07d9f7	same
+iridia/alpha_reference_unwritten_dither.dxbc	b5b93d48de07d9f7	same
+iridia/alpha_reference_unwritten_dither.dxil	b5b93d48de07d9f7	same
+iridia/blend_kinds.dxbc	39a35f3280fd839a	same
+iridia/blend_over.dxbc	babdef04d24a498f	same
+iridia/flow_blend.dxbc	446c0dfc14b9eebf	same
+iridia/flow_blend.dxil	583007e3a371054c	same
+iridia/flow_carried.dxbc	220a66576e030009	same
+iridia/flow_carried.dxil	220a66576e030009	same
+iridia/flow_control.dxbc	220a66576e030009	same
+iridia/flow_control.dxil	220a66576e030009	same
+iridia/flow_coordinate.dxbc	e922aec3f8feeea1	same
+iridia/flow_coordinate.dxil	e922aec3f8feeea1	same
+iridia/flow_kinds.dxbc	0a9d6130cc08d882	same
+iridia/flow_kinds.dxil	0a9d6130cc08d882	same
+iridia/flow_never.dxbc	e922aec3f8feeea1	same
+iridia/flow_never.dxil	e922aec3f8feeea1	same
+iridia/flow_value.dxbc	4884832e9b93c843	same
+iridia/flow_value.dxil	4884832e9b93c843	same
+iridia/modes.dxbc	a7218ecc890320ba	same
+iridia/output_stores.dxil	4a6d683b9d94faf5	same
+iridia/output_uses_opaque.dxbc	14157906ddf07a08	same
+iridia/output_uses_opaque.dxil	a89a8b571d6edda0	same
+iridia/output_uses_tested.dxbc	14157906ddf07a08	same
+iridia/output_uses_tested.dxil	a89a8b571d6edda0	same
+iridia/output_uses_unrelated.dxbc	14157906ddf07a08	same
+iridia/output_uses_unrelated.dxil	a89a8b571d6edda0	same
+iridia/resource_arrays.66.dxil	23b11338ab747159	same
+iridia/resource_arrays.dxil	23b11338ab747159	same
+iridia/sampler_heap.dxil	e922aec3f8feeea1	same
+iridia/specialise_integer.dxbc	220a66576e030009	same
+iridia/specialise_integer.dxil	220a66576e030009	same
+iridia/specialise_root.dxbc	220a66576e030009	same
+iridia/specialise_root.dxil	220a66576e030009	same
+iridia/specialise_word.dxbc	58847cf07f195dfb	same
+iridia/specialise_word.dxil	6f3fff0d504ee5b7	same
+iridia-dxbc/early_depth.dxbc	ab73741c3c6a2e41	same
+iridia-dxbc/gather_cmp_green.dxbc	e922aec3f8feeea1
+iridia-dxbc/late_depth.dxbc	ab73741c3c6a2e41	same
+iridia-dxbc/modes.dxbc	a7218ecc890320ba	same
+iridia-dxbc/reflection_sm4.dxbc	3ce5222c1b05fad3	same
+iridia-dxbc/reflection_sm4.swapped.dxbc	78ca7fb81274e989	same
+iridia-dxbc/reflection_sm51.ps51.dxbc	569b5a2f2f05c917	same
+iridia-dxbc/structured_layout.dxbc	729a24753c4b59f1	same
+iridia-dxbc/structured_tail.dxbc	3dcc83bbe854e761
+iridia-dxil/arrays.66.dxil	c731a05c295c4bb8	gain	lane (0, 0): op -> ((op * op) + op)
+iridia-dxil/arrays.dxil	c731a05c295c4bb8	gain	lane (0, 0): op -> ((op * op) + op)
+iridia-dxil/arrays.od.dxil	b634be54c8be5024	gain	lane (0, 0): op -> (op + (op * op))
+iridia-dxil/bits.66.dxil	fe716b74011171a9	same
+iridia-dxil/bits.dxil	fe716b74011171a9	same
+iridia-dxil/bits.od.dxil	fe716b74011171a9	same
+iridia-dxil/blend.dxil	f5df168fd168cd93	same
+iridia-dxil/draw_colour.dxil	c42c3c416e5ddc09	same
+iridia-dxil/draw_coverage.dxil	7d680ea2a5aded68	same
+iridia-dxil/draw_derivatives.dxil	fc8850b547449915	same
+iridia-dxil/draw_discard.dxil	17edac3cd569c7d9	same
+iridia-dxil/draw_position.dxil	0f90b68277315929	same
+iridia-dxil/draw_primitive.dxil	efb7f88f7864f698	same
+iridia-dxil/draw_texture.dxil	e922aec3f8feeea1	same
+iridia-dxil/early_depth.dxil	ab73741c3c6a2e41	same
+iridia-dxil/flow.66.dxil	656dd371d3d3639b	same
+iridia-dxil/flow.dxil	656dd371d3d3639b	same
+iridia-dxil/flow.od.dxil	656dd371d3d3639b	same
+iridia-dxil/gather_cmp_green.dxil	e922aec3f8feeea1
+iridia-dxil/half_ops.dxil	4734fa0270725bb7	same
+iridia-dxil/half_ops.od.dxil	4734fa0270725bb7	same
+iridia-dxil/late_depth.dxil	ab73741c3c6a2e41	same
+iridia-dxil/loops.66.dxil	3c560e73fadab413	equivalent	lane (0, 3): literal 1.0 -> 1.0
+iridia-dxil/loops.dxil	3c560e73fadab413	equivalent	lane (0, 3): literal 1.0 -> 1.0
+iridia-dxil/loops.od.dxil	3c560e73fadab413	equivalent	lane (0, 3): literal 1.0 -> 1.0
+iridia-dxil/ops.dxil	794200e611c1a62d	same
+iridia-dxil/pixel_ops.66.dxil	fa41ca60ec8d348d	same
+iridia-dxil/pixel_ops.dxil	fa41ca60ec8d348d	same
+iridia-dxil/pixel_ops.od.dxil	fa41ca60ec8d348d	same
+iridia-dxil/resource_arrays.66.dxil	23b11338ab747159	same
+iridia-dxil/resource_arrays.dxil	23b11338ab747159	same
+iridia-dxil/resource_arrays.od.dxil	23b11338ab747159	same
+iridia-dxil/resources.66.dxil	c71cfe7a06a2f929	gain	lane (0, 0): ((op + op) + texel D3dBinding { class: UnorderedAccess, register: 0, space: 0 }.0) -> ((texel D3dBinding { class: ShaderResource, register: 2, space: 0 }.0 + op) + texel D3dBinding { class: UnorderedAccess, register: 0, space: 0 }.0)
+iridia-dxil/resources.dxil	c71cfe7a06a2f929	gain	lane (0, 0): ((op + op) + texel D3dBinding { class: UnorderedAccess, register: 0, space: 0 }.0) -> ((texel D3dBinding { class: ShaderResource, register: 2, space: 0 }.0 + op) + texel D3dBinding { class: UnorderedAccess, register: 0, space: 0 }.0)
+iridia-dxil/resources.od.dxil	4983c85ebaf4ed9d	gain	lane (0, 0): ((op + op) + texel D3dBinding { class: UnorderedAccess, register: 0, space: 0 }.0) -> ((op + texel D3dBinding { class: ShaderResource, register: 2, space: 0 }.0) + texel D3dBinding { class: UnorderedAccess, register: 0, space: 0 }.0)
+iridia-dxil/sampler_heap.dxil	e922aec3f8feeea1	same
+iridia-dxil/structured_layout.dxil	729a24753c4b59f1	same
+iridia-dxil/structured_tail.dxil	3dcc83bbe854e761
+iridia-dxil/switch.66.dxil	758ab4a449c3903e	equivalent	lane (0, 3): literal 1.0 -> 1.0
+iridia-dxil/switch.dxil	758ab4a449c3903e	equivalent	lane (0, 3): literal 1.0 -> 1.0
+iridia-dxil/switch.od.dxil	758ab4a449c3903e	equivalent	lane (0, 3): literal 1.0 -> 1.0
+iridia-dxil/switch_shared.dxil	2517d83e861dd1a2	same
+iridia-dxil/textures.66.dxil	0ab2bdc74f2b565f	same
+iridia-dxil/textures.dxil	0ab2bdc74f2b565f	same
+iridia-dxil/textures.od.dxil	bf252f0efcc0e191	same

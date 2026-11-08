@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `iridia-analysis`: `blend`, the recogniser of `iridia::blend` on the IR: `Scalar`, `Term`, `Over` and `Layer` read from `flow::Values`, with `Over::at`
+  and `Over::under`. A term is spelled for the IEEE operations only (`FAdd`, `FSub`, `FMul(MulZero::Ieee)`, `FNeg`, `Saturate`, `FMin`,
+  `FMax` by `MinNum`); Direct3D 9's zero-wins multiply is a leaf, as it is not the operation a term evaluates. The older tests run with the
+  same expectations (`tests/blend.rs`); `tests/blend_oracle.rs` holds every pixel program of the fixtures, the slim set and Elden Ring's
+  corpus to the older recogniser's answer, by text and by value under the same named leaves (`tests/expected/blend-*.tsv`, judged in
+  `tests/expected/README.md`).
 - `iridia` tests: the slim gate has no column for the older lifts (`iridia_dxbc::lift`, `iridia_dxil::lift`, `iridia_d3d9::lift`);
   each program of the set goes through the IR lift and the IR's WGSL, and `tests/slim/<family>.tsv` lists those two columns.
 - `iridia-d3d9-ir` tests: the gate no longer runs the older lift (`iridia-d3d9`) and the WGSL read back into the naga

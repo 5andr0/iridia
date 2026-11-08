@@ -129,3 +129,47 @@ also requests a small fixture after that refusal, checking that the bounded work
 The IR loop regression counts body walks over nesting depths 1 through 64: exactly one per loop, independent of
 timing. The former SceneBokeh stall and both slim DXIL stalls came from repeated discovery of nested loop-carried
 values; header phis installed before the single body walk eliminate that exponential work.
+
+## Blend (`blend-*.tsv`)
+
+`blend_oracle.rs` holds the blend recogniser on the IR (`iridia_analysis::blend`) to the older one (`iridia::blend`) on every pixel
+program of the fixtures, the slim set and Elden Ring's corpus. Each output lane is spelled as text (its leaves named by what they
+are: an input lane, a texel lane, a constant word; a term shared by many paths is spelled once and a spelling past a line is its
+hash) and, where every leaf has a name, valued under four assignments of numbers to the named leaves, the same number for the same
+name on both sides. A row's verdict:
+
+| Verdict | Meaning |
+| --- | --- |
+| `same` | Every lane's text is the same. |
+| `equivalent` | Texts differ, values agree under every assignment (a regrouping or reordering). |
+| `gain` | Texts differ, some leaf is an unnamed `op` on a side so no value is compared, and the IR's lane names every leaf the older lane names. |
+| `partial` | As `gain`, but the older lane names a leaf the IR's does not. |
+| `differ` | Values differ under the same named leaves. |
+
+| Set | same | equivalent | gain | partial | differ |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| fixtures | 93 | 6 | 6 | 0 | 0 |
+| slim DXBC | 1522 | 0 | 198 | 0 | 16 |
+| slim DXIL | 550 | 0 | 80 | 0 | 0 |
+| slim D3D9 | 70 | 0 | 21 | 132 | 0 |
+| Elden | 14156 | 4 | 11022 | 0 | 0 |
+
+Elden also has one program the older side is not run on (`gxposteffect/SceneBokeh_SimpleBlurFadePS.ppo`: 24 nested loops, and
+the older value graph is exponential in memory; a 4-worker pass reached 54.8 GB on it). The IR side runs on it, and the test
+holds its lift, graph and blend answers to one second.
+
+The classes, each judged once:
+
+- **`differ`, 16 DXBC rows, all lane `(0, 2)` or `(0, 3)`:** the older graph spells an integer literal that a float operation reads
+  by its bits as the integer's value (`literal 1065353216.0`, or the single the sum rounds it to), where the IR's constant is the float
+  whose bits it is (`0x3f800000` is `1.0`; `1058642330` is `0.6`; `1061158912` is `0.75`). The IR is right; the older value is wrong.
+- **`partial`, 132 D3D9 rows, correct and not a loss:** the IR's lift writes Direct3D 9's `mul` as `FMul(MulZero::Zero)` (0 times anything is 0,
+  even infinity), which is not the IEEE multiply a `Term::Multiply` evaluates, so the recogniser leaves it a leaf (`word * 1.0` becomes
+  `op`). The older path read it as the IEEE product, which gives NaN where the program gives 0: the older answer is the wrong one. Accepting
+  every `FMul` in an experiment turns all 132 rows into `gain` or `same` (85 and 138 of the 223 programs) with no `differ`, so this is the
+  whole cause. No consumer computes blend on a Direct3D 9 program: the only consumer of the recogniser in primase is `read_layered_albedo`
+  (primase-core), which no world calls and whose test reads a DXBC program; nothing else in primase, primase-lab, locum or iridia uses it.
+  A `Term` that spells the zero-wins multiply is built when a Direct3D 9 consumer first wants blend.
+- **`gain`:** the older recogniser leaves a node of the lane an unspelled `op` where the IR's graph spells the float operation, and the IR's
+  lane names every leaf the older lane named. The IR graph has no bitcast node, which accounts for some of these; the rows are not itemised by cause.
+- **`equivalent`:** operands of an addition in the other order, or the same sum regrouped, with the same value.

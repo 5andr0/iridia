@@ -5,6 +5,7 @@
 //!   write as a graph of inputs, texels, constants and the operations between them) and what may reach each output
 //!   lane and the discard, and how ([`flow::Flow`]); [`flow::VertexDemand`] is the vertex input lanes a pixel program
 //!   needs.
+//! - [`blend`]: the layers a lane is made of, and any scalar as the float operations it is.
 //! - [`output_uses`]: evidence from output alpha, discard comparisons and blend state.
 //! - [`matrix`]: how constant-buffer lines form rows or columns of the applied matrix.
 //! - [`reads`]: the words of its constant buffers a program's results are made of ([`reads::WordsRead`]).
@@ -27,6 +28,7 @@
 
 extern crate alloc;
 
+pub mod blend;
 pub mod flow;
 pub mod matrix;
 pub mod output_uses;
