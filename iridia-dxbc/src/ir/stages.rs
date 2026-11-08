@@ -12,7 +12,7 @@ use iridia_ir::{
 
 use super::{Exit, Lift, every, lanes_of, scalar_of};
 use crate::Result;
-use crate::lift::setup::PhaseKind;
+use crate::setup::PhaseKind;
 use dxbc_reader::decode::{Instruction, Operand, Register};
 
 /// Where a control point register's varyings are: the input points, or a hull program's output points.

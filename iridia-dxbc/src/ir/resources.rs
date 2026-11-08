@@ -10,7 +10,7 @@ use iridia_ir::{
 use super::operands::{OperandAt, of_four};
 use super::{Lift, lanes_of};
 use crate::Result;
-use crate::lift::setup::{Declaration, Texture, UavKind};
+use crate::setup::{Declaration, Texture, UavKind};
 use dxbc_reader::decode::{Instruction, Operand, Register, Selection};
 use iridia::D3dClass;
 

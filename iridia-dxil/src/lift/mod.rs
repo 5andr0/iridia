@@ -12,8 +12,7 @@
 //! buffers, samples, loads, derivatives, discard), and `alloca`, `getelementptr`, `load` and `store` the local arrays
 //! and constant tables.
 
-pub(crate) mod compute;
-pub(crate) mod dxop;
+mod compute;
 mod flow;
 mod memory;
 mod mesh;
@@ -21,8 +20,7 @@ mod ops;
 mod rayquery;
 mod raytracing;
 mod resources;
-pub(crate) mod setup;
-pub(crate) mod stages;
+mod stages;
 mod values;
 mod wide;
 
@@ -32,14 +30,10 @@ use iridia::build::{Builder, Kind, Val, Width};
 use iridia::{Conventions, D3dModes, Program, Provenance, ShaderFormat, Stage, StageFacts};
 use naga::{Handle, LocalVariable};
 
-use crate::{Result, error, read};
+use crate::shared::{argument, low32, patch_constant_function, target_of};
+use crate::{Result, error, read, setup};
 use dxil_reader::module::{Function, Module, Op, Type, TypeId, ValueId};
 use dxil_reader::reflection;
-
-/// The low 32 bits of a constant, as an LLVM integer constant of 32 bits or fewer is stored (sign-extended to 64).
-pub(crate) fn low32(value: u64) -> u32 {
-    u32::try_from(value & 0xffff_ffff).unwrap_or(u32::MAX)
-}
 
 /// A lane or component number as a `u8`: a lane is one of at most four.
 pub(crate) fn lane_u8(n: impl TryInto<u8>) -> u8 {
@@ -66,19 +60,6 @@ fn blocks_of(f: &Function) -> Result<Vec<Vec<usize>>> {
     Ok(blocks)
 }
 
-/// Argument `n` of a call at bit `at`, an error naming the call when it has fewer.
-pub(crate) fn argument(args: &[ValueId], n: usize, at: usize) -> Result<ValueId> {
-    args.get(n).copied().ok_or_else(|| {
-        error(
-            at,
-            format!(
-                "an operation reads argument {n}, where the call has {}",
-                args.len()
-            ),
-        )
-    })
-}
-
 /// The version of the lifter: bumped when what it produces for the same bytecode changes, so a cache keyed by the
 /// bytecode's hash knows what is stale; gated by `tests/versions.rs` (the lifted fixtures hashed under it, `iridia::gate`).
 pub const LIFTER_VERSION: u32 = 10;
@@ -98,35 +79,6 @@ pub fn lift_with(container: &[u8], bound: &iridia::BoundSizes) -> Result<Program
     let mut program = lift_program(container, bound)?;
     program.provenance.source_hash = Some(iridia::source_hash(container));
     Ok(program)
-}
-
-/// A hull program's patch-constant function, which with the entry (its control-point phase) makes the program; `None`
-/// for a program of another kind.
-pub(crate) fn patch_constant_function(module: &Module, program_version: u32) -> Result<Option<&Function>> {
-    if program_version >> 16 != 3 {
-        return Ok(None);
-    }
-    let state = reflection::hull_state(module).map_err(read)?;
-    module
-        .functions
-        .iter()
-        .find(|f| f.value == state.patch_constant)
-        .map(Some)
-        .ok_or_else(|| error(0, "the patch-constant function has no body"))
-}
-
-/// The target the program was compiled for, as `dxc -T` names it (`ps_6_0`, `as_6_5`); a shader kind no target names
-/// (a ray tracing kind, which only a library's functions have) is refused by name.
-pub(crate) fn target_of(part: &dxil_reader::Part<'_>) -> Result<String> {
-    part.target().ok_or_else(|| {
-        error(
-            0,
-            format!(
-                "a program of shader kind {}, which no target names",
-                part.program_version >> 16
-            ),
-        )
-    })
 }
 
 fn lift_program(container: &[u8], bound: &iridia::BoundSizes) -> Result<Program> {

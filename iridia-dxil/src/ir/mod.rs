@@ -33,7 +33,7 @@ use iridia_ir::{
     interface::{InstructionCount, InstructionUnit, ShaderFormat, Stage, StageFacts},
 };
 
-use crate::lift::setup::{Setup, dx_opcode};
+use crate::setup::{Setup, dx_opcode};
 use crate::{Result, error, read};
 use dxil_reader::module::{
     Function as LlvmFunction, Instruction, Module, Op as LlvmOp, Type as LlvmType, TypeId, ValueId,
@@ -73,7 +73,7 @@ pub fn lift_with(container: &[u8], bound: &iridia_ir::interface::BoundSizes) -> 
         .iter()
         .find(|f| f.value == entry_value)
         .ok_or_else(|| error(0, "the entry point has no body"))?;
-    let patch_constant = crate::lift::patch_constant_function(&module, part.program_version)?;
+    let patch_constant = crate::shared::patch_constant_function(&module, part.program_version)?;
     let mut functions = vec![entry];
     functions.extend(patch_constant);
     let mut setup = Setup::new(&chunks, &module, &functions)?;
@@ -120,7 +120,7 @@ pub fn lift_with(container: &[u8], bound: &iridia_ir::interface::BoundSizes) -> 
     } else {
         None
     };
-    let target = crate::lift::target_of(&part)?;
+    let target = crate::shared::target_of(&part)?;
     // the entry's 32-bit denormal mode (dxc's `-denorm`): kept where it says `preserve`; flushed, as Direct3D's
     // default, where it says `ftz` or `any` or states none
     let f32_denormals = if reflection::fp32_denorm_mode(&module).map_err(read)?.as_deref() == Some("preserve")
@@ -579,11 +579,11 @@ impl<'m> Lift<'m> {
                 let mut made: Vec<(usize, Target)> = Vec::new();
                 let mut out = Vec::new();
                 for &(c, b) in cases {
-                    let Some(k) = crate::lift::setup::const_int(self.m, self.f, c) else {
+                    let Some(k) = crate::setup::const_int(self.m, self.f, c) else {
                         return self.refuse("a switch case that is not a constant");
                     };
                     let t = self.target_once(from, b, &mut made)?;
-                    out.push((crate::lift::low32(k as u64), t));
+                    out.push((crate::shared::low32(k as u64), t));
                 }
                 let default = self.target_once(from, *default, &mut made)?;
                 self.terminate(Terminator::Switch {

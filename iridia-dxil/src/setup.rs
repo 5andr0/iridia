@@ -283,7 +283,7 @@ impl Setup {
                         } else {
                             SystemValue::WorldToObject
                         };
-                        matrix_rows.insert((system, super::low32(row as u64)));
+                        matrix_rows.insert((system, crate::shared::low32(row as u64)));
                     }
                     // the ray tracing system values: the ids and the traced ray's state
                     141..=150 | 153 | 154 | 161 | 213 => {
@@ -293,13 +293,13 @@ impl Setup {
                     }
                     217 => {
                         let Some((class, lower, space)) =
-                            binding_of(m, entry, super::argument(args, 1, inst.at)?)
+                            binding_of(m, entry, crate::shared::argument(args, 1, inst.at)?)
                         else {
                             return Err(error(inst.at, "a handle of a binding that is not constant"));
                         };
                         used_bindings.insert((class, lower, space));
                     }
-                    160 => match variable_loaded(m, entry, super::argument(args, 1, inst.at)?) {
+                    160 => match variable_loaded(m, entry, crate::shared::argument(args, 1, inst.at)?) {
                         Some(global) => {
                             used_variables.insert(global);
                         }
@@ -561,7 +561,7 @@ fn heap_resources(
             if dx_opcode(m, f, *function, args) != Some(218) {
                 continue;
             }
-            let sampler = const_int(m, f, super::argument(args, 2, inst.at)?) == Some(1);
+            let sampler = const_int(m, f, crate::shared::argument(args, 2, inst.at)?) == Some(1);
             // the annotation that says what the descriptor is: its properties, two constant words
             let properties = functions.iter().copied().find_map(|g| {
                 g.instructions.iter().find_map(|i| {
@@ -617,12 +617,12 @@ fn heap_resources(
                             2 => {
                                 u32::try_from(second).map_err(|_| error(inst.at, "a constant buffer size"))?
                             }
-                            _ => super::low32(kind as u64),
+                            _ => crate::shared::low32(kind as u64),
                         },
                         space: HEAP_SPACE,
                         element: (class < 2 && kind != 11 && kind != 12)
-                            .then_some(super::low32(second as u64 & 0xff)),
-                        stride: (kind == 12).then_some(super::low32(second as u64)),
+                            .then_some(crate::shared::low32(second as u64 & 0xff)),
+                        stride: (kind == 12).then_some(crate::shared::low32(second as u64)),
                         counter: false,
                         variable: None,
                     };
@@ -656,7 +656,7 @@ fn cell(list: &[iridia::Varying], register: u32, lane: u8) -> Option<(usize, u8)
     list.iter().enumerate().find_map(|(i, v)| {
         let d3d = v.provenance.d3d?;
         (d3d.register == register)
-            .then(|| super::stages::lanes_below(d3d.mask, lane))
+            .then(|| crate::shared::lanes_below(d3d.mask, lane))
             .flatten()
             .map(|position| (i, position))
     })

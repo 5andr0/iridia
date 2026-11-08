@@ -51,9 +51,12 @@
 #[cfg(doctest)]
 #[doc = include_str!("../README.md")]
 struct ReadmeExamples;
+mod dxop_arguments;
 pub mod ir;
 mod lift;
 mod reflection;
+mod setup;
+mod shared;
 pub use lift::{LIFTER_VERSION, lift, lift_with};
 pub use reflection::{interface, subobjects};
 

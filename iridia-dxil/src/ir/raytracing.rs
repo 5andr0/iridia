@@ -11,7 +11,7 @@ use iridia_ir::{
 
 use super::{Lift, Lv, Pointer};
 use crate::Result;
-use crate::lift::setup::ray_system_value;
+use crate::setup::ray_system_value;
 use dxil_reader::module::{Instruction, Type as LlvmType, ValueId};
 
 impl Lift<'_> {

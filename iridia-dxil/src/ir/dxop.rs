@@ -9,7 +9,7 @@ use iridia_ir::{
 
 use super::{Lift, Lv};
 use crate::Result;
-use crate::lift::setup::const_int;
+use crate::setup::const_int;
 use dxil_reader::module::{Instruction, ValueId};
 
 impl Lift<'_> {
@@ -52,7 +52,7 @@ impl Lift<'_> {
             }
             return self.refuse(format!("a call of {name}"));
         };
-        if let Some(n) = crate::lift::dxop::arguments(code)
+        if let Some(n) = crate::dxop_arguments::arguments(code)
             && args.len() != n
         {
             return self.refuse(format!(

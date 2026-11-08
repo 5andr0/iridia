@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `iridia-dxbc`, `iridia-dxil`: the readers the IR lift and the naga-path lift share (`setup`, and for DXIL the small helpers
+  and the `dx.op` argument counts) are modules of their own, not parts of the naga-path lift. Nothing they produce changes.
 - Route nonlocal structured exits through typed result payloads only across the boundaries they cross. Keep ordinary
   SSA values and loop parameters in place, replacing the whole-function demote/route/promote sequence that multiplied
   transfer copies in nested control flow. Mutually exclusive payloads share a typed field pool selected by the route

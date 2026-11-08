@@ -16,7 +16,7 @@ use iridia_ir::{
 
 use super::{Lift, Lv};
 use crate::Result;
-use crate::lift::setup::{binding_of, const_int, dx_opcode};
+use crate::setup::{binding_of, const_int, dx_opcode};
 use dxil_reader::module::{Constant, Instruction, Op as LlvmOp, Type as LlvmType, TypeId, Value, ValueId};
 
 /// DXIL's `AtomicBinOp` operation codes, in order: add, and, or, xor, signed min and max, unsigned min and max,
@@ -92,13 +92,11 @@ impl Lift<'_> {
                     continue;
                 }
                 // a library's handle is made from the value of the resource's global
-                160 => self
-                    .setup
-                    .resource_of_variable(crate::lift::setup::variable_loaded(
-                        self.m,
-                        self.f,
-                        *args.get(1)?,
-                    )?),
+                160 => self.setup.resource_of_variable(crate::setup::variable_loaded(
+                    self.m,
+                    self.f,
+                    *args.get(1)?,
+                )?),
                 218 => self.setup.heap.get(&v).copied(),
                 _ => None,
             };

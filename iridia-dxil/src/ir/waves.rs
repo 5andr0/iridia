@@ -9,7 +9,7 @@ use iridia_ir::{
 
 use super::{Lift, Lv};
 use crate::Result;
-use crate::lift::compute::{WAVE_MAX, WAVE_MIN, WAVE_PRODUCT, WAVE_SUM};
+use crate::shared::{WAVE_MAX, WAVE_MIN, WAVE_PRODUCT, WAVE_SUM};
 use dxil_reader::module::{Instruction, ValueId};
 
 /// The integer scalar of `bits` bits, signed or not; `None` for a width there is none of.

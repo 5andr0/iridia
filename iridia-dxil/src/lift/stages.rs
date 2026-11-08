@@ -9,6 +9,7 @@ use naga::{Expression as E, Handle, LocalVariable};
 use super::setup::const_int;
 use super::{Lift, Lv};
 use crate::Result;
+use crate::shared::patch_cell;
 use dxil_reader::module::{Instruction, ValueId};
 
 impl Lift<'_> {
@@ -473,22 +474,4 @@ impl Lift<'_> {
         });
         Ok(())
     }
-}
-
-/// The patch-constant varying whose register and lanes hold this cell, and the lane's position in its value.
-pub(crate) fn patch_cell(list: &[Varying], register: u32, lane: u8) -> Option<(usize, u8)> {
-    list.iter().enumerate().find_map(|(i, v)| {
-        let d3d = v.provenance.d3d?;
-        (d3d.register == register && lanes_below(d3d.mask, lane).is_some())
-            .then(|| (i, lanes_below(d3d.mask, lane).unwrap_or(0)))
-    })
-}
-
-/// How many lanes of `mask` come before `lane`, where the mask names `lane`.
-pub(super) fn lanes_below(mask: u8, lane: u8) -> Option<u8> {
-    let lane = u32::from(lane);
-    (mask.checked_shr(lane)? & 1 != 0).then(|| {
-        let below = (u32::from(mask) & 1u32.checked_shl(lane).unwrap_or(0).wrapping_sub(1)).count_ones();
-        u8::try_from(below).unwrap_or(0)
-    })
 }

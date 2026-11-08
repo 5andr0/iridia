@@ -11,7 +11,7 @@ use iridia_ir::{
 
 use super::{Lift, Lv};
 use crate::Result;
-use crate::lift::stages::patch_cell;
+use crate::shared::patch_cell;
 use dxil_reader::module::{Instruction, ValueId};
 
 impl Lift<'_> {

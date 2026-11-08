@@ -16,7 +16,7 @@ use iridia_ir::{AtomicOp, Binary, Memory, Op, OutOfBounds, Type, Unary, ValueId 
 
 use super::{Lift, Lv, Pointer};
 use crate::Result;
-use crate::lift::setup::dx_opcode;
+use crate::setup::dx_opcode;
 use dxil_reader::module::{Op as LlvmOp, Type as LlvmType, TypeId, Value, ValueId};
 
 /// The ABI alignments a module's datalayout states, in bytes, by bit width; LLVM's defaults where it states none.

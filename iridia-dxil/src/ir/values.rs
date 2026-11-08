@@ -9,7 +9,7 @@ use iridia_ir::{
 
 use super::{Lift, Lv, Pointer};
 use crate::Result;
-use crate::lift::setup::const_int;
+use crate::setup::const_int;
 use dxil_reader::module::{
     BinaryOp, CastOp, Constant, Instruction, Op as LlvmOp, Type as LlvmType, TypeId, Value, ValueId,
 };
@@ -262,7 +262,7 @@ impl Lift<'_> {
             LlvmType::Integer(1) => word & 1,
             LlvmType::Integer(64) | LlvmType::Double => word,
             LlvmType::Integer(w @ 2..=32) => word & u64::MAX.checked_shl(*w).map_or(u64::MAX, |high| !high),
-            LlvmType::Float => u64::from(crate::lift::low32(word)),
+            LlvmType::Float => u64::from(crate::shared::low32(word)),
             LlvmType::Half => u64::from(
                 f16::from_bits(u16::try_from(word & 0xffff).unwrap_or(0))
                     .to_f32()

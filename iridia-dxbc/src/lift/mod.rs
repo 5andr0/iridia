@@ -24,7 +24,6 @@ mod compute;
 mod io;
 mod operands;
 mod resources;
-pub(crate) mod setup;
 mod tessellation;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -33,7 +32,7 @@ use iridia::build::{Builder, Width};
 use iridia::{Conventions, D3dModes, Program, Provenance, ShaderFormat, Stage};
 use naga::{Handle, LocalVariable};
 
-use crate::{Result, error};
+use crate::{Result, error, setup};
 use dxbc_reader::decode::{Decoded, decode};
 
 /// The version of the lifter: bumped when what it produces for the same bytecode changes, so a cache keyed by the

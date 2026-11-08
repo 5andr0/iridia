@@ -10,6 +10,7 @@ use super::resources::kind_of_atomic;
 use super::setup::const_int;
 use super::{Lift, Lv};
 use crate::Result;
+use crate::shared::{WAVE_MAX, WAVE_MIN, WAVE_PRODUCT, WAVE_SUM};
 use dxil_reader::module::{Instruction, ValueId};
 
 /// DXIL's `atomicBinOp` operation codes.
@@ -314,12 +315,6 @@ impl Lift<'_> {
         self.define_result(inst.result, Lv::Scalar(old))
     }
 }
-
-/// `WaveActiveOp` codes.
-pub(crate) const WAVE_SUM: i64 = 0;
-pub(crate) const WAVE_PRODUCT: i64 = 1;
-pub(crate) const WAVE_MIN: i64 = 2;
-pub(crate) const WAVE_MAX: i64 = 3;
 
 impl Lift<'_> {
     /// A subgroup operation's result of `kind`, made before the statement that fills it.

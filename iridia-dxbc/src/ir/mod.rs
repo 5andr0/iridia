@@ -23,7 +23,7 @@ use iridia_ir::{
     interface::{InstructionCount, InstructionUnit, ShaderFormat, Stage, StageFacts, SystemValue, Varying},
 };
 
-use crate::lift::setup::{PhaseKind, Setup};
+use crate::setup::{PhaseKind, Setup};
 use crate::{Result, error};
 use dxbc_reader::decode::{Declared, Decoded, Register, decode};
 
