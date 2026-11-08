@@ -5,11 +5,10 @@
 //! the draw binds, not by the program's declaration. [`BoundSizes`] states those sizes by buffer for a lifter, which
 //! then gives the buffer's uniform array the bound size's rows (a read past the declaration but inside the bound is
 //! the buffer's, not zero) and the interface's layout the bound size.
-use std::collections::BTreeMap;
 
-use iridia_interface::ConstantBufferBinding;
+use alloc::{collections::BTreeMap, format, string::String};
 
-use crate::{Interface, ResourceId, ResourceKind};
+use super::{ConstantBufferBinding, Interface, ResourceId, ResourceKind};
 
 /// The bound size, in bytes, of the constant buffers whose binding states one; a buffer not named is bound at its
 /// declared size.

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `iridia-ir`: `BoundSizes`, the size each constant buffer is bound with (taken by `lift_with`), is `iridia_ir::interface::BoundSizes`,
+  beside `ConstantBufferBinding`; `iridia_interface` and `iridia` re-export it, so no path breaks. The IR lifts of
+  `iridia-dxbc` and `iridia-dxil` take it from there.
 - `iridia-dxil::ir` distinguishes typed scalar constants from raw constant-array data words, and refuses scalar
   constants of the wrong kind and volatile or atomic loads and stores. The damaged-input regression tests now use
   the IR lift and its diagnostics.

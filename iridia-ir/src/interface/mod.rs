@@ -27,7 +27,7 @@
 //! - What a program's code shows, as iridia's analyses read it: [`MatrixLines`] (whether a constant's lines are a
 //!   matrix's rows or its columns), [`AlphaComparison`] (what a discard compares a constant with) and [`OutputUse`]
 //!   (what tests or blends an output's lanes); and [`ConstantBufferBinding`], the size a source binds a constant buffer
-//!   with.
+//!   with, and [`BoundSizes`] of them by buffer for a lifter.
 //!
 //! # Example
 //!
@@ -60,6 +60,7 @@
 //! ```
 
 mod binding;
+mod bound;
 mod facts;
 mod resource;
 mod stage;
@@ -67,6 +68,7 @@ mod state;
 mod varying;
 
 pub use binding::{AlphaComparison, ConstantBufferBinding, MatrixLines, OutputUse, Unshown};
+pub use bound::BoundSizes;
 pub use facts::{InstructionCount, InstructionUnit};
 pub use resource::{
     Access, BufferKind, BufferLayout, Constant, ConstantType, D3dBinding, D3dClass, Majorness, Member,

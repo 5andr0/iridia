@@ -70,7 +70,6 @@ struct ReadmeExamples;
 struct RepositoryReadmeExamples;
 
 pub mod blend;
-pub mod bound;
 pub mod build;
 pub mod d3d;
 pub mod emit;
@@ -83,10 +82,9 @@ pub mod output_uses;
 mod program;
 mod reads;
 pub mod rt;
-pub use bound::BoundSizes;
 pub use iridia_interface::{
-    Access, AmplificationFacts, BufferKind, BufferLayout, Constant, ConstantType, D3dBinding, D3dClass,
-    D3dSignature, DomainFacts, GeometryFacts, GsInput, GsOutput, HitGroup, HitGroupKind, HullFacts,
+    Access, AmplificationFacts, BoundSizes, BufferKind, BufferLayout, Constant, ConstantType, D3dBinding,
+    D3dClass, D3dSignature, DomainFacts, GeometryFacts, GsInput, GsOutput, HitGroup, HitGroupKind, HullFacts,
     InstructionCount, InstructionUnit, Interface, InterpMode, InterpSampling, Interpolation, Label,
     MAX_HIT_ATTRIBUTES, MAX_RAY_PAYLOAD, MAX_TASK_PAYLOAD, Majorness, Member, MeshFacts, MeshTopology,
     Partitioning, RayTracingFacts, Resource, ResourceId, ResourceKind, ResourceProvenance, SampleType,

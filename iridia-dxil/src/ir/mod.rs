@@ -50,11 +50,11 @@ pub const LIFTER_VERSION: u32 = 3;
 /// amplification or ray tracing program (a library of one export). What the lift does not carry is an `Err` naming the
 /// bit offset and why.
 pub fn lift(container: &[u8]) -> Result<Program> {
-    lift_with(container, &iridia::BoundSizes::new())
+    lift_with(container, &iridia_ir::interface::BoundSizes::new())
 }
 
 /// [`lift`] with the constant buffers `bound` names bound at the size it states (as [`crate::lift_with`]).
-pub fn lift_with(container: &[u8], bound: &iridia::BoundSizes) -> Result<Program> {
+pub fn lift_with(container: &[u8], bound: &iridia_ir::interface::BoundSizes) -> Result<Program> {
     let chunks = dxil_reader::parts(container).map_err(read)?;
     let module = dxil_reader::module(&chunks, b"DXIL")
         .map_err(read)?

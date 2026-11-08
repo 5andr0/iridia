@@ -35,11 +35,11 @@ pub const LIFTER_VERSION: u32 = 3;
 
 /// Lift a DXBC container's program onto the IR. What the lift does not carry is an `Err` naming the word and why.
 pub fn lift(bytes: &[u8]) -> Result<Program> {
-    lift_with(bytes, &iridia::BoundSizes::new())
+    lift_with(bytes, &iridia_ir::interface::BoundSizes::new())
 }
 
 /// [`lift`] with the constant buffers `bound` names bound at the size it states (as [`crate::lift_with`]).
-pub fn lift_with(bytes: &[u8], bound: &iridia::BoundSizes) -> Result<Program> {
+pub fn lift_with(bytes: &[u8], bound: &iridia_ir::interface::BoundSizes) -> Result<Program> {
     let directory = crate::parts(bytes)?;
     let code = directory
         .iter()

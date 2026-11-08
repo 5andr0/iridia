@@ -95,7 +95,7 @@ impl core::fmt::Display for Unshown {
 /// buffer read by the size of the view the draw binds (the CBV's `SizeInBytes`), not by the shader's declaration, so a
 /// skinning palette a program declares as two matrices is bound as the hundreds the draw uploads, and a joint index past
 /// the declaration reads the palette, not zero. A lifter takes the rows of a buffer's uniform array from the bound size
-/// when it has one (`iridia::BoundSizes`).
+/// when it has one ([`super::BoundSizes`]).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct ConstantBufferBinding {
     /// A constant buffer resource of the shader.
