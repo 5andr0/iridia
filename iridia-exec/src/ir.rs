@@ -1437,7 +1437,10 @@ impl Cx<'_> {
                     },
                 )
             }
-            Node::Barrier(_) => self.statement(out, St::Barrier),
+            // Execution is lockstep and host memory sequentially consistent. A memory-only fence adds no operation
+            // or uniform-control requirement; only an execution barrier requires the active group to reach it.
+            Node::Barrier(b) if b.execution => self.statement(out, St::Barrier),
+            Node::Barrier(_) => Ok(()),
             Node::If {
                 cond,
                 accept,
