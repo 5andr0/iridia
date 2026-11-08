@@ -1,6 +1,8 @@
 //! Passes over iridia's shader IR ([`iridia_ir`]): each takes a function and gives one that means the same, in a form
 //! closer to what an output needs.
 //!
+//! - [`clip_distances_as_varyings`], [`discard_clipped`]: clip distances carried as plain varyings, and the pixel
+//!   program's discard on them.
 //! - [`break_flags`]: exits innermost-only `break` and `continue` cannot take, routed through a jump variable.
 //! - [`flatten`]: a `Regions` body made a `Cfg`, the form a graph-shaped source lifts to.
 //! - [`fold`]: values computed from literals, where every target computes them alike, made literals.
@@ -27,6 +29,7 @@
 extern crate alloc;
 
 mod break_flags;
+mod clip;
 mod flatten;
 mod fold;
 mod material;
@@ -38,6 +41,7 @@ pub mod structure;
 mod structurize;
 
 pub use break_flags::break_flags;
+pub use clip::{ClipVaryings, clip_distances_as_varyings, discard_clipped};
 pub use flatten::flatten;
 pub use fold::fold;
 pub use material::{SpecialiseError, Specialised, Words, feature_words, specialise};

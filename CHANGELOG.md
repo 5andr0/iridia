@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- `iridia-passes`: `clip_distances_as_varyings` and `discard_clipped`, the clip distances of a vertex program carried as
+  plain varyings for a pipeline whose clipper cannot take them (WebGPU without `clip-distances`), and the pixel
+  program's discard on them. Each `SV_ClipDistance` output becomes an ordinary varying of the same label and width, code
+  untouched (the program no longer needs the `ClipDistances` capability, so the browser profile writes it); the pixel
+  program gets a perspective-interpolated input for each and, before each return, a demote where any lane is below
+  zero. The two programs meet by label, so `Pipeline::feeds` links them. It is the older writer's `clip_varyings` and
+  `clip_discard` pipeline options as passes over the IR.
 - `iridia-ir`: `BindingPlan::d3d` and `BindingPlan::webgpu` place a resource that has no Direct3D register (a descriptor
   heap's, the sampler a flattened sampler heap leaves) in space 0 after the highest register of its class, in the order of
   resource ids, where they refused it; a hidden counter is still refused. Of the slim set's Shader Model 6 programs, 38

@@ -18,6 +18,7 @@ iridia-ir.workspace = true
 iridia-exec = { path = "../iridia-exec" }
 iridia-exec-ir = { path = "../iridia-exec-ir" }
 iridia-naga = { path = "../iridia-naga", default-features = false, features = ["wgsl"] }
+iridia-wgsl = { path = "../iridia-wgsl" }
 
 [lints]
 workspace = true

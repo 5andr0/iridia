@@ -474,6 +474,7 @@ dependencies = [
  "iridia-exec-ir",
  "iridia-ir",
  "iridia-naga",
+ "iridia-wgsl",
 ]
 
 [[package]]
