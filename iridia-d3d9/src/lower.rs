@@ -667,7 +667,14 @@ impl Lower<'_> {
                     }
                     Rsq => self.b.math(Mf::InverseSqrt, &[x]),
                     Exp => self.b.math(Mf::Exp2, &[x]),
-                    Log => self.b.math(Mf::Log2, &[x]),
+                    Log => {
+                        // a zero source gives -FLT_MAX, as the instruction reference's code fragment states
+                        let log = self.b.math(Mf::Log2, &[x]);
+                        let zero = self.b.lit_f(0.0);
+                        let empty = self.b.binary(Bo::Equal, x, zero);
+                        let least = self.b.lit_f(-f32::MAX);
+                        self.b.select(empty, least, log)
+                    }
                     _ => {
                         let y = self.b.lane(arg(1)?, 0);
                         self.b.math(Mf::Pow, &[x, y])

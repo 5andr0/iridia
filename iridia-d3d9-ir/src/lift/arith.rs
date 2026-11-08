@@ -177,8 +177,15 @@ impl Lift<'_> {
                     }
                     Rsq => self.unary(Unary::FInverseSqrt, x)?,
                     Exp => self.unary(Unary::FExp2, x)?,
-                    // logp is log at partial precision in every lane, as DXVK computes it for every version
-                    Log | LogP => self.unary(Unary::FLog2, x)?,
+                    // logp is log at partial precision in every lane, as DXVK computes it for every version; a zero
+                    // source gives -FLT_MAX in every version, as the instruction reference's code fragments state
+                    Log | LogP => {
+                        let log = self.unary(Unary::FLog2, x)?;
+                        let zero = self.b.f32(0.0);
+                        let empty = self.binary(Binary::FCmp(Compare::Eq), x, zero)?;
+                        let least = self.b.f32(-f32::MAX);
+                        self.select(empty, least, log)?
+                    }
                     _ => {
                         let y = self.lane(arg(1)?, 0)?;
                         self.binary(Binary::FPow, x, y)?

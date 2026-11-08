@@ -1,6 +1,7 @@
 ; vs_1_1 expp, its exact lanes (2^floor(x), the fraction, and 1), and logp, log2(|x|) in every lane (as wined3d
 ; computes the shader model 1 macros)
 ; run: c0=2.5,-8,0,0 -> TEXCOORD0=4,0.5 TEXCOORD1=1 TEXCOORD2=3,3 TEXCOORD3=3
+; run: c0=2.5,0,0,0 -> TEXCOORD0=4,0.5 TEXCOORD1=1 TEXCOORD2=0xff7fffff,0xff7fffff TEXCOORD3=0xff7fffff
 vs_1_1
 dcl_position v0
 mov oPos, v0

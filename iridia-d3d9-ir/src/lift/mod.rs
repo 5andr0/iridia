@@ -31,7 +31,7 @@ use crate::{
 pub const LIFTER: &str = "iridia-d3d9-ir";
 
 /// Increment when the same tokens lift differently.
-pub const LIFTER_VERSION: u32 = 4;
+pub const LIFTER_VERSION: u32 = 5;
 
 /// The compatibility policies every program states, beside its multiply rule.
 const POLICIES: [&str; 2] = ["d3d9.min_max_nan=min_num", "d3d9.saturate_nan=zero"];

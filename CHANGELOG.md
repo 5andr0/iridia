@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `iridia-d3d9-ir`: `log` and `logp` of a zero source give -FLT_MAX and `texdepth` with `r5.g` zero gives 1.0, as Microsoft's
+  instruction reference states (`LIFTER_VERSION` 5, twelve fixtures change); the crate documentation tables what the lift
+  does at every operation's documented special inputs and why. `iridia-d3d9`, the older lift, gives `log` of zero the same
+  value. The WGSL of both writers is run on WARP in the crate's gate, vkd3d and assembled tests.
 - `iridia-d3d9-ir`: `frame` and `sampler_states`, the two functions of `iridia-d3d9` that read bytes and states rather than
   lift them, with the same behaviour and tests (`frame` returns `iridia_ir::interface::Stage`; errors are this crate's `Error`).
   `iridia-d3d9` keeps its own until it is removed.

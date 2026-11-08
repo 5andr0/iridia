@@ -2,7 +2,7 @@
 
 Reads raw Direct3D 9 shader token streams of every model from `vs_1_1` and `ps_1_1` to `vs_3_0` and `ps_3_0`, and their CTAB constant table, and lifts them into [iridia's shader IR](../iridia-ir).
 
-Part of [iridia](https://github.com/Kalmarv/iridia), which turns compiled shaders into programs other tools can read and write. It began as the shader model 3 reader of [`iridia-d3d9`](../iridia-d3d9) moved onto the IR, and gives the same interface for every program that crate reads; it now reads shader models 1 and 2 and the control flow of 2.x and 3.0 as well. The design is [`docs/design/ir.md`](../docs/design/ir.md). The input is the token stream a Direct3D 9 compiler writes, version token to `END`, with no container. This crate does no I/O.
+Part of [iridia](https://github.com/Kalmarv/iridia), which turns compiled shaders into programs other tools can read and write. It began as the shader model 3 reader of [`iridia-d3d9`](../iridia-d3d9) moved onto the IR, and gives the same interface for every program that crate reads; it now reads shader models 1 and 2 and the control flow of 2.x and 3.0 as well. The design is [`docs/design/ir.md`](../docs/design/ir.md). What the lift gives at the inputs Microsoft's instruction reference states a value for (`log` of zero, `texdepth` with `r5.g` zero) or leaves open (`rcp` and `rsq` of zero, `pow` of a zero base, `min` and `max` of a NaN), and why, is in the crate documentation's section on special inputs. The input is the token stream a Direct3D 9 compiler writes, version token to `END`, with no container. This crate does no I/O.
 
 ## What it reads
 

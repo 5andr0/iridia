@@ -11,7 +11,7 @@
 //!
 //! One case is not held to WARP: `pow` of a zero base and an exponent of 0 or less. Microsoft's `pow` page states no value
 //! for it (the documented expansion `exp(y * log(x))` with `log(0)` = -FLT_MAX gives libm's, which is the IR's), `FPow` in
-//! the IR is undefined there, and so is WGSL's `pow`; the lift leaves the zero base undefined, as both do. A target compiles
+//! the IR is undefined there, and so is WGSL's `pow`; the lift leaves the zero base undefined, as both do (the crate documentation's special inputs section). A target compiles
 //! it as it likes: `pow(0, -0.0)` is 1 in `iridia-exec-ir` and NaN on WARP (the compilers' `exp2(y * log2(x))`). A program
 //! with a lane beyond tolerance whose WGSL has `pow` is therefore run again with `pow` replaced by
 //! [`wgsl_run::substitute_pow`]'s (WGSL's everywhere but at that case, which tests/pow_helper.rs holds it to), and when

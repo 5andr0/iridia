@@ -40,14 +40,18 @@ impl Lift<'_> {
             }
             TexCoord if !early => self.source(i.source(0)?, d.mask)?,
             TexDepth => {
-                // depth = r5.r / r5.g, r5.g at most 1 (wined3d's hardware tests: -0.25 / -0.5 gives 0.5, and a g past
-                // 1 is taken as 1); the depth is then within 0..1 as every depth output is, by the pipeline
+                // depth = r5.r / r5.g, and 1 where r5.g is 0 (the instruction reference); r5.g at most 1 (wined3d's
+                // hardware tests: -0.25 / -0.5 gives 0.5, and a g past 1 is taken as 1); the depth is then within 0..1
+                // as every depth output is, by the pipeline
                 let r = self.register(d.register, 3)?;
                 let x = self.lane(r, 0)?;
                 let y = self.lane(r, 1)?;
+                let zero = self.b.f32(0.0);
                 let one = self.b.f32(1.0);
+                let none = self.binary(Binary::FCmp(Compare::Eq), y, zero)?;
                 let y = self.binary(Binary::FMin(MinMaxNan::MinNum), y, one)?;
-                let depth = self.binary(Binary::FDiv, x, y)?;
+                let ratio = self.binary(Binary::FDiv, x, y)?;
+                let depth = self.select(none, one, ratio)?;
                 return self.depth(i, depth).map(|()| true);
             }
             Tex | TexCoord | TexBem | TexBemL | TexReg2Ar | TexReg2Gb | TexReg2Rgb | TexM3x2Pad
