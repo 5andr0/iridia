@@ -426,10 +426,7 @@ impl Lower<'_> {
                 })
             }
             // the node lowers one whose old value nothing reads ([`Lower::image_atomic`])
-            Memory::Image(..) => Err(err(
-                "a texel atomic whose old value is read, or a compare-exchange of a texel, has no naga form: naga's \
-                 image atomic gives no old value and takes no comparand",
-            )),
+            Memory::Image(..) => Err(err(super::checks::IMAGE_ATOMIC_RESULT)),
             Memory::Var(var, index) => {
                 let scalar = *self
                     .atomics

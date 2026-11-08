@@ -3,6 +3,7 @@
 //! Buffers, workgroup memory, atomics and barriers are in `memory`; samples, texel loads and stores and image queries in
 //! `image`.
 
+mod checks;
 mod image;
 mod memory;
 mod rayquery;
@@ -2395,17 +2396,21 @@ pub fn module(program: &Program, plan: &BindingPlan) -> Result<naga::Module, Err
         ));
     }
     let io = entry_io(&program.interface).map_err(err)?;
+    let read = read_values(f, body);
+    let atomics = Atomics::of(f)?;
+    let counted = memory::counted(f);
+    checks::program(program, plan, body, &read, &atomics, &counted, &io)?;
     let mut l = Lower {
         program,
         f,
         module: naga::Module::default(),
         func: naga::Function::default(),
         values: vec![None; f.values.len()],
-        read: read_values(f, body),
+        read,
         globals: Vec::new(),
         arguments: vec![None; program.interface.inputs.len()],
         vars: Vec::new(),
-        atomics: Atomics::of(f)?,
+        atomics,
         counters: Vec::new(),
         sample_positions: None,
         blocks: vec![(Block::new(), None)],
@@ -2594,7 +2599,7 @@ pub fn module(program: &Program, plan: &BindingPlan) -> Result<naga::Module, Err
         l.globals.push((r.id, g));
     }
     // the hidden counter of each view whose counter the program changes, where the plan binds it
-    for id in memory::counted(f) {
+    for id in counted {
         let bind = plan.counters.iter().find(|b| b.resource == id).ok_or_else(|| {
             err(format!(
                 "the counter of resource {} has no binding in the plan",

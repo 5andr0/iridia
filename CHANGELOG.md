@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `iridia-naga`: check unsupported operations, resource and variable shapes, and structured exits before allocating
+  the lowering arena. Named limitations return without expanding the preceding operations; successful output is
+  unchanged. Unused value-table entries are not treated as placed operations.
 - `iridia-passes`: remove unused construct results, loop parameters and their incoming arguments by a dependency
   worklist, including dead transfer cycles. Exit routing demotes only live slots and prunes again after promotion,
   avoiding large networks of temporary copies in both WGSL writers.

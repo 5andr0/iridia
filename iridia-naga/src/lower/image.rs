@@ -239,27 +239,7 @@ impl Lower<'_> {
         // not at a bias or at derivatives, and takes no offset with a level; a depth texture is sampled at none it
         // biases or at a whole level only
         let depth = shape.sample == SampleType::Depth;
-        match (shape.dim, level) {
-            (TextureDim::D1, Level::Auto) => {}
-            (TextureDim::D1, Level::Zero | Level::Exact(_)) if offset.is_none() && depth_ref.is_none() => {}
-            (TextureDim::D1, other) => {
-                let at = match other {
-                    Level::Zero | Level::Exact(_) => "an explicit level with an offset or a comparison",
-                    Level::Bias(_) => "a biased level",
-                    Level::Grad(..) | Level::Auto => "explicit derivatives",
-                };
-                return Err(err(format!("a sample of a 1D texture at {at} has no WGSL form")));
-            }
-            (_, Level::Bias(_)) if depth => {
-                return Err(err("a biased sample of a depth texture has no WGSL form"));
-            }
-            (_, Level::Grad(..)) if depth && depth_ref.is_some() => {
-                return Err(err(
-                    "a comparison sample at explicit derivatives has no WGSL form",
-                ));
-            }
-            _ => {}
-        }
+        super::checks::sample_level(shape.dim, depth, level, offset.is_some(), depth_ref.is_some())?;
         let level = match (level, depth_ref.is_some()) {
             (Level::Auto, _) => SampleLevel::Auto,
             (Level::Zero, _) => SampleLevel::Zero,

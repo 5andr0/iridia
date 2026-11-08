@@ -77,6 +77,45 @@ fn program(
 const F4: (ScalarType, u8) = (ScalarType::Float, 4);
 
 #[test]
+fn target_checks_visit_placed_operations_and_not_unused_value_table_entries() {
+    let mut p = program(
+        "iridia-ir 1
+fn main {
+  %0: f32 = input 0.x
+  output 0.x = %0
+  return
+}
+",
+        &[F4],
+        &[F4],
+        Vec::new(),
+    );
+    let profile = iridia_naga::Profile::NAGA;
+    let original = iridia_naga::wgsl(&p, &profile).unwrap();
+    let v = iridia_ir::ValueId(u32::try_from(p.entry.values.len()).unwrap());
+    p.entry.values.push(iridia_ir::ValueDef {
+        ty: iridia_ir::Type {
+            scalar: iridia_ir::Scalar::F16,
+            lanes: 1,
+        },
+        op: iridia_ir::Op::Literal([0; 4]),
+        origin: None,
+        precision: iridia_ir::Precision::Full,
+    });
+    iridia_ir::validate(&p).unwrap();
+    assert_eq!(iridia_naga::wgsl(&p, &profile).unwrap(), original);
+    let iridia_ir::Body::Regions(body) = &mut p.entry.body else {
+        panic!("expected regions")
+    };
+    body.nodes.push(iridia_ir::Node::Value(v));
+    iridia_ir::validate(&p).unwrap();
+    assert_eq!(
+        iridia_naga::wgsl(&p, &profile).unwrap_err().0,
+        "f16 literals are not lowered yet"
+    );
+}
+
+#[test]
 fn masked_loads_and_stores_lower_to_swizzles_and_merges() {
     let p = program(
         "iridia-ir 1
@@ -538,6 +577,12 @@ fn main {
     );
     assert!(wgsl.contains("u0_counter[TEXCOORD0_]"), "{wgsl}");
     iridia_naga::validate(&module, &iridia_naga::Profile::NAGA).unwrap();
+    let mut plan = iridia_naga::BindingPlan::d3d(&p.interface).unwrap();
+    plan.counters.clear();
+    assert_eq!(
+        iridia_naga::module(&p, &plan).unwrap_err().0,
+        "the counter of resource 0 has no binding in the plan"
+    );
 }
 
 /// A storage image of `u32` or `i32` texels at register `u0`.
