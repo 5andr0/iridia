@@ -551,6 +551,28 @@ fn main {
 }
 
 #[test]
+fn a_64_bit_value_split_into_words_masks_with_a_literal_naga_reads() {
+    // the low word of a 64-bit lane is its bits under a 64-bit mask; WGSL's suffix for a 64-bit unsigned literal is
+    // lowercase (naga's reader refuses `LU`)
+    let p = program(
+        "iridia-ir 1
+fn main {
+  %0: f32 = input 0.x
+  %1: f64 = convert.undef %0
+  %2: vec2<u32> = bitcast %1
+  output 0.xy = %2
+  return
+}
+",
+        &[(ScalarType::Float, 1)],
+        &[(ScalarType::Uint, 2)],
+        Vec::new(),
+    );
+    let wgsl = written(&p, &Profile::NAGA);
+    assert!(wgsl.contains("& 0xfffffffflu)"), "{wgsl}");
+}
+
+#[test]
 fn the_largest_float_is_written_as_its_bits() {
     let p = program(
         "iridia-ir 1

@@ -668,7 +668,7 @@ impl Writer<'_> {
                 let u = from.with(Scalar::U64);
                 for k in 0..from.lanes {
                     let w = self.lane(&words, u, k)?;
-                    for half in [format!("u32({w} & 0xffffffffLU)"), format!("u32({w} >> 32u)")] {
+                    for half in [format!("u32({w} & 0xfffffffflu)"), format!("u32({w} >> 32u)")] {
                         parts.push(format!("bitcast<{}>({half})", text::scalar(to.scalar)?));
                     }
                 }
