@@ -1024,7 +1024,7 @@
 31fd05bc2d67e4b268657e39cbb420809e916fa88dade3d8dc1a06375e40feeb	IR WGSL	not reached
 32057c5b18ffa24adb5198926a7aaea2ef3176e36aa75f36dfece22eadbec2cb	A	lift: N-bit lanes of a raw or structured buffer are not lifted
 322e7a19a4b455935781fa78f953e79986186472bdc20fde172e4411e8ccc024	A	WGSL read back: error: no definition in scope for identifier: `texture_depth_Nd`    ┌─ wgsl:N:N    │ N │ var tN_: texture_depth_Nd;    │          ^^^^^^^^^^^^^^^^ unknown identifier  
-322e7a19a4b455935781fa78f953e79986186472bdc20fde172e4411e8ccc024	IR WGSL	lower: a sample of a ND texture at an explicit level has no WGSL form
+322e7a19a4b455935781fa78f953e79986186472bdc20fde172e4411e8ccc024	IR WGSL	lower: a sample of a ND texture at an explicit level with an offset or a comparison has no WGSL form
 325d1e5575d7362afcf655e25ab0757c8ddcc2b57e0e7d4eaa0454145dfb4418	A	lift: memory of type Half
 328ad64c061f424d949548516e2009afd1b18316e01d21a75a50c361d9486a46	A	lift: a constant of N bits is not mapped
 328ad64c061f424d949548516e2009afd1b18316e01d21a75a50c361d9486a46	IR	lift: a constant of N bits is not mapped

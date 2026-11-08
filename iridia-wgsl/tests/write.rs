@@ -742,6 +742,80 @@ const F2D: ResourceKind = ResourceKind::Texture {
     sample: SampleType::Float,
 };
 
+/// A pixel program that samples the 1D texture at `r0` through the sampler at `r1`, at the coordinate x of its input,
+/// `tail` being the sample's keywords (the level, the offset).
+fn sampled_1d(tail: &str) -> Program {
+    program(
+        &format!(
+            "iridia-ir 1
+fn main {{
+  %0: vec4<f32> = input 0.xyzw
+  %1: f32 = %0.x
+  %2: f32 = %0.y
+  %3: vec4<f32> = sample r0, r1, %1 {tail}
+  output 0.xyzw = %3
+  return
+}}
+"
+        ),
+        &[F4],
+        &[F4],
+        vec![
+            bound(
+                0,
+                ResourceKind::Texture {
+                    dim: TextureDim::D1,
+                    arrayed: false,
+                    multisampled: false,
+                    sample: SampleType::Float,
+                },
+                1,
+                "tex",
+                D3dClass::ShaderResource,
+            ),
+            bound(
+                1,
+                ResourceKind::Sampler { comparison: false },
+                1,
+                "smp",
+                D3dClass::Sampler,
+            ),
+        ],
+    )
+}
+
+#[test]
+fn a_1d_texture_is_sampled_at_a_level_the_program_states() {
+    // WGSL has textureSampleLevel for texture_1d: at level zero and at a level the program computes
+    for (tail, call) in [
+        ("", "textureSample(t0, s0, "),
+        ("level 0", "textureSampleLevel(t0, s0, v1, 0.0f)"),
+        ("level %2", "textureSampleLevel(t0, s0, v1, v2)"),
+    ] {
+        let wgsl = written(&sampled_1d(tail), &Profile::NAGA);
+        assert!(wgsl.contains(call), "{tail}\n{wgsl}");
+        // and a browser's reader takes the same
+        written(&sampled_1d(tail), &Profile::BROWSER);
+    }
+}
+
+#[test]
+fn a_1d_texture_is_not_sampled_at_a_bias_derivatives_or_an_offset_with_a_level() {
+    for (tail, at) in [
+        ("bias %2", "a biased level"),
+        ("grad %2, %2", "explicit derivatives"),
+        (
+            "level 0 offset (1,0,0)",
+            "an explicit level with an offset or a comparison",
+        ),
+    ] {
+        let e = iridia_wgsl::wgsl(&sampled_1d(tail), &Profile::NAGA)
+            .unwrap_err()
+            .0;
+        assert_eq!(e, format!("a sample of a 1D texture at {at} has no WGSL form"));
+    }
+}
+
 #[test]
 fn arrays_of_resources_are_binding_arrays_of_naga_s_dialect() {
     let p = program(

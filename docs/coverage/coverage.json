@@ -9011,8 +9011,8 @@
         "refused": 10
       },
       "wgsl": {
-        "ok": 172,
-        "failed": 139
+        "ok": 175,
+        "failed": 136
       },
       "executed": {
         "pass": 144,
@@ -9420,8 +9420,8 @@
         "refused": 297
       },
       "wgsl": {
-        "ok": 2707,
-        "failed": 586
+        "ok": 2710,
+        "failed": 583
       },
       "executed": {
         "pass": 2319,
@@ -10924,8 +10924,8 @@
         "refused": 130
       },
       "wgsl": {
-        "ok": 683,
-        "failed": 251
+        "ok": 685,
+        "failed": 249
       },
       "executed": {
         "pass": 591,
@@ -13244,8 +13244,8 @@
         "refused": 0
       },
       "wgsl": {
-        "ok": 15,
-        "failed": 7
+        "ok": 18,
+        "failed": 4
       },
       "executed": {
         "pass": 19,
@@ -13372,8 +13372,8 @@
         "refused": 284
       },
       "wgsl": {
-        "ok": 4182,
-        "failed": 399
+        "ok": 4184,
+        "failed": 397
       },
       "executed": {
         "pass": 3542,
@@ -18867,8 +18867,8 @@
         "refused": 165
       },
       "wgsl": {
-        "ok": 616,
-        "failed": 453
+        "ok": 617,
+        "failed": 452
       },
       "executed": {
         "pass": 705,
@@ -19059,8 +19059,8 @@
         "refused": 370
       },
       "wgsl": {
-        "ok": 4030,
-        "failed": 250
+        "ok": 4032,
+        "failed": 248
       },
       "executed": {
         "pass": 3274,

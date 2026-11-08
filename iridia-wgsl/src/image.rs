@@ -208,14 +208,16 @@ impl Writer<'_> {
             Some(c) => Some(self.get(c)?),
             None => None,
         };
-        // WGSL samples a 1D texture at the derivatives' level only, and a depth texture at none it biases or at a whole
-        // level only
+        // WGSL samples a 1D texture at the derivatives' level or at a level it states (the sample at level zero, too),
+        // not at a bias or at derivatives, and takes no offset with a level; a depth texture is sampled at none it
+        // biases or at a whole level only
         let depth = shape.sample == SampleType::Depth;
         match (shape.dim, level) {
             (TextureDim::D1, Level::Auto) => {}
+            (TextureDim::D1, Level::Zero | Level::Exact(_)) if offset.is_none() && depth_ref.is_none() => {}
             (TextureDim::D1, other) => {
                 let at = match other {
-                    Level::Zero | Level::Exact(_) => "an explicit level",
+                    Level::Zero | Level::Exact(_) => "an explicit level with an offset or a comparison",
                     Level::Bias(_) => "a biased level",
                     Level::Grad(..) | Level::Auto => "explicit derivatives",
                 };

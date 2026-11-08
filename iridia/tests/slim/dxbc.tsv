@@ -91,7 +91,6 @@
 12329703201fd45a13fded3a757664df3e7441ef28da475b9950c9b2599e8081	A	lift: bufinfo: opcode N is not lifted
 12329703201fd45a13fded3a757664df3e7441ef28da475b9950c9b2599e8081	IR	lift: bufinfo: opcode N is not lifted to the IR yet
 12329703201fd45a13fded3a757664df3e7441ef28da475b9950c9b2599e8081	IR WGSL	not reached
-126587cab5ed42b51de40edf09496719d5cc38af404b944c54b41960a22b5474	IR WGSL	lower: a sample of a ND texture at an explicit level has no WGSL form
 12f605bc5a7701985fcacc404b0c943c79e14e9ee116431be1d530a75d38f368	A	lift: reflection: DXBC at word N: g_VertexBuffer: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 12f605bc5a7701985fcacc404b0c943c79e14e9ee116431be1d530a75d38f368	IR	lift: reflection: DXBC at word N: g_VertexBuffer: DND_SIT_UAV_RWSTRUCTURED_WITH_COUNTER (N) is not mapped
 12f605bc5a7701985fcacc404b0c943c79e14e9ee116431be1d530a75d38f368	IR WGSL	not reached
@@ -175,7 +174,7 @@
 2203f0a14a2467f73ea314a89cb65bc112806d4a3022b462ce9a90d9acb5684f	IR	lift: abort: opcode N is not lifted to the IR yet
 2203f0a14a2467f73ea314a89cb65bc112806d4a3022b462ce9a90d9acb5684f	IR WGSL	not reached
 2327a30fb3604d8b390266600e511958122af024377b165466bbb39283fe77e8	IR WGSL	lower: a Hull program is not lowered yet
-235dbf6197891a0521ec193aad99cb97157665e91adf598b3030dcfe692b0931	IR WGSL	lower: a sample of a ND texture at an explicit level has no WGSL form
+235dbf6197891a0521ec193aad99cb97157665e91adf598b3030dcfe692b0931	IR WGSL	lower: a sample of a ND texture at an explicit level with an offset or a comparison has no WGSL form
 23aee0131baea038584dfc740b47e45109147118387163b4e2b9c232fe737aed	A	lift: ld_feedback: opcode N is not lifted
 23aee0131baea038584dfc740b47e45109147118387163b4e2b9c232fe737aed	IR	lift: ld_feedback: opcode N is not lifted to the IR yet
 23aee0131baea038584dfc740b47e45109147118387163b4e2b9c232fe737aed	IR WGSL	not reached
