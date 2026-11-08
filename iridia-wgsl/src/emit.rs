@@ -87,6 +87,8 @@ pub(crate) struct Writer<'a> {
     pub outputs: Vec<Option<String>>,
     /// Structure declarations the module needs besides the result's.
     pub decls: Vec<String>,
+    /// The function's ray queries as the text declares them.
+    pub queries: Vec<crate::rayquery::QueryVars>,
 }
 
 impl Writer<'_> {

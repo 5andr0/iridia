@@ -39,7 +39,8 @@ pub enum Capability {
     BindingArrayNonUniform(ArrayClass),
     /// An atomic operation on a storage image's texel (naga's image atomics; WGSL has none).
     TextureAtomic,
-    /// Inline ray queries, including acceleration structures (WGSL has none).
+    /// Inline ray queries, including acceleration structures (wgpu's WGSL has them behind `enable wgpu_ray_query;`, a
+    /// browser's has none).
     RayQuery,
 }
 

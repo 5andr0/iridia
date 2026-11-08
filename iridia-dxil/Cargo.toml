@@ -25,8 +25,10 @@ iridia-exec = { path = "../iridia-exec" }
 # tests/semantics.rs: what the naga lowering refuses (texture atomic results)
 iridia-naga = { path = "../iridia-naga", default-features = false, features = ["wgsl"] }
 iridia-passes = { path = "../iridia-passes" }
-# tests/exec_warp_rq.rs: stock naga writes a lowered module as HLSL (the writer wgpu runs on Direct3D 12)
-naga-hlsl = { package = "naga", version = "=30.0.1", default-features = false, features = ["hlsl-out"] }
+# tests/exec_warp_rq.rs: stock naga writes a lowered module, or iridia-wgsl's WGSL read back, as HLSL (the writer wgpu runs on
+# Direct3D 12)
+iridia-wgsl = { path = "../iridia-wgsl" }
+naga-hlsl = { package = "naga", version = "=30.0.1", default-features = false, features = ["hlsl-out", "wgsl-in"] }
 primase-testdata.workspace = true
 serde_json.workspace = true
 

@@ -380,6 +380,7 @@ dependencies = [
  "iridia-ir",
  "iridia-naga",
  "iridia-passes",
+ "iridia-wgsl",
  "naga",
  "primase-naga",
  "primase-testdata",

@@ -186,7 +186,10 @@ const RESERVED: &[&str] = &[
 
 /// WGSL's predeclared functions, types and enumerants, sorted.
 const PREDECLARED: &[&str] = &[
+    "RayDesc",
+    "RayIntersection",
     "abs",
+    "acceleration_structure",
     "acos",
     "acosh",
     "all",
@@ -236,6 +239,8 @@ const PREDECLARED: &[&str] = &[
     "fwidth",
     "fwidthCoarse",
     "fwidthFine",
+    "getCandidateHitVertexPositions",
+    "getCommittedHitVertexPositions",
     "i32",
     "insertBits",
     "inverseSqrt",
@@ -252,6 +257,7 @@ const PREDECLARED: &[&str] = &[
     "ptr",
     "quantizeToF16",
     "radians",
+    "ray_query",
     "read",
     "read_write",
     "reflect",
@@ -286,7 +292,7 @@ const PREDECLARED: &[&str] = &[
 /// `atomicAdd`, `quadSwapX`, `r32uint`) and of the names the writer makes itself.
 const PREFIXES: &[&str] = &[
     "vec", "mat", "texture", "subgroup", "quad", "pack", "unpack", "atomic", "dot4", "rgba", "rgb", "rg",
-    "r8", "r16", "r32", "bgra", "iridia_", "__",
+    "r8", "r16", "r32", "bgra", "iridia_", "__", "rayQuery", "RAY_",
 ];
 
 /// Whether `name` is of the shape of a name the writer makes: a value `v3`, a temporary `x7`, a parameter's storage `p2`.

@@ -116,6 +116,7 @@ impl Profile {
             Capability::BindingArrayNonUniform(ArrayClass::Buffers),
             Capability::BindingArrayNonUniform(ArrayClass::StorageImages),
             Capability::TextureAtomic,
+            Capability::RayQuery,
         ]),
         bindings: Bindings::D3d,
         directives: Directives::Naga,
@@ -153,10 +154,17 @@ pub fn needs(program: &Program) -> Vec<Requirement> {
 
 /// Refuse `program` if it needs a capability `profile` does not allow, naming the first such feature.
 pub fn preflight(program: &Program, profile: &Profile) -> Result<(), Error> {
-    if !program.entry.queries.is_empty() {
-        return Err(Error("WGSL has no ray queries".into()));
+    let needs = requirements(program);
+    // wgpu's `wgpu_ray_query` extension is native only: a browser's WGSL, whatever it is allowed, has no ray queries
+    if profile.directives == Directives::Standard
+        && let Some(r) = needs.iter().find(|r| r.capability == Capability::RayQuery)
+    {
+        return Err(Error(format!(
+            "{} has no ray queries: {} (capability {:?})",
+            profile.name, r.feature, r.capability
+        )));
     }
-    match requirements(program)
+    match needs
         .into_iter()
         .find(|r| !profile.capabilities.contains(r.capability))
     {

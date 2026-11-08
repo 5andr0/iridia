@@ -91,11 +91,12 @@ fn write(
     info: &naga::valid::ModuleInfo,
     profile: &Profile,
 ) -> Result<String, Error> {
-    // WGSL has no ray queries (naga's writer has none either: it meets one as a statement it cannot reach), so the
-    // validated module is as far as a program with one goes
+    // naga's WGSL writer has no ray queries (naga 30 meets one as a statement it cannot reach), so the validated module
+    // is as far as a program with one goes here; iridia-wgsl writes them, for wgpu's `wgpu_ray_query` extension
     if !program.entry.queries.is_empty() {
         return Err(Error(
-            "WGSL has no ray queries: the program's are in its naga module, which no WGSL writes".into(),
+            "naga's WGSL writer has no ray queries: iridia-wgsl writes them (the program's are in its naga module, which naga's other writers take)"
+                .into(),
         ));
     }
     let text = naga::back::wgsl::write_string(module, info, naga::back::wgsl::WriterFlags::empty())

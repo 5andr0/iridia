@@ -79,26 +79,248 @@ fn program(
 
 const F4: (ScalarType, u8) = (ScalarType::Float, 4);
 
-#[test]
-fn ray_queries_are_a_shared_requirement_and_wgsl_refuses_them() {
-    let p = program(
-        "iridia-ir 1\nfn main {\n  query q0 flags 0x0\n  return\n}\n",
-        &[],
-        &[],
-        vec![],
+/// The acceleration structure at `t0`, and a pixel program that starts a ray query of it (`rayquery init`) and runs `body`
+/// after it, then returns.
+fn ray_query_program(body: &str, outputs: &[(ScalarType, u8)]) -> Program {
+    let text = format!(
+        "iridia-ir 1
+fn main {{
+  query q0 flags 0x20
+  %0: u32 = u32(2)
+  %1: u32 = u32(255)
+  %2: vec3<f32> = vec3<f32>(0x0, 0x0, 0x0)
+  %3: f32 = f32(0x0)
+  %4: vec3<f32> = vec3<f32>(0x0, 0x0, 0x3f800000)
+  %5: f32 = f32(0x447a0000)
+  rayquery init q0 r0 flags %0 mask %1 origin %2 tmin %3 direction %4 tmax %5
+{body}  return
+}}
+"
     );
+    ray_query_text(&text, outputs)
+}
+
+/// A pixel program of IR text over the acceleration structure at `t0`.
+fn ray_query_text(text: &str, outputs: &[(ScalarType, u8)]) -> Program {
+    let scene = Resource {
+        id: ResourceId(0),
+        kind: ResourceKind::AccelerationStructure,
+        count: 1,
+        provenance: ResourceProvenance {
+            name: "scene".into(),
+            d3d: Some(D3dBinding {
+                class: D3dClass::ShaderResource,
+                register: 0,
+                space: 0,
+            }),
+            ..ResourceProvenance::default()
+        },
+    };
+    program(text, &[], outputs, vec![scene])
+}
+
+#[test]
+fn ray_queries_are_a_shared_requirement_a_browser_refuses_by_name() {
+    let p = ray_query_program("  output 0.x = %0\n", &[(ScalarType::Uint, 1)]);
     let needs: Vec<_> = iridia_wgsl::needs(&p).into_iter().map(|r| r.capability).collect();
     assert_eq!(needs, [Capability::RayQuery]);
+    // a browser has none, whatever it is allowed
     for profile in [
         Profile::BROWSER,
-        Profile::NAGA,
-        Profile::NAGA.with(Capabilities::of(&[Capability::RayQuery])),
+        Profile::BROWSER.with(Capabilities::of(&[Capability::RayQuery])),
     ] {
-        assert_eq!(
-            iridia_wgsl::wgsl(&p, &profile).unwrap_err().0,
-            "WGSL has no ray queries"
+        let e = iridia_wgsl::wgsl(&p, &profile).unwrap_err().0;
+        assert!(
+            e.starts_with("browser WGSL has no ray queries: ") && e.contains("ray query q0"),
+            "{e}"
         );
     }
+    // wgpu's extension has them
+    let wgsl = written(&p, &Profile::NAGA);
+    assert!(wgsl.starts_with("enable wgpu_ray_query;"), "{wgsl}");
+}
+
+#[test]
+fn a_ray_query_is_the_extension_s_calls_and_naga_reads_them_back() {
+    // the status, the candidate's kind, a committed hit's integer fields, and the ray's flags
+    let p = ray_query_program(
+        "  %6: bool = rayquery.proceed q0
+  %7: u32 = rayquery.state q0 committed.status
+  %8: u32 = rayquery.state q0 candidate.type
+  %9: u32 = rayquery.state q0 committed.instanceid
+  %10: u32 = rayquery.state q0 committed.contribution
+  %11: u32 = rayquery.state q0 ray.flags
+  %12: u32 = rayquery.state q0 candidate.primitive
+  rayquery commit q0
+  output 0.x = %7
+  output 0.y = %8
+  output 0.z = %9
+  output 0.w = %10
+  output 1.x = %11
+  output 1.y = %12
+",
+        &[(ScalarType::Uint, 4), (ScalarType::Uint, 2)],
+    );
+    let wgsl = written(&p, &Profile::NAGA);
+    for line in [
+        "enable wgpu_ray_query;",
+        "@group(1) @binding(0) var t0: acceleration_structure;",
+        "var rquery: ray_query;",
+        // the query's declared flags join the ray's, and the ray is kept for the read of its flags
+        "rquery_flags = (v0 | 32u);",
+        "rayQueryInitialize(&rquery, t0, RayDesc((v0 | 32u), v1, v3, v5, v2, v4));",
+        "let v6 = rayQueryProceed(&rquery);",
+        "let v7 = rayQueryGetCommittedIntersection(&rquery).kind;",
+        // a candidate's kind is 1 for a triangle and 3 for a procedural primitive, where the IR says 0 and 1
+        "let v8 = select(1u, 0u, (rayQueryGetCandidateIntersection(&rquery).kind == 1u));",
+        "let v9 = rayQueryGetCommittedIntersection(&rquery).instance_custom_data;",
+        "let v10 = rayQueryGetCommittedIntersection(&rquery).sbt_record_offset;",
+        "let v11 = rquery_flags;",
+        "let v12 = rayQueryGetCandidateIntersection(&rquery).primitive_index;",
+        "rayQueryConfirmIntersection(&rquery);",
+    ] {
+        assert!(wgsl.contains(line), "{line}\n{wgsl}");
+    }
+}
+
+#[test]
+fn a_hit_s_floats_booleans_and_matrices_are_the_intersection_s() {
+    let p = ray_query_program(
+        "  %6: bool = rayquery.proceed q0
+  %7: f32 = rayquery.state q0 committed.t
+  %8: f32 = rayquery.state q0 candidate.barycentrics.y
+  %9: f32 = rayquery.state q0 committed.objecttoworld.r1c3
+  %10: f32 = rayquery.state q0 candidate.worldtoobject.r2c0
+  %11: f32 = rayquery.state q0 committed.objectorigin.y
+  %12: f32 = rayquery.state q0 candidate.objectdirection.z
+  %13: bool = rayquery.state q0 committed.frontface
+  %14: f32 = rayquery.state q0 ray.origin.z
+  %15: f32 = rayquery.state q0 ray.tmin
+  %16: f32 = select %13, %7, %8
+  output 0.x = %7
+  output 0.y = %8
+  output 0.z = %9
+  output 0.w = %10
+  output 1.x = %11
+  output 1.y = %12
+  output 1.z = %14
+  output 1.w = %16
+  output 2.x = %15
+",
+        &[
+            (ScalarType::Float, 4),
+            (ScalarType::Float, 4),
+            (ScalarType::Float, 1),
+        ],
+    );
+    let wgsl = written(&p, &Profile::NAGA);
+    for line in [
+        "let v7 = rayQueryGetCommittedIntersection(&rquery).t;",
+        "let v8 = rayQueryGetCandidateIntersection(&rquery).barycentrics.y;",
+        // a 3 by 4 matrix's row and column: the intersection's matrix is four columns of three rows
+        "let v9 = rayQueryGetCommittedIntersection(&rquery).object_to_world[3][1];",
+        "let v10 = rayQueryGetCandidateIntersection(&rquery).world_to_object[0][2];",
+        // the kept ray in the hit's object space
+        "let v11 = (rayQueryGetCommittedIntersection(&rquery).world_to_object * vec4<f32>(rquery_origin, 1f)).y;",
+        "let v12 = (rayQueryGetCandidateIntersection(&rquery).world_to_object * vec4<f32>(rquery_dir, 0f)).z;",
+        "let v13 = rayQueryGetCommittedIntersection(&rquery).front_face;",
+        "let v14 = rquery_origin.z;",
+        "let v15 = rquery_tmin;",
+    ] {
+        assert!(wgsl.contains(line), "{line}\n{wgsl}");
+    }
+}
+
+#[test]
+fn a_query_read_for_nothing_of_its_ray_keeps_no_ray() {
+    let p = ray_query_program(
+        "  %6: bool = rayquery.proceed q0
+  %7: u32 = rayquery.state q0 committed.status
+  output 0.x = %7
+",
+        &[(ScalarType::Uint, 1)],
+    );
+    let wgsl = written(&p, &Profile::NAGA);
+    assert!(!wgsl.contains("rquery_"), "{wgsl}");
+}
+
+#[test]
+fn a_candidate_s_opacity_is_refused_by_name() {
+    let p = ray_query_program(
+        "  %6: bool = rayquery.proceed q0
+  %7: bool = rayquery.state q0 candidate.nonopaque
+  %8: u32 = select %7, %0, %1
+  output 0.x = %8
+",
+        &[(ScalarType::Uint, 1)],
+    );
+    let e = iridia_wgsl::wgsl(&p, &Profile::NAGA).unwrap_err().0;
+    assert!(
+        e.contains("candidate procedural primitive is not opaque has no WGSL form"),
+        "{e}"
+    );
+}
+
+/// A pixel program whose region `inside` (after the common values) starts query q0, round a loop `%8` rounds long.
+fn started_in(inside: &str) -> String {
+    format!(
+        "iridia-ir 1
+fn main {{
+  query q0 flags 0x0
+  %0: u32 = u32(2)
+  %1: u32 = u32(255)
+  %2: vec3<f32> = vec3<f32>(0x0, 0x0, 0x0)
+  %3: f32 = f32(0x0)
+  %4: vec3<f32> = vec3<f32>(0x0, 0x0, 0x3f800000)
+  %5: f32 = f32(0x447a0000)
+  %6: u32 = u32(0)
+  %7: u32 = u32(1)
+  %8: u32 = u32(2)
+{inside}  return
+}}
+"
+    )
+}
+
+#[test]
+fn a_query_started_again_is_refused_by_name() {
+    let start = "rayquery init q0 r0 flags %0 mask %1 origin %2 tmin %3 direction %4 tmax %5";
+    // a second start of one query
+    let twice = started_in(&format!("  {start}\n  {start}\n  output 0.x = %0\n"));
+    // a start in a loop that goes round again
+    let in_a_loop = started_in(&format!(
+        "  loop '0 (%9: u32) = (%6) {{
+    %10: bool = ucmp.ge %9, %8
+    if %10 {{
+      br '0 %9
+    }} else {{
+      yield
+    }}
+    {start}
+    %11: u32 = iadd %9, %7
+    continue '0 %11
+  }} -> %12: u32
+  output 0.x = %12
+"
+    ));
+    for (name, text) in [("twice", twice), ("a loop", in_a_loop)] {
+        let p = ray_query_text(&text, &[(ScalarType::Uint, 1)]);
+        let e = iridia_wgsl::wgsl(&p, &Profile::NAGA).unwrap_err().0;
+        assert!(
+            e.starts_with("ray query q0 is started again: naga cannot restart one"),
+            "{name}: {e}"
+        );
+    }
+    // a loop that never goes round again is a block that leaves early: it starts the query once
+    let once = started_in(&format!(
+        "  loop '0 () = () {{
+    {start}
+    br '0
+  }}
+  output 0.x = %0
+"
+    ));
+    written(&ray_query_text(&once, &[(ScalarType::Uint, 1)]), &Profile::NAGA);
 }
 
 /// What upstream naga's validator is given for a profile: the capabilities it allows.
@@ -116,6 +338,7 @@ fn naga_capabilities(profile: &Profile) -> naga::valid::Capabilities {
         (Capability::Subgroup, C::SUBGROUP),
         (Capability::SubgroupVertexStage, C::SUBGROUP_VERTEX_STAGE),
         (Capability::TextureAtomic, C::TEXTURE_ATOMIC),
+        (Capability::RayQuery, C::RAY_QUERY),
     ]
     .into_iter()
     .chain(

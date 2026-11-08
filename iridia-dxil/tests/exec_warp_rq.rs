@@ -218,6 +218,18 @@ fn procedural_primitives_through_naga_hlsl_agree_with_warp() {
     hits("ray_query_procedural", true, Cs::NagaHlsl);
 }
 
+/// The same again through iridia-wgsl's WGSL: the text of the program, read by stock naga (wgpu's reader), written as HLSL
+/// and compiled as above. This is the check that the text means what the program means.
+#[test]
+fn ray_queries_through_wgsl_agree_with_warp() {
+    hits("ray_query_grid", false, Cs::Wgsl);
+}
+
+#[test]
+fn procedural_primitives_through_wgsl_agree_with_warp() {
+    hits("ray_query_procedural", true, Cs::Wgsl);
+}
+
 /// `ray_query_grid.hlsl` and `ray_query_procedural.hlsl`: the committed hit of every ray, ten words.
 fn hits(fixture_name: &str, procedural: bool, cs: Cs) {
     let Some(run) = gate(fixture_name, procedural, 10, cs) else {
@@ -274,6 +286,11 @@ fn object_space_rays_and_candidate_opacity_agree_with_warp() {
 #[test]
 fn object_space_rays_through_naga_hlsl_agree_with_warp() {
     object_space("ray_query_object_fields", Cs::NagaHlsl);
+}
+
+#[test]
+fn object_space_rays_through_wgsl_agree_with_warp() {
+    object_space("ray_query_object_fields", Cs::Wgsl);
 }
 
 fn object_space(fixture_name: &str, cs: Cs) {
@@ -406,6 +423,8 @@ enum Cs {
     /// The program's naga module as iridia-naga lowers it, written as HLSL by stock naga (the writer wgpu runs on
     /// Direct3D 12) and compiled by `tools.dxc`.
     NagaHlsl,
+    /// The program's WGSL as iridia-wgsl writes it, read by stock naga and written as HLSL the same way.
+    Wgsl,
 }
 
 impl Cs {
@@ -413,6 +432,7 @@ impl Cs {
         match self {
             Cs::Fixture => "fixture",
             Cs::NagaHlsl => "naga-hlsl",
+            Cs::Wgsl => "wgsl",
         }
     }
 }
@@ -492,7 +512,7 @@ fn gate(fixture_name: &str, procedural: bool, words: usize, cs: Cs) -> Option<Ru
     let warp = program(Tool::Warp)?;
     let derived = fixture_name == "ray_query_object_fields";
     let dxc = match cs {
-        Cs::NagaHlsl => Some(program(Tool::Dxc)?),
+        Cs::NagaHlsl | Cs::Wgsl => Some(program(Tool::Dxc)?),
         Cs::Fixture if derived => Some(program(Tool::Dxc)?),
         Cs::Fixture => None,
     };
@@ -508,6 +528,21 @@ fn gate(fixture_name: &str, procedural: bool, words: usize, cs: Cs) -> Option<Ru
             let plan = iridia_naga::BindingPlan::new(&program.interface, profile.bindings).unwrap();
             let module = iridia_naga::module(&program, &plan).unwrap();
             let info = iridia_naga::validate(&module, &profile).unwrap();
+            hlsl_dxil(&module, &info, &program.interface, &plan, dxc, &scratch, &label)
+        }
+        (Cs::Wgsl, Some(dxc)) => {
+            let profile = iridia_wgsl::Profile::NAGA;
+            let text = iridia_wgsl::wgsl(&program, &profile).unwrap_or_else(|e| panic!("{label}: {e}"));
+            std::fs::write(scratch.join(format!("{label}.wgsl")), &text).unwrap();
+            let module = naga_hlsl::front::wgsl::parse_str(&text)
+                .unwrap_or_else(|e| panic!("{}\n{text}", e.emit_to_string(&text)));
+            let info = naga_hlsl::valid::Validator::new(
+                naga_hlsl::valid::ValidationFlags::all(),
+                naga_hlsl::valid::Capabilities::all(),
+            )
+            .validate(&module)
+            .unwrap_or_else(|e| panic!("{e:?}\n{text}"));
+            let plan = iridia_wgsl::BindingPlan::new(&program.interface, profile.bindings).unwrap();
             hlsl_dxil(&module, &info, &program.interface, &plan, dxc, &scratch, &label)
         }
         _ => fixture.clone(),

@@ -453,9 +453,7 @@ impl Writer<'_> {
             Node::RayQueryInit { .. }
             | Node::RayQueryAbort(_)
             | Node::RayQueryCommitTriangle(_)
-            | Node::RayQueryCommitProcedural { .. } => {
-                return Err(err("WGSL has no ray queries"));
-            }
+            | Node::RayQueryCommitProcedural { .. } => self.ray_query_node(n)?,
             Node::If {
                 cond,
                 accept,

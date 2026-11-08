@@ -35,6 +35,7 @@ mod ops;
 mod origin;
 mod pipeline;
 mod profile;
+mod rayquery;
 mod text;
 mod wave;
 

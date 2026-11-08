@@ -770,7 +770,7 @@ fn main {{
 }
 
 #[test]
-fn a_ray_query_lowers_to_a_module_naga_validates_and_wgsl_refuses_by_name() {
+fn a_ray_query_lowers_to_a_module_naga_validates_and_its_wgsl_writer_refuses_by_name() {
     // the ray in object space is the hit's world-to-object transform of the kept ray, which naga's intersection has
     let p = ray_query_program(
         "  %7: f32 = rayquery.state q0 candidate.objectorigin.x
@@ -785,7 +785,10 @@ fn a_ray_query_lowers_to_a_module_naga_validates_and_wgsl_refuses_by_name() {
     let e = iridia_naga::wgsl(&p, &iridia_naga::Profile::BROWSER).unwrap_err();
     assert!(e.0.contains("ray query q0"), "{e}");
     let e = iridia_naga::wgsl(&p, &iridia_naga::Profile::NAGA).unwrap_err();
-    assert!(e.0.starts_with("WGSL has no ray queries"), "{e}");
+    assert!(
+        e.0.starts_with("naga's WGSL writer has no ray queries: iridia-wgsl writes them"),
+        "{e}"
+    );
 
     // whether a candidate procedural primitive is opaque naga's intersection does not say
     let p = ray_query_program(

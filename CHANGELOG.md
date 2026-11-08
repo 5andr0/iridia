@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- `iridia-wgsl` writes ray queries, for wgpu's `wgpu_ray_query` WGSL extension (`Profile::NAGA`; `Profile::BROWSER` has
+  none and refuses them by name): `enable wgpu_ray_query;`, an `acceleration_structure` resource, a function-level
+  `var q: ray_query` per query, `rayQueryInitialize` with the query's declared flags joined to the ray's, `rayQueryProceed`,
+  the terminate, confirm and generate-intersection calls, and every query field as the committed or candidate
+  `RayIntersection`'s (a candidate's kind is 1 for a triangle and 3 for a procedural primitive in naga, 0 and 1 in the IR;
+  a ray in object space is the hit's world-to-object matrix applied to the ray the program started the query with, kept
+  in `let`s only when read). Refused by name: whether a candidate procedural primitive is opaque (the intersection does
+  not say), an array of acceleration structures, and a query that is started again. naga 30 cannot restart a query (a
+  function-level one keeps its finished bit across `rayQueryInitialize`, so the second search never proceeds; a
+  loop-local one panics its HLSL writer), so a program that starts one query at more than one site, or at one site under a
+  loop that goes round again, is refused with the probe evidence in `rayquery::restarted`'s doc comment. `iridia-naga`'s
+  refusal now says iridia-wgsl writes them. `exec_warp_rq.rs` also compares the grid, procedural and object-space
+  programs through three roads on WARP (the fixture's DXIL, the naga module through stock naga's HLSL writer, the WGSL text
+  read by stock naga and written as HLSL), by the same two-of-three consensus: no ray differs.
 - `iridia-naga`: a filtered sample of an integer texture (a sample, a biased or a level one, or one at gradients, of a texture
   of unsigned or signed integers) is refused by name, "a filtered sample of an integer texture has no WGSL form", as
   `iridia-wgsl` already did; naga's writer made text its own validator refused ("Unable to operate on image class
@@ -60,7 +74,7 @@
   module, which naga's validator accepts with the ray query capability (`Profile::NAGA` allows it;
   `Profile::BROWSER` refuses the program before lowering): a ray in object space is the hit's world-to-object
   transform of the ray, and whether a candidate procedural primitive is opaque, which naga's intersection does not
-  say, is refused by name. WGSL has no ray queries, so the WGSL output refuses them by name.
+  say, is refused by name. `iridia-naga`'s WGSL output refuses them by name (naga's writer has none); `iridia-wgsl` writes them.
 - `iridia-dxil::ir` refuses an operation that yields a value called as a function that returns none (a damaged
   callee's type) by name, "an instruction that yields a value but defines none", as the naga lift does: it lifted the
   program and dropped the value.

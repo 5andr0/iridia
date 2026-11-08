@@ -149,6 +149,12 @@ impl<'a> Writer<'a> {
                 "a vertex program that writes no position feeds a tessellator: it is a function, not a WGSL entry point",
             ));
         }
+        if let Some(q) = crate::rayquery::restarted(body) {
+            return Err(err(format!(
+                "ray query q{} is started again: naga cannot restart one (see rayquery::restarted)",
+                q.0
+            )));
+        }
         let mut io = entry_io(&program.interface).map_err(err)?;
         let linked = link(&io.results)?;
         // the names of the arguments and result members are the labels', made WGSL identifiers
@@ -209,6 +215,7 @@ impl<'a> Writer<'a> {
             forward: BTreeMap::new(),
             outputs: alloc::vec![None; program.interface.outputs.len()],
             decls: Vec::new(),
+            queries: Vec::new(),
         };
         let result_struct = w.result_struct()?;
         let globals = w.declare_resources()?;
@@ -293,6 +300,16 @@ impl<'a> Writer<'a> {
         }
         if self.program.interface.resources.iter().any(Resource::is_array) {
             out.push_str("enable wgpu_binding_array;\n");
+        }
+        if !self.f.queries.is_empty()
+            || self
+                .program
+                .interface
+                .resources
+                .iter()
+                .any(|r| matches!(r.kind, ResourceKind::AccelerationStructure))
+        {
+            out.push_str("enable wgpu_ray_query;\n");
         }
         if self.profile.directives == Directives::Standard
             && iridia_ir::target::requirements(self.program)
@@ -447,6 +464,10 @@ impl<'a> Writer<'a> {
                     ),
                     self.buffer_type(r.id, *kind)?,
                 ),
+                // the type is the ray query extension's
+                ResourceKind::AccelerationStructure => {
+                    ("var ".to_string(), "acceleration_structure".to_string())
+                }
                 other => return Err(err(format!("a {other:?} resource is not written yet"))),
             };
             // an array of resources is one binding array at its first register (unsized where the program does not size it);
@@ -629,6 +650,7 @@ impl<'a> Writer<'a> {
             };
             private.push_str(&format!("    var {name}: {ty}{init};\n"));
         }
+        private.push_str(&self.declare_queries()?);
         if !workgroup.is_empty() {
             workgroup.push('\n');
         }
