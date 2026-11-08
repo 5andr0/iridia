@@ -16,59 +16,9 @@ use iridia_ir::{AtomicOp, Binary, Memory, Op, OutOfBounds, Type, Unary, ValueId 
 
 use super::{Lift, Lv, Pointer};
 use crate::Result;
+use crate::layout::DataLayout;
 use crate::setup::dx_opcode;
 use dxil_reader::module::{Op as LlvmOp, Type as LlvmType, TypeId, Value, ValueId};
-
-/// The ABI alignments a module's datalayout states, in bytes, by bit width; LLVM's defaults where it states none.
-#[derive(Clone, Debug)]
-pub(crate) struct DataLayout {
-    integers: Vec<(u32, u32)>,
-    floats: Vec<(u32, u32)>,
-}
-
-impl DataLayout {
-    /// The layout of datalayout string `s` (`e-m:e-p:32:32-i1:32-i8:32-i16:32-...`).
-    pub(crate) fn parse(s: &str) -> std::result::Result<DataLayout, String> {
-        // LLVM's defaults
-        let mut integers = vec![(1, 1), (8, 1), (16, 2), (32, 4), (64, 4)];
-        let mut floats = vec![(16, 2), (32, 4), (64, 8), (128, 16)];
-        for spec in s.split('-') {
-            let (table, rest) = match spec.as_bytes().first() {
-                Some(b'i') => (&mut integers, spec.get(1..).unwrap_or("")),
-                Some(b'f') => (&mut floats, spec.get(1..).unwrap_or("")),
-                _ => continue,
-            };
-            let mut parts = rest.split(':');
-            let (Some(Ok(bits)), Some(Ok(abi))) = (
-                parts.next().map(str::parse::<u32>),
-                parts.next().map(str::parse::<u32>),
-            ) else {
-                return Err(format!("datalayout entry {spec}"));
-            };
-            if abi == 0 || abi % 8 != 0 {
-                return Err(format!("datalayout entry {spec}: an alignment of {abi} bits"));
-            }
-            match table.iter_mut().find(|(b, _)| *b == bits) {
-                Some(entry) => entry.1 = abi / 8,
-                None => table.push((bits, abi / 8)),
-            }
-        }
-        Ok(DataLayout { integers, floats })
-    }
-
-    fn integer(&self, bits: u32) -> Option<u32> {
-        self.integers.iter().find(|(b, _)| *b == bits).map(|&(_, a)| a)
-    }
-
-    fn float(&self, bits: u32) -> Option<u32> {
-        self.floats.iter().find(|(b, _)| *b == bits).map(|&(_, a)| a)
-    }
-}
-
-/// `n` rounded up to a multiple of `align`.
-fn round_up(n: u32, align: u32) -> u32 {
-    n.div_ceil(align.max(1)).saturating_mul(align.max(1))
-}
 
 impl Lift<'_> {
     /// The allocas and module globals an amplification program hands to `DispatchMesh` as its payload, and a ray tracing
@@ -124,67 +74,23 @@ impl Lift<'_> {
         roots
     }
 
-    /// The module's datalayout, which a task payload is laid out by.
+    /// The module's datalayout, which memory laid out in bytes is laid out by.
     fn datalayout(&self) -> Result<DataLayout> {
-        let Some(s) = self.m.datalayout.as_deref() else {
-            return self.refuse("a task payload in a module that states no datalayout");
-        };
-        DataLayout::parse(s).map_err(|why| crate::error(self.at, why))
+        DataLayout::of(self.m).map_err(|why| crate::error(self.at, why))
     }
 
     /// The ABI alignment and allocation size in bytes of a value of LLVM type `ty`, as the datalayout lays it out.
     pub(crate) fn byte_layout(&self, ty: TypeId) -> Result<(u32, u32)> {
         let dl = self.datalayout()?;
-        self.byte_layout_in(&dl, ty)
-    }
-
-    fn byte_layout_in(&self, dl: &DataLayout, ty: TypeId) -> Result<(u32, u32)> {
-        let scalar = |align: Option<u32>, bits: u32, what: &str| -> Result<(u32, u32)> {
-            let Some(align) = align else {
-                return self.refuse(format!(
-                    "a task payload's {what} the datalayout gives no alignment"
-                ));
-            };
-            Ok((align, round_up(bits.div_ceil(8), align)))
-        };
-        match self.type_at(ty)?.clone() {
-            LlvmType::Integer(bits) => scalar(dl.integer(bits), bits, "integer"),
-            LlvmType::Half => scalar(dl.float(16), 16, "half"),
-            LlvmType::Float => scalar(dl.float(32), 32, "float"),
-            LlvmType::Double => scalar(dl.float(64), 64, "double"),
-            LlvmType::Array(n, e) | LlvmType::Vector(n, e) => {
-                let (align, size) = self.byte_layout_in(dl, e)?;
-                let n =
-                    u32::try_from(n).map_err(|_| crate::error(self.at, "a task payload of many elements"))?;
-                Ok((align, size.saturating_mul(n)))
-            }
-            LlvmType::Struct { elements, packed, .. } => {
-                let (mut align, mut at) = (1u32, 0u32);
-                for e in elements {
-                    let (a, size) = self.byte_layout_in(dl, e)?;
-                    let a = if packed { 1 } else { a };
-                    align = align.max(a);
-                    at = round_up(at, a).saturating_add(size);
-                }
-                Ok((align, round_up(at, align)))
-            }
-            other => self.refuse(format!("a task payload of {other:?}")),
-        }
+        dl.size_align(self.m, ty)
+            .map_err(|why| crate::error(self.at, why))
     }
 
     /// The byte offset of field `field` of a structure of `elements` (`packed` without padding).
     pub(crate) fn field_offset(&self, elements: &[TypeId], packed: bool, field: usize) -> Result<u32> {
         let dl = self.datalayout()?;
-        let mut at = 0u32;
-        for (k, &e) in elements.iter().enumerate() {
-            let (a, size) = self.byte_layout_in(&dl, e)?;
-            at = if packed { at } else { round_up(at, a) };
-            if k == field {
-                return Ok(at);
-            }
-            at = at.saturating_add(size);
-        }
-        self.refuse("a field past the structure")
+        dl.field_offset(self.m, elements, packed, field)
+            .map_err(|why| crate::error(self.at, why))
     }
 
     /// The byte address (`u32`) of a byte-laid pointer plus `k`.

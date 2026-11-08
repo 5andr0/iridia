@@ -356,6 +356,8 @@ fn on_the_ir(mut interface: Interface, payload: u32) -> Interface {
         export: "main".into(),
         payload,
         attributes: 0,
+        payload_leaves: Vec::new(),
+        attribute_leaves: Vec::new(),
         subobjects: Vec::new(),
     });
     interface

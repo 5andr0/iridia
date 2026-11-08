@@ -5,7 +5,7 @@
 //! is `pipeline.rs`'s and `exec_warp_pipeline.rs`'s to check.
 use iridia_ir::{
     Program, Space,
-    interface::{RayTracingFacts, Stage, StageFacts},
+    interface::{Leaf, LeafKind, RayTracingFacts, Stage, StageFacts},
 };
 
 fn program(name: &str) -> Program {
@@ -42,6 +42,83 @@ fn as_stage(p: &Program, stage: Stage) -> Program {
     q.stage = stage;
     q.interface.stage = stage;
     q
+}
+
+/// The scalars each program's facts state for the structures its function takes: the payload (a float, a uint and a
+/// float3 as Direct3D lays them out, a callable's parameter of one float) and the triangle's barycentrics, each at the
+/// byte its field starts at, and none for a program that takes none.
+#[test]
+fn the_ray_tracing_programs_state_the_scalars_of_their_payloads_and_attributes() {
+    let at = |kinds: &[(u32, LeafKind)]| -> Vec<Leaf> {
+        kinds
+            .iter()
+            .map(|&(offset, kind)| Leaf { offset, kind })
+            .collect()
+    };
+    let payload = at(&[
+        (0, LeafKind::Float32),
+        (4, LeafKind::Int32),
+        (8, LeafKind::Float32),
+        (12, LeafKind::Float32),
+        (16, LeafKind::Float32),
+    ]);
+    let barycentrics = at(&[(0, LeafKind::Float32), (4, LeafKind::Float32)]);
+    let expected = [
+        ("raygen", vec![], vec![]),
+        ("miss", payload.clone(), vec![]),
+        ("closest_hit", payload.clone(), barycentrics.clone()),
+        ("any_hit", payload, barycentrics),
+        ("intersection", vec![], vec![]),
+        ("callable", at(&[(0, LeafKind::Float32)]), vec![]),
+    ];
+    for variant in ["", ".od"] {
+        for (export, payload, attributes) in &expected {
+            let name = format!("ray_tracing.{export}{variant}.dxil");
+            let p = program(&name);
+            let StageFacts::RayTracing(facts) = &p.interface.facts else {
+                panic!("{name}: {:?}", p.interface.facts);
+            };
+            assert_eq!(&facts.payload_leaves, payload, "{name}");
+            assert_eq!(&facts.attribute_leaves, attributes, "{name}");
+        }
+    }
+}
+
+/// Leaves that overlap, run past the bytes the facts state or are out of order are the interface's to refuse.
+#[test]
+fn leaves_that_do_not_fit_their_bytes_are_refused() {
+    let closest = program("ray_tracing.closest_hit.dxil");
+    for (what, edit) in [
+        (
+            "payload: a Float64 at byte 16 of 20 bytes",
+            (|f: &mut RayTracingFacts| {
+                f.payload_leaves.push(Leaf {
+                    offset: 16,
+                    kind: LeafKind::Float64,
+                });
+            }) as fn(&mut RayTracingFacts),
+        ),
+        (
+            "hit attributes: a Float32 at byte 0 of 8 bytes, after the leaves that end at 8",
+            |f: &mut RayTracingFacts| {
+                f.attribute_leaves.insert(
+                    0,
+                    Leaf {
+                        offset: 4,
+                        kind: LeafKind::Float32,
+                    },
+                );
+            },
+        ),
+    ] {
+        let mut q = closest.clone();
+        let StageFacts::RayTracing(facts) = &mut q.interface.facts else {
+            unreachable!()
+        };
+        edit(facts);
+        let found = q.interface.verify().unwrap_err();
+        assert!(found.contains(what), "{what}: {found}");
+    }
 }
 
 /// Each program's payload (a payload of a distance, a count and a colour: 20 bytes as Direct3D lays it out; a

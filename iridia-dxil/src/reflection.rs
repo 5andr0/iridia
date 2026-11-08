@@ -4,6 +4,7 @@
 //! `STAT` part's reflection module when present: the program's own metadata carries no names), what a stage's entry
 //! point states, and a library's subobjects. D3D's and DXIL's enum numbers stop here: a value the mapping does not know
 //! is an error naming it.
+use crate::layout::DataLayout;
 use crate::{Result, error, read};
 use dxcontainer::Chunk;
 use dxil_reader::module::{Module, Type, TypeId};
@@ -12,9 +13,9 @@ use dxil_reader::reflection::{self as records, FieldAnnotation, Range};
 use iridia::d3d;
 use iridia::{
     Access, BufferKind, BufferLayout, Constant as BufferConstant, ConstantType, D3dBinding, D3dClass,
-    DomainFacts, HitGroup, HitGroupKind, HullFacts, Interface, Majorness, Member, Partitioning, Resource,
-    ResourceId, ResourceKind, ResourceProvenance, SampleType, ScalarType, Stage, StageFacts, StorageTarget,
-    Subobject, TessDomain, TessTopology, TextureDim, Value as Lanes, Varying,
+    DomainFacts, HitGroup, HitGroupKind, HullFacts, Interface, Leaf, Majorness, Member, Partitioning,
+    Resource, ResourceId, ResourceKind, ResourceProvenance, SampleType, ScalarType, Stage, StageFacts,
+    StorageTarget, Subobject, TessDomain, TessTopology, TextureDim, Value as Lanes, Varying,
 };
 
 /// Direct3D 11's limits on what a stage states, which the lifter would otherwise allocate for: a geometry program's
@@ -89,6 +90,77 @@ fn geometry_facts_of(state: records::GeometryState) -> Result<iridia::GeometryFa
             MAX_GS_INSTANCES,
         )?,
     })
+}
+
+/// The scalars of the structures a ray tracing program's function takes as its payload (or a callable program's
+/// parameter) and hit attributes, laid out as the module's datalayout lays them out: the function's pointer
+/// parameters in order, the payload then the attributes. Each structure's size is the bytes the entry point states.
+fn ray_leaves(
+    m: &Module,
+    function: dxil_reader::module::ValueId,
+    stage: Stage,
+    payload: u32,
+    attributes: u32,
+) -> Result<(Vec<Leaf>, Vec<Leaf>)> {
+    let expected: &[(&str, u32)] = match stage {
+        Stage::AnyHit | Stage::ClosestHit => &[("payload", payload), ("attributes", attributes)],
+        Stage::Miss | Stage::Callable => &[("payload", payload)],
+        _ => &[],
+    };
+    let params = match m
+        .value_types
+        .get(function)
+        .and_then(|&t| m.types.get(t))
+        .and_then(|t| match t {
+            Type::Pointer(f, _) => m.types.get(*f),
+            _ => None,
+        }) {
+        Some(Type::Function { params, .. }) => params.as_slice(),
+        _ => &[],
+    };
+    if params.len() != expected.len() {
+        return Err(error(
+            0,
+            format!(
+                "{} program whose function takes {} parameters where {} are expected",
+                stage.with_article(),
+                params.len(),
+                expected.len()
+            ),
+        ));
+    }
+    let layout = DataLayout::of(m).map_err(|why| error(0, why))?;
+    let mut lists = Vec::with_capacity(2);
+    for (&param, &(name, bytes)) in params.iter().zip(expected) {
+        let Some(&Type::Pointer(pointee, _)) = m.types.get(param) else {
+            return Err(error(
+                0,
+                format!("a ray tracing program's {name}, which is not a pointer"),
+            ));
+        };
+        let (_, size) = layout
+            .size_align(m, pointee)
+            .map_err(|why| error(0, format!("a ray tracing program's {name}: {why}")))?;
+        if size != bytes {
+            return Err(error(
+                0,
+                format!(
+                    "{} program's {name} of {size} bytes by the datalayout, where the entry point states {bytes}",
+                    stage.with_article()
+                ),
+            ));
+        }
+        let mut leaves = Vec::new();
+        layout
+            .leaves(m, pointee, 0, &mut leaves)
+            .map_err(|why| error(0, format!("a ray tracing program's {name}: {why}")))?;
+        lists.push(leaves);
+    }
+    let mut lists = lists.into_iter();
+    let payload = lists.next().unwrap_or_default();
+    // an any-hit or closest-hit program takes the attributes second; a miss or callable program has none
+    let attributes = lists.next().unwrap_or_default();
+    Ok((payload, attributes))
 }
 
 /// What a mesh program's entry point states, mapped: the most vertices and primitives it writes, what its primitives
@@ -850,10 +922,16 @@ pub fn reflection(chunks: &[Chunk<'_>], program: &Module, named: Option<&Module>
                 None => Vec::new(),
             };
             // the bytes of the payload and attributes the entry point states (`Interface::verify` bounds them)
+            let payload = records::ray_payload_size(program).map_err(read)?.unwrap_or(0);
+            let attributes = records::ray_attribute_size(program).map_err(read)?.unwrap_or(0);
+            let (payload_leaves, attribute_leaves) =
+                ray_leaves(program, function, stage, payload, attributes)?;
             StageFacts::RayTracing(iridia::RayTracingFacts {
                 export,
-                payload: records::ray_payload_size(program).map_err(read)?.unwrap_or(0),
-                attributes: records::ray_attribute_size(program).map_err(read)?.unwrap_or(0),
+                payload,
+                attributes,
+                payload_leaves,
+                attribute_leaves,
                 subobjects,
             })
         }

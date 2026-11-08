@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- `iridia-ir`: a ray tracing program's facts state the scalars of the structures it declares its payload and hit attributes
+  as (`RayTracingFacts::payload_leaves` and `attribute_leaves`, each a `Leaf` of a byte offset and a `LeafKind`: bool, 16, 32
+  or 64-bit integer, 16, 32 or 64-bit float; integers carry no sign), and `Interface::verify` holds them in ascending order
+  within the bytes. `iridia-dxil` reads them from the entry function's parameter types laid out by the module's datalayout and
+  refuses a program whose structure is not the size the entry point states (`LIFTER_VERSION` 5: the eleven ray tracing fixtures of a
+  hit, miss or callable program change; a program with no leaves serializes as before). The datalayout code the byte-laid
+  payloads use moved to its own module.
 - `wgsl-run` (the WARP harness): workgroup memory is zeroed in the naga module, by loops strided over `local_invocation_index`
   and a workgroup barrier, with wgpu's own zero-initialisation turned off. wgpu 30.0.1 zeroes it with one assignment of the
   whole array by the first invocation, which WARP takes 50 to 120 s to compile for arrays of about 3,000 words (1,024 words:

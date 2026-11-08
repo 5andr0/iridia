@@ -486,8 +486,73 @@ pub struct RayTracingFacts {
     /// The bytes of the hit's attributes an any-hit or closest-hit program reads (at most
     /// [`MAX_HIT_ATTRIBUTES`]); 0 for a program that has none.
     pub attributes: u32,
+    /// The scalars of the structure the program declares its payload as, in ascending byte order. The payload's bytes
+    /// are shared with the programs that trace the ray or handle its hit, each of which declares its own structure
+    /// over them, so these are this program's view of the words, not the caller's. Empty where `payload` is 0.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub payload_leaves: Vec<Leaf>,
+    /// The scalars of the structure the program declares its hit attributes as, as `payload_leaves` are.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub attribute_leaves: Vec<Leaf>,
     /// Every subobject of the library, in the order stored.
     pub subobjects: Vec<Subobject>,
+}
+
+/// The type of a scalar in memory a program declares a structure over (a ray payload, a hit's attributes). The
+/// source's integers carry no sign.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LeafKind {
+    /// A boolean, which takes 4 bytes.
+    Bool,
+    /// A 16-bit integer.
+    Int16,
+    /// A 32-bit integer.
+    Int32,
+    /// A 64-bit integer.
+    Int64,
+    /// A 16-bit float.
+    Float16,
+    /// A 32-bit float.
+    Float32,
+    /// A 64-bit float.
+    Float64,
+}
+
+impl LeafKind {
+    /// The bytes the scalar takes.
+    pub fn bytes(self) -> u32 {
+        match self {
+            LeafKind::Int16 | LeafKind::Float16 => 2,
+            LeafKind::Bool | LeafKind::Int32 | LeafKind::Float32 => 4,
+            LeafKind::Int64 | LeafKind::Float64 => 8,
+        }
+    }
+}
+
+/// One scalar of a structure laid out in bytes as Direct3D lays it out (as C does, each field at its natural alignment).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize)]
+pub struct Leaf {
+    /// The byte offset from the structure's start.
+    pub offset: u32,
+    /// The scalar's type.
+    pub kind: LeafKind,
+}
+
+/// Whether `leaves` are in ascending byte order, overlap nowhere and end within `bytes`.
+fn leaves_fit(leaves: &[Leaf], bytes: u32) -> Result<(), String> {
+    let mut end = 0u32;
+    for leaf in leaves {
+        let next = leaf.offset.checked_add(leaf.kind.bytes());
+        if leaf.offset < end || next.is_none_or(|n| n > bytes) {
+            return Err(format!(
+                "a {:?} at byte {} of {bytes} bytes, after the leaves that end at {end}",
+                leaf.kind, leaf.offset
+            ));
+        }
+        end = next.unwrap_or(bytes);
+    }
+    Ok(())
 }
 
 /// The most bytes of a ray payload or callable parameter taken. Direct3D states no bound but the pipeline's own
@@ -641,6 +706,10 @@ impl Interface {
                         r.attributes
                     ));
                 }
+                leaves_fit(&r.payload_leaves, r.payload)
+                    .map_err(|why| format!("{} program's payload: {why}", stage.with_article()))?;
+                leaves_fit(&r.attribute_leaves, r.attributes)
+                    .map_err(|why| format!("{} program's hit attributes: {why}", stage.with_article()))?;
                 Ok(())
             }
             (_, StageFacts::None) => Ok(()),

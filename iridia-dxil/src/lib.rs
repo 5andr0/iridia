@@ -53,6 +53,7 @@
 struct ReadmeExamples;
 mod dxop_arguments;
 pub mod ir;
+mod layout;
 mod lift;
 mod reflection;
 mod setup;
